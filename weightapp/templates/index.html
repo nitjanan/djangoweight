@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block css %}
+<style>
+
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <h3>Weight Statistics</h3>
+</div>
+<div class="page-content">
+  <section class="row">
+    <div class="col-12 col-lg-9">
+      <div class="row">
+        <div class="col-6 col-lg-3 col-md-6">
+          <div class="card">
+            <div class="card-body px-4 py-4-5">
+              <div class="row">
+                <div
+                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
+                >
+                  <!--div class="stats-icon purple mb-2">
+                    <i class="iconly-boldProfile"></i>
+                  </div-->
+                  <div class="avatar avatar-lg">
+                    <img src="{% static 'images/stone/34.jpg' %}" />
+                  </div>
+                </div>
+                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
+                  <h6 class="text-muted font-semibold">
+                    หิน 3/4
+                  </h6>
+                  <h6 class="font-extrabold mb-0">
+                    {% if tf_to_day.weight_total__sum %}{{tf_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                  </h6>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 col-md-6">
+          <div class="card">
+            <div class="card-body px-4 py-4-5">
+              <div class="row">
+                <div
+                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
+                >
+                  <!--div class="stats-icon blue mb-2">
+                    <i class="iconly-boldProfile"></i>
+                  </div-->
+                  <div class="avatar avatar-lg">
+                    <img src="{% static 'images/stone/4080.jpg' %}" />
+                  </div>
+                </div>
+                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
+                  <h6 class="text-muted font-semibold">หิน 40-80 (Ex)</h6>
+                  <h6 class="font-extrabold mb-0">
+                    {% if fex_to_day.weight_total__sum %}{{fex_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                  </h6>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 col-md-6">
+          <div class="card">
+            <div class="card-body px-4 py-4-5">
+              <div class="row">
+                <div
+                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
+                >
+                  <!--div class="stats-icon green mb-2">
+                    <i class="iconly-boldAdd-User"></i>
+                  </!-div-->
+                  <div class="avatar avatar-lg">
+                    <img src="{% static 'images/stone/fun.jpg' %}" />
+                  </div>
+                </div>
+                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
+                  <h6 class="text-muted font-semibold">หินฝุ่น</h6>
+                  <h6 class="font-extrabold mb-0">
+                    {% if du_to_day.weight_total__sum %}{{du_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                  </h6>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 col-md-6">
+          <div class="card">
+            <div class="card-body px-4 py-4-5">
+              <div class="row">
+                <div
+                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
+                >
+                  <!--div class="stats-icon red mb-2">
+                    <i class="iconly-boldBookmark"></i>
+                  </div-->
+                  <div class="avatar avatar-lg">
+                    <img src="{% static 'images/stone/kluk.jpg' %}" />
+                  </div>
+                </div>
+                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
+                  <h6 class="text-muted font-semibold">หินคลุก A & B</h6>
+                  <h6 class="font-extrabold mb-0">
+                    {% if mix_to_day.weight_total__sum %}{{mix_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                  </h6>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h4>Stone Weight</h4>
+            </div>
+            <div class="card-body">
+              <!--div id="chart-profile-visit"></div-->
+              <!--canvas id="stoneTypeChart" width="300" height="200"></canvas-->
+              <div id="chart-stone"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12 col-xl-6">
+          <div class="card">
+            <div class="card-header">
+            </div>
+            <div class="card-body">
+              <div class="alert alert-light-info color-info">
+                วันที่ {{weight.1.date}} <p class="float-end"> รวมทั้งหมด {{sum_all_weight |intcomma}} ตัน</p>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-striped" id="table1"><!--เปลี่ยนจำนวนรายการที่แสดงต่อหน้า perPage:5 -->
+                  <thead>
+                    <tr>
+                      <th>ลูกค้า</th>
+                      <th>รวมนน.สุทธิ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for i in weight%}
+                    <tr>
+                      <td>{{i.customer_name}}</td>
+                      <td>{{i.sum_weight_total |intcomma}}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td>Footer 1</td>
+                      <td>Footer 2</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>        
+        <div class="col-12 col-xl-6">
+          <div class="card">
+            <div class="card-header">
+              <h4>Mill</h4>
+            </div>
+            <div class="card-body">
+              <div id="chart-mill"></div>
+              <!--div class="row">
+                <div class="col-7">
+                  <div class="d-flex align-items-center">
+                    <svg
+                      class="bi text-primary"
+                      width="32"
+                      height="32"
+                      fill="blue"
+                      style="width: 10px"
+                    >
+                      <use
+                        xlink:href="{% static 'images/bootstrap-icons.svg#circle-fill'%}"
+                      />
+                    </svg>
+                    <h5 class="mb-0 ms-3">Europe</h5>
+                  </div>
+                </div>
+                <div class="col-5">
+                  <h5 class="mb-0 text-end">862</h5>
+                </div>
+                <div class="col-12">
+                  <div id="chart-europe"></div>
+                </div>
+              </div-->
+              <!--div class="row">
+                <div class="col-7">
+                  <div class="d-flex align-items-center">
+                    <svg
+                      class="bi text-success"
+                      width="32"
+                      height="32"
+                      fill="blue"
+                      style="width: 10px"
+                    >
+                      <use
+                        xlink:href="{% static 'images/bootstrap-icons.svg#circle-fill' %}"
+                      />
+                    </svg>
+                    <h5 class="mb-0 ms-3">America</h5>
+                  </div>
+                </div>
+                <div class="col-5">
+                  <h5 class="mb-0 text-end">375</h5>
+                </div>
+                <div class="col-12">
+                  <div id="chart-america"></div>
+                </div>
+              </div-->
+              <!--div class="row">
+                <div class="col-7">
+                  <div class="d-flex align-items-center">
+                    <svg
+                      class="bi text-danger"
+                      width="32"
+                      height="32"
+                      fill="blue"
+                      style="width: 10px"
+                    >
+                      <use
+                        xlink:href="{% static 'images/bootstrap-icons.svg#circle-fill' %}"
+                      />
+                    </svg>
+                    <h5 class="mb-0 ms-3">Indonesia</h5>
+                  </div>
+                </div>
+                <div class="col-5">
+                  <h5 class="mb-0 text-end">1025</h5>
+                </div>
+                <div class="col-12">
+                  <div id="chart-indonesia"></div>
+                </div>
+              </div-->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-3">
+      <div class="card">
+        <div class="card-body py-4 px-4">
+          <div class="d-flex align-items-center">
+            <div class="avatar avatar-xl">
+              <img src="{% static 'compiled/jpg/5.jpg'%}" alt="Face 1" />
+            </div>
+            {% if request.user.is_authenticated and request.user %}
+            <div class="ms-3 name">
+              <h5 class="font-bold">{{request.user}}</h5>
+              <h6 class="text-muted mb-0"><a href="{% url 'logout' %}">Logout</a></h6>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h4>Recent Messages</h4>
+        </div>
+        <div class="card-content pb-4">
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/4.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">Hank Schrader</h5>
+              <h6 class="text-muted mb-0">@johnducky</h6>
+            </div>
+          </div>
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/6.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">Dean Winchester</h5>
+              <h6 class="text-muted mb-0">@imdean</h6>
+            </div>
+          </div>
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/1.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">John Dodol</h5>
+              <h6 class="text-muted mb-0">@dodoljohn</h6>
+            </div>
+          </div>
+          <div class="px-4">
+            <button
+              class="btn btn-block btn-xl btn-outline-primary font-bold mt-3"
+            >
+              Start Conversation
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h4>Weight Loss</h4>
+        </div>
+        <div class="card-body">
+          <!--div id="chart-visitors-profile"></div-->
+          <div id="chart-weight-loss">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<!-- Need: Apexcharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<!--script src="{% static 'extensions/apexcharts/apexcharts.min.js' %}"></script-->
+<script src="{% static 'js/pages/dashboard.js' %}"></script>
+
+<!-- DataTable -->
+<script src="{% static 'extensions/simple-datatables/umd/simple-datatables.js' %}"></script>
+<script src="{% static 'js/pages/simple-datatables.js' %}"></script>
+
+<script type="text/javascript">
+  /*2222222222222222222222
+  var optionsStone = {
+    series: [{
+      name: "stone type",
+      data: [{% for number in number_list %} '{{ number }}', {% endfor %}]
+    }],
+    chart: {
+      height: 400,
+      type: 'bar',
+    },
+    colors:[
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(54, 162, 235, 0.8)',
+      'rgba(255, 206, 86, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(255, 159, 64, 0.8)',
+      'rgba(255, 51, 227, 0.8)',
+      'rgba(39, 16, 205, 0.8)',
+      'rgba(205, 45, 16, 0.8)',
+    ],
+    plotOptions: {
+      bar: {
+        columnWidth: '45%',
+        distributed: true,
+      }
+    },
+    dataLabels: {
+      enabled: false
+    },
+    legend: {
+      show: false
+    },
+    xaxis: {
+      categories: [{% for i in stone_type_list %} '{{ i }}', {% endfor %}],
+      labels: {
+        style: {
+          fontSize: '12px'
+        }
+      },
+    },
+  }
+  */
+
+  var optionsStone = {
+      series: [{
+          name: 'sell',
+          data: [44, 55, 57, 56, 61,]
+        }, {
+          name: 'sell (Ex)',
+          data: [76, 85, 101, 98, 87,]
+        }, {
+          name: 'stock',
+          data: [35, 41, 36, 26, 45,]
+        }, {
+          name: 'produce',
+          data: [76, 85, 101, 98, 87,]
+        },
+      ],
+        chart: {
+        type: 'bar',
+        height: 350
+      },
+        colors:[
+          'rgba(255, 99, 132, 0.8)',
+          'rgba(54, 162, 235, 0.8)',
+          'rgba(255, 206, 86, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+          'rgba(153, 102, 255, 0.8)',
+          'rgba(255, 159, 64, 0.8)',
+        ],
+        plotOptions: {
+          bar: {
+            horizontal: false,
+            columnWidth: '55%',
+            endingShape: 'rounded'
+          },
+        },
+        dataLabels: {
+          enabled: false
+        },
+        stroke: {
+          show: true,
+          width: 2,
+          colors: ['transparent']
+        },
+        xaxis: {
+          categories: ['หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก', 'อื่นๆ',],
+        },
+        yaxis: {
+          title: {
+            text: 'stone weight total on mounth'
+          }
+        },
+        fill: {
+          opacity: 1
+        },
+        tooltip: {
+          y: {
+            formatter: function (val) {
+              return  val + "   ton"
+            }
+          }
+        }
+  };
+
+  var optionsWeightLoss = {
+        series: [44, 55, 67, 83],
+          chart: {
+          height: "350px",
+          //redrawOnParentResize: true,
+          type: 'radialBar',
+        },
+        plotOptions: {
+          radialBar: {
+            dataLabels: {
+              name: {
+                fontSize: '22px',
+              },
+              value: {
+                fontSize: '16px',
+              },
+              total: {
+                show: true,
+                label: 'เป้าหมาย',
+                formatter: function (w) {
+                  // By default this function returns the average of all series. The below is just an example to show the use of custom formatter function
+                  return 24965.120 + " ton"
+                }
+              }
+            }
+          }
+        },
+        labels: ['โรงโม่ 3', 'โรงโม่ 2', 'โรงโม่ 1', 'ทำได้จริง'],
+  };
+
+  var optionsMill = {
+          series: [{
+          name: 'โรงโม่ 1',
+          data: [31, 40, 28, 51, 42, 109, 100]
+        }, {
+          name: 'โรงโม่ 2',
+          data: [11, 32, 45, 32, 34, 52, 41]
+        }, 
+        {
+          name: 'โรงโม่ 3',
+          data: [45, 75, 12, 55, 20, 60, 80]
+        }],
+          chart: {
+          height: 350,
+          type: 'area'
+        },
+        dataLabels: {
+          enabled: false
+        },
+        stroke: {
+          curve: 'smooth'
+        },
+        xaxis: {
+          type: 'datetime',
+          categories: ["2018-09-19T00:00:00.000Z", "2018-09-19T01:30:00.000Z", "2018-09-19T02:30:00.000Z", "2018-09-19T03:30:00.000Z", "2018-09-19T04:30:00.000Z", "2018-09-19T05:30:00.000Z", "2018-09-19T06:30:00.000Z"]
+        },
+        tooltip: {
+          x: {
+            format: 'dd/MM/yy HH:mm'
+          },
+        },
+  };
+
+
+  var chartStone = new ApexCharts(
+    document.querySelector("#chart-stone"), 
+    optionsStone
+  );
+  chartStone.render();
+
+  var chartWeightLoss = new ApexCharts(
+    document.querySelector("#chart-weight-loss"),
+    optionsWeightLoss
+  );
+
+  chartWeightLoss.render();
+
+
+  var chartMill = new ApexCharts(
+    document.querySelector("#chart-mill"),
+    optionsMill
+  );
+
+  chartMill.render();
+</script>
+
+{% endblock %}

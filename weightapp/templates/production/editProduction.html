@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+{% load widget_tweaks %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Edit Production</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item">
+                <a href="{% url 'viewProduction' %}">Production</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Edit Production
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title">แก้ไขบันทึกปฎิบัติการงานโรงโม่</h4>
+        </div>
+        <div class="card-content">
+          <div class="card-body">
+            <form class="form" method="post">
+              <div class="row">
+                {% csrf_token %}
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.mill.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.mill | add_class:"form-control" |attr:"required:true"}}
+                      <div class="form-control-icon">
+                        <i class="fa-solid fa-industry"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.line_type.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.line_type | add_class:"form-control" |attr:"required:true"}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-bar-chart-steps"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.created.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.created}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-calendar-week"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.goal.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.goal | add_class:"form-control" |attr:"required:true"}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-graph-up-arrow"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.plan_start_time.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.plan_start_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.plan_end_time.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.plan_end_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2 f-time">
+                  <p class="fw-bolder">{{form.run_start_time.label}}</p>
+                </div>
+                <div class="col-md-4 f-time">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.run_start_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2 f-time">
+                  <p class="fw-bolder">{{form.run_end_time.label}}</p>
+                </div>
+                <div class="col-md-4 f-time">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.run_end_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2 f-decimal">
+                  <p class="fw-bolder">{{form.mile_run_start_time.label}}</p>
+                </div>
+                <div class="col-md-4 f-decimal">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.mile_run_start_time| add_class:"form-control"|attr:"required:true"}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2 f-decimal">
+                  <p class="fw-bolder">{{form.mile_run_end_time.label}}</p>
+                </div>
+                <div class="col-md-4 f-decimal">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.mile_run_end_time| add_class:"form-control"|attr:"required:true"}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <hr class="my-2">
+                <h6 class="card-title my-3">เวลาในการสูญเสีย</h6>
+                <div class="col-md-6 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เหตุผล</p>
+                  </div>
+                </div>
+                <div class="col-md-6 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เวลา (นาที)</p>
+                  </div>
+                </div>
+                {{ formset.management_form }}
+                {% for form in formset %}
+                <!-- จำเป็นมาก -->{{form.id}} 
+                  <div class="col-md-6 col-12">
+                    <div class="form-group">
+                      {{form.loss_type | add_class:"form-control loss_type"}}
+                    </div>
+                  </div>
+                  <div class="col-md-6 col-12">
+                    <div class="form-group">
+                      {{form.loss_time}}
+                    </div>
+                  </div>
+                {% endfor %}
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.note.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.note}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-sticky"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary me-1 mb-1">
+                    Submit
+                  </button>
+                  <!--button type="reset" class="btn btn-light-secondary me-1 mb-1">
+                    Reset
+                  </button-->
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p>
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+<script>
+  $('#id_created').val('{{pd.created|date:"Y-m-d"}}');
+  
+  //ห้ามเปลี่ยน select option
+  $('.loss_type').css('pointer-events','none');
+  
+  $('form').submit(function() {
+    //เช็คว่าภายในวันนี้มีการบันทึก โรงโม่ และ line นี้ไปหรือยัง
+    var is_duplicate = false;
+    "{% for pdod in production_on_day %}"
+      if ("{{pdod.mill}}" == $("#id_mill").val() && "{{pdod.line_type}}" == $("#id_line_type").val() && "{{pdod.created}}" == $("#id_created").val())
+      is_duplicate = true;
+    "{% endfor %}"
+
+
+    //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
+    if($("#id_mill").val() == '03'){
+      $('#id_run_start_time').val('');
+      $('#id_run_end_time').val('');
+    }
+    else{
+      $('#id_mile_run_start_time').val('');
+      $('#id_mile_run_end_time').val('');
+    }
+
+    if (is_duplicate) {
+      $("#id_mill").trigger( "focus" );
+      alert('มีข้อมูลโรงโม่ และ line ของวันนี้อยู่แล้ว กรุณาเปลี่ยน โรงโม่ และ line');
+      return false;
+    }
+
+  });
+
+    //after load
+    $(window).on('load', function() {
+  
+      if($("#id_mill").val() == '03'){
+      $(".f-decimal").show();
+      $(".f-time").hide();
+
+      $('#id_run_start_time').prop('required',false);
+      $('#id_run_end_time').prop('required',false);
+    }
+    else{
+      $(".f-decimal").hide();
+      $(".f-time").show();
+
+      $('#id_mile_run_start_time').prop('required',false);
+      $('#id_mile_run_end_time').prop('required',false);
+    }
+  });
+
+  $("#id_mill").on( "change", function() {
+    if($(this).val() == '03'){
+      $(".f-decimal").show();
+      $(".f-time").hide();
+
+      $('#id_run_start_time').prop('required',false);
+      $('#id_run_end_time').prop('required',false);
+    }
+    else{
+      $(".f-decimal").hide();
+      $(".f-time").show();
+
+      $('#id_mile_run_start_time').prop('required',false);
+      $('#id_mile_run_end_time').prop('required',false);
+    }
+      
+  } );
+  
+</script>
+{% endblock %}

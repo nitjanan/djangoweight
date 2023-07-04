@@ -1,0 +1,49 @@
+{% load static %}
+{% load crispy_forms_tags %}
+{% load widget_tweaks %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{% endblock %}</title>
+
+    <link rel="shortcut icon" href="{% static 'icon/favicon-96x96.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'icon/apple-icon-180x180.png' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'icon/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'icon/favicon-16x16.png' %}">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="{% static 'icon/ms-icon-144x144.png' %}">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="stylesheet" href="{% static 'compiled/css/app.css' %}" />
+    <link rel="stylesheet" href="{% static 'compiled/css/app-dark.css' %}" />
+    <link rel="stylesheet" href="{% static 'compiled/css/auth.css' %}" />
+  </head>
+
+  <body>
+    <script src="{% static 'js/initTheme.js' %}"></script>
+    <div id="auth">
+      <div class="row h-100">
+        <div class="col-lg-5 col-12">
+          <div id="auth-left">
+            <div class="auth-logo">
+              <h2>
+                <a href="{% url 'home' %}">
+                  <i class="fa-solid fa-scale-unbalanced-flip fa-bounce fa-lg"></i> Weight
+                </a>
+              </h2>
+            </div>
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+            <div class="col-lg-7 d-none d-lg-block">
+                <div id="auth-right"></div>
+            </div>
+      </div>
+    </div>
+    <script src="https://kit.fontawesome.com/fdd38baacb.js" crossorigin="anonymous"></script>
+  </body>
+</html>
+

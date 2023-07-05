@@ -146,6 +146,7 @@ def decimalToTime(deci):
     result = None
     if deci is not None:
         hours, minutes = map(int, str(deci).split('.'))
+        minutes = minutes * 6
         result = timedelta(hours=hours, minutes=minutes)
     return result
 
@@ -205,7 +206,6 @@ class Production(models.Model):
             self.run_time = calculatorDiffTime(self.run_start_time, self.run_end_time)#ชั่วโมงเดินเครื่อง
         elif self.mile_run_start_time and self.mile_run_end_time:
             self.run_time = decimalToTime(calculatorDiffTime(self.mile_run_start_time, self.mile_run_end_time))
-            print("testttttttt" + str(self.run_time))
         super().save(*args, **kwargs)
 
     class Meta:

@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Stone Estimate</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Stone Estimate
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-body">
+          <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.start_created|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.end_created|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.mill|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              <div>
+                <label for=""></label>
+                <div class="my-2">
+                  <button type="submit" class="btn btn-outline-info"><i class="fas fa-filter"></i> กรอง</button>
+                </div>
+              </div>
+            </div>
+          </form>
+            <div class="dropdown">
+              <button class="btn btn-success dropdown-toggle me-1" type="button" id="dropdownMenuButton2" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <i class="fa-solid fa-file-excel"></i> รายงานการผลิตเหมือง 200 ไร่
+              </button>
+              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton2">
+                <a class="dropdown-item" href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}">Export EXCEL</a>
+                <a class="dropdown-item" href="#">Export CSV</a>
+                <a class="dropdown-item" href="#">Export PDF</a>
+              </div>
+            </div>
+            <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStoneEstimate' %}">สร้างการประมาณการณ์หิน <i class="fa-solid fa-circle-plus"></i></a>
+            <div class="table-responsive my-3">
+              <table class="table table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th>วันที่</th>
+                    <th>โรงโม่</th>
+                    <th>ชนิดหิน</th>
+                    <th>แก้ไข</th>
+                    <th>ลบ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for i in stone_estimate%}
+                  <tr>
+                    <td>{{i.created}}</td>
+                    <td>{{i.mill}}</td>
+                    <td>
+                      {% for item in i.stoneestimateitem_set.all %}
+                        {% if item.percent %}<li>{{ item.stone_type }} : {{ item.percent }}%</li>{%endif%}
+                      {% endfor %}
+                    </td>
+                    <td>
+                      <a href="{% url 'editStoneEstimate' i.id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
+                    </td>
+                    <td>
+                      <a onclick="return confirm('คุณต้องการลบประมาณการณ์หินนี้หรือไม่ ?')" href="{% url 'removeStoneEstimate' i.id %}" class="btn btn-danger btn-sm"><i class="fas fa-trash-alt"></i> ลบ</a>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <th scope="row" colspan="9" class="text-center">
+                      <div class="alert alert-light-warning color-warning">
+                        <i class="bi bi-exclamation-triangle"></i>  ไม่มีรายการการประมาณ์การหิน
+                      </div>
+                    </th>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <!--Pagination-->
+              <nav aria-label="Page navigation">
+                <ul class="pagination float-end">
+                {% if stone_estimate.has_previous %}
+                    <li class="page-item">
+                    <a class="page-link" href="{% my_url stone_estimate.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                  </li>
+                {% endif %}
+
+                {% if stone_estimate.number|add:'-4' > 1 %}
+                    <li class="page-item"><a class="page-link" href="{% my_url stone_estimate.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% for i in stone_estimate.paginator.page_range %}
+                    {% if stone_estimate.number == i %}
+                        <li class="page-item active" aria-current="page">
+                      <span class="page-link">
+                        {{ i }}
+                        <span class="sr-only">(current)</span>
+                      </span>
+                    </li>
+                    {% elif i > stone_estimate.number|add:'-5' and i < stone_estimate.number|add:'5' %}
+                        <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if stone_estimate.paginator.num_pages > stone_estimate.number|add:'4' %}
+                  <li class="page-item"><a class="page-link" href="{% my_url stone_estimate.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% if stone_estimate.has_next %}
+                    <li class="page-item">
+                    <a class="page-link"  href="{% my_url stone_estimate.next_page_number 'page' request.GET.urlencode %}">Next</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
+                  </li>
+                {% endif %}
+              </ul>
+            </nav>
+            <!--end of Pagination-->
+            </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p>
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+<script>
+  var today = new Date();
+  var formattedDate = today.toISOString().split('T')[0];
+  
+  //$('#id_start_created').val(formattedDate);
+  //$('#id_end_created').val(formattedDate);
+
+  $(window).on('load', function() {
+    //after load
+    //$('#form_filter').submit();
+  });
+</script>
+{% endblock %}

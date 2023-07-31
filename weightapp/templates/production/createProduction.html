@@ -58,6 +58,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
+
                 <div class="col-md-2">
                   <p class="fw-bolder">{{form.mill.label}}</p>
                 </div>
@@ -169,7 +170,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
 
                 <div class="col-md-2 f-decimal">
-                  <p class="fw-bolder">{{form.mile_run_start_time.label}}</p>
+                  <p class="fw-bolder text-danger">{{form.mile_run_start_time.label}}</p>
                 </div>
                 <div class="col-md-4 f-decimal">
                   <div class="form-group has-icon-left">
@@ -182,7 +183,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
                 <div class="col-md-2 f-decimal">
-                  <p class="fw-bolder">{{form.mile_run_end_time.label}}</p>
+                  <p class="fw-bolder text-danger">{{form.mile_run_end_time.label}}</p>
                 </div>
                 <div class="col-md-4 f-decimal">
                   <div class="form-group has-icon-left">
@@ -194,7 +195,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     </div>
                   </div>
                 </div>
-
+                <hr class="my-4">
+                {{pd_goal_form.pk}}
+                <div class="col-md-2">
+                  <p class="fw-bolder text-warning">{{pd_goal_form.accumulated_goal.label}}</p>
+                </div>
+                <div class="col-md-10">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{pd_goal_form.accumulated_goal | add_class:"form-control" }}
+                      <div class="form-control-icon">
+                        <i class="bi bi-graph-up-arrow"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <hr class="my-2">
                 <h6 class="card-title my-3">เวลาในการสูญเสีย</h6>
                 <div class="col-md-6 col-12">
@@ -236,7 +251,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
                 <div class="col-12 d-flex justify-content-end">
                   <button type="submit" class="btn btn-primary me-1 mb-1">
-                    Submit
+                    บันทึก
                   </button>
                   <!--button type="reset" class="btn btn-light-secondary me-1 mb-1">
                     Reset
@@ -280,6 +295,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 
 <script>
+  var have_production = false;
   var today = new Date();
   var formattedDate = today.toISOString().split('T')[0];
   $('#id_created').val(formattedDate);
@@ -287,6 +303,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   //ห้ามเปลี่ยน select option
   $('.loss_type').css('pointer-events','none');
 
+  //after load
   $(window).on('load', function() {
   "{% for it in base_loss_type %}"
       $("#id_form-{{forloop.counter0}}-loss_type").val("{{it.id}}");
@@ -304,12 +321,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   //before save
   $('form').submit(function() {
-    //เช็คว่าภายในวันนี้มีการบันทึก โรงโม่ และ line นี้ไปหรือยัง
-    var is_duplicate = false;
-    "{% for pdod in production_on_day %}"
-      if ("{{pdod.mill}}" == $("#id_mill").val() && "{{pdod.line_type}}" == $("#id_line_type").val() && "{{pdod.created}}" == $("#id_created").val())
-      is_duplicate = true;
-    "{% endfor %}"
 
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
     if($("#id_mill").val() == '03'){
@@ -322,7 +333,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
 
     //เช็คว่าวันนี้มี save โรงโม่ และ line นี้หรือยัง ถ้ามีแล้วไม่ให้ save
-    if (is_duplicate) {
+    if(have_production){
       $("#id_mill").trigger( "focus" );
       alert('มีข้อมูลโรงโม่ และ line ของวันนี้อยู่แล้ว กรุณาเปลี่ยน โรงโม่ และ line');
       return false;
@@ -332,6 +343,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   
 
   $("#id_mill").on( "change", function() {
+    //โรงโม่ 3 เปลี่ยน input
     if($(this).val() == '03'){
       $(".f-decimal").show();
       $(".f-time").hide();
@@ -348,6 +360,75 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
       
   } );
+
+  $("#id_line_type").on( "change", function() {
+    //หากไม่ใช่ line 1  ให้เปลี่ยนเป้าเป็น 0.0
+      if($(this).val() != '1'){
+        $("#id_goal").val('0.0');
+        $('#id_goal').css('pointer-events','none');
+      }else{
+        $('#id_goal').css('pointer-events','');
+      }
+  } );
+
+
+  $('#id_mill, #id_line_type, #id_created').change(function() {
+      searchProductionGoal();
+  });
+
+  function durationToTime(durationString){
+    // Extracting hours and minutes from the string
+    var hours = durationString.match(/(\d+)H/)[1];
+    var minutes = durationString.match(/(\d+)M/)[1];
+
+    // Formatting the hours and minutes as "HH:MM"
+    var timeString = ("0" + hours).slice(-2) + ":" + ("0" + minutes).slice(-2);
+
+    // Setting the value of the input element using jQuery
+    return timeString;
+  }
+
+	function searchProductionGoal(){
+        var mill = $("#id_mill").val();
+        var line_type = $("#id_line_type").val();
+        var created = $("#id_created").val();
+        var pd_id = '';
+        // Create Ajax Call
+        if(mill && line_type && created){
+                //set id_distributor
+              $.ajax({
+                url: '{% url "searchProductionGoal" %}',
+                data: {
+                        'mill_id': mill,
+                        'line_type_id': line_type,
+                        'created': created,
+                        'pd_id': pd_id,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    have_production = data.have_production;
+
+                    if (data.pd_goal_list == "") {
+                      $("#id_accumulated_goal").val('');
+                      $("#id_pk").val('');
+                    }else{
+                      $("#id_accumulated_goal").val(data.pd_goal_list[0].accumulated_goal);
+                      $("#id_pk").val(data.pd_goal_list[0].id);
+                    }
+
+                    //set ข้อมูล line 1 ใน line อื่นๆ
+                    if (data.pd_line1) {
+                      if(line_type != '1'){
+                        $("#id_plan_start_time").val(durationToTime(data.pd_line1[0].plan_start_time));
+                        $("#id_plan_end_time").val(durationToTime(data.pd_line1[0].plan_end_time));
+                      }
+                    }
+
+                }
+              });
+        }
+        return false;
+    }
 
 </script>
 {% endblock %}

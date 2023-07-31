@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -44,7 +44,7 @@ class ProductionForm(forms.ModelForm):
         'note': forms.Textarea(attrs={'class':'form-control','rows':2, 'cols':15}),
         }
        labels = {
-            'created': _('วันที่สร้าง'),
+            'created': _('วันที่ผลิต'),
             'mill': _('โรงโม่'),
             'line_type': _('Line'),
             'goal': _('เป้าต่อวัน (ตัน)'),
@@ -52,6 +52,8 @@ class ProductionForm(forms.ModelForm):
             'plan_end_time': _('ชั่วโมงตามแผน (สิ้นสุด)'),
             'run_start_time': _('ชั่วโมงเดินเครื่อง (เริ่ม)'),
             'run_end_time': _('ชั่วโมงเดินเครื่อง (สิ้นสุด)'),
+            'mile_run_start_time': _('เลขไมล์ (เริ่ม)'),
+            'mile_run_end_time': _('เลขไมล์ (สิ้นสุด)'),
             'note': _('หมายเหตุ'),
        }
 
@@ -138,3 +140,43 @@ ProductionLossItemInlineFormset = inlineformset_factory(
     extra=1,
 )
 
+
+class ProductionGoalForm(forms.ModelForm):
+    pk = forms.IntegerField(widget = forms.HiddenInput(), required = False)
+    class Meta:
+       model = ProductionGoal
+       fields = ('accumulated_goal','pk')
+       labels = {
+            'accumulated_goal': _('เป้าที่คาดการณ์ของเดือนนี้'),
+       }
+
+#เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
+class StoneEstimateForm(forms.ModelForm):
+    class Meta:
+       model = StoneEstimate
+       fields = ('created', 'mill',)
+       widgets = {
+        'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        }
+       labels = {
+            'created': _('วันที่ประมาณการณ์'),
+            'mill': _('โรงโม่'),
+       }
+
+class StoneEstimateItemForm(forms.ModelForm):
+    class Meta:
+       model = StoneEstimateItem
+       fields=('stone_type', 'percent')
+       widgets = {
+        }
+
+#เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
+StoneEstimateItemInlineFormset = inlineformset_factory(
+    StoneEstimate,
+    StoneEstimateItem,
+    form=StoneEstimateItemForm,
+    fields=('stone_type', 'percent'),
+    widgets = {  
+    },
+    extra=1,
+)

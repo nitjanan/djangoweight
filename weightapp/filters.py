@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -42,15 +42,30 @@ class ProductionFilter(django_filters.FilterSet):
         model = Production
         fields = ('created', 'mill', 'line_type',)
         
-
+    '''
     def __init__(self, data, *args, **kwargs):
         if not data.get('start_created') and not data.get('end_created'):
             data = data.copy()
             data['start_created'] =  date.today().__str__()
             data['end_created'] =  date.today().__str__()
-        super().__init__(data, *args, **kwargs)
+        super().__init__(data, *args, **kwargs)    
+    '''
     
 ProductionFilter.base_filters['start_created'].label = 'วันที่'
 ProductionFilter.base_filters['end_created'].label = 'ถึง'
 ProductionFilter.base_filters['mill'].label = 'โรงโม่'
 ProductionFilter.base_filters['line_type'].label = 'Line'
+
+class StoneEstimateFilter(django_filters.FilterSet):
+    start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
+    end_created = django_filters.DateFilter(field_name = "created", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
+    mill =  django_filters.ModelChoiceFilter(field_name="mill", queryset= BaseMill.objects.all())
+
+    class Meta:
+        model = StoneEstimate
+        fields = ('created', 'mill',)
+
+StoneEstimateFilter.base_filters['start_created'].label = 'วันที่'
+StoneEstimateFilter.base_filters['end_created'].label = 'ถึง'
+StoneEstimateFilter.base_filters['mill'].label = 'โรงโม่'
+

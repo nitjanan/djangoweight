@@ -102,6 +102,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>นน.เข้า</th>
                   <th>นน.ออก</th>
                   <th>นน.สุทธิ</th>
+                  <th>แก้ไข</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,6 +116,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
+                  <td>
+                    <a href="{% url 'editWeight' i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>

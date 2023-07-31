@@ -16,16 +16,61 @@ class BaseWeightType(models.Model):
         return self.name
 
 class BaseVatType(models.Model):
-    base_vat_type_id = models.CharField(primary_key = True, max_length=120)
-    base_vat_type_name = models.CharField(blank=True, null=True, max_length=255)
-    base_vat_type_des = models.CharField(blank=True, null=True, max_length=255)
+    base_vat_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสชนิดvat")
+    base_vat_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อชนิดvat")
+    base_vat_type_des = models.CharField(blank=True, null=True, max_length=255, verbose_name="คำอธิบาย")
     
     class Meta:
         db_table = 'base_vat_type'
+        verbose_name = 'ชนิดvat'
+        verbose_name_plural = 'ข้อมูลชนิดvat'
 
     def __str__(self):
         return self.base_vat_type_des
     
+class BaseJobType(models.Model):
+    base_job_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสประเภทงานของลูกค้า")
+    base_job_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อประเภทงานของลูกค้า")
+    
+    class Meta:
+        db_table = 'base_job_type'
+        verbose_name = 'ประเภทงานของลูกค้า'
+        verbose_name_plural = 'ข้อมูลประเภทงานของลูกค้า'
+
+    def __str__(self):
+        return self.base_job_type_name
+    
+class BaseStoneType(models.Model):
+    base_stone_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหิน")
+    base_stone_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อหิน")
+    type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทหิน")
+    cal_q = models.CharField(blank=True, null=True, max_length=120, verbose_name="ค่าคำนวณคิว")
+    
+    class Meta:
+        db_table = 'base_stone_type'
+        verbose_name = 'ชนิดหิน'
+        verbose_name_plural = 'ข้อมูลชนิดหิน'
+
+    def __str__(self):
+        return self.base_stone_type_name
+    
+class BaseCustomer(models.Model):
+    customer_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสลูกค้า")
+    customer_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อลูกค้า")
+    address = models.CharField(blank=True, null=True, max_length=255, verbose_name="ที่อยู่")
+    send_to = models.CharField(blank=True, null=True, max_length=255, verbose_name="ส่งที่")
+    customer_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทลูกค้า")
+    base_vat_type = models.ForeignKey(BaseVatType,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ชนิดvat")
+    base_job_type = models.ForeignKey(BaseJobType,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ประเภทงานของลูกค้า")
+    
+    class Meta:
+        db_table = 'base_customer'
+        verbose_name = 'ลูกค้า'
+        verbose_name_plural = 'ข้อมูลลูกค้า'
+
+    def __str__(self):
+        return self.customer_name
+
 class BaseWeightStation(models.Model):
     id = models.CharField(primary_key = True, max_length=120)
     des = models.CharField(blank=True, null=True,max_length=120)
@@ -45,8 +90,8 @@ class Weight(models.Model):
     date = models.DateField()#วันที่
     date_in = models.DateField(blank=True, null=True)#วันที่ชั่งเข้า
     date_out = models.DateField(blank=True, null=True)#วันที่ชั่งออก
-    time_in = models.TextField(blank=True, null=True)#เวลาชั่งเข้า
-    time_out = models.TextField(blank=True, null=True)#เวลาชั่งออก
+    time_in = models.TimeField(blank=True, null=True)#เวลาชั่งเข้า
+    time_out = models.TimeField(blank=True, null=True)#เวลาชั่งออก
     ref_id = models.TextField(blank=True, null=True)#เลขที่ใบตัก
     doc_id = models.TextField(blank=True, null=True)#เลขที่เอกสาร
     car_registration_id = models.TextField(blank=True, null=True)#รหัสทะเบียนรถ
@@ -131,6 +176,18 @@ class BaseMill(models.Model):
     def __str__(self):
         return self.name
     
+class BaseTimeEstimate(models.Model):
+    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    time_from = models.TimeField(null = True, blank=True)
+    time_to = models.TimeField(null = True, blank=True)
+    time_name = models.CharField(blank=True, null=True, max_length=120)
+
+    class Meta:
+        db_table = 'base_time_estimate'
+
+    def __str__(self):
+        return self.time_name
+    
 def setDurationTime(duration):
     result = None
     if duration is not None:
@@ -156,11 +213,21 @@ def calculatorDiffTime(start_time, end_time):
         difference = end_time - start_time
     return difference
 
+#เก็บเป้าสะสมของตามเดือนนั้นๆ ตามโรงโม่และ line
+class ProductionGoal(models.Model):
+    date = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต")
+    accumulated_goal = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#เป้าสะสมของเดือนปีนั้นๆ
+    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    line_type = models.ForeignKey(BaseLineType,on_delete=models.CASCADE, null = True, blank=True)
+
+    class Meta:
+        db_table = 'production_goal'
+
 class Production(models.Model):
     mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
     line_type = models.ForeignKey(BaseLineType,on_delete=models.CASCADE, null = True, blank=True)
 
-    created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันเวลาที่สร้างครั้งแรกอัตโนมัติ
+    created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ผลิต
     update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
 
     goal = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#เป้าต่อวัน
@@ -185,6 +252,7 @@ class Production(models.Model):
     capacity_per_hour = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#กำลังการผลิตต่อชั่วโมง
     note = models.TextField(blank=True, null=True)#หมายเหตุ
 
+    pd_goal =  models.ForeignKey(ProductionGoal,on_delete=models.CASCADE, null = True, blank=True)
     '''
     def clean(self):
         if self.plan_start_time > self.plan_end_time:
@@ -194,7 +262,6 @@ class Production(models.Model):
         return super().clean()    
     '''
     
-
     def save(self, *args, **kwargs):
         # Convert the timedelta to string and extract the hours and minutes
         self.plan_start_time = setDurationTime(self.plan_start_time)
@@ -226,3 +293,17 @@ class ProductionLossItem(models.Model):
         db_table = 'production_loss_item'
 
 
+class StoneEstimate(models.Model):
+    created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
+    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    
+    class Meta:
+        db_table = 'stone_estimate'
+
+class StoneEstimateItem(models.Model):
+    stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
+    percent = models.IntegerField(blank=True, null=True)
+    se = models.ForeignKey(StoneEstimate,on_delete=models.CASCADE, null = True, blank=True)
+    
+    class Meta:
+        db_table = 'stone_estimate_item'

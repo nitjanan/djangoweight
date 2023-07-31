@@ -79,7 +79,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <a class="dropdown-item" href="#">Export PDF</a>
               </div>
             </div>
-            <a type="button" class="btn btn-info btn-block btn-lg my-3" href="{% url 'createProduction' %}"><i class="fa-solid fa-circle-plus"></i> สร้างบันทึกปฎิบัติการงานโรงโม่</a>
+            <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createProduction' %}">สร้างบันทึกปฎิบัติการงานโรงโม่ <i class="fa-solid fa-circle-plus"></i></a>
             <div class="table-responsive my-3">
               <table class="table table-hover">
                 <thead class="table-dark">
@@ -87,6 +87,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <th>วันที่</th>
                     <th>โรงโม่</th>
                     <th>Line</th>
+                    <th>เป้าต่อวัน</th>
                     <th>ชั่วโมงเดินเครื่อง (เริ่ม)</th>
                     <th>ชั่วโมงเดินเครื่อง (สิ้นสุด)</th>
                     <th>ชั่วโมงเดินเครื่อง</th>
@@ -101,6 +102,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <td>{{i.created}}</td>
                     <td>{{i.mill}}</td>
                     <td>{{i.line_type}}</td>
+                    <!--td>
+                      {% for item in i.productionlossitem_set.all %}
+                          {{ item.loss_type }}
+                      {% endfor %}
+                    </td-->
+                    <td class="text-end">{{i.goal| intcomma}}</td>
                     <td>{% if i.run_start_time %}{{i.run_start_time | format_duration_substring}}{% elif i.mile_run_start_time %}{{i.mile_run_start_time}}{% endif %}</td>
                     <td>{% if i.run_end_time %}{{i.run_end_time| format_duration_substring}}{% elif i.mile_run_end_time %}{{i.mile_run_end_time}}{% endif %}</td>
                     <td>{{i.run_time| format_duration_substring}}</td>

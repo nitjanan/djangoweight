@@ -4,7 +4,13 @@
 
 {% block css %}
 <style>
-
+.red-text {
+  color: red;
+}
+.apexcharts-datalabel-value{
+  fill: #737CA1;
+  font-weight : 600 ;
+}
 </style>
 {% endblock %}
 
@@ -38,10 +44,10 @@
                 </div>
                 <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
                   <h6 class="text-muted font-semibold">
-                    หิน 3/4
+                    Total
                   </h6>
                   <h6 class="font-extrabold mb-0">
-                    {% if tf_to_day.weight_total__sum %}{{tf_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                    {% if data_sum_produc_all%}{{data_sum_produc_all|intcomma}}{% else %}0.000{% endif %} ตัน
                   </h6>
                 </div>
               </div>
@@ -63,9 +69,9 @@
                   </div>
                 </div>
                 <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
-                  <h6 class="text-muted font-semibold">หิน 40-80 (Ex)</h6>
+                  <h6 class="text-muted font-semibold">โรงโม่ 1</h6>
                   <h6 class="font-extrabold mb-0">
-                    {% if fex_to_day.weight_total__sum %}{{fex_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                    {% if data_sum_produc_mill1 %}{{data_sum_produc_mill1 |intcomma}}{% else %}0.000{% endif %} ตัน
                   </h6>
                 </div>
               </div>
@@ -87,9 +93,9 @@
                   </div>
                 </div>
                 <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
-                  <h6 class="text-muted font-semibold">หินฝุ่น</h6>
+                  <h6 class="text-muted font-semibold">โรงโม่ 2</h6>
                   <h6 class="font-extrabold mb-0">
-                    {% if du_to_day.weight_total__sum %}{{du_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                    {% if data_sum_produc_mill2 %}{{data_sum_produc_mill2 |intcomma}}{% else %}0.000{% endif %} ตัน
                   </h6>
                 </div>
               </div>
@@ -111,9 +117,9 @@
                   </div>
                 </div>
                 <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
-                  <h6 class="text-muted font-semibold">หินคลุก A & B</h6>
+                  <h6 class="text-muted font-semibold">โรงโม่ 3</h6>
                   <h6 class="font-extrabold mb-0">
-                    {% if mix_to_day.weight_total__sum %}{{mix_to_day.weight_total__sum |intcomma}}{% else %}0.000{% endif %} ตัน
+                    {% if data_sum_produc_mill3 %}{{data_sum_produc_mill3 |intcomma}}{% else %}0.000{% endif %} ตัน
                   </h6>
                 </div>
               </div>
@@ -125,7 +131,7 @@
         <div class="col-12">
           <div class="card">
             <div class="card-header">
-              <h4>Stone Weight</h4>
+              <h4>เป้าผลิตสะสมประจำเดือน</h4>
             </div>
             <div class="card-body">
               <!--div id="chart-profile-visit"></div-->
@@ -142,7 +148,7 @@
             </div>
             <div class="card-body">
               <div class="alert alert-light-info color-info">
-                วันที่ {{weight.1.date}} <p class="float-end"> รวมทั้งหมด {{sum_all_weight |intcomma}} ตัน</p>
+                วันที่ {{weight.1.date}} <p class="float-end"> รวม {{sum_all_weight |intcomma}} ตัน</p>
               </div>
               <div class="table-responsive">
                 <table class="table table-striped" id="table1"><!--เปลี่ยนจำนวนรายการที่แสดงต่อหน้า perPage:5 -->
@@ -174,7 +180,7 @@
         <div class="col-12 col-xl-6">
           <div class="card">
             <div class="card-header">
-              <h4>Mill</h4>
+              <h4>ยอดสะสมประจำเดือน</h4>
             </div>
             <div class="card-body">
               <div id="chart-mill"></div>
@@ -262,7 +268,7 @@
             <div class="avatar avatar-xl">
               <img src="{% static 'compiled/jpg/5.jpg'%}" alt="Face 1" />
             </div>
-            {% if request.user.is_authenticated and request.user %}
+            {% if request.user.is_authenticated %}
             <div class="ms-3 name">
               <h5 class="font-bold">{{request.user}}</h5>
               <h6 class="text-muted mb-0"><a href="{% url 'logout' %}">Logout</a></h6>
@@ -271,11 +277,19 @@
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" style="height: 30rem;">
         <div class="card-header">
-          <h4>Recent Messages</h4>
+          <h4>รายงานประจำเดือน</h4>
         </div>
         <div class="card-content pb-4">
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block">ยอดผลิตตามประเภทหิน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionAndLossDashboard' %}" class="btn btn-success rounded-pill btn-block">บันทึกปฏิบัติการงานโรงโม่</a>
+          </div>
+        </div>
+        <!-- div class="card-content pb-4">
           <div class="recent-message d-flex px-4 py-3">
             <div class="avatar avatar-lg">
               <img src="{% static 'compiled/jpg/4.jpg' %}" />
@@ -310,11 +324,11 @@
               Start Conversation
             </button>
           </div>
-        </div>
+        </div-->
       </div>
       <div class="card">
         <div class="card-header">
-          <h4>Weight Loss</h4>
+          <h4>เวลาในการสูญเสีย</h4>
         </div>
         <div class="card-body">
           <!--div id="chart-visitors-profile"></div-->
@@ -390,16 +404,16 @@
   var optionsStone = {
       series: [{
           name: 'sell',
-          data: [44, 55, 57, 56, 61,]
+          data: {{sell_list|safe}}
         }, {
           name: 'sell (Ex)',
-          data: [76, 85, 101, 98, 87,]
+          data: {{sell_ex_list|safe}}
         }, {
           name: 'stock',
-          data: [35, 41, 36, 26, 45,]
+          data: {{stock_list|safe}}
         }, {
           name: 'produce',
-          data: [76, 85, 101, 98, 87,]
+          data: {{produce_list|safe}}
         },
       ],
         chart: {
@@ -435,6 +449,11 @@
         yaxis: {
           title: {
             text: 'stone weight total on mounth'
+          },
+          labels: {
+            formatter: function (value) {
+              return value.toLocaleString() + " ตัน";
+            }
           }
         },
         fill: {
@@ -443,17 +462,17 @@
         tooltip: {
           y: {
             formatter: function (val) {
-              return  val + "   ton"
+              return  val.toLocaleString() + " ตัน"
             }
           }
         }
   };
 
   var optionsWeightLoss = {
-        series: [44, 55, 67, 83],
+        series: {{list_persent_loss_weight|safe}},
           chart: {
           height: "350px",
-          //redrawOnParentResize: true,
+          redrawOnParentResize: true,
           type: 'radialBar',
         },
         plotOptions: {
@@ -467,29 +486,32 @@
               },
               total: {
                 show: true,
-                label: 'เป้าหมาย',
+                label: 'ชั่วโมงทำงาน',
+                color: '#9370DB',
                 formatter: function (w) {
-                  // By default this function returns the average of all series. The below is just an example to show the use of custom formatter function
-                  return 24965.120 + " ton"
+                  return '{{actual_working_time_all | intcomma}}';
+                },
+                style: {
+                  color: 'red' // Set the color of the text here
                 }
               }
             }
           }
         },
-        labels: ['โรงโม่ 3', 'โรงโม่ 2', 'โรงโม่ 1', 'ทำได้จริง'],
+        labels: ['โรงโม่ 3', 'โรงโม่ 2', 'โรงโม่ 1', 'เวลาสูญเสียรวม'],
   };
 
   var optionsMill = {
           series: [{
           name: 'โรงโม่ 1',
-          data: [31, 40, 28, 51, 42, 109, 100]
+          data: {{list_goal_mill_1|safe}},
         }, {
           name: 'โรงโม่ 2',
-          data: [11, 32, 45, 32, 34, 52, 41]
+          data: {{list_goal_mill_2|safe}},
         }, 
         {
           name: 'โรงโม่ 3',
-          data: [45, 75, 12, 55, 20, 60, 80]
+          data: {{list_goal_mill_3|safe}},
         }],
           chart: {
           height: 350,
@@ -503,11 +525,20 @@
         },
         xaxis: {
           type: 'datetime',
-          categories: ["2018-09-19T00:00:00.000Z", "2018-09-19T01:30:00.000Z", "2018-09-19T02:30:00.000Z", "2018-09-19T03:30:00.000Z", "2018-09-19T04:30:00.000Z", "2018-09-19T05:30:00.000Z", "2018-09-19T06:30:00.000Z"]
+          categories: {{ list_date|safe }},
+        },
+        yaxis: {
+          min: 0,
+          max: 100,
+          labels: {
+            formatter: function (value) {
+              return value + '%';
+            }
+          }
         },
         tooltip: {
           x: {
-            format: 'dd/MM/yy HH:mm'
+            format: 'dd/MM/yyyy'
           },
         },
   };
@@ -526,6 +557,19 @@
 
   chartWeightLoss.render();
 
+  window.addEventListener('resize', onResizeFunction);
+  window.addEventListener("load", onResizeFunction);
+
+  function onResizeFunction (e){
+    var chartElement = document.querySelector("#chart-weight-loss");
+    var chartWidth = chartElement.offsetWidth;
+
+      chartWeightLoss.updateOptions({
+        chart: {
+          height: chartWidth + 60 // Set the chart height equal to the current width
+        },
+      });
+  }
 
   var chartMill = new ApexCharts(
     document.querySelector("#chart-mill"),
@@ -533,6 +577,8 @@
   );
 
   chartMill.render();
+
+
 </script>
 
 {% endblock %}

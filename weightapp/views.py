@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite
 from django.db.models import Sum, Q
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -250,7 +250,7 @@ def logoutUser(request):
     return redirect('login')
 
 def weightTable(request):
-    data = Weight.objects.filter(date__gte='2023-01-01', date__lte='2023-03-31').order_by('date')
+    data = Weight.objects.filter(date__gte='2023-01-01', date__lte='2023-03-31').order_by('date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -269,7 +269,7 @@ def editWeight(request, weight_id):
     weight_data = Weight.objects.get(weight_id = weight_id)
 
     if request.method == "POST":
-        form = ProductionForm(request.POST, request.FILES, instance=weight_data)
+        form = WeightForm(request, request.POST, request.FILES, instance=weight_data)
 
         if form.is_valid():
             # save weight
@@ -277,10 +277,41 @@ def editWeight(request, weight_id):
             weight.save()
             return redirect('weightTable')
     else:
-        form = ProductionForm(instance=weight_data)
+        form = WeightForm(request, instance=weight_data)
 
-    context = {'production_page':'active', 'form': form, 'weight_data': weight_data}
+    context = {'weightTable_page':'active', 'form': form, 'weight': weight_data}
     return render(request, "weight/editWeight.html",context)
+
+def searchDataCustomer(request):
+    if 'customer_id' in request.GET and 'weight_id' in request.GET:
+        customer_id = request.GET.get('customer_id')
+        weight_id = request.GET.get('weight_id')
+
+        site = BaseSite.objects.filter(base_customer_id = customer_id).values('base_site_name')
+    data = {
+        'site_list': list(site),
+    }
+    return JsonResponse(data)
+
+def setDataCustomer(request):
+    if 'customer_id' in request.GET:
+        customer_id = request.GET.get('customer_id')
+        qs = BaseCustomer.objects.get(customer_id = customer_id)
+        val = qs.customer_id + ":" + qs.customer_name
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def autocompalteCustomer(request):
+    if 'term' in request.GET:
+        term = request.GET.get('term')
+        qs = BaseCustomer.objects.filter(Q(customer_id__icontains = term) | Q(customer_name__icontains = term))[:15]
+        titles = list()
+        for obj in qs:
+            titles.append(obj.customer_id +":"+ obj.customer_name)
+    return JsonResponse(titles, safe=False)
+
 
 def excelProductionByStone(request, my_q, list_date):
     # Query ข้อมูลขาย

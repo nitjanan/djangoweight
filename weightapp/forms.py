@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -180,3 +180,40 @@ StoneEstimateItemInlineFormset = inlineformset_factory(
     },
     extra=1,
 )
+
+class WeightForm(forms.ModelForm):
+    def __init__(self,request,*args,**kwargs):
+        super (WeightForm,self).__init__(*args,**kwargs)
+        instance = kwargs.get('instance')
+
+        if instance:
+            # Access the attributes of the model instance if needed
+            customer_id_value = instance.customer_id
+
+        #เปลี่ยนการจัดกลุ่มเป็นแบบอื่นเพราะมีเคสที่ใช้เงื่อนไขนี้ไม่ได้
+        #self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_site_name = self.fields['site'], base_customer_id = self.fields['customer_id']))
+
+    site = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.none())
+    mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
+    stone_type = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    class Meta:
+       model = Weight
+       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name', 'province','driver_id','driver_name', 'customer_id','customer_name','site','mill_id','mill_name','stone_type','carry_type_name', 'car_team', 'stone_color', 'scoop_id', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content')
+       widgets = {
+        'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'customer_id': forms.HiddenInput(),
+        'customer_name': forms.HiddenInput(),
+        }
+       labels = {
+            'date': _('วันที่ผลิต'),
+            'car_registration_id': _('รหัสทะเบียนรถ'),
+            'car_registration_name': _('ทะเบียนรถ'),
+            'province': _('ทะเบียน'),
+            'driver_id': _('รหัสคนขับ'),
+            'driver_name': _('ชื่อคนขับ'),
+
+            'customer_name': _('ชื่อลูกค้า'),
+            'mill_id': _('รหัสโรงโม่'),
+            'mill_name': _('ชื่อโรงโม่'),
+            'stone_type': _('ชื่อหิน'),
+       }

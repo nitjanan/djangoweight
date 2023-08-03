@@ -64,31 +64,228 @@ input.del[type=checkbox] {
               <div class="row">
                 {% csrf_token %}
                 <div class="row">
-                    <div class="col-md-4">
-                      <label for="first-name-horizontal">ลูกค้า</label>
+                    <div class="col-md-2 form-group">
+                        <label for="first-name-horizontal">วันที่</label>
+                      </div>
+                      <div class="col-md-2 form-group">
+                        {{form.date |attr:"readonly"| add_class:"form-control" }}
+                      </div>
+                      <div class="col-md-8 form-group">
+                        {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">จ่ายเงิน</label>
+                    </div>
+                    <div class="col-md-10 form-group mt-2">
+                      <fieldset id="group1">
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            เงินสด
+                          </label>
+                        </div>
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            เงินเชื่อ
+                          </label>
+                        </div>
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            เงินโอน
+                          </label>
+                        </div>                        
+                      </fieldset>
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                        <label for="first-name-horizontal">ลูกค้า</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                        {{form.customer_name}}
+                        {{form.customer_id}}{{form.customer_name}}
+                        <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="searchDataCustomer()">
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">หน้างาน</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      <input type="text" id="first-name-horizontal" class="form-control" name="fname" placeholder="First Name">
+                      {{form.site | add_class:"form-control"}}
                     </div>
-                    <div class="col-md-4">
-                      <label for="email-horizontal">Email</label>
+                    <div class="col-md-2 form-group">
+                      {{form.carry_type_name  | add_class:"form-control"}}
                     </div>
-                    <div class="col-md-8 form-group">
-                      <input type="email" id="email-horizontal" class="form-control" name="email-id" placeholder="Email">
-                    </div>
-                    <div class="col-md-4">
-                      <label for="contact-info-horizontal">Mobile</label>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ทะเบียนรถ</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      <input type="number" id="contact-info-horizontal" class="form-control" name="contact" placeholder="Mobile">
+                      {{form.car_registration_name | add_class:"form-control"}}
                     </div>
-                    <div class="col-md-4">
-                      <label for="password-horizontal">Password</label>
+                    <div class="col-md-2 form-group">
+                      {{form.province  | add_class:"form-control"}}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ผู้ขับ</label>
+                    </div>
+                    <div class="col-md-5 form-group">
+                      {{form.driver_name | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-5 form-group">
+                      {{form.car_team  | add_class:"form-control"}}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">โรงโม่</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.mill_name | add_class:"form-control"}}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ชนิดหิน</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.stone_type | add_class:"form-control"}}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ประเภทหิน</label>
+                    </div>
+                    <div class="col-md-5 form-group">
+                      {{form.stone_color | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-5 form-group">
+                      <fieldset id="group2">
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            ล้างหิน
+                          </label>
+                        </div>
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            สเปรย์น้ำ
+                          </label>
+                        </div>
+                        <div class="form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <label class="form-check-label" for="Primary">
+                            ไม่มี
+                          </label>
+                        </div>
+                      </fieldset>
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ผู้ตัก</label>
+                    </div>
+                    <div class="col-md-2 form-group">
+                      {{form.scoop_id | add_class:"form-control" }}
                     </div>
                     <div class="col-md-8 form-group">
-                      <input type="password" id="password-horizontal" class="form-control" name="password" placeholder="Password">
+                      {{form.scoop_name | add_class:"form-control" }}
                     </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">หมายเหตุ</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.note | add_class:"form-control" }}
+                    </div>
+
                   <hr class="my-3">
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal" class="text-success">น้ำหนักเข้า</label>
+                  </div>
+                  <div class="col-md-9 form-group">
+                    {{form.weight_in | add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-1">
+                    <label for="first-name-horizontal" class="text-success">ตัน</label>
+                  </div>
+
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal" class="text-success">น้ำหนักออก</label>
+                  </div>
+                  <div class="col-md-9 form-group">
+                    {{form.weight_out | add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-1">
+                    <label for="first-name-horizontal" class="text-success">ตัน</label>
+                  </div>
+
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
+                  </div>
+                  <div class="col-md-9 form-group">
+                    {{form.weight_total | add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-1">
+                    <label for="first-name-horizontal" class="text-success">ตัน</label>
+                  </div>
+
+                  <hr class="my-3">
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal">ภาษี</label>
+                  </div>
+                  <div class="col-md-4 form-group">
+                    <fieldset id="group3">
+                      <div class="form-check form-check-warning form-check-inline me-4">
+                        <input class="form-check-input" type="radio" name="group3" id="Primary" checked="">
+                        <label class="form-check-label" for="Primary">
+                          รวมภาษี
+                        </label>
+                      </div>
+                      <div class="form-check form-check-warning form-check-inline me-4">
+                        <input class="form-check-input" type="radio" name="group3" id="Primary" checked="">
+                        <label class="form-check-label" for="Primary">
+                          ไม่รวมภาษี
+                        </label>
+                      </div>
+                    </fieldset>
+                  </div>
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal" class="text-danger">น้ำมัน</label>
+                  </div>
+                  <div class="col-md-3 form-group">
+                    {{form.oil_content | add_class:"form-control"}}
+                  </div>
+                  <div class="col-md-1">
+                    <label for="first-name-horizontal" class="text-danger">ลิตร</label>
+                  </div>
+
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal">ราคา/ตัน</label>
+                  </div>
+                  <div class="col-md-4 form-group">
+                    {{form.price_per_ton | add_class:"form-control"}}
+                  </div>
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal">จำนวนเงิน</label>
+                  </div>
+                  <div class="col-md-4 form-group">
+                    {{form.amount | add_class:"form-control"}}
+                  </div>
+
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal">vat 7%</label>
+                  </div>
+                  <div class="col-md-4 form-group">
+                    {{form.vat | add_class:"form-control"}}
+                  </div>
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal">จำนวนเงินสุทธิ</label>
+                  </div>
+                  <div class="col-md-4 form-group">
+                    {{form.amount_vat | add_class:"form-control"}}
+                  </div>
+                  
                   <div class="col-12 d-flex justify-content-end">
                     <button type="submit" class="btn btn-primary me-1 mb-1">
                       บันทึก
@@ -123,15 +320,89 @@ input.del[type=checkbox] {
 {% block script %}
 <script src="{% static 'js/components/dark.js' %}"></script>
 <script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
-
 <script src="{% static 'compiled/js/app.js' %}"></script>
 
-<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
-<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
-<script src="{% static 'js/pages/datatables.js' %}"></script>
+<link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+<link rel="stylesheet" href="/resources/demos/style.css">
+<script src="https://code.jquery.com/jquery-3.6.0.js"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
 
-<script>
-  //$('#id_start_created').val(formattedDate);
-  //$('#id_end_created').val(formattedDate);
+<script type="text/javascript">
+
+  $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
+  $("#id_site").append(new Option('{{weight.site}}'));
+  $('#id_site option:contains("{{weight.site}}")').prop('selected', true);
+  $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
+  $('#id_stone_type option:contains("{{weight.stone_type}}")').prop('selected', true);
+
+
+  setDataCustomer();
+
+  $( function() {
+      $( "#id-form-customer" ).autocomplete({
+        source: '{% url "autocompalteCustomer" %}',
+        minLength: 1,
+      });
+  } );
+
+  function searchDataCustomer(){
+        var tempSite = $("#id_site").val();
+
+        if($('#id-form-customer').val() != ""){
+          var str = $('#id-form-customer').val();
+          var items = str.split( ":" );
+          var idInput = items[0];
+            // Create Ajax Call
+            if(idInput){
+                $('#id_customer_id').val(items[0]);
+                $('#id_customer_name').val(items[1]);
+                //set id_distributor
+                $.ajax({
+                url: '{% url "searchDataCustomer" %}',
+                data: {
+                        'customer_id': idInput,
+                        'weight_id': "{{weight.weight_id}}",
+                    },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.site_list) {
+                            $("#id_site").find('option').not(':first').remove();
+                            //set option 
+                            for(var i = 0; i < data.site_list.length; i++){
+                                $("#id_site").append(new Option(data.site_list[i].base_site_name));
+                            }
+                    }
+                    $('#id_site option[value="'+tempSite +'"]').attr('selected','selected');
+                }
+                });
+            }
+            return false;
+        }else{
+            $("#id_site").find('option').not(':first').remove();
+        }
+  }
+
+  function setDataCustomer(){
+    if($('#id_customer_id').val() != ""){
+        var idInput = $('#id_customer_id').val();
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "setDataCustomer" %}',
+                data: {
+                    'customer_id': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                        $('#id-form-customer').val(data.val);
+                    }
+                }
+            });
+        }
+        return false;
+    }
+  }
+
 </script>
 {% endblock %}

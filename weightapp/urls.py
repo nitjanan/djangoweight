@@ -8,7 +8,7 @@ urlpatterns = [
     path('logout/', views.logoutUser,name="logout"),
 
     path('weight/table', views.weightTable,name="weightTable"),
-    path('weight/edit/<int:weight_id>', views.editWeight,name="editWeight"),
+    path('weight/edit/<int:mode>/<int:weight_id>', views.editWeight,name="editWeight"),
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
     path('searchDataCustomer/',views.searchDataCustomer,name="searchDataCustomer"),
     path('setDataCustomer/',views.setDataCustomer,name="setDataCustomer"),

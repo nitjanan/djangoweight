@@ -201,8 +201,6 @@ class WeightForm(forms.ModelForm):
        fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name', 'province','driver_id','driver_name', 'customer_id','customer_name','site','mill_id','mill_name','stone_type','carry_type_name', 'car_team', 'stone_color', 'scoop_id', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
-        'customer_id': forms.HiddenInput(),
-        'customer_name': forms.HiddenInput(),
         }
        labels = {
             'date': _('วันที่ผลิต'),

@@ -78,25 +78,25 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">จ่ายเงิน</label>
                     </div>
                     <div class="col-md-10 form-group mt-2">
-                      <fieldset id="group1">
+                      <fieldset id="pay_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินสด">
                           <label class="form-check-label" for="Primary">
                             เงินสด
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินเชื่อ">
                           <label class="form-check-label" for="Primary">
                             เงินเชื่อ
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group1" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินโอน">
                           <label class="form-check-label" for="Primary">
                             เงินโอน
                           </label>
-                        </div>                        
+                        </div>
                       </fieldset>
                     </div>
 
@@ -104,8 +104,7 @@ input.del[type=checkbox] {
                         <label for="first-name-horizontal">ลูกค้า</label>
                     </div>
                     <div class="col-md-10 form-group">
-                        {{form.customer_name}}
-                        {{form.customer_id}}{{form.customer_name}}
+                        {{form.customer_id | add_class:"d-none"}}{{form.customer_name| add_class:"d-none"}}
                         <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="searchDataCustomer()">
                     </div>
 
@@ -128,7 +127,6 @@ input.del[type=checkbox] {
                     <div class="col-md-2 form-group">
                       {{form.province  | add_class:"form-control"}}
                     </div>
-
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ขับ</label>
                     </div>
@@ -160,21 +158,21 @@ input.del[type=checkbox] {
                       {{form.stone_color | add_class:"form-control"}}
                     </div>
                     <div class="col-md-5 form-group">
-                      <fieldset id="group2">
+                      <fieldset id="clean_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="ล้างหิน">
                           <label class="form-check-label" for="Primary">
                             ล้างหิน
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="สเปรย์น้ำ">
                           <label class="form-check-label" for="Primary">
                             สเปรย์น้ำ
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="group2" id="Primary" checked="">
+                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="ไม่มี">
                           <label class="form-check-label" for="Primary">
                             ไม่มี
                           </label>
@@ -235,15 +233,15 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal">ภาษี</label>
                   </div>
                   <div class="col-md-4 form-group">
-                    <fieldset id="group3">
+                    <fieldset id="vat_type_group">
                       <div class="form-check form-check-warning form-check-inline me-4">
-                        <input class="form-check-input" type="radio" name="group3" id="Primary" checked="">
+                        <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked="" value="รวมภาษี">
                         <label class="form-check-label" for="Primary">
                           รวมภาษี
                         </label>
                       </div>
                       <div class="form-check form-check-warning form-check-inline me-4">
-                        <input class="form-check-input" type="radio" name="group3" id="Primary" checked="">
+                        <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked="" value="ไม่รวมภาษี">
                         <label class="form-check-label" for="Primary">
                           ไม่รวมภาษี
                         </label>
@@ -336,7 +334,14 @@ input.del[type=checkbox] {
   $('#id_stone_type option:contains("{{weight.stone_type}}")').prop('selected', true);
 
 
+  setDataRadio();
   setDataCustomer();
+
+  function setDataRadio(){
+    $('input[name="pay_group"][value="{{weight.pay}}"]').prop("checked", true);
+    $('input[name="clean_group"][value="{{weight.clean}}"]').prop("checked", true);
+    $('input[name="vat_type_group"][value="{{weight.vat_type}}"]').prop("checked", true);
+  }
 
   $( function() {
       $( "#id-form-customer" ).autocomplete({
@@ -401,6 +406,37 @@ input.del[type=checkbox] {
             });
         }
         return false;
+    }
+  }
+
+  $('input[name="vat_type_group"]').change(function(){
+    calculateAll();
+  });
+
+  
+  $("#id_price_per_ton").on( "keyup", function() {
+    calculateAll();
+  } );
+
+  function calculateAll(){
+    vat_type = $('input[name="vat_type_group"]:checked').val();
+
+    weight_total = $('#id_weight_total').val();
+    price_per_ton = $('#id_price_per_ton').val();
+    if(weight_total && price_per_ton){
+      amount = parseFloat(weight_total) * parseFloat(price_per_ton);
+      vat = (amount * 7)/100;
+      amount_vat = vat + amount;
+
+      if(vat_type == 'รวมภาษี'){
+        $('#id_amount').val(amount.toFixed(2));
+        $('#id_amount_vat').val(amount.toFixed(2));
+        $('#id_vat').val('0.00');
+      }else if(vat_type == 'ไม่รวมภาษี'){
+        $('#id_amount').val(amount.toFixed(2));
+        $('#id_amount_vat').val(amount_vat.toFixed(2));
+        $('#id_vat').val(vat.toFixed(2));
+      }
     }
   }
 

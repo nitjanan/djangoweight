@@ -265,8 +265,13 @@ def weightTable(request):
     return render(request, "weight/weightTable.html",context)
 
 
-def editWeight(request, weight_id):
+def editWeight(request, mode,  weight_id):
     weight_data = Weight.objects.get(weight_id = weight_id)
+
+    if mode == 1:
+        template_name = "weight/editWeightSell.html"
+    elif mode == 2:
+        template_name = "weight/editWeightStock.html"
 
     if request.method == "POST":
         form = WeightForm(request, request.POST, request.FILES, instance=weight_data)
@@ -280,7 +285,7 @@ def editWeight(request, weight_id):
         form = WeightForm(request, instance=weight_data)
 
     context = {'weightTable_page':'active', 'form': form, 'weight': weight_data}
-    return render(request, "weight/editWeight.html",context)
+    return render(request, template_name,context)
 
 def searchDataCustomer(request):
     if 'customer_id' in request.GET and 'weight_id' in request.GET:
@@ -1085,14 +1090,12 @@ def exportExcelStoneEstimateAndProduction(request):
 
     workbook = openpyxl.Workbook()
     for mill in mills:
-        list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
-
         sheet = workbook.create_sheet(title=mill.name)
 
+        list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        weight_stone_types = Weight.objects.filter(Q(stone_type__icontains = 'เข้าโม่') | Q(stone_type = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.name).values_list('stone_type', flat=True).distinct()
+        weight_stone_types = Weight.objects.filter(Q(stone_type__icontains = 'เข้าโม่') | Q(stone_type = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.name).order_by('stone_type').values_list('stone_type', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
-
 
         column_index = 2
         sheet.cell(row=1, column = column_index, value = "พนักงาน")
@@ -1114,7 +1117,7 @@ def exportExcelStoneEstimateAndProduction(request):
             sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
             sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
             column_index += 2
-    
+
         sheet.cell(row=1, column = column_index, value = "หินเข้าโม่ทั้งหมด")
         sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
         sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
@@ -1164,10 +1167,10 @@ def exportExcelStoneEstimateAndProduction(request):
                     mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type = 'เข้าโม่') | Q(stone_type = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
                     #หินเข้าโม่ทั้งหมด
                     crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
-                    
+
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
-                    
+
                     for stone_type in weight_stone_types:
 
                         weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type = stone_type, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
@@ -1224,7 +1227,7 @@ def exportExcelStoneEstimateAndProduction(request):
             for column in sheet.columns:
                 max_length = 0
                 column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
-                
+
                 for cell in column:
                     try:
                         if len(str(cell.value)) > max_length:
@@ -1244,7 +1247,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
                 sheet.column_dimensions[column_letter].width = adjusted_width
-                
+
                 # Set border for each cell in the column
                 border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
                 for cell in column:
@@ -1254,11 +1257,14 @@ def exportExcelStoneEstimateAndProduction(request):
                         cell.alignment = Alignment(horizontal='right', vertical='center')
                     cell.border = border
         
+        
+            
+
             
     workbook.remove(workbook['Sheet'])
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="StoneEstimate.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="production_data.xlsx"'
 
     workbook.save(response)
     return response

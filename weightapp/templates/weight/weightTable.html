@@ -97,6 +97,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>weight_id</th>
                   <th>เลขที่ชั่ง</th>
                   <th>วันที่</th>
+                  <th>เวลาเข้า</th>
+                  <th>เวลาออก</th>
                   <th>ลูกค้า</th>
                   <th>หิน</th>
                   <th>นน.เข้า</th>
@@ -111,13 +113,15 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.weight_id}}</td>
                   <td>{{i.doc_id}}</td>
                   <td>{{i.date |date:"d/m/Y"}}</td>
+                  <td>{{i.time_in}}</td>
+                  <td>{{i.time_out}}</td>
                   <td>{{i.customer_name}}</td>
                   <td>{{i.stone_type}}</td>
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
                   <td>
-                    <a href="{% url 'editWeight' i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
+                    <a href="{% url 'editWeight' i.base_weight_station_name.weight_type.id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
                   </td>
                 </tr>
                 {% endfor %}

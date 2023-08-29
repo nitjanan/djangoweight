@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+{% load widget_tweaks %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>{{text_mode}} {{table_name}}</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item">
+                <a href="{% url 'viewProduction' %}">{{table_name}}</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                {{text_mode}} {{table_name}}
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-content">
+          <div class="card-body">
+            <form class="form" method="post">
+              <div class="row">
+                {% csrf_token %}
+                {{form | crispy}}
+                <div class="col-12 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary me-1 mb-1">
+                    บันทึก
+                  </button>
+                  <!--button type="reset" class="btn btn-light-secondary me-1 mb-1">
+                    Reset
+                  </button-->
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p>
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+<script type="text/javascript">
+  //After load
+  $("#id_weight_type").prop('required',true);
+
+  if($("#id_weight_type").val() != 1){
+    $("#id_base_vat_type").prop('disabled', true);
+    $("#id_base_job_type").prop('disabled', true);
+  }
+
+  $("#id_weight_type").change(function(){
+    setRequiredSell($(this).val());
+  });
+
+  function setRequiredSell(weight_type){
+    if(weight_type == 1){
+      $("#id_base_vat_type").prop('required',true);
+      $("#id_base_job_type").prop('required',true);
+
+      $("#id_base_vat_type").prop('disabled', false);
+      $("#id_base_job_type").prop('disabled', false);
+
+    }else{
+      $("#id_base_vat_type").prop('required',false);
+      $("#id_base_job_type").prop('required',false);
+
+      $("#id_base_vat_type").val("");
+      $("#id_base_job_type").val("");
+
+      $("#id_base_vat_type").prop('disabled', true);
+      $("#id_base_job_type").prop('disabled', true);
+    }
+  }
+
+</script>
+
+{% endblock %}

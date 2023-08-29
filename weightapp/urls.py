@@ -10,8 +10,6 @@ urlpatterns = [
     path('weight/table', views.weightTable,name="weightTable"),
     path('weight/edit/<int:mode>/<int:weight_id>', views.editWeight,name="editWeight"),
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
-    path('searchDataCustomer/',views.searchDataCustomer,name="searchDataCustomer"),
-    path('setDataCustomer/',views.setDataCustomer,name="setDataCustomer"),
 
     path('production/view', views.viewProduction,name="viewProduction"),
     path('production/create', views.createProduction,name="createProduction"),
@@ -31,6 +29,48 @@ urlpatterns = [
     
     path('searchProductionGoal', views.searchProductionGoal, name="searchProductionGoal"),
     path('searchStoneEstimate', views.searchStoneEstimate, name="searchStoneEstimate"),
+    path('searchNumCalQ', views.searchNumCalQ, name="searchNumCalQ"),
+    path('searchDataCustomer/',views.searchDataCustomer,name="searchDataCustomer"),
+    path('setDataCustomer/',views.setDataCustomer,name="setDataCustomer"),
+    path('setDataCarryType/',views.setDataCarryType,name="setDataCarryType"),
+    path('searchTeamFromCar/',views.searchTeamFromCar,name="searchTeamFromCar"),
+    path('searchDataBaesCustomer/',views.searchDataBaesCustomer,name="searchDataBaesCustomer"),
+
+    path('baseMill/setting',views.settingBaseMill,name="settingBaseMill"),
+    path('baseMill/create',views.createBaseMill,name="createBaseMill"),
+    path('baseMill/edit/<str:id>',views.editBaseMill,name="editBaseMill"),
+
+    path('baseStoneType/setting',views.settingBaseStoneType,name="settingBaseStoneType"),
+    path('baseStoneType/create',views.createBaseStoneType,name="createBaseStoneType"),
+    path('baseStoneType/edit/<str:id>',views.editBaseStoneType,name="editBaseStoneType"),
+
+    path('baseScoop/setting',views.settingBaseScoop,name="settingBaseScoop"),
+    path('baseScoop/create',views.createBaseScoop,name="createBaseScoop"),
+    path('baseScoop/edit/<str:id>',views.editBaseScoop,name="editBaseScoop"),
+
+    path('baseCarTeam/setting',views.settingBaseCarTeam,name="settingBaseCarTeam"),
+    path('baseCarTeam/create',views.createBaseCarTeam,name="createBaseCarTeam"),
+    path('baseCarTeam/edit/<str:id>',views.editBaseCarTeam,name="editBaseCarTeam"),
+
+    path('baseCar/setting',views.settingBaseCar,name="settingBaseCar"),
+    path('baseCar/create',views.createBaseCar,name="createBaseCar"),
+    path('baseCar/edit/<str:id>',views.editBaseCar,name="editBaseCar"),
+
+    path('baseSite/setting',views.settingBaseSite,name="settingBaseSite"),
+    path('baseSite/create',views.createBaseSite,name="createBaseSite"),
+    path('baseSite/edit/<str:id>',views.editBaseSite,name="editBaseSite"),
+
+    path('baseCustomer/setting',views.settingBaseCustomer,name="settingBaseCustomer"),
+    path('baseCustomer/create',views.createBaseCustomer,name="createBaseCustomer"),
+    path('baseCustomer/edit/<str:id>',views.editBaseCustomer,name="editBaseCustomer"),
+
+    path('baseDriver/setting',views.settingBaseDriver,name="settingBaseDriver"),
+    path('baseDriver/create',views.createBaseDriver,name="createBaseDriver"),
+    path('baseDriver/edit/<str:id>',views.editBaseDriver,name="editBaseDriver"),
+
+    path('baseCarRegistration/setting',views.settingBaseCarRegistration,name="settingBaseCarRegistration"),
+    path('baseCarRegistration/create',views.createBaseCarRegistration,name="createBaseCarRegistration"),
+    path('baseCarRegistration/edit/<str:id>',views.editBaseCarRegistration,name="editBaseCarRegistration"),
 
     path('exportExcelStoneEstimateAndProduction/', views.exportExcelStoneEstimateAndProduction,name="exportExcelStoneEstimateAndProduction"),
 

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>ข้อมูลทะเบียนรถ</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                ข้อมูลทะเบียนรถ
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-header">
+          <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseCarRegistration' %}">เพิ่ม ทะเบียนรถ <i class="fa-solid fa-circle-plus"></i></a>
+        </div>
+        <div class="card-body">
+          <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.car_registration_id|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.car_registration_name|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              <div>
+                <label for=""></label>
+                <div class="my-2">
+                  <button type="submit" class="btn btn-outline-info"><i class="fas fa-filter"></i> ค้นหา</button>
+                </div>
+              </div>
+            </div>
+          </form>
+            <div class="table-responsive my-3">
+              <table class="table table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th>รหัสทะเบียนรถ</th>
+                    <th>ชื่อทะเบียนรถ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for i in base_car_registration%}
+                  <tr>
+                    <td><b><a href="{% url 'editBaseCarRegistration' i.car_registration_id %}">{{i.car_registration_id}}</a></b></td>
+                    <td>{{i.car_registration_name}}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <th scope="row" colspan="9" class="text-center">
+                      <div class="alert alert-light-warning color-warning">
+                        <i class="bi bi-exclamation-triangle"></i>  ไม่มีทะเบียนรถนี้
+                      </div>
+                    </th>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <!--Pagination-->
+              <nav aria-label="Page navigation">
+                <ul class="pagination float-end">
+                {% if base_car_registration.has_previous %}
+                    <li class="page-item">
+                    <a class="page-link" href="{% my_url base_car_registration.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                  </li>
+                {% endif %}
+
+                {% if base_car_registration.number|add:'-4' > 1 %}
+                    <li class="page-item"><a class="page-link" href="{% my_url base_car_registration.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% for i in base_car_registration.paginator.page_range %}
+                    {% if base_car_registration.number == i %}
+                        <li class="page-item active" aria-current="page">
+                      <span class="page-link">
+                        {{ i }}
+                        <span class="sr-only">(current)</span>
+                      </span>
+                    </li>
+                    {% elif i > base_car_registration.number|add:'-5' and i < base_car_registration.number|add:'5' %}
+                        <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if base_car_registration.paginator.num_pages > base_car_registration.number|add:'4' %}
+                  <li class="page-item"><a class="page-link" href="{% my_url base_car_registration.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% if base_car_registration.has_next %}
+                    <li class="page-item">
+                    <a class="page-link"  href="{% my_url base_car_registration.next_page_number 'page' request.GET.urlencode %}">Next</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
+                  </li>
+                {% endif %}
+              </ul>
+            </nav>
+            <!--end of Pagination-->
+            </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p>
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+<script>
+
+</script>
+{% endblock %}

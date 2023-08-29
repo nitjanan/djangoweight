@@ -78,7 +78,7 @@ input.del[type=checkbox] {
                         <label for="first-name-horizontal">หน้างาน</label>
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.customer_id | add_class:"form-control"}}
+                      {{form.customer_id |attr:"readonly" | add_class:"form-control"}}
                     </div>
                     <div class="col-md-8 form-group">
                       {{form.customer_name | add_class:"form-control"}}
@@ -88,19 +88,17 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">ทะเบียนรถ</label>
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.car_registration_id | add_class:"form-control"}}
+                      {{form.car_registration_id |attr:"readonly" | add_class:"form-control"}}
                     </div>
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-8 form-group">
                       {{form.car_registration_name | add_class:"form-control"}}
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.province  | add_class:"form-control"}}
-                    </div>
+                    
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ขับ</label>
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.driver_id | add_class:"form-control"}}
+                      {{form.driver_id |attr:"readonly" | add_class:"form-control"}}
                     </div>
                     <div class="col-md-8 form-group">
                       {{form.driver_name | add_class:"form-control"}}
@@ -109,22 +107,28 @@ input.del[type=checkbox] {
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">โรงโม่</label>
                     </div>
-                    <div class="col-md-10 form-group">
+                    <div class="col-md-2 form-group">
+                      {{form.mill_id |attr:"readonly"  | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-8 form-group">
                       {{form.mill_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ชนิดหิน</label>
                     </div>
-                    <div class="col-md-10 form-group">
-                      {{form.stone_type | add_class:"form-control"}}
+                    <div class="col-md-2 form-group">
+                      {{form.stone_type_id |attr:"readonly" | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-8 form-group">
+                      {{form.stone_type_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ตัก</label>
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.scoop_id | add_class:"form-control" }}
+                      {{form.scoop_id |attr:"readonly" | add_class:"form-control" }}
                     </div>
                     <div class="col-md-8 form-group">
                       {{form.scoop_name | add_class:"form-control" }}
@@ -198,85 +202,83 @@ input.del[type=checkbox] {
 <script src="{% static 'compiled/js/app.js' %}"></script>
 
 <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
-<link rel="stylesheet" href="/resources/demos/style.css">
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script type="text/javascript">
 
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
-  $("#id_site").append(new Option('{{weight.site}}'));
-  $('#id_site option:contains("{{weight.site}}")').prop('selected', true);
+  $('#id_customer_name option:contains("{{weight.customer_name}}")').prop('selected', true);
   $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
-  $('#id_stone_type option:contains("{{weight.stone_type}}")').prop('selected', true);
+  $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
+  $('#id_car_registration_name option:contains("{{weight.car_registration_name}}")').prop('selected', true);
+  $('#id_driver_name option:contains("{{weight.driver_name}}")').prop('selected', true);
+  $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
 
-  setDataCustomer();
+  // BEFORE form submission
+  $('form').submit(function() {
+    customer_name = $('#id_customer_name').val();
+    if(customer_name == 'ยกเลิก'){
+        $('#id_weight_in').val('0.000');
+        $('#id_weight_out').val('0.000');
+        $('#id_weight_total').val('0.000');
+    }
+    $("#id_customer_id").val($("#id_customer_name").val());
+    $("#id_car_registration_id").val($("#id_car_registration_name").val());
+    $("#id_driver_id").val($("#id_driver_name").val());
+    $("#id_scoop_id").val($("#id_scoop_name").val());
+    $("#id_mill_id").val($("#id_mill_name").val());
+    $("#id_stone_type_id").val($("#id_stone_type_name").val());
+  });
 
-  $( function() {
-      $( "#id-form-customer" ).autocomplete({
-        source: '{% url "autocompalteCustomer" %}',
-        minLength: 1,
-      });
-  } );
+  $("#id_weight_total").blur(function(){
+    calculateAll();
 
-  function searchDataCustomer(){
-        var tempSite = $("#id_site").val();
+    tmp = parseFloat($(this).val());
+    $(this).val(tmp.toFixed(3));
+  });
 
-        if($('#id-form-customer').val() != ""){
-          var str = $('#id-form-customer').val();
-          var items = str.split( ":" );
-          var idInput = items[0];
-            // Create Ajax Call
-            if(idInput){
-                $('#id_customer_id').val(items[0]);
-                $('#id_customer_name').val(items[1]);
-                //set id_distributor
-                $.ajax({
-                url: '{% url "searchDataCustomer" %}',
-                data: {
-                        'customer_id': idInput,
-                        'weight_id': "{{weight.weight_id}}",
-                    },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.site_list) {
-                            $("#id_site").find('option').not(':first').remove();
-                            //set option 
-                            for(var i = 0; i < data.site_list.length; i++){
-                                $("#id_site").append(new Option(data.site_list[i].base_site_name));
-                            }
-                    }
-                    $('#id_site option[value="'+tempSite +'"]').attr('selected','selected');
-                }
-                });
-            }
-            return false;
-        }else{
-            $("#id_site").find('option').not(':first').remove();
-        }
-  }
+  $("#id_weight_in, #id_weight_out").blur(function(){
+    calculateWeightTotal();
+  });
 
-  function setDataCustomer(){
-    if($('#id_customer_id').val() != ""){
-        var idInput = $('#id_customer_id').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "setDataCustomer" %}',
-                data: {
-                    'customer_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                        $('#id-form-customer').val(data.val);
-                    }
-                }
-            });
-        }
-        return false;
+  function calculateWeightTotal(){
+    if($('#id_weight_in').val() && $('#id_weight_out').val()){
+      weight_in = parseFloat($('#id_weight_in').val());
+      weight_out = parseFloat($('#id_weight_out').val());
+        weight_total = weight_out - weight_in;
+        $('#id_weight_in').val(weight_in.toFixed(3));
+        $('#id_weight_out').val(weight_out.toFixed(3));
+        $('#id_weight_total').val(weight_total.toFixed(3));
     }
   }
+
+  $("#id_customer_name").change(function(){
+    $("#id_customer_id").val($("#id_customer_name").val());
+  });
+
+  $("#id_car_registration_name").change(function(){
+    $("#id_car_registration_id").val($("#id_car_registration_name").val());
+  });
+  
+  $("#id_driver_name").change(function(){
+    $("#id_driver_id").val($("#id_driver_name").val());
+  });
+
+  $("#id_scoop_name").change(function(){
+    $("#id_scoop_id").val($("#id_scoop_name").val());
+  });
+
+  $("#id_mill_name").change(function(){
+    $("#id_mill_id").val($("#id_mill_name").val());
+  });
+
+  $("#id_stone_type_name").change(function(){
+    $("#id_stone_type_id").val($("#id_stone_type_name").val());
+  });
+
 
 </script>
 {% endblock %}

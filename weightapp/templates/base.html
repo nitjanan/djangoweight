@@ -135,153 +135,68 @@
                 </a>
               </li>
 
-              <li class="sidebar-item has-sub">
+              <li class="sidebar-title">Manage</li>
+
+              <li class="sidebar-item has-sub {{setting_page}}">
                 <a href="#" class="sidebar-link">
-                  <i class="bi bi-hexagon-fill"></i>
-                  <span>Form Elements</span>
+                  <i class="fa-solid fa-gears"></i>
+                  <span>Setting</span>
                 </a>
 
                 <ul class="submenu">
-                  <li class="submenu-item">
-                    <a href="form-element-input.html" class="submenu-link"
-                      >Input</a
+                  <li class="submenu-item {{setting_base_customer_page}}">
+                    <a href="{% url 'settingBaseCustomer' %}" class="submenu-link"
+                      >ข้อมูลลูกค้า</a
+                    >
+                  </li>
+                  <li class="submenu-item {{setting_base_site_page}}">
+                    <a href="{% url 'settingBaseSite' %}" class="submenu-link"
+                      >ข้อมูลหน้างาน</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-element-input-group.html" class="submenu-link"
-                      >Input Group</a
+                  <li class="submenu-item {{setting_base_stone_type_page}}">
+                    <a href="{% url 'settingBaseStoneType' %}" class="submenu-link"
+                      >ข้อมูลชนิดหิน</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-element-select.html" class="submenu-link"
-                      >Select</a
+                  <li class="submenu-item {{setting_base_mill_page}}">
+                    <a href="{% url 'settingBaseMill' %}" class="submenu-link"
+                      >ข้อมูลโรงโม่</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-element-radio.html" class="submenu-link"
-                      >Radio</a
+                  <li class="submenu-item {{setting_base_car_team_page}}">
+                    <a href="{% url 'settingBaseCarTeam' %}" class="submenu-link"
+                      >ข้อมูลทีม</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-element-checkbox.html" class="submenu-link"
-                      >Checkbox</a
+                  <li class="submenu-item {{setting_base_car_page}}">
+                    <a href="{% url 'settingBaseCar' %}" class="submenu-link"
+                      >ข้อมูลรถร่วมและทีม</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-element-textarea.html" class="submenu-link"
-                      >Textarea</a
-                    >
-                  </li>
-                </ul>
-              </li>
-
-              <li class="sidebar-item">
-                <a href="form-layout.html" class="sidebar-link">
-                  <i class="bi bi-file-earmark-medical-fill"></i>
-                  <span>Form Layout</span>
-                </a>
-              </li>
-
-              <li class="sidebar-item has-sub">
-                <a href="#" class="sidebar-link">
-                  <i class="bi bi-journal-check"></i>
-                  <span>Form Validation</span>
-                </a>
-
-                <ul class="submenu">
-                  <li class="submenu-item">
-                    <a href="form-validation-parsley.html" class="submenu-link"
-                      >Parsley</a
-                    >
-                  </li>
-                </ul>
-              </li>
-
-              <li class="sidebar-item has-sub">
-                <a href="#" class="sidebar-link">
-                  <i class="bi bi-pen-fill"></i>
-                  <span>Form Editor</span>
-                </a>
-
-                <ul class="submenu">
-                  <li class="submenu-item">
-                    <a href="form-editor-quill.html" class="submenu-link"
-                      >Quill</a
+                  <li class="submenu-item {{setting_base_scoop_page}}">
+                    <a href="{% url 'settingBaseScoop' %}" class="submenu-link"
+                      >ข้อมูลผู้ตัก</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-editor-ckeditor.html" class="submenu-link"
-                      >CKEditor</a
+                  <li class="submenu-item {{setting_base_driver_page}}">
+                    <a href="{% url 'settingBaseDriver' %}" class="submenu-link"
+                      >ข้อมูลผู้ขับ (ผลิต)</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-editor-summernote.html" class="submenu-link"
-                      >Summernote</a
+                  <li class="submenu-item {{setting_base_car_registration_page}}">
+                    <a href="{% url 'settingBaseCarRegistration' %}" class="submenu-link"
+                      >ข้อมูลทะเบียนรถ (ผลิต)</a
                     >
                   </li>
 
-                  <li class="submenu-item">
-                    <a href="form-editor-tinymce.html" class="submenu-link"
-                      >TinyMCE</a
-                    >
-                  </li>
-                </ul>
-              </li>
-
-              <li class="sidebar-item has-sub">
-                <a href="#" class="sidebar-link">
-                  <i class="bi bi-file-earmark-spreadsheet-fill"></i>
-                  <span>Datatables</span>
-                </a>
-
-                <ul class="submenu">
-                  <li class="submenu-item">
-                    <a href="table-datatable.html" class="submenu-link"
-                      >Datatable</a
-                    >
-                  </li>
-
-                  <li class="submenu-item">
-                    <a href="table-datatable-jquery.html" class="submenu-link"
-                      >Datatable (jQuery)</a
-                    >
-                  </li>
-                </ul>
-              </li>
-
-              <li class="sidebar-title">Extra UI</li>
-
-              <li class="sidebar-item has-sub">
-                <a href="#" class="sidebar-link">
-                  <i class="bi bi-pentagon-fill"></i>
-                  <span>Widgets</span>
-                </a>
-
-                <ul class="submenu">
-                  <li class="submenu-item">
-                    <a href="ui-widgets-chatbox.html" class="submenu-link"
-                      >Chatbox</a
-                    >
-                  </li>
-
-                  <li class="submenu-item">
-                    <a href="ui-widgets-pricing.html" class="submenu-link"
-                      >Pricing</a
-                    >
-                  </li>
-
-                  <li class="submenu-item">
-                    <a href="ui-widgets-todolist.html" class="submenu-link"
-                      >To-do List</a
-                    >
-                  </li>
                 </ul>
               </li>
 

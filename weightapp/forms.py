@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -30,7 +30,17 @@ class DurationInput(TextInput):
         minutes = minutes % 60
 
         return '{:02d}:{:02d}'.format(minutes, seconds)
-    
+
+class WeightStockForm(forms.ModelForm):
+    class Meta:
+       model = Weight
+       fields = ('mill_name',)
+       widgets = {
+        }
+       labels = {
+            'mill_name': _('โรงโม่'),
+       }
+       
 class ProductionForm(forms.ModelForm):
     class Meta:
        model = Production
@@ -182,6 +192,7 @@ StoneEstimateItemInlineFormset = inlineformset_factory(
 )
 
 class WeightForm(forms.ModelForm):
+    '''
     def __init__(self,request,*args,**kwargs):
         super (WeightForm,self).__init__(*args,**kwargs)
         instance = kwargs.get('instance')
@@ -191,16 +202,25 @@ class WeightForm(forms.ModelForm):
             customer_id_value = instance.customer_id
 
         #เปลี่ยนการจัดกลุ่มเป็นแบบอื่นเพราะมีเคสที่ใช้เงื่อนไขนี้ไม่ได้
-        #self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_site_name = self.fields['site'], base_customer_id = self.fields['customer_id']))
+        #self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_site_name = self.fields['site'], base_customer_id = self.fields['customer_id']))    
+    '''
 
-    site = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.none())
     mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
-    stone_type = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all())
+    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
+    transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
+
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name', 'province','driver_id','driver_name', 'customer_id','customer_name','site','mill_id','mill_name','stone_type','carry_type_name', 'car_team', 'stone_color', 'scoop_id', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content')
+       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name', 'province','driver_id','driver_name', 'customer_id','customer_name','site_name','mill_id','mill_name','stone_type_id', 'stone_type_name', 'transport','carry_type_name', 'car_team_name', 'stone_color', 'scoop_id', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'site_name' : forms.HiddenInput(),
+        'carry_type_name': forms.HiddenInput(),
+        'pay': forms.HiddenInput(),
+        'clean_type': forms.HiddenInput(),
+        'vat_type': forms.HiddenInput(),
         }
        labels = {
             'date': _('วันที่ผลิต'),
@@ -209,9 +229,142 @@ class WeightForm(forms.ModelForm):
             'province': _('ทะเบียน'),
             'driver_id': _('รหัสคนขับ'),
             'driver_name': _('ชื่อคนขับ'),
-
             'customer_name': _('ชื่อลูกค้า'),
             'mill_id': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
-            'stone_type': _('ชื่อหิน'),
+            'stone_type_name': _('ชื่อหิน'),
+            'transport': _('ขนส่ง'),
+       }
+
+class WeightStockForm(forms.ModelForm):
+    customer_name = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
+    mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
+    stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    car_registration_name = forms.ModelChoiceField(label='ชื่อทะเบียนรถ', queryset = BaseCarRegistration.objects.all())
+    driver_name = forms.ModelChoiceField(label='ชื่อผู้ขับ', queryset = BaseDriver.objects.all())
+    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
+    
+    class Meta:
+       model = Weight
+       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name','driver_id','driver_name', 'customer_id','customer_name','mill_id','mill_name','stone_type_id','stone_type_name', 'scoop_id', 'scoop_name', 'weight_in', 'weight_out', 'weight_total')
+       widgets = {
+        'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+       }
+       labels = {
+            'date': _('วันที่ผลิต'),
+            'car_registration_id': _('รหัสทะเบียนรถ'),
+            'car_registration_name': _('ทะเบียนรถ'),
+            'province': _('ทะเบียน'),
+            'driver_id': _('รหัสคนขับ'),
+            'driver_name': _('ชื่อคนขับ'),
+            'customer_name': _('ชื่อลูกค้า'),
+            'mill_id': _('รหัสโรงโม่'),
+            'mill_name': _('ชื่อโรงโม่'),
+            'stone_type_name': _('ชื่อหิน'),
+       }
+
+class BaseMillForm(forms.ModelForm):
+    class Meta:
+       model = BaseMill
+       fields = ('id' , 'name',)
+       widgets = {
+        }
+       labels = {
+            'id': _('รหัสโรงโม่'),
+            'name': _('ชื่อโรงโม่'),
+       }
+
+class BaseStoneTypeForm(forms.ModelForm):
+    class Meta:
+       model = BaseStoneType
+       fields = ('base_stone_type_id' , 'base_stone_type_name', 'type', 'cal_q', 'is_stone_estimate',)
+       widgets = {
+        }
+       labels = {
+            'base_stone_type_id': _('รหัสหิน'),
+            'base_stone_type_name': _('ชื่อหิน'),
+       }
+
+class BaseScoopForm(forms.ModelForm):
+    class Meta:
+       model = BaseScoop
+       fields = ('scoop_id' , 'scoop_name',)
+       widgets = {
+        }
+       labels = {
+            'scoop_id': _('รหัสผู้ตัก'),
+            'scoop_name': _('ชื่อผู้ตัก'),
+       }
+
+class BaseCarTeamForm(forms.ModelForm):
+    class Meta:
+       model = BaseCarTeam
+       fields = ('car_team_id' , 'car_team_name',)
+       widgets = {
+        }
+       labels = {
+            'car_team_id': _('รหัสทีม'),
+            'car_team_name': _('ชื่อทีม'),
+       }
+
+class BaseCarForm(forms.ModelForm):
+    class Meta:
+       model = BaseCar
+       fields = ('base_car_team', 'car_id' , 'car_name', )
+       widgets = {
+        }
+       labels = {
+            'car_id': _('รหัสรถร่วม'),
+            'car_name': _('ชื่อรถร่วม'),
+            'base_car_team': _('ทีม'),
+       }
+
+class BaseSiteForm(forms.ModelForm):
+    class Meta:
+       model = BaseSite
+       fields = ('base_customer', 'base_site_id' , 'base_site_name', )
+       widgets = {
+           'base_customer': forms.HiddenInput(),
+        }
+       labels = {
+            'base_site_id': _('รหัสหน้างาน'),
+            'base_site_name': _('ชื่อรถร่วม'),
+            'base_customer': _('ลูกค้า'),
+       }
+
+class BaseCustomerForm(forms.ModelForm):
+    class Meta:
+       model = BaseCustomer
+       fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to','is_stone_estimate')
+       widgets = {
+           
+        }
+       labels = {
+            'customer_id': _('รหัสลูกค้า'),
+            'customer_name': _('ชื่อลูกค้า'),
+            'address': _('ที่อยู่'),
+            'send_to': _('ส่งที่'),
+            'customer_type': _('ประเภทลูกค้า'),
+            'base_vat_type': _('ชนิดvat'),
+            'base_job_type': _('ประเภทงานของลูกค้า'),
+            'weight_type': _('ชนิดเครื่องชั่ง'),
+       }
+
+class BaseDriverForm(forms.ModelForm):
+    class Meta:
+       model = BaseDriver
+       fields = ('driver_id', 'driver_name' ,)
+       labels = {
+            'driver_id': _('รหัสผู้ขับ'),
+            'driver_name': _('ชื่อผู้ขับ'),
+       }
+
+class BaseCarRegistrationForm(forms.ModelForm):
+    class Meta:
+       model = BaseCarRegistration
+       fields = ('car_registration_id', 'car_registration_name' ,'car_type')
+       labels = {
+            'car_registration_id': _('รหัสทะเบียนรถ'),
+            'car_registration_name': _('ชื่อทะเบียนรถ'),
+            'car_type': _('ประเภทรถ'),
        }

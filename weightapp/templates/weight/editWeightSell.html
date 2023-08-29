@@ -60,7 +60,7 @@ input.del[type=checkbox] {
         </div>
         <div class="card-content">
           <div class="card-body">
-            <form class="form" method="post">
+            <form class="form" method="post" enctype="multipart/form-data">
               <div class="row">
                 {% csrf_token %}
                 <div class="row">
@@ -98,6 +98,7 @@ input.del[type=checkbox] {
                           </label>
                         </div>
                       </fieldset>
+                      {{form.pay}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -112,10 +113,14 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">หน้างาน</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      {{form.site | add_class:"form-control"}}
+                      <select id="select_site" name="select_site_list" class="form-control">
+                        <option value>---------</option>
+                      </select>
+                      {{form.site_name | add_class:"form-control"}}
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.carry_type_name  | add_class:"form-control"}}
+                      {{form.transport  | add_class:"form-control"}}
+                      {{form.carry_type_name}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -130,25 +135,34 @@ input.del[type=checkbox] {
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ขับ</label>
                     </div>
-                    <div class="col-md-5 form-group">
+                    <div class="col-md-4 form-group">
                       {{form.driver_name | add_class:"form-control"}}
                     </div>
+                    <div class="col-md-1 form-group">
+                      <label for="first-name-horizontal">ทีม</label>
+                    </div>
                     <div class="col-md-5 form-group">
-                      {{form.car_team  | add_class:"form-control"}}
+                      {{form.car_team_name  | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">โรงโม่</label>
                     </div>
-                    <div class="col-md-10 form-group">
+                    <div class="col-md-2 form-group">
+                      {{form.mill_id |attr:"readonly" | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-8 form-group">
                       {{form.mill_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ชนิดหิน</label>
                     </div>
-                    <div class="col-md-10 form-group">
-                      {{form.stone_type | add_class:"form-control"}}
+                    <div class="col-md-2 form-group">
+                      {{form.stone_type_id |attr:"readonly" | add_class:"form-control"}}
+                    </div>
+                    <div class="col-md-8 form-group">
+                      {{form.stone_type_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -178,13 +192,14 @@ input.del[type=checkbox] {
                           </label>
                         </div>
                       </fieldset>
+                      {{form.clean_type}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ตัก</label>
                     </div>
                     <div class="col-md-2 form-group">
-                      {{form.scoop_id | add_class:"form-control" }}
+                      {{form.scoop_id |attr:"readonly" | add_class:"form-control" }}
                     </div>
                     <div class="col-md-8 form-group">
                       {{form.scoop_name | add_class:"form-control" }}
@@ -221,8 +236,11 @@ input.del[type=checkbox] {
                   <div class="col-md-2 form-group">
                     <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
                   </div>
-                  <div class="col-md-9 form-group">
+                  <div class="col-md-7 form-group">
                     {{form.weight_total | add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-2 form-group">
+                    {{form.q | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -247,6 +265,7 @@ input.del[type=checkbox] {
                         </label>
                       </div>
                     </fieldset>
+                    {{form.vat_type}}
                   </div>
                   <div class="col-md-2 form-group">
                     <label for="first-name-horizontal" class="text-danger">น้ำมัน</label>
@@ -321,25 +340,49 @@ input.del[type=checkbox] {
 <script src="{% static 'compiled/js/app.js' %}"></script>
 
 <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
-<link rel="stylesheet" href="/resources/demos/style.css">
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
 
 <script type="text/javascript">
-
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
-  $("#id_site").append(new Option('{{weight.site}}'));
-  $('#id_site option:contains("{{weight.site}}")').prop('selected', true);
-  $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
-  $('#id_stone_type option:contains("{{weight.stone_type}}")').prop('selected', true);
 
+  if('{{weight.site_name}}' != 'None'){
+    $("#select_site").append(new Option('{{weight.site_name}}', '{{weight.site_name}}'));
+    $('#select_site option:contains("{{weight.site_name}}")').prop('selected', true);
+  }
+
+  $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
+  $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
+  $('#id_stone_color option:contains("{{weight.stone_color}}")').prop('selected', true);
+  $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
+  $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);
 
   setDataRadio();
   setDataCustomer();
+  searchNumCalQ();
+
+  // BEFORE form submission
+  $('form').submit(function() {
+    customer_name = $('#id_customer_name').val();
+    if(customer_name == 'ยกเลิก'){
+        $('#id_weight_in').val('0.000');
+        $('#id_weight_out').val('0.000');
+        $('#id_weight_total').val('0.000');
+    }
+    //set data to id
+    $("#id_scoop_id").val($("#id_scoop_name").val());
+    $("#id_mill_id").val($("#id_mill_name").val());
+    $("#id_stone_type_id").val($("#id_stone_type_name").val());
+
+    //set data radio
+    $("#id_pay").val($('input[name="pay_group"]:checked').val());
+    $("#id_clean_type").val($('input[name="clean_group"]:checked').val());
+    $("#id_vat_type").val($('input[name="vat_type_group"]:checked').val());
+  });
 
   function setDataRadio(){
     $('input[name="pay_group"][value="{{weight.pay}}"]').prop("checked", true);
-    $('input[name="clean_group"][value="{{weight.clean}}"]').prop("checked", true);
+    $('input[name="clean_group"][value="{{weight.clean_type}}"]').prop("checked", true);
     $('input[name="vat_type_group"][value="{{weight.vat_type}}"]').prop("checked", true);
   }
 
@@ -351,7 +394,7 @@ input.del[type=checkbox] {
   } );
 
   function searchDataCustomer(){
-        var tempSite = $("#id_site").val();
+        var tempSite = $("#select_site").val();
 
         if($('#id-form-customer').val() != ""){
           var str = $('#id-form-customer').val();
@@ -371,20 +414,45 @@ input.del[type=checkbox] {
                 dataType: 'json',
                 success: function (data) {
                     if (data.site_list) {
-                            $("#id_site").find('option').not(':first').remove();
+                            $("#select_site").find('option').not(':first').remove();
                             //set option 
                             for(var i = 0; i < data.site_list.length; i++){
-                                $("#id_site").append(new Option(data.site_list[i].base_site_name));
+                                $("#select_site").append(new Option(data.site_list[i].base_site_name, data.site_list[i].base_site_name));
                             }
                     }
-                    $('#id_site option[value="'+tempSite +'"]').attr('selected','selected');
+                    $('#select_site option[value="'+tempSite +'"]').attr('selected','selected');
                 }
                 });
             }
             return false;
         }else{
-            $("#id_site").find('option').not(':first').remove();
+            $("#select_site").find('option').not(':first').remove();
         }
+  }
+
+  function searchNumCalQ(){
+    if($('#id_stone_type_name').val() != ""){
+        var idInput = $('#id_stone_type_name').val();
+
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "searchNumCalQ" %}',
+                data: {
+                    'stone_type_id': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                      calculateQ(data.val);
+                    }else{
+                      calculateQ(0.0);
+                    }
+                }
+            });
+        }
+        return false;
+    }
   }
 
   function setDataCustomer(){
@@ -409,14 +477,67 @@ input.del[type=checkbox] {
     }
   }
 
+  function setDataCarryType(){
+    if($('#id_transport').val() != ""){
+        var idInput = $('#id_transport').val();
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "setDataCarryType" %}',
+                data: {
+                    'transport_id': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                        $('#id_carry_type_name').val(data.val);
+                    }
+                }
+            });
+        }
+        return false;
+    }else{
+      $('#id_carry_type_name').val("");
+    }
+  }
+
+  $("#select_site").change(function(){
+    $("#id_site_name").val($(this).val());
+  });
+
+  $("#id_stone_type_name").change(function(){
+    searchNumCalQ();
+  });
+
+  $("#id_transport").change(function(){
+    setDataCarryType();
+  });
+
   $('input[name="vat_type_group"]').change(function(){
     calculateAll();
   });
-
   
   $("#id_price_per_ton").on( "keyup", function() {
     calculateAll();
   } );
+
+  $("#id_price_per_ton").blur(function(){
+    tmp = parseFloat($(this).val());
+    $(this).val(tmp.toFixed(2));
+  });
+
+  $("#id_weight_total").blur(function(){
+    calculateAll();
+
+    tmp = parseFloat($(this).val());
+    $(this).val(tmp.toFixed(3));
+  });
+
+  $("#id_weight_in, #id_weight_out").blur(function(){
+    calculateWeightTotal();
+    calculateAll();
+    searchNumCalQ();
+  });
 
   function calculateAll(){
     vat_type = $('input[name="vat_type_group"]:checked').val();
@@ -439,6 +560,71 @@ input.del[type=checkbox] {
       }
     }
   }
+
+  function calculateWeightTotal(){
+    if($('#id_weight_in').val() && $('#id_weight_out').val()){
+      weight_in = parseFloat($('#id_weight_in').val());
+      weight_out = parseFloat($('#id_weight_out').val());
+        weight_total = weight_out - weight_in;
+        $('#id_weight_in').val(weight_in.toFixed(3));
+        $('#id_weight_out').val(weight_out.toFixed(3));
+        $('#id_weight_total').val(weight_total.toFixed(3));
+    }
+  }
+
+  $("#id_stone_type_name").change(function(){
+    searchNumCalQ();
+  });
+
+  function calculateQ(num_cal_q){
+    var weight_total =  parseFloat($("#id_weight_total").val());
+    var num_q = weight_total / num_cal_q;
+    $("#id_q").val(num_q.toFixed(2));
+  }
+
+
+  $("#id_scoop_name").change(function(){
+    $("#id_scoop_id").val($("#id_scoop_name").val());
+  });
+
+  $("#id_mill_name").change(function(){
+    $("#id_mill_id").val($("#id_mill_name").val());
+  });
+
+  $("#id_stone_type_name").change(function(){
+    $("#id_stone_type_id").val($("#id_stone_type_name").val());
+  });
+
+
+  $("#id_car_registration_name").on( "keyup", function() {
+    searchTeamFromCar();
+  } );
+
+
+  function searchTeamFromCar(){
+    if($('#id_car_registration_name').val() != ""){
+        var idInput = $('#id_car_registration_name').val();
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "searchTeamFromCar" %}',
+                data: {
+                    'car_registration_name': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                      $('#id_car_team_name').val(data.val);
+                    }
+                }
+            });
+        }
+        return false;
+    }else{
+      $('#id_car_team_name').val("");
+    }
+  }
+
 
 </script>
 {% endblock %}

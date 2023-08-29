@@ -5,6 +5,9 @@ from django.forms import forms
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from datetime import timedelta, datetime
+from django.contrib.auth.models import Group, User
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 
 # Create your models here.
 class BaseWeightType(models.Model):
@@ -14,6 +17,32 @@ class BaseWeightType(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class BaseCarTeam(models.Model):
+    car_team_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสทีม")
+    car_team_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อทีม")
+    
+    class Meta:
+        db_table = 'base_car_team'
+        verbose_name = 'ทีม'
+        verbose_name_plural = 'ข้อมูลทีม'
+
+    def __str__(self):
+        return self.car_team_id + " : "+ self.car_team_name
+    
+class BaseCar(models.Model):
+    car_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสรถร่วม")
+    car_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อรถร่วม")
+    base_car_team = models.ForeignKey(BaseCarTeam,on_delete=models.CASCADE, null = True, verbose_name="ทีม")
+    
+    class Meta:
+        db_table = 'base_car'
+        verbose_name = 'รถร่วมและทีม'
+        verbose_name_plural = 'ข้อมูลรถร่วมและทีม'
+
+    def __str__(self):
+        return self.car_id
 
 class BaseVatType(models.Model):
     base_vat_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสชนิดvat")
@@ -26,7 +55,7 @@ class BaseVatType(models.Model):
         verbose_name_plural = 'ข้อมูลชนิดvat'
 
     def __str__(self):
-        return self.base_vat_type_id
+        return self.base_vat_type_name
     
 class BaseJobType(models.Model):
     base_job_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสประเภทงานของลูกค้า")
@@ -38,13 +67,22 @@ class BaseJobType(models.Model):
         verbose_name_plural = 'ข้อมูลประเภทงานของลูกค้า'
     
     def __str__(self):
-        return self.base_job_type_id
+        return self.base_job_type_id + " : " + self.base_job_type_name
+    
+class BaseStoneColor(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120)
+    class Meta:
+        db_table = 'base_stone_color'
+
+    def __str__(self):
+        return self.name
     
 class BaseStoneType(models.Model):
     base_stone_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหิน")
     base_stone_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อหิน")
     type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทหิน")
     cal_q = models.CharField(blank=True, null=True, max_length=120, verbose_name="ค่าคำนวณคิว")
+    is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     
     class Meta:
         db_table = 'base_stone_type'
@@ -62,6 +100,8 @@ class BaseCustomer(models.Model):
     customer_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทลูกค้า")
     base_vat_type = models.ForeignKey(BaseVatType,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ชนิดvat")
     base_job_type = models.ForeignKey(BaseJobType,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ประเภทงานของลูกค้า")
+    weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True, verbose_name="ชนิดเครื่องชั่ง")
+    is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     
     class Meta:
         db_table = 'base_customer'
@@ -69,7 +109,44 @@ class BaseCustomer(models.Model):
         verbose_name_plural = 'ข้อมูลลูกค้า'
 
     def __str__(self):
-        return self.customer_id + " " + self.customer_name
+        return self.customer_name
+
+class BaseScoop(models.Model):
+    scoop_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสผู้ตัก")
+    scoop_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ตัก")
+
+    class Meta:
+        db_table = 'base_scoop'
+        verbose_name = 'ผู้ตัก'
+        verbose_name_plural = 'ข้อมูลผู้ตัก'
+
+    def __str__(self):
+        return self.scoop_name
+       
+class BaseCarRegistration(models.Model):
+    car_registration_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสทะเบียนรถ")
+    car_registration_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อทะเบียนรถ")
+    car_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทรถ")
+
+    class Meta:
+        db_table = 'base_car_registration'
+        verbose_name = 'ทะเบียนรถ'
+        verbose_name_plural = 'ข้อมูลทะเบียนรถ'
+
+    def __str__(self):
+        return self.car_registration_name
+
+class BaseDriver(models.Model):
+    driver_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสผู้ขับ")
+    driver_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ขับ")
+
+    class Meta:
+        db_table = 'base_driver'
+        verbose_name = 'ผู้ขับ'
+        verbose_name_plural = 'ข้อมูลผู้ขับ'
+
+    def __str__(self):
+        return self.driver_name
     
 class BaseSite(models.Model):
     base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหน้างาน")
@@ -83,6 +160,27 @@ class BaseSite(models.Model):
 
     def __str__(self):
         return self.base_site_id
+    
+class BaseCarryType(models.Model):
+    base_carry_type_id = models.CharField(primary_key = True, max_length=120)
+    base_carry_type_name = models.CharField(blank=True, null=True, max_length=255)
+
+    class Meta:
+        db_table = 'base_carry_type'
+
+    def __str__(self):
+        return self.base_carry_type_name
+    
+class BaseTransport(models.Model):
+    base_transport_id = models.CharField(primary_key = True, max_length=120)
+    base_transport_name = models.CharField(blank=True, null=True, max_length=255)
+    base_carry_type = models.ForeignKey(BaseCarryType,on_delete=models.CASCADE, null = True, blank=True)
+
+    class Meta:
+        db_table = 'base_transport'
+
+    def __str__(self):
+        return self.base_transport_name
 
 class BaseWeightStation(models.Model):
     id = models.CharField(primary_key = True, max_length=120)
@@ -100,7 +198,7 @@ class BaseWeightStation(models.Model):
     
 class Weight(models.Model):
     weight_id = models.IntegerField(primary_key = True)#weight_id primary_key
-    date = models.DateField()#วันที่
+    date = models.DateField(blank=True, null=True)#วันที่
     date_in = models.DateField(blank=True, null=True)#วันที่ชั่งเข้า
     date_out = models.DateField(blank=True, null=True)#วันที่ชั่งออก
     time_in = models.TimeField(blank=True, null=True)#เวลาชั่งเข้า
@@ -114,10 +212,12 @@ class Weight(models.Model):
     driver_name = models.CharField(blank=True, null=True,max_length=255)#คนขับ
     customer_id = models.CharField(blank=True, null=True,max_length=255)#รหัสลูกค้า
     customer_name = models.CharField(blank=True, null=True,max_length=255)#ลูกค้า
-    site = models.CharField(blank=True, null=True,max_length=255)#หน้างาน
+    site_id = models.CharField(blank=True, null=True,max_length=255)
+    site_name = models.CharField(blank=True, null=True,max_length=255)#หน้างาน
     mill_id = models.CharField(blank=True, null=True,max_length=255)#รหัสโรงโม่
     mill_name = models.CharField(blank=True, null=True,max_length=255)#โรงโม่
-    stone_type = models.CharField(blank=True, null=True,max_length=255)#ชนิดหิน
+    stone_type_id = models.CharField(blank=True, null=True,max_length=255)#รหัสหิน    
+    stone_type_name = models.CharField(blank=True, null=True,max_length=255)#ชนิดหิน
     pay = models.CharField(blank=True, null=True,max_length=255)#จ่ายเงิน
     scale_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้ชั่ง
@@ -127,12 +227,13 @@ class Weight(models.Model):
     approve_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้อนุมัติจ่าย
     vat_type = models.CharField(blank=True, null=True,max_length=255)#ชนิดvat
     stone_color = models.CharField(blank=True, null=True,max_length=255)#ประเภทหิน
-    car_team = models.CharField(blank=True, null=True,max_length=255)#ทีม
-    clean = models.CharField(blank=True, null=True,max_length=255)#ล้าง
+    car_team_id = models.CharField(blank=True, null=True,max_length=255)#รหัสทีม
+    car_team_name = models.CharField(blank=True, null=True,max_length=255)#ทีม
+    clean_type = models.CharField(blank=True, null=True,max_length=255)#ล้าง
     transport = models.CharField(blank=True, null=True,max_length=255)#ขนส่ง
     note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     ship_cost = models.CharField(blank=True, null=True,max_length=255)#ค่าขนส่ง
-    carry_type_name = models.CharField(blank=True, null=True,max_length=255)
+    carry_type_name = models.CharField(blank=True, null=True,max_length=255)#รับเอง-ส่งให้
     line_type = models.CharField(blank=True, null=True,max_length=255)
     bag_type = models.CharField(blank=True, null=True,max_length=255)#bag_type
     fertilizer = models.CharField(blank=True, null=True,max_length=255)#ชนิดปุ๋ย
@@ -162,6 +263,147 @@ class Weight(models.Model):
         db_table = 'weight'
         ordering = ["weight_id"]
 
+class WeightHistory(models.Model):
+    date = models.DateField(blank=True, null=True)#วันที่
+    date_in = models.DateField(blank=True, null=True)#วันที่ชั่งเข้า
+    date_out = models.DateField(blank=True, null=True)#วันที่ชั่งออก
+    time_in = models.TimeField(blank=True, null=True)#เวลาชั่งเข้า
+    time_out = models.TimeField(blank=True, null=True)#เวลาชั่งออก
+    ref_id = models.CharField(blank=True, null=True,max_length=255)#เลขที่ใบตัก
+    doc_id =  models.CharField(blank=True, null=True,max_length=255)#เลขที่เอกสาร
+    car_registration_id = models.CharField(blank=True, null=True,max_length=255)#รหัสทะเบียนรถ
+    car_registration_name = models.CharField(blank=True, null=True,max_length=255)#ทะเบียนรถ
+    province = models.CharField(blank=True, null=True,max_length=255)#จังหวัด
+    driver_id = models.CharField(blank=True, null=True,max_length=255)#รหัสคนขับ
+    driver_name = models.CharField(blank=True, null=True,max_length=255)#คนขับ
+    customer_id = models.CharField(blank=True, null=True,max_length=255)#รหัสลูกค้า
+    customer_name = models.CharField(blank=True, null=True,max_length=255)#ลูกค้า
+    site_id = models.CharField(blank=True, null=True,max_length=255)
+    site_name = models.CharField(blank=True, null=True,max_length=255)#หน้างาน
+    mill_id = models.CharField(blank=True, null=True,max_length=255)#รหัสโรงโม่
+    mill_name = models.CharField(blank=True, null=True,max_length=255)#โรงโม่
+    stone_type_id = models.CharField(blank=True, null=True,max_length=255)#รหัสหิน    
+    stone_type_name = models.CharField(blank=True, null=True,max_length=255)#ชนิดหิน
+    pay = models.CharField(blank=True, null=True,max_length=255)#จ่ายเงิน
+    scale_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้ชั่ง
+    scale_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้ชั่ง
+    scoop_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้ตัก
+    scoop_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้ตัก
+    approve_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้อนุมัติจ่าย
+    approve_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้อนุมัติจ่าย
+    vat_type = models.CharField(blank=True, null=True,max_length=255)#ชนิดvat
+    stone_color = models.CharField(blank=True, null=True,max_length=255)#ประเภทหิน
+    car_team_id = models.CharField(blank=True, null=True,max_length=255)
+    car_team_name = models.CharField(blank=True, null=True,max_length=255)#ทีม
+    clean_type = models.CharField(blank=True, null=True,max_length=255)#ล้าง
+    transport = models.CharField(blank=True, null=True,max_length=255)#ขนส่ง
+    note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
+    ship_cost = models.CharField(blank=True, null=True,max_length=255)#ค่าขนส่ง
+    carry_type_name = models.CharField(blank=True, null=True,max_length=255)
+    line_type = models.CharField(blank=True, null=True,max_length=255)
+    bag_type = models.CharField(blank=True, null=True,max_length=255)#bag_type
+    fertilizer = models.CharField(blank=True, null=True,max_length=255)#ชนิดปุ๋ย
+    pack_weight = models.CharField(blank=True, null=True,max_length=255)#น้ำหนักบรรจุ
+    price_per_ton = models.DecimalField(blank=True, null=True, max_digits=10, decimal_places=2)#price_per_ton
+    vat = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)
+    q = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#คิว
+    amount = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#จำนวณเงิน
+    amount_vat = models.DecimalField(blank=True, null=True, decimal_places=2 , max_digits=20)#จำนวนเงินสุทธิ
+    weight_in = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)#weight_in
+    weight_out = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)#weight_out
+    weight_total = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)#weight_total
+    oil_content = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)
+    origin_weight = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    origin_q = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)
+    freight_cost = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุก
+    ton = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#จำนวนตัน
+    sack = models.IntegerField(blank=True, null=True)#จำนวนกระสอบ
+    price_up = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าขึ้น
+    price_down = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลง
+    price_up_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าขึ้นรวม
+    price_down_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลงรวม
+    freight_cost_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุกรวม
+    base_weight_station_name = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
+    weight_table = models.ForeignKey(Weight,on_delete=models.CASCADE, null = True)
+    update = models.DateTimeField(default=timezone.now)#เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
+    user_update = models.ForeignKey(User,on_delete=models.CASCADE,related_name='user_update', blank=True, null=True)
+    weight_id = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'weight_history'
+        ordering = ["-id"]
+    
+    def __str__(self):
+        return str(self.weight_id)
+
+@receiver(pre_save, sender=Weight)
+def save_weight_history(sender, instance, **kwargs):
+    if instance.pk:  # Only if the instance has already been saved (i.e., an update)
+        old_weight = Weight.objects.get(pk=instance.pk)
+        WeightHistory.objects.create(
+                date = old_weight.date,
+                date_in = old_weight.date_in,
+                date_out = old_weight.date_out,
+                time_in = old_weight.time_in,
+                time_out = old_weight.time_out,
+                ref_id = old_weight.ref_id,
+                doc_id =  old_weight.doc_id,
+                car_registration_id = old_weight.car_registration_id,
+                car_registration_name = old_weight.car_registration_name,
+                province = old_weight.province,
+                driver_id = old_weight.driver_id,
+                driver_name = old_weight.driver_name,
+                customer_id = old_weight.customer_id,
+                customer_name = old_weight.customer_name,
+                site_id = old_weight.site_id,
+                site_name = old_weight.site_name,
+                mill_id = old_weight.mill_id,
+                mill_name = old_weight.mill_name,
+                stone_type_id = old_weight.stone_type_id,
+                stone_type_name = old_weight.stone_type_name,
+                pay = old_weight.pay,
+                scale_id = old_weight.scale_id,
+                scale_name = old_weight.scale_name,
+                scoop_id = old_weight.scoop_id,
+                scoop_name = old_weight.scoop_name,
+                approve_id = old_weight.approve_id,
+                approve_name = old_weight.approve_name,
+                vat_type = old_weight.vat_type,
+                stone_color = old_weight.stone_color,
+                car_team_id = old_weight.car_team_id,
+                car_team_name = old_weight.car_team_name,
+                clean_type = old_weight.clean_type,
+                transport = old_weight.transport,
+                note = old_weight.note,
+                ship_cost = old_weight.ship_cost,
+                carry_type_name = old_weight.carry_type_name,
+                line_type = old_weight.line_type,
+                bag_type = old_weight.bag_type,
+                fertilizer = old_weight.fertilizer,
+                pack_weight = old_weight.pack_weight,
+                price_per_ton = old_weight.price_per_ton,
+                vat = old_weight.vat,
+                q = old_weight.q,
+                amount = old_weight.amount,
+                amount_vat = old_weight.amount_vat,
+                weight_in = old_weight.weight_in,
+                weight_out = old_weight.weight_out,
+                weight_total = old_weight.weight_total,
+                oil_content = old_weight.oil_content,
+                origin_weight = old_weight.origin_weight,
+                origin_q = old_weight.origin_q,
+                freight_cost = old_weight.freight_cost,
+                ton = old_weight.ton,
+                sack = old_weight.sack,
+                price_up = old_weight.price_up,
+                price_down = old_weight.price_down,
+                price_up_total = old_weight.price_up_total,
+                price_down_total = old_weight.price_down_total,
+                freight_cost_total = old_weight.freight_cost_total,
+                base_weight_station_name = old_weight.base_weight_station_name,
+                weight_id = old_weight.pk,
+                weight_table = old_weight
+        )
 
 class BaseLossType(models.Model):
     name = models.CharField(unique=True, blank=True, null=True, max_length=255)

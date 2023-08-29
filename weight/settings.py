@@ -119,9 +119,11 @@ TIME_ZONE = 'Asia/Bangkok'
 
 USE_I18N = True
 
+DATETIME_FORMAT = '%d-%m-%Y %H:%M:%S' 
+
 USE_L10N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)

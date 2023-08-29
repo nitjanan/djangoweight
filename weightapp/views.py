@@ -1,17 +1,17 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration
 from django.db.models import Sum, Q
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -33,6 +33,7 @@ from collections import defaultdict
 from re import escape as reescape
 from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat
+from django.contrib.auth.decorators import login_required
 
 def generate_pastel_color():
     # Generate random pastel colors by restricting the RGB channels within a specific range
@@ -53,22 +54,22 @@ def set_border(ws, side=None, blank=True):
 
 def getSumByStone(mode, stoneType, type):
     if type == 1:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type__contains = 'ส่งออก')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     else:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getSumOther(mode, list_sum_stone, type):
     query_filters = Q()
     for item_number_prefix in list_sum_stone:
-        query_filters |= Q(stone_type__startswith=item_number_prefix)
+        query_filters |= Q(stone_type_name__startswith=item_number_prefix)
 
     if type == 1:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type__contains = 'ส่งออก'), query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก'), query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type__icontains = 'ส่งออก', date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).values('stone_type').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__icontains = 'ส่งออก', date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).values('stone_type_name').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 3:
-        w = Weight.objects.filter(Q(stone_type__icontains = 'สต๊อก')| Q(stone_type__icontains = 'สต็อก'), base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(Q(stone_type_name__icontains = 'สต๊อก')| Q(stone_type_name__icontains = 'สต็อก'), base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getNumListStoneWeightChart(mode, stone_list_name, type):
@@ -88,10 +89,10 @@ def index(request):
     weight = Weight.objects.filter(date='2023-02-02', base_weight_station_name__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
     sum_all_weight = Weight.objects.filter(date='2023-02-02', base_weight_station_name__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
-    data_sum_produc_all = Weight.objects.filter(date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill1 = Weight.objects.filter(mill_name='โรงโม่ 1' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill2 = Weight.objects.filter(mill_name='โรงโม่ 2' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill3 = Weight.objects.filter(mill_name='โรงโม่ 3' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_all = Weight.objects.filter(date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill1 = Weight.objects.filter(mill_name='โรงโม่ 1' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill2 = Weight.objects.filter(mill_name='โรงโม่ 2' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill3 = Weight.objects.filter(mill_name='โรงโม่ 3' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
     
     '''
     tf_to_day = Weight.objects.filter(stone_type = 'หิน 3/4', date ='2023-03-02').aggregate(Sum('weight_total'))
@@ -142,7 +143,7 @@ def index(request):
     weight_mill1 = Weight.objects.filter(
         date__range=(start_date, end_date),
         mill_name='โรงโม่ 1',
-        stone_type__icontains='เข้าโม่'
+        stone_type_name__icontains='เข้าโม่'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
@@ -150,7 +151,7 @@ def index(request):
     weight_mill2 = Weight.objects.filter(
         date__range=(start_date, end_date),
         mill_name='โรงโม่ 2',
-        stone_type__icontains='เข้าโม่'
+        stone_type_name__icontains='เข้าโม่'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
@@ -158,7 +159,7 @@ def index(request):
     weight_mill3 = Weight.objects.filter(
         date__range=(start_date, end_date),
         mill_name='โรงโม่ 3',
-        stone_type__icontains='เข้าโม่'
+        stone_type_name__icontains='เข้าโม่'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
@@ -264,28 +265,34 @@ def weightTable(request):
     context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', }
     return render(request, "weight/weightTable.html",context)
 
-
-def editWeight(request, mode,  weight_id):
-    weight_data = Weight.objects.get(weight_id = weight_id)
+@login_required
+def editWeight(request, mode, weight_id):
+    weight_data = get_object_or_404(Weight, pk=weight_id)
 
     if mode == 1:
         template_name = "weight/editWeightSell.html"
+        tmp_form_post = WeightForm(request.POST, request.FILES, instance=weight_data)
+        tmp_form = WeightForm(instance=weight_data)
     elif mode == 2:
         template_name = "weight/editWeightStock.html"
+        tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
+        tmp_form = WeightStockForm(instance=weight_data)
 
-    if request.method == "POST":
-        form = WeightForm(request, request.POST, request.FILES, instance=weight_data)
-
+    if request.method == 'POST':
+        form = tmp_form_post
         if form.is_valid():
-            # save weight
-            weight = form.save(commit=False)
-            weight.save()
+            # log history เก็บข้อมูลก่อนแก้
+            wight_form = form.save()
+
+            weight_history = WeightHistory.objects.filter(weight_id = wight_form.pk).order_by('-update')[0]
+            weight_history.user_update = request.user
+            weight_history.save()
             return redirect('weightTable')
     else:
-        form = WeightForm(request, instance=weight_data)
+        form = tmp_form
 
-    context = {'weightTable_page':'active', 'form': form, 'weight': weight_data}
-    return render(request, template_name,context)
+    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data}
+    return render(request, template_name, context)
 
 def searchDataCustomer(request):
     if 'customer_id' in request.GET and 'weight_id' in request.GET:
@@ -298,11 +305,54 @@ def searchDataCustomer(request):
     }
     return JsonResponse(data)
 
+def searchDataBaesCustomer(request):
+    if 'customer_id' in request.GET :
+        customer_id = request.GET.get('customer_id')
+        try:
+            customer = BaseCustomer.objects.get(customer_id = customer_id)
+            val = customer.customer_id
+        except BaseCustomer.DoesNotExist:
+            val = None
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
 def setDataCustomer(request):
     if 'customer_id' in request.GET:
         customer_id = request.GET.get('customer_id')
         qs = BaseCustomer.objects.get(customer_id = customer_id)
         val = qs.customer_id + ":" + qs.customer_name
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def setDataCarryType(request):
+    if 'transport_id' in request.GET:
+        transport_id = request.GET.get('transport_id')
+        qs = BaseTransport.objects.get(base_transport_id = transport_id)
+        val = qs.base_carry_type.base_carry_type_name  
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def searchNumCalQ(request):
+    if 'stone_type_id' in request.GET:
+        stone_type_id = request.GET.get('stone_type_id')
+        qs = BaseStoneType.objects.get(base_stone_type_id = stone_type_id)
+        val = qs.cal_q
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def searchTeamFromCar(request):
+    if 'car_registration_name' in request.GET:
+        car_registration_name = request.GET.get('car_registration_name')
+        qs = BaseCar.objects.filter(car_name = car_registration_name).first()
+        val = qs.base_car_team.car_team_name
     data = {
         'val': val,
     }
@@ -317,12 +367,11 @@ def autocompalteCustomer(request):
             titles.append(obj.customer_id +":"+ obj.customer_name)
     return JsonResponse(titles, safe=False)
 
-
 def excelProductionByStone(request, my_q, list_date):
     # Query ข้อมูลขาย
-    data = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 1).order_by('date','mill_name').values_list('date','mill_name', 'stone_type').annotate(sum_weight_total = Sum('weight_total'))
+    data = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 1).order_by('date','mill_name').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     # Query ข้อมูลผลิตรวม
-    data_sum_produc = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').order_by('date','mill_name').values_list('date','mill_name').annotate(sum_weight_total = Sum('weight_total'))
+    data_sum_produc = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').order_by('date','mill_name').values_list('date','mill_name').annotate(sum_weight_total = Sum('weight_total'))
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -521,7 +570,7 @@ def exportExcelProductionByStone(request):
     if customer_name is not None :
         my_q &=Q(customer_name__icontains = customer_name)
     if stone_type is not None :
-        my_q &=Q(stone_type__icontains = stone_type)
+        my_q &=Q(stone_type_name__icontains = stone_type)
 
     my_q &= ~Q(customer_name ='ยกเลิก') & Q(mill_name__in = ["โรงโม่ 1", "โรงโม่ 2", "โรงโม่ 3"])
    
@@ -690,6 +739,7 @@ def editProduction(request, pd_id):
         formset = ProductionLossItemInlineFormset(request.POST, request.FILES, instance=pd_data)
         form = ProductionForm(request.POST, request.FILES, instance=pd_data)
         pd_goal_form = ProductionGoalForm(request.POST, request.FILES, instance=pd_data.pd_goal)
+        print("Form instanceeeeeeeeeee:", form) 
 
         if form.is_valid() and formset.is_valid() and pd_goal_form.is_valid():
             # save production
@@ -841,8 +891,8 @@ def excelProductionAndLoss(request, my_q):
                 production = Production.objects.filter(mill = mill, line_type = line_type, created = created_date).first()
                 accumulated_goal = Production.objects.filter(mill = mill, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
 
-                data_sum_produc = Weight.objects.filter(mill_name=mill ,date = created_date, base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-                accumulated_produc = Weight.objects.filter(mill_name=mill ,date__range=(date_from_accumulated, created_date) , base_weight_station_name__weight_type = 2, stone_type__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+                data_sum_produc = Weight.objects.filter(mill_name=mill ,date = created_date, base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+                accumulated_produc = Weight.objects.filter(mill_name=mill ,date__range=(date_from_accumulated, created_date) , base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
 
                 sum_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
                 cal_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
@@ -984,7 +1034,7 @@ def viewStoneEstimate(request):
     return render(request, "stoneEstimate/viewStoneEstimate.html",context)
 
 def createStoneEstimate(request):
-    base_stone_type = BaseStoneType.objects.all()
+    base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True)
     StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, fields=('stone_type', 'percent'), extra=len(base_stone_type), widgets={})
     if request.method == 'POST':
         se_form = StoneEstimateForm(request.POST)
@@ -1086,7 +1136,8 @@ def exportExcelStoneEstimateAndProduction(request):
 
     base_stone_type = BaseStoneType.objects.all().values_list('base_stone_type_name', flat=True)
 
-    list_customer_name = ['สมัย','วีระวุฒิ','NCK']
+    #list_customer_name = ['สมัย','วีระวุฒิ','NCK']
+    list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
 
     workbook = openpyxl.Workbook()
     for mill in mills:
@@ -1094,7 +1145,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
         list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        weight_stone_types = Weight.objects.filter(Q(stone_type__icontains = 'เข้าโม่') | Q(stone_type = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.name).order_by('stone_type').values_list('stone_type', flat=True).distinct()
+        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2
@@ -1164,16 +1215,16 @@ def exportExcelStoneEstimateAndProduction(request):
                     #หมายเหตุ
                     production_note = Production.objects.filter(mill = mill, created = created_date).values_list('note', flat=True).first()
                     #หินเขา
-                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type = 'เข้าโม่') | Q(stone_type = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
                     #หินเข้าโม่ทั้งหมด
-                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
-                    for stone_type in weight_stone_types:
+                    for stone_type_name in weight_stone_types:
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type = stone_type, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
                         if weight_time1:
                             row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
                         else:
@@ -1257,14 +1308,533 @@ def exportExcelStoneEstimateAndProduction(request):
                         cell.alignment = Alignment(horizontal='right', vertical='center')
                     cell.border = border
         
-        
-            
-
-            
     workbook.remove(workbook['Sheet'])
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="production_data.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="stone_estimate.xlsx"'
 
     workbook.save(response)
     return response
+
+################### BaesMill ####################
+def settingBaseMill(request):
+    data = BaseMill.objects.all().order_by('id')
+
+    #กรองข้อมูล
+    myFilter = BaseMillFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_mill = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, }
+    return render(request, "manage/baseMill.html",context)
+
+
+def createBaseMill(request):
+    form = BaseMillForm(request.POST or None)
+    if form.is_valid():
+        form = BaseMillForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseMill')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_mill_page': 'active',
+        'table_name' : 'โรงโม่',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseMill(request, id):
+    data = BaseMill.objects.get(id = id)
+    form = BaseMillForm(instance=data)
+    if request.method == 'POST':
+        form = BaseMillForm(request.POST, instance=data)
+        if form.is_valid():
+            mill_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(mill_id = mill_form.pk)
+            weights.update(mill_name = mill_form.name)
+
+            return redirect('settingBaseMill')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_mill_page': 'active',
+        'table_name' : 'โรงโม่',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaesStoneType ####################
+def settingBaseStoneType(request):
+    data = BaseStoneType.objects.all().order_by('base_stone_type_id')
+
+    #กรองข้อมูล
+    myFilter = BaseStoneTypeFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_stone_type = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, }
+    return render(request, "manage/baseStoneType.html",context)
+
+def createBaseStoneType(request):
+    form = BaseStoneTypeForm(request.POST or None)
+    if form.is_valid():
+        form = BaseStoneTypeForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseStoneType')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_stone_type_page': 'active',
+        'table_name' : 'ชนิดหิน',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseStoneType(request, id):
+    data = BaseStoneType.objects.get(base_stone_type_id = id)
+    
+    form = BaseStoneTypeForm(instance=data)
+    if request.method == 'POST':
+        form = BaseStoneTypeForm(request.POST, instance=data)
+        if form.is_valid():
+            stone_type_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)
+            weights.update(stone_type_name = stone_type_form.base_stone_type_name)
+
+            return redirect('settingBaseStoneType')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_stone_type_page': 'active',
+        'table_name' : 'ชนิดหิน',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaesScoop ####################
+def settingBaseScoop(request):
+    data = BaseScoop.objects.all().order_by('scoop_id')
+
+    #กรองข้อมูล
+    myFilter = BaseScoopFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_scoop = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, }
+    return render(request, "manage/baseScoop.html",context)
+
+def createBaseScoop(request):
+    form = BaseScoopForm(request.POST or None)
+    if form.is_valid():
+        form = BaseScoopForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseScoop')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_scoop_page': 'active',
+        'table_name' : 'ผู้ตัก',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseScoop(request, id):
+    data = BaseScoop.objects.get(scoop_id = id)
+    
+    form = BaseScoopForm(instance=data)
+    if request.method == 'POST':
+        form = BaseScoopForm(request.POST, instance=data)
+        if form.is_valid():
+            scoop_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+            weights.update(scoop_name = scoop_form.scoop_name)
+
+            return redirect('settingBaseScoop')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_scoop_page': 'active',
+        'table_name' : 'ผู้ตัก',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaseCarTeam ####################
+def settingBaseCarTeam(request):
+    data = BaseCarTeam.objects.all().order_by('car_team_id')
+
+    #กรองข้อมูล
+    myFilter = BaseCarTeamFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_car_team = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, }
+    return render(request, "manage/baseCarTeam.html",context)
+
+def createBaseCarTeam(request):
+    form = BaseCarTeamForm(request.POST or None)
+    if form.is_valid():
+        form = BaseCarTeamForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseCarTeam')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_team_page': 'active',
+        'table_name' : 'ทีม',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseCarTeam(request, id):
+    data = BaseCarTeam.objects.get(car_team_id = id)
+    
+    form = BaseCarTeamForm(instance=data)
+    if request.method == 'POST':
+        form = BaseCarTeamForm(request.POST, instance=data)
+        if form.is_valid():
+            car_team_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(car_team_id = car_team_form.pk)
+            weights.update(car_team_name = car_team_form.car_team_name)
+
+            return redirect('settingBaseCarTeam')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_team_page': 'active',
+        'table_name' : 'ทีม',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaseCar ####################
+def settingBaseCar(request):
+    data = BaseCar.objects.all().order_by('car_id')
+
+    #กรองข้อมูล
+    myFilter = BaseCarFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_car = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, }
+    return render(request, "manage/baseCar.html",context)
+
+def createBaseCar(request):
+    form = BaseCarForm(request.POST or None)
+    if form.is_valid():
+        form = BaseCarForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseCar')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_page': 'active',
+        'table_name' : 'รถร่วม',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseCar(request, id):
+    data = BaseCar.objects.get(car_id = id)
+    
+    form = BaseCarForm(instance=data)
+    if request.method == 'POST':
+        form = BaseCarForm(request.POST, instance=data)
+        if form.is_valid():
+            car_form = form.save()
+
+            '''
+            # update weight ด้วย
+            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+            weights.update(scoop_name = scoop_form.scoop_name)         
+            '''
+            return redirect('settingBaseCar')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_page': 'active',
+        'table_name' : 'รถร่วม',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaesSite ####################
+def settingBaseSite(request):
+    data = BaseSite.objects.all().order_by('base_site_id')
+
+    #กรองข้อมูล
+    myFilter = BaseSiteFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_site = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, }
+    return render(request, "manage/BaseSite/baseSite.html",context)
+
+def createBaseSite(request):
+    form = BaseSiteForm(request.POST or None)
+    if form.is_valid():
+        form = BaseSiteForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseSite')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_site_page': 'active',
+        'table_name' : 'หน้างาน',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/BaseSite/formBaseSite.html", context)
+
+def editBaseSite(request, id):
+    data = BaseSite.objects.get(base_site_id = id)
+    
+    form = BaseSiteForm(instance=data)
+    if request.method == 'POST':
+        form = BaseSiteForm(request.POST, instance=data)
+        if form.is_valid():
+            site_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(site_id = site_form.pk)
+            weights.update(site_name = site_form.base_site_name)         
+
+            return redirect('settingBaseSite')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_site_page': 'active',
+        'table_name' : 'หน้างาน',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/BaseSite/formBaseSite.html", context)
+
+################### BaesCustomer ####################
+def settingBaseCustomer(request):
+    data = BaseCustomer.objects.all().order_by('-customer_id')
+
+    #กรองข้อมูล
+    myFilter = BaseCustomerFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_customer = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, }
+    return render(request, "manage/BaseCustomer/baseCustomer.html",context)
+
+def createBaseCustomer(request):
+    form = BaseCustomerForm(request.POST or None)
+    if form.is_valid():
+        form = BaseCustomerForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseCustomer')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_customer_page': 'active',
+        'table_name' : 'ลูกค้า',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
+
+def editBaseCustomer(request, id):
+    data = BaseCustomer.objects.get(customer_id = id)
+    
+    form = BaseCustomerForm(instance=data)
+    if request.method == 'POST':
+        form = BaseCustomerForm(request.POST, instance=data)
+        if form.is_valid():
+            customer_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(customer_id = customer_form.pk)
+            weights.update(customer_name = customer_form.customer_name)
+
+            return redirect('settingBaseCustomer')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_customer_page': 'active',
+        'table_name' : 'ลูกค้า',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
+
+################### BaseDriver ####################
+def settingBaseDriver(request):
+    data = BaseDriver.objects.all().order_by('driver_id')
+
+    #กรองข้อมูล
+    myFilter = BaseDriverFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_driver = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, }
+    return render(request, "manage/baseDriver.html",context)
+
+def createBaseDriver(request):
+    form = BaseDriverForm(request.POST or None)
+    if form.is_valid():
+        form = BaseDriverForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseDriver')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_driver_page': 'active',
+        'table_name' : 'ผู้ขับ',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseDriver(request, id):
+    data = BaseDriver.objects.get(driver_id = id)
+    
+    form = BaseDriverForm(instance=data)
+    if request.method == 'POST':
+        form = BaseDriverForm(request.POST, instance=data)
+        if form.is_valid():
+            driver_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(driver_id = driver_form.pk)
+            weights.update(driver_name = driver_form.driver_name)
+
+            return redirect('settingBaseDriver')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_driver_page': 'active',
+        'table_name' : 'ผู้ขับ',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaseCarRegistration ####################
+def settingBaseCarRegistration(request):
+    data = BaseCarRegistration.objects.all().order_by('car_registration_id')
+
+    #กรองข้อมูล
+    myFilter = BaseCarRegistrationFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_car_registration = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, }
+    return render(request, "manage/baseCarRegistration.html",context)
+
+def createBaseCarRegistration(request):
+    form = BaseCarRegistrationForm(request.POST or None)
+    if form.is_valid():
+        form = BaseCarRegistrationForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseCarRegistration')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_registration_page': 'active',
+        'table_name' : 'ทะเบียนรถ',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseCarRegistration(request, id):
+    data = BaseCarRegistration.objects.get(car_registration_id = id)
+    
+    form = BaseCarRegistrationForm(instance=data)
+    if request.method == 'POST':
+        form = BaseCarRegistrationForm(request.POST, instance=data)
+        if form.is_valid():
+            car_registration_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(car_registration_id = car_registration_form.pk)
+            weights.update(car_registration_name = car_registration_form.car_registration_name)
+
+            return redirect('settingBaseCarRegistration')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_registration_page': 'active',
+        'table_name' : 'ทะเบียนรถ',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)

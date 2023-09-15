@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer
 
 # Register your models here.
 class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -73,7 +73,7 @@ class BaseLossTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseMillAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['id','name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['mill_id','mill_name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseLineTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -146,6 +146,10 @@ class BaseCarAdmin(ImportExportModelAdmin):
     list_display = ('car_id', 'car_name',)
     search_fields = ('car_id', 'car_name',)
 
+class BaseFertilizerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['fertilizer_id', 'fertilizer_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
 admin.site.register(BaseWeightType, BaseWeightTypeAdmin)
 admin.site.register(BaseWeightStation, BaseWeightStationAdmin)
@@ -167,5 +171,6 @@ admin.site.register(BaseCarryType, BaseCarryTypeAdmin)
 admin.site.register(BaseTransport, BaseTransportTypeAdmin)
 admin.site.register(BaseCarTeam, BaseCarTeamAdmin)
 admin.site.register(BaseCar, BaseCarAdmin)
+admin.site.register(BaseFertilizer, BaseFertilizerAdmin)
 
 

@@ -44,7 +44,8 @@ INSTALLED_APPS = [
     'django_filters',
     'stripe',
     'import_export',
-    'weightapp'
+    'weightapp',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -162,3 +163,4 @@ EMAIL_HOST_PASSWORD = 'sviqgnrvbfzggcjx'
 
 # set Time input
 TIME_INPUT_FORMATS = ['%H:%M',]
+CHARSET = 'UTF-8'

@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -71,15 +71,27 @@ StoneEstimateFilter.base_filters['mill'].label = 'โรงโม่'
 
 
 class BaseMillFilter(django_filters.FilterSet):
-    id = django_filters.CharFilter(field_name="id", lookup_expr='icontains')
-    name = django_filters.CharFilter(field_name="name", lookup_expr='icontains')
+    mill_id = django_filters.CharFilter(field_name="id", lookup_expr='icontains')
+    mill_name = django_filters.CharFilter(field_name="name", lookup_expr='icontains')
 
     class Meta:
         model = BaseMill
-        fields = ('id', 'name',)
+        fields = ('mill_id', 'mill_name',)
 
-BaseMillFilter.base_filters['id'].label = 'รหัสโรงโม่'
-BaseMillFilter.base_filters['name'].label = 'ชื่อโรงโม่'
+BaseMillFilter.base_filters['mill_id'].label = 'รหัสโรงโม่'
+BaseMillFilter.base_filters['mill_name'].label = 'ชื่อโรงโม่'
+
+
+class BaseJobTypeFilter(django_filters.FilterSet):
+    base_job_type_id = django_filters.CharFilter(field_name="base_job_type_id", lookup_expr='icontains')
+    base_job_type_name = django_filters.CharFilter(field_name="base_job_type_name", lookup_expr='icontains')
+
+    class Meta:
+        model = BaseJobType
+        fields = ('base_job_type_id', 'base_job_type_name',)
+
+BaseJobTypeFilter.base_filters['base_job_type_id'].label = 'รหัสประเภทงานของลูกค้า'
+BaseJobTypeFilter.base_filters['base_job_type_name'].label = 'ชื่อประเภทงานของลูกค้า'
 
 
 class BaseStoneTypeFilter(django_filters.FilterSet):

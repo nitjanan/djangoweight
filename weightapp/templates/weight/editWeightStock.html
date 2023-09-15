@@ -77,60 +77,48 @@ input.del[type=checkbox] {
                     <div class="col-md-2 form-group">
                         <label for="first-name-horizontal">หน้างาน</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.customer_id |attr:"readonly" | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.customer |attr:"readonly" | add_class:"form-control"}}
                       {{form.customer_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ทะเบียนรถ</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.car_registration_id |attr:"readonly" | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.car_registration |attr:"readonly" | add_class:"form-control"}}
                       {{form.car_registration_name | add_class:"form-control"}}
                     </div>
                     
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ขับ</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.driver_id |attr:"readonly" | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.driver |attr:"readonly" | add_class:"form-control"}}
                       {{form.driver_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">โรงโม่</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.mill_id |attr:"readonly"  | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.mill |attr:"readonly"  | add_class:"form-control"}}
                       {{form.mill_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ชนิดหิน</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.stone_type_id |attr:"readonly" | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.stone_type |attr:"readonly" | add_class:"form-control"}}
                       {{form.stone_type_name | add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ตัก</label>
                     </div>
-                    <div class="col-md-2 form-group">
-                      {{form.scoop_id |attr:"readonly" | add_class:"form-control" }}
-                    </div>
-                    <div class="col-md-8 form-group">
+                    <div class="col-md-10 form-group">
+                      {{form.scoop |attr:"readonly" | add_class:"form-control" }}
                       {{form.scoop_name | add_class:"form-control" }}
                     </div>
 
@@ -219,18 +207,19 @@ input.del[type=checkbox] {
 
   // BEFORE form submission
   $('form').submit(function() {
+    $("#id_customer_name").val($("#id_customer").find(":selected").text());
+    $("#id_car_registration_name").val($("#id_car_registration").find(":selected").text());
+    $("#id_driver_name").val($("#id_driver").find(":selected").text());
+    $("#id_scoop_name").val($("#id_scoop").find(":selected").text());
+    $("#id_mill_name").val($("#id_mill").find(":selected").text());
+    $("#id_stone_type_name").val($("#id_stone_type").find(":selected").text());
+
     customer_name = $('#id_customer_name').val();
     if(customer_name == 'ยกเลิก'){
         $('#id_weight_in').val('0.000');
         $('#id_weight_out').val('0.000');
         $('#id_weight_total').val('0.000');
     }
-    $("#id_customer_id").val($("#id_customer_name").val());
-    $("#id_car_registration_id").val($("#id_car_registration_name").val());
-    $("#id_driver_id").val($("#id_driver_name").val());
-    $("#id_scoop_id").val($("#id_scoop_name").val());
-    $("#id_mill_id").val($("#id_mill_name").val());
-    $("#id_stone_type_id").val($("#id_stone_type_name").val());
   });
 
   $("#id_weight_total").blur(function(){
@@ -255,28 +244,28 @@ input.del[type=checkbox] {
     }
   }
 
-  $("#id_customer_name").change(function(){
-    $("#id_customer_id").val($("#id_customer_name").val());
+  $("#id_customer").change(function(){
+    $("#id_customer_name").val($(this).find(":selected").text());
   });
 
-  $("#id_car_registration_name").change(function(){
-    $("#id_car_registration_id").val($("#id_car_registration_name").val());
+  $("#id_car_registration").change(function(){
+    $("#id_car_registration_name").val($(this).find(":selected").text());
   });
   
-  $("#id_driver_name").change(function(){
-    $("#id_driver_id").val($("#id_driver_name").val());
+  $("#id_driver").change(function(){
+    $("#id_driver_name").val($(this).find(":selected").text());
   });
 
-  $("#id_scoop_name").change(function(){
-    $("#id_scoop_id").val($("#id_scoop_name").val());
+  $("#id_scoop").change(function(){
+    $("#id_scoop_name").val($(this).find(":selected").text());
   });
 
-  $("#id_mill_name").change(function(){
-    $("#id_mill_id").val($("#id_mill_name").val());
+  $("#id_mill").change(function(){
+    $("#id_mill_name").val($(this).find(":selected").text());
   });
 
-  $("#id_stone_type_name").change(function(){
-    $("#id_stone_type_id").val($("#id_stone_type_name").val());
+  $("#id_stone_type").change(function(){
+    $("#id_stone_type_name").val($(this).find(":selected").text());
   });
 
 

@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType
 from django.db.models import Sum, Q
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -34,6 +34,16 @@ from re import escape as reescape
 from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat
 from django.contrib.auth.decorators import login_required
+
+from rest_framework import generics, viewsets
+from rest_framework.views import APIView
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.renderers import TemplateHTMLRenderer
+
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer
+from rest_framework.decorators import api_view
+from django.contrib.auth.models import User
 
 def generate_pastel_color():
     # Generate random pastel colors by restricting the RGB channels within a specific range
@@ -132,9 +142,9 @@ def index(request):
     list_date_between = pd.date_range(start_date, end_date).tolist()
     list_date = [date.strftime("%Y-%m-%d") for date in list_date_between]
 
-    sum_goal_mill_1 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__name = 'โรงโม่ 1').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_2 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__name = 'โรงโม่ 2').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_3 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__name = 'โรงโม่ 3').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_1 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 1').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_2 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 2').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_3 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 3').aggregate(s=Sum('accumulated_goal'))["s"]
 
     list_goal_mill_1 = []
     list_goal_mill_2 = []
@@ -188,14 +198,14 @@ def index(request):
     ######## chart loss weight #########
     ####################################
     actual_working_time_all = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__name = 'โรงโม่ 1').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__name = 'โรงโม่ 2').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__name = 'โรงโม่ 3').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 1').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 2').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 3').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
     total_loss_time_all = Production.objects.filter(created__range = (start_date, end_date)).aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), mill__name = 'โรงโม่ 1').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill2 = Production.objects.filter(created__range = (start_date, end_date), mill__name = 'โรงโม่ 2').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill3 = Production.objects.filter(created__range = (start_date, end_date), mill__name = 'โรงโม่ 3').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 1').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill2 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 2').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill3 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 3').aggregate(s=Sum('total_loss_time'))["s"]
     
     persent_loss_weight_all = calculatePersent(total_loss_time_all if total_loss_time_all else None, actual_working_time_all)
     persent_loss_weight_mill1 = calculatePersent(total_loss_time_mill1 if total_loss_time_mill1 else None, actual_working_time_mill1)
@@ -251,7 +261,7 @@ def logoutUser(request):
     return redirect('login')
 
 def weightTable(request):
-    data = Weight.objects.filter(date__gte='2023-01-01', date__lte='2023-03-31').order_by('date','weight_id')
+    data = Weight.objects.all().order_by('date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -282,9 +292,9 @@ def editWeight(request, mode, weight_id):
         form = tmp_form_post
         if form.is_valid():
             # log history เก็บข้อมูลก่อนแก้
-            wight_form = form.save()
+            weight_form = form.save()
 
-            weight_history = WeightHistory.objects.filter(weight_id = wight_form.pk).order_by('-update')[0]
+            weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
             weight_history.user_update = request.user
             weight_history.save()
             return redirect('weightTable')
@@ -299,7 +309,7 @@ def searchDataCustomer(request):
         customer_id = request.GET.get('customer_id')
         weight_id = request.GET.get('weight_id')
 
-        site = BaseSite.objects.filter(base_customer_id = customer_id).values('base_site_name')
+        site = BaseSite.objects.filter(base_customer_id = customer_id).values('base_site_id','base_site_name')
     data = {
         'site_list': list(site),
     }
@@ -352,7 +362,7 @@ def searchTeamFromCar(request):
     if 'car_registration_name' in request.GET:
         car_registration_name = request.GET.get('car_registration_name')
         qs = BaseCar.objects.filter(car_name = car_registration_name).first()
-        val = qs.base_car_team.car_team_name
+        val = qs.base_car_team.car_team_id
     data = {
         'val': val,
     }
@@ -668,14 +678,14 @@ def searchProductionGoal(request):
         date_object = datetime.strptime(created, "%Y-%m-%d")
 
         #เอาออก line_type__id = line_type_id เพราะโรงโม่เดียวกันใช้เป้าผลิตเท่ากัน
-        pd_goal = ProductionGoal.objects.filter(date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , mill__id = mill_id).values('mill', 'line_type', 'date' , 'accumulated_goal', 'id')
+        pd_goal = ProductionGoal.objects.filter(date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , mill__mill_id = mill_id).values('mill', 'line_type', 'date' , 'accumulated_goal', 'id')
         #if pd_id == '' create mode , else edit mode
         if pd_id == '':
-            have_production = Production.objects.filter(created = created, mill__id = mill_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(created = created, mill__mill_id = mill_id, line_type__id = line_type_id ).exists()
         else:
-            have_production = Production.objects.filter(~Q(id = pd_id), created = created, mill__id = mill_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(~Q(id = pd_id), created = created, mill__mill_id = mill_id, line_type__id = line_type_id ).exists()
         #ดึงข้อมูล line 1 มาเพื่อไป set default ใน line อื่นๆ
-        pd_line1 = Production.objects.filter(created = created, mill__id = mill_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
+        pd_line1 = Production.objects.filter(created = created, mill__mill_id = mill_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
         
         
     data = {
@@ -817,11 +827,11 @@ def formatHourMinute(time):
 def excelProductionAndLoss(request, my_q):
     count_loss = BaseLossType.objects.all()
     pd_mills = Production.objects.filter(my_q).values_list('mill', flat=True).distinct()
-    mills = BaseMill.objects.filter(id__in = pd_mills)
+    mills = BaseMill.objects.filter(mill_id__in = pd_mills)
 
     workbook = openpyxl.Workbook()
     for mill in mills:
-        sheet = workbook.create_sheet(title=mill.name)
+        sheet = workbook.create_sheet(title=mill.mill_name)
 
         # Fetch distinct line types for the current mill
         line_types = Production.objects.filter(my_q, mill=mill).values_list('line_type', flat=True).distinct()
@@ -1097,11 +1107,11 @@ def searchStoneEstimate(request):
 
         #if se_id == '' create mode , else edit mode
         if se_id == '':
-            have_estimate = StoneEstimate.objects.filter(created = created, mill__id = mill_id).exists()
+            have_estimate = StoneEstimate.objects.filter(created = created, mill__mill_id= mill_id).exists()
         else:
-            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id), created = created, mill__id = mill_id).exists()
+            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id), created = created, mill__mill_id = mill_id).exists()
         #ดึงเปอร์เซ็นคำนวนหินเปอร์ที่คีย์ไปล่าสุด
-        last_se = StoneEstimate.objects.filter(mill__id = mill_id).order_by('-created').first()
+        last_se = StoneEstimate.objects.filter(mill__mill_id = mill_id).order_by('-created').first()
         last_se_item = StoneEstimateItem.objects.filter(se = last_se).values('stone_type', 'percent')
         
     data = {
@@ -1132,7 +1142,7 @@ def exportExcelStoneEstimateAndProduction(request):
         my_q &=Q(created__lte = end_created)
 
     se_mills = StoneEstimate.objects.filter(my_q).values_list('mill', flat=True).distinct()
-    mills = BaseMill.objects.filter(id__in = se_mills)
+    mills = BaseMill.objects.filter(mill_id__in = se_mills)
 
     base_stone_type = BaseStoneType.objects.all().values_list('base_stone_type_name', flat=True)
 
@@ -1141,11 +1151,11 @@ def exportExcelStoneEstimateAndProduction(request):
 
     workbook = openpyxl.Workbook()
     for mill in mills:
-        sheet = workbook.create_sheet(title=mill.name)
+        sheet = workbook.create_sheet(title=mill.mill_name)
 
         list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
+        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.mill_name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2
@@ -1215,16 +1225,16 @@ def exportExcelStoneEstimateAndProduction(request):
                     #หมายเหตุ
                     production_note = Production.objects.filter(mill = mill, created = created_date).values_list('note', flat=True).first()
                     #หินเขา
-                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
                     #หินเข้าโม่ทั้งหมด
-                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
                     for stone_type_name in weight_stone_types:
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
                         if weight_time1:
                             row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
                         else:
@@ -1318,7 +1328,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
 ################### BaesMill ####################
 def settingBaseMill(request):
-    data = BaseMill.objects.all().order_by('id')
+    data = BaseMill.objects.all().order_by('mill_id')
 
     #กรองข้อมูล
     myFilter = BaseMillFilter(request.GET, queryset = data)
@@ -1351,7 +1361,7 @@ def createBaseMill(request):
     return render(request, "manage/formBase.html", context)
 
 def editBaseMill(request, id):
-    data = BaseMill.objects.get(id = id)
+    data = BaseMill.objects.get(mill_id = id)
     form = BaseMillForm(instance=data)
     if request.method == 'POST':
         form = BaseMillForm(request.POST, instance=data)
@@ -1359,8 +1369,8 @@ def editBaseMill(request, id):
             mill_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(mill_id = mill_form.pk)
-            weights.update(mill_name = mill_form.name)
+            weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
+            weights.update(mill_name = mill_form.mill_name)
 
             return redirect('settingBaseMill')
 
@@ -1369,6 +1379,59 @@ def editBaseMill(request, id):
         'setting_page':'active',
         'setting_base_mill_page': 'active',
         'table_name' : 'โรงโม่',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+################### BaseJobType ####################
+def settingBaseJobType(request):
+    data = BaseJobType.objects.all().order_by('base_job_type_id')
+
+    #กรองข้อมูล
+    myFilter = BaseJobTypeFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_job_type = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, }
+    return render(request, "manage/baseJobType.html",context)
+
+
+def createBaseJobType(request):
+    form = BaseJobTypeForm(request.POST or None)
+    if form.is_valid():
+        form = BaseJobTypeForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseJobType')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_job_type_page': 'active',
+        'table_name' : 'ประเภทงานของลูกค้า',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseJobType(request, id):
+    data = BaseJobType.objects.get(base_job_type_id = id)
+    form = BaseJobTypeForm(instance=data)
+    if request.method == 'POST':
+        form = BaseJobTypeForm(request.POST, instance=data)
+        if form.is_valid():
+            job_type_form = form.save()
+            return redirect('settingBaseJobType')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_job_type_page': 'active',
+        'table_name' : 'ประเภทงานของลูกค้า',
         'text_mode' : 'เปลี่ยน',
     }
 
@@ -1417,7 +1480,7 @@ def editBaseStoneType(request, id):
             stone_type_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)
+            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
             weights.update(stone_type_name = stone_type_form.base_stone_type_name)
 
             return redirect('settingBaseStoneType')
@@ -1475,7 +1538,7 @@ def editBaseScoop(request, id):
             scoop_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+            weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
             weights.update(scoop_name = scoop_form.scoop_name)
 
             return redirect('settingBaseScoop')
@@ -1533,7 +1596,7 @@ def editBaseCarTeam(request, id):
             car_team_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(car_team_id = car_team_form.pk)
+            weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
             weights.update(car_team_name = car_team_form.car_team_name)
 
             return redirect('settingBaseCarTeam')
@@ -1650,7 +1713,7 @@ def editBaseSite(request, id):
             site_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(site_id = site_form.pk)
+            weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
             weights.update(site_name = site_form.base_site_name)         
 
             return redirect('settingBaseSite')
@@ -1707,7 +1770,7 @@ def editBaseCustomer(request, id):
         if form.is_valid():
             customer_form = form.save()
 
-            # update weight ด้วย
+            # update weight ด้วย iiiiiiiiiiiiiii
             weights = Weight.objects.filter(customer_id = customer_form.pk)
             weights.update(customer_name = customer_form.customer_name)
 
@@ -1838,3 +1901,455 @@ def editBaseCarRegistration(request, id):
     }
 
     return render(request, "manage/formBase.html", context)
+
+#################################
+############# API ###############
+#################################
+
+############# Weight API ###############
+@api_view(['GET'])
+def apiWeightOverview(request):
+    api_urls = {
+        'List':'/weight/api/list/',
+        'Detail View':'/weight/api/detail/<str:pk>/',
+        'Create':'/weight/api/create/',
+        'Update':'/weight/api/update/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def weightList(request):
+    queryset = Weight.objects.all()
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def weightDetail(request, pk):
+    queryset = Weight.objects.get(weight_id = pk)
+    serializer = WeightSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def weightCreate(request):
+    serializer = WeightSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['PUT'])
+def weightUpdate(request, pk):
+    queryset = Weight.objects.get(weight_id = pk)
+    serializer = WeightSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+############# BaseScoop API ###############
+class BaseScoopView(generics.ListCreateAPIView):
+    queryset = BaseScoop.objects.all()
+    serializer_class = BaseScoopSerializer
+
+class BaseScoopViewById(generics.ListCreateAPIView):
+    queryset = BaseScoop.objects.all()
+    def get_queryset(self):
+        queryset = BaseScoop.objects.filter(scoop_id=self.kwargs["pk"])
+        return queryset
+    serializer_class = BaseScoopSerializer
+
+class CreateBaseScoop(APIView):
+    renderer_classes = [TemplateHTMLRenderer]
+    template_name = 'manage/formBase.html'
+
+    serializer_class = BaseScoopSerializer
+
+    def post(self, request):
+        scoop_id = request.data.get("scoop_id")
+        scoop_name = request.data.get("scoop_name")
+
+        data = {'scoop_id': scoop_id, 'scoop_name': scoop_name}
+
+        serializer = BaseScoopSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+############# BaseMill API ###############
+@api_view(['GET'])
+def apiBaseMillOverview(request):
+    api_urls = {
+        'List':'/baseMill/api/list/',
+        'Detail View':'/baseMill/api/detail/<str:pk>/',
+        'Create':'/baseMill/api/create/',
+        'Update':'/baseMill/api/update/<str:pk>/',
+        'Delete':'/baseMill/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseMillList(request):
+    queryset = BaseMill.objects.all()
+    serializer = BaseMillSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseMillDetail(request, pk):
+    queryset = BaseMill.objects.get(mill_id=pk)
+    serializer = BaseMillSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseMillCreate(request):
+    serializer = BaseMillSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseMillUpdate(request, pk):
+    queryset = BaseMill.objects.get(mill_id=pk)
+    serializer = BaseMillSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseMillDelete(request, pk):
+    queryset = BaseMill.objects.get(mill_id=pk)
+    queryset.delete()
+
+    return Response("Item successfully delete!")
+
+############# base customer API ###############
+@api_view(['GET'])
+def apiBaseCustomerOverview(request):
+    api_urls = {
+        'List':'/baseCustomer/api/list/',
+        'Detail View':'/baseCustomer/api/detail/<str:pk>/',
+        'Create':'/baseCustomer/api/create/',
+        'Update':'/baseCustomer/api/update/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseCustomerList(request):
+    queryset = BaseCustomer.objects.all()
+    serializer = BaseCustomerSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseCustomerDetail(request, pk):
+    queryset = BaseCustomer.objects.get(customer_id = pk)
+    serializer = BaseCustomerSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseCustomerCreate(request):
+    serializer = BaseCustomerSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseCustomerUpdate(request, pk):
+    try:
+        base_customer = BaseCustomer.objects.get(customer_id=pk)
+        weights = Weight.objects.filter(customer_id = pk) #iiiiiiiiii
+
+        # Update BaseCustomer
+        base_customer_serializer = BaseCustomerSerializer(instance=base_customer, data=request.data)
+        if base_customer_serializer.is_valid():
+            base_customer_serializer.save()
+
+            customer_name = request.data.get("customer_name")
+            # 1 Update Weight
+            weights.update(customer_name = customer_name)
+            
+            # 2 Update Weight ไม่ต้องแล้ว
+            '''
+            data_weight = {'customer_id': pk, 'customer_name': customer_name}
+            for weight in weights:
+                weight_serializer = WeightSerializer(instance=weight, data=data_weight)
+                if weight_serializer.is_valid():
+                    weight_serializer.save()         
+            '''
+        return Response({'message': 'Data updated successfully'})
+    except BaseCustomer.DoesNotExist or Weight.DoesNotExist:
+        return Response({'error': 'Record not found'}, status=404)
+
+
+############# BaseStoneType API ###############
+@api_view(['GET'])
+def apiBaseStoneTypeOverview(request):
+    api_urls = {
+        'List':'/baseStoneType/api/list/',
+        'Detail View':'/baseStoneType/api/detail/<str:pk>/',
+        'Create':'/baseStoneType/api/create/',
+        'Update':'/baseStoneType/api/update/<str:pk>/',
+        'Delete':'/baseStoneType/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseStoneTypeList(request):
+    queryset = BaseStoneType.objects.all()
+    serializer = BaseStoneTypeSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseStoneTypeDetail(request, pk):
+    queryset = BaseStoneType.objects.get(base_stone_type_id=pk)
+    serializer = BaseStoneTypeSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseStoneTypeCreate(request):
+    serializer = BaseStoneTypeSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseStoneTypeUpdate(request, pk):
+    queryset = BaseStoneType.objects.get(base_stone_type_id=pk)
+    serializer = BaseStoneTypeSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+class BaseStoneTypeList(generics.ListCreateAPIView):
+    queryset = BaseStoneType.objects.all()
+    serializer_class = BaseStoneTypeTestSerializer
+
+############# BaseCarTeam API ###############
+@api_view(['GET'])
+def apiBaseCarTeamOverview(request):
+    api_urls = {
+        'List':'/baseCarTeam/api/list/',
+        'Detail View':'/baseCarTeam/api/detail/<str:pk>/',
+        'Create':'/baseCarTeam/api/create/',
+        'Update':'/baseCarTeam/api/update/<str:pk>/',
+        'Delete':'/baseCarTeam/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseCarTeamList(request):
+    queryset = BaseCarTeam.objects.all()
+    serializer = BaseCarTeamSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseCarTeamDetail(request, pk):
+    queryset = BaseCarTeam.objects.get(car_team_id=pk)
+    serializer = BaseCarTeamSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseCarTeamCreate(request):
+    serializer = BaseCarTeamSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseCarTeamUpdate(request, pk):
+    queryset = BaseCarTeam.objects.get(car_team_id=pk)
+    serializer = BaseCarTeamSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+
+############# BaseDriver API ###############
+@api_view(['GET'])
+def apiBaseDriverOverview(request):
+    api_urls = {
+        'List':'/baseDriver/api/list/',
+        'Detail View':'/baseDriver/api/detail/<str:pk>/',
+        'Create':'/baseDriver/api/create/',
+        'Update':'/baseDriver/api/update/<str:pk>/',
+        'Delete':'/baseDriver/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseDriverList(request):
+    queryset = BaseDriver.objects.all()
+    serializer = BaseDriverSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseDriverDetail(request, pk):
+    queryset = BaseDriver.objects.get(driver_id=pk)
+    serializer = BaseDriverSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseDriverCreate(request):
+    serializer = BaseDriverSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseDriverUpdate(request, pk):
+    queryset = BaseDriver.objects.get(driver_id=pk)
+    serializer = BaseDriverSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+############# BaseCarRegistration API ###############
+@api_view(['GET'])
+def apiBaseCarRegistrationOverview(request):
+    api_urls = {
+        'List':'/baseCarRegistration/api/list/',
+        'Detail View':'/baseCarRegistration/api/detail/<str:pk>/',
+        'Create':'/baseCarRegistration/api/create/',
+        'Update':'/baseCarRegistration/api/update/<str:pk>/',
+        'Delete':'/baseCarRegistration/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseCarRegistrationList(request):
+    queryset = BaseCarRegistration.objects.all()
+    serializer = BaseCarRegistrationSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseCarRegistrationDetail(request, pk):
+    queryset = BaseCarRegistration.objects.get(car_registration_id=pk)
+    serializer = BaseCarRegistrationSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseCarRegistrationCreate(request):
+    serializer = BaseCarRegistrationSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseCarRegistrationUpdate(request, pk):
+    queryset = BaseCarRegistration.objects.get(car_registration_id=pk)
+    serializer = BaseCarRegistrationSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+############# BaseSite API ###############
+@api_view(['GET'])
+def apiBaseSiteOverview(request):
+    api_urls = {
+        'List':'/baseSite/api/list/',
+        'Detail View':'/baseSite/api/detail/<str:pk>/',
+        'Create':'/baseSite/api/create/',
+        'Update':'/baseSite/api/update/<str:pk>/',
+        'Delete':'/baseSite/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseSiteList(request):
+    queryset = BaseSite.objects.all()
+    serializer = BaseSiteSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseSiteDetail(request, pk):
+    queryset = BaseSite.objects.get(base_site_id=pk)
+    serializer = BaseSiteSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseSiteCreate(request):
+    serializer = BaseSiteSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseSiteUpdate(request, pk):
+    queryset = BaseSite.objects.get(base_site_id=pk)
+    serializer = BaseSiteSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+############# BaseCar API ###############
+@api_view(['GET'])
+def apiBaseCarOverview(request):
+    api_urls = {
+        'List':'/baseCar/api/list/',
+        'Detail View':'/baseCar/api/detail/<str:pk>/',
+        'Create':'/baseCar/api/create/',
+        'Update':'/baseCar/api/update/<str:pk>/',
+        'Delete':'/baseCar/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseCarList(request):
+    queryset = BaseCar.objects.all()
+    serializer = BaseCarSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseCarDetail(request, pk):
+    queryset = BaseCar.objects.get(car_id=pk)
+    serializer = BaseCarSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseCarCreate(request):
+    serializer = BaseCarSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseCarUpdate(request, pk):
+    queryset = BaseCar.objects.get(car_id=pk)
+    serializer = BaseCarSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)

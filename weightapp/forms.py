@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -202,63 +202,79 @@ class WeightForm(forms.ModelForm):
             customer_id_value = instance.customer_id
 
         #เปลี่ยนการจัดกลุ่มเป็นแบบอื่นเพราะมีเคสที่ใช้เงื่อนไขนี้ไม่ได้
-        #self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_site_name = self.fields['site'], base_customer_id = self.fields['customer_id']))    
+        self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_customer_id = customer_id_value), required=False)    
     '''
 
+    ''' hidden
     mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
     stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())    
+    '''
+
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all())
-    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
 
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name', 'province','driver_id','driver_name', 'customer_id','customer_name','site_name','mill_id','mill_name','stone_type_id', 'stone_type_name', 'transport','carry_type_name', 'car_team_name', 'stone_color', 'scoop_id', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type')
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'site_name' : forms.HiddenInput(),
+        'site' : forms.HiddenInput(),
         'carry_type_name': forms.HiddenInput(),
         'pay': forms.HiddenInput(),
         'clean_type': forms.HiddenInput(),
         'vat_type': forms.HiddenInput(),
+        'mill_name': forms.HiddenInput(),
+        'stone_type_name': forms.HiddenInput(),
+        'scoop_name': forms.HiddenInput(),
+        'car_team_name': forms.HiddenInput(),
         }
        labels = {
             'date': _('วันที่ผลิต'),
-            'car_registration_id': _('รหัสทะเบียนรถ'),
+            'car_registration': _('รหัสทะเบียนรถ'),
             'car_registration_name': _('ทะเบียนรถ'),
             'province': _('ทะเบียน'),
-            'driver_id': _('รหัสคนขับ'),
+            'driver': _('รหัสคนขับ'),
             'driver_name': _('ชื่อคนขับ'),
             'customer_name': _('ชื่อลูกค้า'),
-            'mill_id': _('รหัสโรงโม่'),
+            'mill': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
             'stone_type_name': _('ชื่อหิน'),
             'transport': _('ขนส่ง'),
        }
 
 class WeightStockForm(forms.ModelForm):
-    customer_name = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
-    mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
-    stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
-    car_registration_name = forms.ModelChoiceField(label='ชื่อทะเบียนรถ', queryset = BaseCarRegistration.objects.all())
-    driver_name = forms.ModelChoiceField(label='ชื่อผู้ขับ', queryset = BaseDriver.objects.all())
-    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
+    customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
+    #hidden
+    #customer_name = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
+    #mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
+    #stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
+    #car_registration_name = forms.ModelChoiceField(label='ชื่อทะเบียนรถ', queryset = BaseCarRegistration.objects.all())
+    #driver_name = forms.ModelChoiceField(label='ชื่อผู้ขับ', queryset = BaseDriver.objects.all())
+    #scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
     
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration_id', 'car_registration_name','driver_id','driver_name', 'customer_id','customer_name','mill_id','mill_name','stone_type_id','stone_type_name', 'scoop_id', 'scoop_name', 'weight_in', 'weight_out', 'weight_total')
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'customer_name': forms.HiddenInput(),
+        'mill_name': forms.HiddenInput(),
+        'stone_type_name': forms.HiddenInput(),
+        'car_registration_name': forms.HiddenInput(),
+        'driver_name': forms.HiddenInput(),
+        'scoop_name': forms.HiddenInput(),
        }
        labels = {
             'date': _('วันที่ผลิต'),
-            'car_registration_id': _('รหัสทะเบียนรถ'),
+            'car_registration': _('รหัสทะเบียนรถ'),
             'car_registration_name': _('ทะเบียนรถ'),
             'province': _('ทะเบียน'),
-            'driver_id': _('รหัสคนขับ'),
+            'driver': _('รหัสคนขับ'),
             'driver_name': _('ชื่อคนขับ'),
             'customer_name': _('ชื่อลูกค้า'),
-            'mill_id': _('รหัสโรงโม่'),
+            'mill': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
             'stone_type_name': _('ชื่อหิน'),
        }
@@ -266,12 +282,23 @@ class WeightStockForm(forms.ModelForm):
 class BaseMillForm(forms.ModelForm):
     class Meta:
        model = BaseMill
-       fields = ('id' , 'name',)
+       fields = ('mill_id' , 'mill_name',)
        widgets = {
         }
        labels = {
-            'id': _('รหัสโรงโม่'),
-            'name': _('ชื่อโรงโม่'),
+            'mill_id': _('รหัสโรงโม่'),
+            'mill_name': _('ชื่อโรงโม่'),
+       }
+
+class BaseJobTypeForm(forms.ModelForm):
+    class Meta:
+       model = BaseJobType
+       fields = ('base_job_type_id' , 'base_job_type_name',)
+       widgets = {
+        }
+       labels = {
+            'base_job_type_id': _('รหัสประเภทงานของลูกค้า'),
+            'base_job_type_name': _('ชื่อประเภทงานของลูกค้า'),
        }
 
 class BaseStoneTypeForm(forms.ModelForm):

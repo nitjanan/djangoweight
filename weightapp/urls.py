@@ -1,6 +1,7 @@
 from django.urls import path
 from weightapp import views
 from django.contrib.auth import views as auth_views
+from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList
 
 urlpatterns = [
     path('',views.index,name="home"),
@@ -39,6 +40,10 @@ urlpatterns = [
     path('baseMill/setting',views.settingBaseMill,name="settingBaseMill"),
     path('baseMill/create',views.createBaseMill,name="createBaseMill"),
     path('baseMill/edit/<str:id>',views.editBaseMill,name="editBaseMill"),
+
+    path('baseJobType/setting',views.settingBaseJobType,name="settingBaseJobType"),
+    path('baseJobType/create',views.createBaseJobType,name="createBaseJobType"),
+    path('baseJobType/edit/<str:id>',views.editBaseJobType,name="editBaseJobType"),
 
     path('baseStoneType/setting',views.settingBaseStoneType,name="settingBaseStoneType"),
     path('baseStoneType/create',views.createBaseStoneType,name="createBaseStoneType"),
@@ -81,4 +86,64 @@ urlpatterns = [
           name="password_reset_done"),
     path('reset/<uidb64>/<token>', auth_views.PasswordResetConfirmView.as_view(template_name = "account/passwordResetConfirm.html"), name="password_reset_confirm"),
     path('reset_password_complete/', auth_views.PasswordResetCompleteView.as_view(template_name = "account/passwordResetComplete.html"), name="password_reset_complete"),
+
+    path('baseScoop/api/list/',BaseScoopView.as_view()),
+    path('baseScoop/api/<str:pk>/',BaseScoopViewById.as_view()),
+    path('baseScoop/api/create/', CreateBaseScoop.as_view(), name="createBaesScoop"),
+
+     path('baseMill/api/',views.apiBaseMillOverview,name="apiBaseMillOverview"),
+     path('baseMill/api/list/',views.baseMillList,name="baseMillList"),
+     path('baseMill/api/detail/<str:pk>/',views.baseMillDetail,name="baseMillDetail"),
+     path('baseMill/api/create/',views.baseMillCreate,name="baseMillCreate"),
+     path('baseMill/api/update/<str:pk>/',views.baseMillUpdate,name="baseMillUpdate"),
+     path('baseMill/api/delete/<str:pk>/',views.baseMillDelete,name="baseMillDelete"),
+
+     path('weight/api/',views.apiWeightOverview,name="apiWeightOverview"),
+     path('weight/api/list/',views.weightList,name="weightList"),
+     path('weight/api/detail/<str:pk>/',views.weightDetail,name="weightDetail"),
+     path('weight/api/create/',views.weightCreate,name="weightCreate"),
+     path('weight/api/update/<str:pk>/',views.weightUpdate,name="weightUpdate"),
+
+     path('baseCustomer/api/',views.apiBaseCustomerOverview,name="apiBaseCustomerOverview"),
+     path('baseCustomer/api/list/',views.baseCustomerList,name="baseCustomerList"),
+     path('baseCustomer/api/detail/<str:pk>/',views.baseCustomerDetail,name="baseCustomerDetail"),
+     path('baseCustomer/api/create/',views.baseCustomerCreate,name="baseCustomerCreate"),
+     path('baseCustomer/api/update/<str:pk>/',views.baseCustomerUpdate,name="baseCustomerUpdate"),
+
+     path('baseStoneType/api/',views.apiBaseStoneTypeOverview,name="apiBaseStoneTypeOverview"),
+     path('baseStoneType/api/list/',views.baseStoneTypeList,name="baseStoneTypeList"),
+     path('baseStoneType/api/detail/<str:pk>/',views.baseStoneTypeDetail,name="baseStoneTypeDetail"),
+     path('baseStoneType/api/create/',views.baseStoneTypeCreate,name="baseStoneTypeCreate"),
+     path('baseStoneType/api/update/<str:pk>/',views.baseStoneTypeUpdate,name="baseStoneTypeUpdate"),
+     path('baseStoneType/api/test/', BaseStoneTypeList.as_view(), name="baseStoneTypeList"),
+
+     path('baseCarTeam/api/',views.apiBaseCarTeamOverview,name="apiBaseCarTeamOverview"),
+     path('baseCarTeam/api/list/',views.baseCarTeamList,name="baseCarTeamList"),
+     path('baseCarTeam/api/detail/<str:pk>/',views.baseCarTeamDetail,name="baseCarTeamDetail"),
+     path('baseCarTeam/api/create/',views.baseCarTeamCreate,name="baseCarTeamCreate"),
+     path('baseCarTeam/api/update/<str:pk>/',views.baseCarTeamUpdate,name="baseCarTeamUpdate"),
+
+     path('baseDriver/api/',views.apiBaseDriverOverview,name="apiBaseDriverOverview"),
+     path('baseDriver/api/list/',views.baseDriverList,name="baseDriverList"),
+     path('baseDriver/api/detail/<str:pk>/',views.baseDriverDetail,name="baseDriverDetail"),
+     path('baseDriver/api/create/',views.baseDriverCreate,name="baseDriverCreate"),
+     path('baseDriver/api/update/<str:pk>/',views.baseDriverUpdate,name="baseDriverUpdate"),
+
+     path('baseCarRegistration/api/',views.apiBaseCarRegistrationOverview,name="apiBaseCarRegistrationOverview"),
+     path('baseCarRegistration/api/list/',views.baseCarRegistrationList,name="baseCarRegistrationList"),
+     path('baseCarRegistration/api/detail/<str:pk>/',views.baseCarRegistrationDetail,name="baseCarRegistrationDetail"),
+     path('baseCarRegistration/api/create/',views.baseCarRegistrationCreate,name="baseCarRegistrationCreate"),
+     path('baseCarRegistration/api/update/<str:pk>/',views.baseCarRegistrationUpdate,name="baseCarRegistrationUpdate"),
+
+     path('baseSite/api/',views.apiBaseSiteOverview,name="apiBaseSiteOverview"),
+     path('baseSite/api/list/',views.baseSiteList,name="baseSiteList"),
+     path('baseSite/api/detail/<str:pk>/',views.baseSiteDetail,name="baseSiteDetail"),
+     path('baseSite/api/create/',views.baseSiteCreate,name="baseSiteCreate"),
+     path('baseSite/api/update/<str:pk>/',views.baseSiteUpdate,name="baseSiteUpdate"),
+
+     path('baseCar/api/',views.apiBaseCarOverview,name="apiBaseCarOverview"),
+     path('baseCar/api/list/',views.baseCarList,name="baseCarList"),
+     path('baseCar/api/detail/<str:pk>/',views.baseCarDetail,name="baseCarDetail"),
+     path('baseCar/api/create/',views.baseCarCreate,name="baseCarCreate"),
+     path('baseCar/api/update/<str:pk>/',views.baseCarUpdate,name="baseCarUpdate"),
 ]

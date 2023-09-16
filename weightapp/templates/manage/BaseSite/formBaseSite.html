@@ -55,11 +55,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
-                <div id="div_id_base_site_id" class="mb-3"> 
-                    <label for="id_base_site_id" class="form-label requiredField">ลูกค้า</label>
+                <div class="mb-3"> 
+                    <label for="id-form-customer" class="form-label requiredField">ลูกค้า</label>
                     <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="searchDataBaesCustomer()">
                 </div>
-                {{form | crispy}}
+                <div class="mb-3">
+                  {{form.base_site_id.label}} {{form.base_site_id | add_class:"form-control"}}
+                </div>
+                <div class="mb-3">
+                  {{form.base_site_name.label}} {{form.base_site_name | add_class:"form-control"}}
+                </div>
+                {{form.base_customer | add_class:"form-control d-none"}}
                 <div class="col-12 d-flex justify-content-end">
                   <button type="submit" class="btn btn-primary me-1 mb-1">
                     บันทึก
@@ -106,6 +112,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
 <script type="text/javascript">
 
+  //before submit
+  $('form').submit(function() {
+    //searchDataBaesCustomer();
+  });
+
   $( function() {
       $( "#id-form-customer" ).autocomplete({
         source: '{% url "autocompalteCustomer" %}',
@@ -113,8 +124,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       });
   } );
 
-  function searchDataBaesCustomer(){
+  
 
+  function searchDataBaesCustomer(){
         if($('#id-form-customer').val() != ""){
           var str = $('#id-form-customer').val();
           var items = str.split( ":" );

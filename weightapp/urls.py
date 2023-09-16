@@ -146,4 +146,10 @@ urlpatterns = [
      path('baseCar/api/detail/<str:pk>/',views.baseCarDetail,name="baseCarDetail"),
      path('baseCar/api/create/',views.baseCarCreate,name="baseCarCreate"),
      path('baseCar/api/update/<str:pk>/',views.baseCarUpdate,name="baseCarUpdate"),
+
+     path('baseJobType/api/',views.apiBaseJobTypeOverview,name="apiBaseJobTypeOverview"),
+     path('baseJobType/api/list/',views.baseJobTypeList,name="baseJobTypeList"),
+     path('baseJobType/api/detail/<str:pk>/',views.baseJobTypeDetail,name="baseJobTypeDetail"),
+     path('baseJobType/api/create/',views.baseJobTypeCreate,name="baseJobTypeCreate"),
+     path('baseJobType/api/update/<str:pk>/',views.baseJobTypeUpdate,name="baseJobTypeUpdate"),
 ]

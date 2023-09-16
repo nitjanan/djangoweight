@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType
 from django.contrib.auth.models import User
 
 class CustomField(serializers.CharField):
@@ -138,3 +138,10 @@ class BaseSiteSerializer(serializers.ModelSerializer):
     รหัสหน้างาน = serializers.CharField(source='base_site_id')
     ชื่อหน้างาน = serializers.CharField(source='base_site_name')
     ลูกค้า = serializers.CharField(source='base_customer')
+
+
+class BaseJobTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BaseJobType
+        fields = '__all__'
+        extra_fields = ['base_job_type_id']

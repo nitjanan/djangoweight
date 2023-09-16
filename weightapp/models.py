@@ -38,7 +38,7 @@ class BaseCarTeam(models.Model):
         verbose_name_plural = 'ข้อมูลทีม'
 
     def __str__(self):
-        return self.car_team_name
+        return self.car_team_id +" : " + self.car_team_name
     
 class BaseCar(models.Model):
     car_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสรถร่วม")

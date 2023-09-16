@@ -17,6 +17,11 @@ from django.forms.models import BaseInlineFormSet
 from django.forms.widgets import TextInput
 from django.utils.dateparse import parse_duration
 
+#new check error id 
+def has_only_en(name):
+    char_set = string.ascii_letters + string.digits + "-"
+    return all((True if x in char_set else False for x in name))
+
 class DurationInput(TextInput):
 
     def _format_value(self, value):
@@ -290,6 +295,30 @@ class BaseMillForm(forms.ModelForm):
             'mill_name': _('ชื่อโรงโม่'),
        }
 
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('mill_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('mill_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.mill_id = instance.mill_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
+
 class BaseJobTypeForm(forms.ModelForm):
     class Meta:
        model = BaseJobType
@@ -300,6 +329,31 @@ class BaseJobTypeForm(forms.ModelForm):
             'base_job_type_id': _('รหัสประเภทงานของลูกค้า'),
             'base_job_type_name': _('ชื่อประเภทงานของลูกค้า'),
        }
+
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('base_job_type_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('base_job_type_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสประเภทงานผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.base_job_type_id = instance.base_job_type_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
+
 
 class BaseStoneTypeForm(forms.ModelForm):
     class Meta:
@@ -312,6 +366,30 @@ class BaseStoneTypeForm(forms.ModelForm):
             'base_stone_type_name': _('ชื่อหิน'),
        }
 
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('base_stone_type_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('base_stone_type_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.base_stone_type_id = instance.base_stone_type_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
+
 class BaseScoopForm(forms.ModelForm):
     class Meta:
        model = BaseScoop
@@ -322,6 +400,30 @@ class BaseScoopForm(forms.ModelForm):
             'scoop_id': _('รหัสผู้ตัก'),
             'scoop_name': _('ชื่อผู้ตัก'),
        }
+
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('scoop_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('scoop_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.scoop_id = instance.scoop_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
 
 class BaseCarTeamForm(forms.ModelForm):
     class Meta:
@@ -334,6 +436,21 @@ class BaseCarTeamForm(forms.ModelForm):
             'car_team_name': _('ชื่อทีม'),
        }
 
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('car_team_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.car_team_id = instance.car_team_id.replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
+
 class BaseCarForm(forms.ModelForm):
     class Meta:
        model = BaseCar
@@ -345,19 +462,58 @@ class BaseCarForm(forms.ModelForm):
             'car_name': _('ชื่อรถร่วม'),
             'base_car_team': _('ทีม'),
        }
+    
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('car_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.car_id = instance.car_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
 
 class BaseSiteForm(forms.ModelForm):
     class Meta:
        model = BaseSite
        fields = ('base_customer', 'base_site_id' , 'base_site_name', )
        widgets = {
-           'base_customer': forms.HiddenInput(),
+
         }
        labels = {
             'base_site_id': _('รหัสหน้างาน'),
-            'base_site_name': _('ชื่อรถร่วม'),
+            'base_site_name': _('ชื่อหน้างาน'),
             'base_customer': _('ลูกค้า'),
        }
+
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('base_site_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('base_site_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสหน้างานผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.base_site_id = instance.base_site_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
 
 class BaseCustomerForm(forms.ModelForm):
     class Meta:
@@ -377,6 +533,30 @@ class BaseCustomerForm(forms.ModelForm):
             'weight_type': _('ชนิดเครื่องชั่ง'),
        }
 
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('customer_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('customer_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสลูกค้าผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.customer_id = instance.customer_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
+
 class BaseDriverForm(forms.ModelForm):
     class Meta:
        model = BaseDriver
@@ -385,6 +565,30 @@ class BaseDriverForm(forms.ModelForm):
             'driver_id': _('รหัสผู้ขับ'),
             'driver_name': _('ชื่อผู้ขับ'),
        }
+
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('driver_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('driver_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.driver_id = instance.driver_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance
 
 class BaseCarRegistrationForm(forms.ModelForm):
     class Meta:
@@ -395,3 +599,27 @@ class BaseCarRegistrationForm(forms.ModelForm):
             'car_registration_name': _('ชื่อทะเบียนรถ'),
             'car_type': _('ประเภทรถ'),
        }
+
+    def clean_name_field(self):
+        name_field = self.cleaned_data.get('car_registration_name')
+        if name_field:
+            name_field = name_field.strip()  # Remove spaces from the beginning and end
+        return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('car_registration_id')
+        hoen = has_only_en(id)
+
+        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+            raise forms.ValidationError(u"รหัสทะเบียนรถผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.car_registration_id = instance.car_registration_id.upper().replace(" ", "")
+
+        if commit:
+            instance.save()
+
+        return instance

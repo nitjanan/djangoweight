@@ -41,7 +41,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.renderers import TemplateHTMLRenderer
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 
@@ -2348,6 +2348,49 @@ def baseCarCreate(request):
 def baseCarUpdate(request, pk):
     queryset = BaseCar.objects.get(car_id=pk)
     serializer = BaseCarSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+############# BaseJobType API ###############
+@api_view(['GET'])
+def apiBaseJobTypeOverview(request):
+    api_urls = {
+        'List':'/baseJobType/api/list/',
+        'Detail View':'/baseJobType/api/detail/<str:pk>/',
+        'Create':'/baseJobType/api/create/',
+        'Update':'/baseJobType/api/update/<str:pk>/',
+        'Delete':'/baseJobType/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+def baseJobTypeList(request):
+    queryset = BaseJobType.objects.all()
+    serializer = BaseJobTypeSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def baseJobTypeDetail(request, pk):
+    queryset = BaseJobType.objects.get(base_job_type_id =pk)
+    serializer = BaseJobTypeSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def baseJobTypeCreate(request):
+    serializer = BaseJobTypeSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+def baseJobTypeUpdate(request, pk):
+    queryset = BaseJobType.objects.get(base_job_type_id=pk)
+    serializer = BaseJobTypeSerializer(instance=queryset, data = request.data)
     
     if serializer.is_valid():
         serializer.save()

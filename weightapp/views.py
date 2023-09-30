@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType
-from django.db.models import Sum, Q
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
+from django.db.models import Sum, Q, Max
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -35,15 +35,20 @@ from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat
 from django.contrib.auth.decorators import login_required
 
-from rest_framework import generics, viewsets
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework import generics, viewsets, permissions, status
 from rest_framework.views import APIView
-from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.request import Request
 from rest_framework.renderers import TemplateHTMLRenderer
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.permissions import IsAuthenticated
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
+from django.db import IntegrityError
+from .tokens import create_jwt_pair_for_user
 
 def generate_pastel_color():
     # Generate random pastel colors by restricting the RGB channels within a specific range
@@ -307,9 +312,8 @@ def editWeight(request, mode, weight_id):
 def searchDataCustomer(request):
     if 'customer_id' in request.GET and 'weight_id' in request.GET:
         customer_id = request.GET.get('customer_id')
-        weight_id = request.GET.get('weight_id')
 
-        site = BaseSite.objects.filter(base_customer_id = customer_id).values('base_site_id','base_site_name')
+        site = BaseCustomerSite.objects.filter(customer = customer_id).values('site__base_site_id','site__base_site_name')
     data = {
         'site_list': list(site),
     }
@@ -333,6 +337,16 @@ def setDataCustomer(request):
         customer_id = request.GET.get('customer_id')
         qs = BaseCustomer.objects.get(customer_id = customer_id)
         val = qs.customer_id + ":" + qs.customer_name
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def setDataSite(request):
+    if 'site_id' in request.GET:
+        site_id = request.GET.get('site_id')
+        qs = BaseSite.objects.get(base_site_id = site_id)
+        val = qs.base_site_id + ":" + qs.base_site_name
     data = {
         'val': val,
     }
@@ -375,6 +389,15 @@ def autocompalteCustomer(request):
         titles = list()
         for obj in qs:
             titles.append(obj.customer_id +":"+ obj.customer_name)
+    return JsonResponse(titles, safe=False)
+
+def autocompalteSite(request):
+    if 'term' in request.GET:
+        term = request.GET.get('term')
+        qs = BaseSite.objects.filter(Q(base_site_id__icontains = term) | Q(base_site_name__icontains = term))[:15]
+        titles = list()
+        for obj in qs:
+            titles.append(obj.base_site_id +":"+ obj.base_site_name)
     return JsonResponse(titles, safe=False)
 
 def excelProductionByStone(request, my_q, list_date):
@@ -1902,44 +1925,159 @@ def editBaseCarRegistration(request, id):
 
     return render(request, "manage/formBase.html", context)
 
+################### BaseCustomerSite ####################
+def settingBaseCustomerSite(request):
+    data = BaseCustomerSite.objects.all().order_by('id')
+
+    #กรองข้อมูล
+    myFilter = BaseCustomerSiteFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 15)
+    page = request.GET.get('page')
+    base_customer_site = p.get_page(page)
+
+    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, }
+    return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
+
+def createBaseCustomerSite(request):
+    form = BaseCustomerSiteForm(request.POST or None)
+    if form.is_valid():
+        form = BaseCustomerSiteForm(request.POST or None, request.FILES)
+        form.save()
+        return redirect('settingBaseCustomerSite')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_customer_site_page': 'active',
+        'table_name' : 'ลูกค้าและหน้างาน',
+        'text_mode' : 'เพิ่ม',
+    }
+
+    return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
+
+def editBaseCustomerSite(request, id):
+    data = BaseCustomerSite.objects.get(id = id)
+    
+    form = BaseCustomerSiteForm(instance=data)
+    if request.method == 'POST':
+        form = BaseCustomerSiteForm(request.POST, instance=data)
+        if form.is_valid():
+            customer_site_form = form.save()
+
+            return redirect('settingBaseCustomerSite')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_customer_site_page': 'active',
+        'table_name' : 'ลูกค้าและหน้างาน',
+        'text_mode' : 'เปลี่ยน',
+    }
+
+    return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
+
 #################################
 ############# API ###############
 #################################
 
+############# Login API ###############
+class LoginApiView(APIView):
+    permission_classes = []
+
+    def post(self, request: Request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        user = authenticate(username=username, password=password)
+        if user is not None:
+            tokens = create_jwt_pair_for_user(user)
+
+            response = {"message": "Login Successfull", "tokens": tokens}
+            return Response(data=response, status=status.HTTP_200_OK)
+
+        else:
+            return Response(data={"message": "Invalid email or password"})
+
+    def get(self, request: Request):
+        content = {"user": str(request.user), "auth": str(request.auth)}
+
+        return Response(data=content, status=status.HTTP_200_OK)
+
+############# SignUp API ###############   
+class SignUpApiView(generics.GenericAPIView):
+    serializer_class = SignUpSerializer
+    permission_classes = []
+
+    def post(self, request: Request):
+        data = request.data
+
+        serializer = self.serializer_class(data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+
+            response = {"message": "User Created Successfully", "data": serializer.data}
+
+            return Response(data=response, status=status.HTTP_201_CREATED)
+
+        return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 ############# Weight API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiWeightOverview(request):
     api_urls = {
         'List':'/weight/api/list/',
         'Detail View':'/weight/api/detail/<str:pk>/',
+        'Detail By Date':'/weight/api/detail/date/<str:str_date>/',
         'Create':'/weight/api/create/',
         'Update':'/weight/api/update/<str:pk>/',
     }
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def weightList(request):
     queryset = Weight.objects.all()
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def weightDetail(request, pk):
     queryset = Weight.objects.get(weight_id = pk)
     serializer = WeightSerializer(queryset, many = False)
     return Response(serializer.data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightDetailByDate(request, str_date , str_lc):
+    latest_weights = WeightHistory.objects.filter(date = str_date, base_weight_station_name__id = str_lc).values('weight_id').distinct()
+    queryset = Weight.objects.filter(weight_id__in = latest_weights)
+
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def weightCreate(request):
     serializer = WeightSerializer(data = request.data)
     
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except IntegrityError as e:
+            return Response(serializer.data, status=status.HTTP_409_CONFLICT)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def weightUpdate(request, pk):
     queryset = Weight.objects.get(weight_id = pk)
     serializer = WeightSerializer(instance=queryset, data = request.data)
@@ -1952,10 +2090,14 @@ def weightUpdate(request, pk):
 
 ############# BaseScoop API ###############
 class BaseScoopView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+
     queryset = BaseScoop.objects.all()
     serializer_class = BaseScoopSerializer
 
 class BaseScoopViewById(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+
     queryset = BaseScoop.objects.all()
     def get_queryset(self):
         queryset = BaseScoop.objects.filter(scoop_id=self.kwargs["pk"])
@@ -1963,6 +2105,8 @@ class BaseScoopViewById(generics.ListCreateAPIView):
     serializer_class = BaseScoopSerializer
 
 class CreateBaseScoop(APIView):
+    permission_classes = [IsAuthenticated]
+
     renderer_classes = [TemplateHTMLRenderer]
     template_name = 'manage/formBase.html'
 
@@ -1981,8 +2125,16 @@ class CreateBaseScoop(APIView):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseScoopDetail(request, pk):
+    queryset = BaseScoop.objects.get(scoop_id=pk)
+    serializer = BaseScoopSerializer(queryset, many = False)
+    return Response(serializer.data)
+        
 ############# BaseMill API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseMillOverview(request):
     api_urls = {
         'List':'/baseMill/api/list/',
@@ -1994,18 +2146,21 @@ def apiBaseMillOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseMillList(request):
     queryset = BaseMill.objects.all()
     serializer = BaseMillSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseMillDetail(request, pk):
     queryset = BaseMill.objects.get(mill_id=pk)
     serializer = BaseMillSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseMillCreate(request):
     serializer = BaseMillSerializer(data = request.data)
     
@@ -2015,6 +2170,7 @@ def baseMillCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseMillUpdate(request, pk):
     queryset = BaseMill.objects.get(mill_id=pk)
     serializer = BaseMillSerializer(instance=queryset, data = request.data)
@@ -2025,6 +2181,7 @@ def baseMillUpdate(request, pk):
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseMillDelete(request, pk):
     queryset = BaseMill.objects.get(mill_id=pk)
     queryset.delete()
@@ -2033,6 +2190,7 @@ def baseMillDelete(request, pk):
 
 ############# base customer API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseCustomerOverview(request):
     api_urls = {
         'List':'/baseCustomer/api/list/',
@@ -2043,18 +2201,21 @@ def apiBaseCustomerOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCustomerList(request):
     queryset = BaseCustomer.objects.all()
     serializer = BaseCustomerSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCustomerDetail(request, pk):
     queryset = BaseCustomer.objects.get(customer_id = pk)
     serializer = BaseCustomerSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseCustomerCreate(request):
     serializer = BaseCustomerSerializer(data = request.data)
     
@@ -2064,6 +2225,7 @@ def baseCustomerCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseCustomerUpdate(request, pk):
     try:
         base_customer = BaseCustomer.objects.get(customer_id=pk)
@@ -2093,6 +2255,7 @@ def baseCustomerUpdate(request, pk):
 
 ############# BaseStoneType API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseStoneTypeOverview(request):
     api_urls = {
         'List':'/baseStoneType/api/list/',
@@ -2104,18 +2267,21 @@ def apiBaseStoneTypeOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseStoneTypeList(request):
     queryset = BaseStoneType.objects.all()
     serializer = BaseStoneTypeSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseStoneTypeDetail(request, pk):
     queryset = BaseStoneType.objects.get(base_stone_type_id=pk)
     serializer = BaseStoneTypeSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseStoneTypeCreate(request):
     serializer = BaseStoneTypeSerializer(data = request.data)
     
@@ -2125,6 +2291,7 @@ def baseStoneTypeCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseStoneTypeUpdate(request, pk):
     queryset = BaseStoneType.objects.get(base_stone_type_id=pk)
     serializer = BaseStoneTypeSerializer(instance=queryset, data = request.data)
@@ -2140,6 +2307,7 @@ class BaseStoneTypeList(generics.ListCreateAPIView):
 
 ############# BaseCarTeam API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseCarTeamOverview(request):
     api_urls = {
         'List':'/baseCarTeam/api/list/',
@@ -2151,18 +2319,21 @@ def apiBaseCarTeamOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarTeamList(request):
     queryset = BaseCarTeam.objects.all()
     serializer = BaseCarTeamSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarTeamDetail(request, pk):
     queryset = BaseCarTeam.objects.get(car_team_id=pk)
     serializer = BaseCarTeamSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseCarTeamCreate(request):
     serializer = BaseCarTeamSerializer(data = request.data)
     
@@ -2172,6 +2343,7 @@ def baseCarTeamCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseCarTeamUpdate(request, pk):
     queryset = BaseCarTeam.objects.get(car_team_id=pk)
     serializer = BaseCarTeamSerializer(instance=queryset, data = request.data)
@@ -2184,6 +2356,7 @@ def baseCarTeamUpdate(request, pk):
 
 ############# BaseDriver API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseDriverOverview(request):
     api_urls = {
         'List':'/baseDriver/api/list/',
@@ -2195,18 +2368,21 @@ def apiBaseDriverOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseDriverList(request):
     queryset = BaseDriver.objects.all()
     serializer = BaseDriverSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseDriverDetail(request, pk):
     queryset = BaseDriver.objects.get(driver_id=pk)
     serializer = BaseDriverSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseDriverCreate(request):
     serializer = BaseDriverSerializer(data = request.data)
     
@@ -2216,6 +2392,7 @@ def baseDriverCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseDriverUpdate(request, pk):
     queryset = BaseDriver.objects.get(driver_id=pk)
     serializer = BaseDriverSerializer(instance=queryset, data = request.data)
@@ -2227,6 +2404,7 @@ def baseDriverUpdate(request, pk):
 
 ############# BaseCarRegistration API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseCarRegistrationOverview(request):
     api_urls = {
         'List':'/baseCarRegistration/api/list/',
@@ -2238,18 +2416,21 @@ def apiBaseCarRegistrationOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarRegistrationList(request):
     queryset = BaseCarRegistration.objects.all()
     serializer = BaseCarRegistrationSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarRegistrationDetail(request, pk):
     queryset = BaseCarRegistration.objects.get(car_registration_id=pk)
     serializer = BaseCarRegistrationSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseCarRegistrationCreate(request):
     serializer = BaseCarRegistrationSerializer(data = request.data)
     
@@ -2259,6 +2440,7 @@ def baseCarRegistrationCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseCarRegistrationUpdate(request, pk):
     queryset = BaseCarRegistration.objects.get(car_registration_id=pk)
     serializer = BaseCarRegistrationSerializer(instance=queryset, data = request.data)
@@ -2270,6 +2452,7 @@ def baseCarRegistrationUpdate(request, pk):
 
 ############# BaseSite API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseSiteOverview(request):
     api_urls = {
         'List':'/baseSite/api/list/',
@@ -2281,18 +2464,21 @@ def apiBaseSiteOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseSiteList(request):
     queryset = BaseSite.objects.all()
     serializer = BaseSiteSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseSiteDetail(request, pk):
     queryset = BaseSite.objects.get(base_site_id=pk)
     serializer = BaseSiteSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseSiteCreate(request):
     serializer = BaseSiteSerializer(data = request.data)
     
@@ -2302,6 +2488,7 @@ def baseSiteCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseSiteUpdate(request, pk):
     queryset = BaseSite.objects.get(base_site_id=pk)
     serializer = BaseSiteSerializer(instance=queryset, data = request.data)
@@ -2313,6 +2500,7 @@ def baseSiteUpdate(request, pk):
 
 ############# BaseCar API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseCarOverview(request):
     api_urls = {
         'List':'/baseCar/api/list/',
@@ -2324,18 +2512,21 @@ def apiBaseCarOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarList(request):
     queryset = BaseCar.objects.all()
     serializer = BaseCarSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseCarDetail(request, pk):
     queryset = BaseCar.objects.get(car_id=pk)
     serializer = BaseCarSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseCarCreate(request):
     serializer = BaseCarSerializer(data = request.data)
     
@@ -2345,6 +2536,7 @@ def baseCarCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseCarUpdate(request, pk):
     queryset = BaseCar.objects.get(car_id=pk)
     serializer = BaseCarSerializer(instance=queryset, data = request.data)
@@ -2356,6 +2548,7 @@ def baseCarUpdate(request, pk):
 
 ############# BaseJobType API ###############
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def apiBaseJobTypeOverview(request):
     api_urls = {
         'List':'/baseJobType/api/list/',
@@ -2367,18 +2560,21 @@ def apiBaseJobTypeOverview(request):
     return Response(api_urls)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseJobTypeList(request):
     queryset = BaseJobType.objects.all()
     serializer = BaseJobTypeSerializer(queryset, many = True)
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def baseJobTypeDetail(request, pk):
     queryset = BaseJobType.objects.get(base_job_type_id =pk)
     serializer = BaseJobTypeSerializer(queryset, many = False)
     return Response(serializer.data)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def baseJobTypeCreate(request):
     serializer = BaseJobTypeSerializer(data = request.data)
     
@@ -2388,6 +2584,7 @@ def baseJobTypeCreate(request):
     return Response(serializer.data)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def baseJobTypeUpdate(request, pk):
     queryset = BaseJobType.objects.get(base_job_type_id=pk)
     serializer = BaseJobTypeSerializer(instance=queryset, data = request.data)
@@ -2396,3 +2593,53 @@ def baseJobTypeUpdate(request, pk):
         serializer.save()
 
     return Response(serializer.data)
+
+
+############# BaseCustomerSite API ###############
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def apiBaseCustomerSiteOverview(request):
+    api_urls = {
+        'List':'/baseCustomerSite/api/list/',
+        'Detail View':'/baseCustomerSite/api/detail/<str:pk>/',
+        'Create':'/baseCustomerSite/api/create/',
+        'Update':'/baseCustomerSite/api/update/<str:pk>/',
+        'Delete':'/baseCustomerSite/api/delete/<str:pk>/',
+    }
+    return Response(api_urls)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCustomerSiteList(request):
+    queryset = BaseCustomerSite.objects.all()
+    serializer = BaseCustomerSiteSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCustomerSiteDetail(request, pk):
+    queryset = BaseCustomerSite.objects.get(id = pk)
+    serializer = BaseCustomerSiteSerializer(queryset, many = False)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def baseCustomerSiteCreate(request):
+    serializer = BaseCustomerSiteSerializer(data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def baseCustomerSiteUpdate(request, pk):
+    queryset = BaseCustomerSite.objects.get(id=pk)
+    serializer = BaseCustomerSiteSerializer(instance=queryset, data = request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+
+    return Response(serializer.data)
+

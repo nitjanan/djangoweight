@@ -1,11 +1,44 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite
 from django.contrib.auth.models import User
+from rest_framework.validators import ValidationError
+from rest_framework.authtoken.models import Token
 
 class CustomField(serializers.CharField):
     def to_representation(self, obj):
         # Custom logic to represent the field
         return obj.custom_field_value
+    
+class SignUpSerializer(serializers.ModelSerializer):
+    email = serializers.CharField(max_length=80)
+    username = serializers.CharField(max_length=45)
+    password = serializers.CharField(min_length=8, write_only=True)
+
+    class Meta:
+        model = User
+        fields = ["email", "username", "password"]
+
+    def validate(self, attrs):
+
+        email_exists = User.objects.filter(email=attrs["email"]).exists()
+
+        if email_exists:
+            raise ValidationError("Email has already been used")
+
+        return super().validate(attrs)
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+
+        user = super().create(validated_data)
+
+        user.set_password(password)
+
+        user.save()
+
+        Token.objects.create(user=user)
+
+        return user
     
 class UserSerializer(serializers.ModelSerializer):
 	class Meta:
@@ -132,12 +165,7 @@ class BaseCarSerializer(serializers.ModelSerializer):
 class BaseSiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseSite
-        fields = ('รหัสหน้างาน', 'ชื่อหน้างาน','ลูกค้า')
-
-    # Define custom field names
-    รหัสหน้างาน = serializers.CharField(source='base_site_id')
-    ชื่อหน้างาน = serializers.CharField(source='base_site_name')
-    ลูกค้า = serializers.CharField(source='base_customer')
+        fields = ('base_site_id', 'base_site_name')
 
 
 class BaseJobTypeSerializer(serializers.ModelSerializer):
@@ -145,3 +173,10 @@ class BaseJobTypeSerializer(serializers.ModelSerializer):
         model = BaseJobType
         fields = '__all__'
         extra_fields = ['base_job_type_id']
+
+
+class BaseCustomerSiteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BaseCustomerSite
+        fields = '__all__'
+        extra_fields = ['id']

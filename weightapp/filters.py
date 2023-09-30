@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -129,7 +129,6 @@ class BaseCarTeamFilter(django_filters.FilterSet):
 BaseCarTeamFilter.base_filters['car_team_id'].label = 'รหัสทีม'
 BaseCarTeamFilter.base_filters['car_team_name'].label = 'ชื่อทีม'
 
-
 class BaseCarFilter(django_filters.FilterSet):
     car_id = django_filters.CharFilter(field_name="car_id", lookup_expr='icontains')
     car_name = django_filters.CharFilter(field_name="car_name", lookup_expr='icontains')
@@ -146,15 +145,13 @@ BaseCarFilter.base_filters['base_car_team'].label = 'ทีม'
 class BaseSiteFilter(django_filters.FilterSet):
     base_site_id = django_filters.CharFilter(field_name="base_site_id", lookup_expr='icontains')
     base_site_name = django_filters.CharFilter(field_name="base_site_name", lookup_expr='icontains')
-    base_customer = django_filters.CharFilter(field_name="base_customer__customer_name", lookup_expr='icontains')
 
     class Meta:
         model = BaseSite
-        fields = ('base_site_id', 'base_site_name', 'base_customer')
+        fields = ('base_site_id', 'base_site_name')
 
 BaseSiteFilter.base_filters['base_site_id'].label = 'รหัสหน้างาน'
 BaseSiteFilter.base_filters['base_site_name'].label = 'ชื่อหน้างาน'
-BaseSiteFilter.base_filters['base_customer'].label = 'ลูกค้า'
 
 
 class BaseCustomerFilter(django_filters.FilterSet):
@@ -168,6 +165,17 @@ class BaseCustomerFilter(django_filters.FilterSet):
 BaseCustomerFilter.base_filters['customer_id'].label = 'รหัสลูกค้า'
 BaseCustomerFilter.base_filters['customer_name'].label = 'ชื่อลูกค้า'
 
+
+class BaseCustomerSiteFilter(django_filters.FilterSet):
+    customer = django_filters.CharFilter(field_name="customer__customer_name", lookup_expr='icontains')
+    site = django_filters.CharFilter(field_name="site__base_site_name", lookup_expr='icontains')
+
+    class Meta:
+        model = BaseCustomerSite
+        fields = ('customer', 'site')
+
+BaseCustomerSiteFilter.base_filters['customer'].label = 'ลูกค้า'
+BaseCustomerSiteFilter.base_filters['site'].label = 'หน้างาน'
 
 class BaseDriverFilter(django_filters.FilterSet):
     driver_id = django_filters.CharFilter(field_name="driver_id", lookup_expr='icontains')

@@ -172,7 +172,7 @@ class BaseDriver(models.Model):
 class BaseSite(models.Model):
     base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหน้างาน")
     base_site_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อหน้างาน")
-    base_customer = models.ForeignKey(BaseCustomer,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ลูกค้า")
+    des = models.CharField(blank=True, null=True, max_length=255, verbose_name="des")
     
     class Meta:
         db_table = 'base_site'
@@ -181,6 +181,32 @@ class BaseSite(models.Model):
 
     def __str__(self):
         return self.base_site_name
+    
+class BaseCustomerSite(models.Model):
+    customer = models.ForeignKey(
+        BaseCustomer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        to_field='customer_id',  # Specify the correct field here
+        verbose_name="ลูกค้า"
+    )
+    site = models.ForeignKey(
+        BaseSite,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        to_field='base_site_id',  # Specify the correct field here
+        verbose_name="หน้างาน"
+    )
+    class Meta:
+        db_table = 'base_customer_site'
+        ordering=('id',)
+        verbose_name = 'ลูกค้าและหน้างาน'
+        verbose_name_plural = 'ข้อมูลลูกค้าและหน้างาน'
+
+    def __str__(self):
+        return str(self.customer)
     
 class BaseCarryType(models.Model):
     base_carry_type_id = models.CharField(primary_key = True, max_length=120)
@@ -289,6 +315,7 @@ class Weight(models.Model):
     price_down_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลงรวม
     freight_cost_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุกรวม
     base_weight_station_name = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
+    is_s = models.BooleanField(default=False, verbose_name="พิเศษ")
 
     class Meta:
         db_table = 'weight'

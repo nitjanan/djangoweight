@@ -1,16 +1,28 @@
 from django.urls import path
 from weightapp import views
 from django.contrib.auth import views as auth_views
-from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList
+from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList, LoginApiView, SignUpApiView
+from rest_framework_simplejwt.views import(
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+) 
 
 urlpatterns = [
     path('',views.index,name="home"),
     path('login/', views.loginPage,name="login"),
     path('logout/', views.logoutUser,name="logout"),
+    path('login/api/', views.LoginApiView.as_view(), name="login_api"),
+    path('signup/api/', views.SignUpApiView.as_view(), name="signup_api"),
+
+    path('jwt/create/', TokenObtainPairView.as_view(), name="jwt_create"),
+    path('jwt/refresh/', TokenRefreshView.as_view(), name="token_refresh"),
+    path('jwt/verify/', TokenVerifyView.as_view(), name="token_verify"),
 
     path('weight/table', views.weightTable,name="weightTable"),
     path('weight/edit/<int:mode>/<int:weight_id>', views.editWeight,name="editWeight"),
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
+    path('autocompalteSite/',views.autocompalteSite,name="autocompalteSite"),
 
     path('production/view', views.viewProduction,name="viewProduction"),
     path('production/create', views.createProduction,name="createProduction"),
@@ -33,6 +45,7 @@ urlpatterns = [
     path('searchNumCalQ', views.searchNumCalQ, name="searchNumCalQ"),
     path('searchDataCustomer/',views.searchDataCustomer,name="searchDataCustomer"),
     path('setDataCustomer/',views.setDataCustomer,name="setDataCustomer"),
+    path('setDataSite/',views.setDataSite,name="setDataSite"),
     path('setDataCarryType/',views.setDataCarryType,name="setDataCarryType"),
     path('searchTeamFromCar/',views.searchTeamFromCar,name="searchTeamFromCar"),
     path('searchDataBaesCustomer/',views.searchDataBaesCustomer,name="searchDataBaesCustomer"),
@@ -69,6 +82,10 @@ urlpatterns = [
     path('baseCustomer/create',views.createBaseCustomer,name="createBaseCustomer"),
     path('baseCustomer/edit/<str:id>',views.editBaseCustomer,name="editBaseCustomer"),
 
+    path('baseCustomerSite/setting',views.settingBaseCustomerSite,name="settingBaseCustomerSite"),
+    path('baseCustomerSite/create',views.createBaseCustomerSite,name="createBaseCustomerSite"),
+    path('baseCustomerSite/edit/<str:id>',views.editBaseCustomerSite,name="editBaseCustomerSite"),
+
     path('baseDriver/setting',views.settingBaseDriver,name="settingBaseDriver"),
     path('baseDriver/create',views.createBaseDriver,name="createBaseDriver"),
     path('baseDriver/edit/<str:id>',views.editBaseDriver,name="editBaseDriver"),
@@ -90,6 +107,7 @@ urlpatterns = [
     path('baseScoop/api/list/',BaseScoopView.as_view()),
     path('baseScoop/api/<str:pk>/',BaseScoopViewById.as_view()),
     path('baseScoop/api/create/', CreateBaseScoop.as_view(), name="createBaesScoop"),
+    path('baseScoop/api/detail/<str:pk>/',views.baseScoopDetail,name="baseScoopDetail"),
 
      path('baseMill/api/',views.apiBaseMillOverview,name="apiBaseMillOverview"),
      path('baseMill/api/list/',views.baseMillList,name="baseMillList"),
@@ -103,6 +121,7 @@ urlpatterns = [
      path('weight/api/detail/<str:pk>/',views.weightDetail,name="weightDetail"),
      path('weight/api/create/',views.weightCreate,name="weightCreate"),
      path('weight/api/update/<str:pk>/',views.weightUpdate,name="weightUpdate"),
+     path('weight/api/detail/date/<str:str_date>/<str:str_lc>/',views.weightDetailByDate,name="weightDetailByDate"),
 
      path('baseCustomer/api/',views.apiBaseCustomerOverview,name="apiBaseCustomerOverview"),
      path('baseCustomer/api/list/',views.baseCustomerList,name="baseCustomerList"),
@@ -152,4 +171,10 @@ urlpatterns = [
      path('baseJobType/api/detail/<str:pk>/',views.baseJobTypeDetail,name="baseJobTypeDetail"),
      path('baseJobType/api/create/',views.baseJobTypeCreate,name="baseJobTypeCreate"),
      path('baseJobType/api/update/<str:pk>/',views.baseJobTypeUpdate,name="baseJobTypeUpdate"),
+
+     path('baseCustomerSite/api/',views.apiBaseCustomerSiteOverview,name="apiBaseCustomerSiteOverview"),
+     path('baseCustomerSite/api/list/',views.baseCustomerSiteList,name="baseCustomerSiteList"),
+     path('baseCustomerSite/api/detail/<str:pk>/',views.baseCustomerSiteDetail,name="baseCustomerSiteDetail"),
+     path('baseCustomerSite/api/create/',views.baseCustomerSiteCreate,name="baseCustomerSiteCreate"),
+     path('baseCustomerSite/api/update/<str:pk>/',views.baseCustomerSiteUpdate,name="baseCustomerSiteUpdate"),
 ]

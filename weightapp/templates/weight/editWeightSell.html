@@ -343,8 +343,8 @@ input.del[type=checkbox] {
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
 
   if('{{weight.site}}' != 'None'){
-    $("#select_site").append(new Option('{{weight.site_name}}', '{{weight.site.id}}'));
-    $('#select_site option:contains("{{weight.site_name}}")').prop('selected', true);
+    $("#select_site").append(new Option('{{weight.site.base_site_name}}', '{{weight.site.base_site_id}}'));
+    $('#select_site option:contains("{{weight.site.base_site_name}}")').prop('selected', true);
   }
 
 
@@ -426,7 +426,7 @@ input.del[type=checkbox] {
                             $("#select_site").find('option').not(':first').remove();
                             //set option 
                             for(var i = 0; i < data.site_list.length; i++){
-                                $("#select_site").append(new Option(data.site_list[i].base_site_name, data.site_list[i].base_site_id));
+                                $("#select_site").append(new Option(data.site_list[i].site__base_site_name, data.site_list[i].site__base_site_id));
                             }
                     }
                     $('#select_site option[value="'+tempSite +'"]').attr('selected','selected');

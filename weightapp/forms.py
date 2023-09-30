@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -481,14 +481,13 @@ class BaseCarForm(forms.ModelForm):
 class BaseSiteForm(forms.ModelForm):
     class Meta:
        model = BaseSite
-       fields = ('base_customer', 'base_site_id' , 'base_site_name', )
+       fields = ('base_site_id' , 'base_site_name', )
        widgets = {
 
         }
        labels = {
             'base_site_id': _('รหัสหน้างาน'),
             'base_site_name': _('ชื่อหน้างาน'),
-            'base_customer': _('ลูกค้า'),
        }
 
     def clean_name_field(self):
@@ -556,6 +555,20 @@ class BaseCustomerForm(forms.ModelForm):
             instance.save()
 
         return instance
+    
+class BaseCustomerSiteForm(forms.ModelForm):
+    class Meta:
+       model = BaseCustomerSite
+       fields = ('customer' , 'site', )
+       widgets = {
+            'customer': forms.HiddenInput(),
+            'site': forms.HiddenInput(),
+        }
+       labels = {
+            'customer': _('ลูกค้า'),
+            'site': _('หน้างาน'),
+       }
+
 
 class BaseDriverForm(forms.ModelForm):
     class Meta:

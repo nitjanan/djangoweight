@@ -56,10 +56,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <div class="row">
                 {% csrf_token %}
                 <div class="mb-3">
-                  {{form.base_site_id.label}} {{form.base_site_id | add_class:"form-control"}}
+                  {{form.customer.label}} 
+                  <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="setCustomer_FO()" required>
+                  {{form.customer | add_class:"form-control"}}
                 </div>
                 <div class="mb-3">
-                  {{form.base_site_name.label}} {{form.base_site_name | add_class:"form-control"}}
+                  {{form.site.label}}
+                  <input type="text" name="form-site" id="id-form-site" class="form-control" Placeholder="ค้นหาหน้างาน ..." autocomplete="off" onfocusout="setSite_FO()" required>
+                  {{form.site | add_class:"form-control"}}
                 </div>
                 <div class="col-12 d-flex justify-content-end">
                   <button type="submit" class="btn btn-primary me-1 mb-1">
@@ -104,4 +108,89 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+
+<script type="text/javascript">
+ setDataCustomer();
+ setDataSite();
+
+ $( function() {
+      $( "#id-form-customer" ).autocomplete({
+        source: '{% url "autocompalteCustomer" %}',
+        minLength: 1,
+      });
+  } );
+
+  $( function() {
+      $( "#id-form-site" ).autocomplete({
+        source: '{% url "autocompalteSite" %}',
+        minLength: 1,
+      });
+  } );
+
+  function setCustomer_FO(){
+        if($('#id-form-customer').val() != ""){
+          var str = $('#id-form-customer').val();
+          var items = str.split( ":" );
+          var idInput = items[0];
+          $('#id_customer').val(idInput);
+        }else{
+          $('#id_customer').val("");
+        }
+  }
+
+  function setSite_FO(){
+        if($('#id-form-site').val() != ""){
+          var str = $('#id-form-site').val();
+          var items = str.split( ":" );
+          var idInput = items[0];
+          $('#id_site').val(idInput);
+        }else{
+          $('#id_site').val("");
+        }
+  }
+
+  function setDataCustomer(){
+    if($('#id_customer').val() != ""){
+        var idInput = $('#id_customer').val();
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "setDataCustomer" %}',
+                data: {
+                    'customer_id': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                        $('#id-form-customer').val(data.val);
+                    }
+                }
+            });
+        }
+        return false;
+    }
+  }
+
+  function setDataSite(){
+    if($('#id_site').val() != ""){
+        var idInput = $('#id_site').val();
+        // Create Ajax Call
+        if(idInput){
+            $.ajax({
+                url: '{% url "setDataSite" %}',
+                data: {
+                    'site_id': idInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                        $('#id-form-site').val(data.val);
+                    }
+                }
+            });
+        }
+        return false;
+    }
+  }
+</script>
 {% endblock %}

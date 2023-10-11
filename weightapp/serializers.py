@@ -75,11 +75,12 @@ class WeightSerializer(serializers.ModelSerializer):
 class BaseScoopSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseScoop
-        fields = ('รหัสผู้ตัก', 'ชื่อผู้ตัก')
+        fields = ('รหัสผู้ตัก', 'ชื่อผู้ตัก', 'v_stamp', 'company')
 
     # Define custom field names
     รหัสผู้ตัก = serializers.CharField(source='scoop_id')
     ชื่อผู้ตัก = serializers.CharField(source='scoop_name')
+    company = serializers.CharField(source='company.code')
 
 class BaseCustomerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -90,7 +91,7 @@ class BaseCustomerSerializer(serializers.ModelSerializer):
 class BaseMillSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseMill
-        fields = ('รหัสโรงโม่', 'ชื่อโรงโม่')
+        fields = ('รหัสโรงโม่', 'ชื่อโรงโม่', 'weight_type', 'v_stamp')
 
     # Define custom field names
     รหัสโรงโม่ = serializers.CharField(source='mill_id')
@@ -102,7 +103,7 @@ class BaseStoneTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BaseStoneType
-        fields = ('รหัสหิน', 'ชื่อหิน', 'cal_q',)
+        fields = ('รหัสหิน', 'ชื่อหิน', 'cal_q', 'v_stamp')
 
 class ThaiEnglishField(serializers.Field):
     def to_representation(self, obj):
@@ -127,7 +128,7 @@ class BaseStoneTypeTestSerializer(serializers.ModelSerializer):
 class BaseCarTeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseCarTeam
-        fields = ('รหัสทีม', 'ชื่อทีม',)
+        fields = ('รหัสทีม', 'ชื่อทีม', 'v_stamp')
 
     # Define custom field names
     รหัสทีม = serializers.CharField(source='car_team_id')
@@ -136,26 +137,28 @@ class BaseCarTeamSerializer(serializers.ModelSerializer):
 class BaseDriverSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseDriver
-        fields = ('รหัสผู้ขับ', 'ชื่อผู้ขับ',)
+        fields = ('รหัสผู้ขับ', 'ชื่อผู้ขับ', 'v_stamp', 'company')
 
     # Define custom field names
     รหัสผู้ขับ = serializers.CharField(source='driver_id')
     ชื่อผู้ขับ = serializers.CharField(source='driver_name')
+    company = serializers.CharField(source='company.code')
 
 class BaseCarRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseCarRegistration
-        fields = ('รหัสทะเบียนรถ', 'ชื่อทะเบียนรถ','ประเภทรถ')
+        fields = ('รหัสทะเบียนรถ', 'ชื่อทะเบียนรถ','ประเภทรถ', 'v_stamp', 'company')
 
     # Define custom field names
     รหัสทะเบียนรถ = serializers.CharField(source='car_registration_id')
     ชื่อทะเบียนรถ = serializers.CharField(source='car_registration_name')
     ประเภทรถ = serializers.CharField(source='car_type')
+    company = serializers.CharField(source='company.code')
 
 class BaseCarSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseCar
-        fields = ('รหัสรถร่วม', 'ชื่อรถร่วม','รหัสทีม')
+        fields = ('รหัสรถร่วม', 'ชื่อรถร่วม','รหัสทีม', 'v_stamp')
 
     # Define custom field names
     รหัสรถร่วม = serializers.CharField(source='car_id')
@@ -165,7 +168,7 @@ class BaseCarSerializer(serializers.ModelSerializer):
 class BaseSiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseSite
-        fields = ('base_site_id', 'base_site_name')
+        fields = ('base_site_id', 'base_site_name', 'weight_type', 'v_stamp')
 
 
 class BaseJobTypeSerializer(serializers.ModelSerializer):

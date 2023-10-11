@@ -287,12 +287,12 @@ class WeightStockForm(forms.ModelForm):
 class BaseMillForm(forms.ModelForm):
     class Meta:
        model = BaseMill
-       fields = ('mill_id' , 'mill_name',)
+       fields = ('mill_id' , 'mill_name', 'weight_type')
        widgets = {
         }
        labels = {
-            'mill_id': _('รหัสโรงโม่'),
-            'mill_name': _('ชื่อโรงโม่'),
+            'mill_id': _('รหัสต้นทาง'),
+            'mill_name': _('ชื่อต้นทาง'),
        }
 
     def clean_name_field(self):
@@ -358,7 +358,7 @@ class BaseJobTypeForm(forms.ModelForm):
 class BaseStoneTypeForm(forms.ModelForm):
     class Meta:
        model = BaseStoneType
-       fields = ('base_stone_type_id' , 'base_stone_type_name', 'type', 'cal_q', 'is_stone_estimate',)
+       fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q', 'is_stone_estimate',)
        widgets = {
         }
        labels = {
@@ -393,12 +393,13 @@ class BaseStoneTypeForm(forms.ModelForm):
 class BaseScoopForm(forms.ModelForm):
     class Meta:
        model = BaseScoop
-       fields = ('scoop_id' , 'scoop_name',)
+       fields = ('scoop_id' , 'scoop_name', 'company')
        widgets = {
         }
        labels = {
             'scoop_id': _('รหัสผู้ตัก'),
             'scoop_name': _('ชื่อผู้ตัก'),
+            'company': _('บริษัท'),
        }
 
     def clean_name_field(self):
@@ -481,13 +482,13 @@ class BaseCarForm(forms.ModelForm):
 class BaseSiteForm(forms.ModelForm):
     class Meta:
        model = BaseSite
-       fields = ('base_site_id' , 'base_site_name', )
+       fields = ('base_site_id' , 'base_site_name', 'weight_type')
        widgets = {
 
         }
        labels = {
-            'base_site_id': _('รหัสหน้างาน'),
-            'base_site_name': _('ชื่อหน้างาน'),
+            'base_site_id': _('รหัสปลายทาง'),
+            'base_site_name': _('ชื่อปลายทาง'),
        }
 
     def clean_name_field(self):
@@ -566,17 +567,18 @@ class BaseCustomerSiteForm(forms.ModelForm):
         }
        labels = {
             'customer': _('ลูกค้า'),
-            'site': _('หน้างาน'),
+            'site': _('ปลายทาง'),
        }
 
 
 class BaseDriverForm(forms.ModelForm):
     class Meta:
        model = BaseDriver
-       fields = ('driver_id', 'driver_name' ,)
+       fields = ('driver_id', 'driver_name' ,'company')
        labels = {
             'driver_id': _('รหัสผู้ขับ'),
             'driver_name': _('ชื่อผู้ขับ'),
+            'company': _('บริษัท'),
        }
 
     def clean_name_field(self):
@@ -603,14 +605,24 @@ class BaseDriverForm(forms.ModelForm):
 
         return instance
 
+
+# iterable 
+CT_CHOICES =( 
+    ("สิบล้อ", "สิบล้อ"), 
+    ("จีน", "จีน"),
+) 
+
 class BaseCarRegistrationForm(forms.ModelForm):
+    car_type = forms.ChoiceField(choices = CT_CHOICES)
+
     class Meta:
        model = BaseCarRegistration
-       fields = ('car_registration_id', 'car_registration_name' ,'car_type')
+       fields = ('car_registration_id', 'car_registration_name' ,'car_type','company')
        labels = {
             'car_registration_id': _('รหัสทะเบียนรถ'),
             'car_registration_name': _('ชื่อทะเบียนรถ'),
             'car_type': _('ประเภทรถ'),
+            'company': _('บริษัท'),
        }
 
     def clean_name_field(self):

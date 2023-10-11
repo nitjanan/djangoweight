@@ -72,6 +72,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th>รหัสผู้ขับ</th>
                     <th>ชื่อผู้ขับ</th>
+                    <th>บริษัท</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -79,6 +80,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b><a href="{% url 'editBaseDriver' i.driver_id %}">{{i.driver_id}}</a></b></td>
                     <td>{{i.driver_name}}</td>
+                    <td>{{i.company}}</td>
                   </tr>
                   {% empty %}
                   <tr>

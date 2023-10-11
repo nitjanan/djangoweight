@@ -9,7 +9,6 @@ from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
-# Create your models here.
 class BaseWeightType(models.Model):
     name = models.CharField(blank=True, null=True, max_length=120)
     class Meta:
@@ -17,20 +16,36 @@ class BaseWeightType(models.Model):
 
     def __str__(self):
         return self.name
+    
+class BaseCompany(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อบริษัท")
+    code = models.CharField(blank=True, null=True, max_length=120, verbose_name="โค้ดบริษัท")
+    class Meta:
+        db_table = 'base_comp'
+        verbose_name = 'บริษัท'
+        verbose_name_plural = 'ข้อมูลบริษัท'
+
+    def __str__(self):
+        return self.code
 
 class BaseMill(models.Model):
-    mill_id = models.CharField(primary_key = True, max_length=120)
-    mill_name = models.CharField(unique=True, blank=True, null=True, max_length=255)
+    mill_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสต้นทาง")
+    mill_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อต้นทาง")
+    weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True , verbose_name="ประเภทเครื่องชั่ง")
+    v_stamp = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'base_mill'
+        verbose_name = 'ต้นทาง'
+        verbose_name_plural = 'ข้อมูลต้นทาง'
 
     def __str__(self):
         return self.mill_name
 
 class BaseCarTeam(models.Model):
     car_team_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสทีม")
-    car_team_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อทีม")
+    car_team_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อทีม")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_car_team'
@@ -38,12 +53,13 @@ class BaseCarTeam(models.Model):
         verbose_name_plural = 'ข้อมูลทีม'
 
     def __str__(self):
-        return self.car_team_id +" : " + self.car_team_name
+        return self.car_team_name
     
 class BaseCar(models.Model):
     car_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสรถร่วม")
     car_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อรถร่วม")
     base_car_team = models.ForeignKey(BaseCarTeam,on_delete=models.CASCADE, null = True, verbose_name="ทีม")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_car'
@@ -68,7 +84,8 @@ class BaseVatType(models.Model):
     
 class BaseJobType(models.Model):
     base_job_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสประเภทงานของลูกค้า")
-    base_job_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อประเภทงานของลูกค้า")
+    base_job_type_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อประเภทงานของลูกค้า")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_job_type'
@@ -88,10 +105,11 @@ class BaseStoneColor(models.Model):
     
 class BaseStoneType(models.Model):
     base_stone_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหิน")
-    base_stone_type_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อหิน")
+    base_stone_type_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อหิน")
     type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทหิน")
     cal_q = models.CharField(blank=True, null=True, max_length=120, verbose_name="ค่าคำนวณคิว")
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_stone_type'
@@ -115,7 +133,7 @@ class BaseFertilizer(models.Model):
     
 class BaseCustomer(models.Model):
     customer_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสลูกค้า")
-    customer_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อลูกค้า")
+    customer_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อลูกค้า")
     address = models.CharField(blank=True, null=True, max_length=255, verbose_name="ที่อยู่")
     send_to = models.CharField(blank=True, null=True, max_length=255, verbose_name="ส่งที่")
     customer_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทลูกค้า")
@@ -123,6 +141,7 @@ class BaseCustomer(models.Model):
     base_job_type = models.ForeignKey(BaseJobType,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ประเภทงานของลูกค้า")
     weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True, verbose_name="ชนิดเครื่องชั่ง")
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_customer'
@@ -134,8 +153,10 @@ class BaseCustomer(models.Model):
 
 class BaseScoop(models.Model):
     scoop_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสผู้ตัก")
-    scoop_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ตัก")
-
+    scoop_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ตัก")
+    v_stamp = models.DateTimeField(auto_now=True)
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    
     class Meta:
         db_table = 'base_scoop'
         verbose_name = 'ผู้ตัก'
@@ -146,9 +167,11 @@ class BaseScoop(models.Model):
        
 class BaseCarRegistration(models.Model):
     car_registration_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสทะเบียนรถ")
-    car_registration_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อทะเบียนรถ")
+    car_registration_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อทะเบียนรถ")
     car_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทรถ")
-
+    v_stamp = models.DateTimeField(auto_now=True)
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    
     class Meta:
         db_table = 'base_car_registration'
         verbose_name = 'ทะเบียนรถ'
@@ -159,7 +182,9 @@ class BaseCarRegistration(models.Model):
 
 class BaseDriver(models.Model):
     driver_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสผู้ขับ")
-    driver_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ขับ")
+    driver_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ขับ")
+    v_stamp = models.DateTimeField(auto_now=True)
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
 
     class Meta:
         db_table = 'base_driver'
@@ -170,14 +195,15 @@ class BaseDriver(models.Model):
         return self.driver_name
     
 class BaseSite(models.Model):
-    base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสหน้างาน")
-    base_site_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อหน้างาน")
-    des = models.CharField(blank=True, null=True, max_length=255, verbose_name="des")
+    base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสปลายทาง")
+    base_site_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อปลายทาง")
+    weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True , verbose_name="ประเภทเครื่องชั่ง")
+    v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'base_site'
-        verbose_name = 'หน้างาน'
-        verbose_name_plural = 'ข้อมูลหน้างาน'
+        verbose_name = 'ปลายทาง'
+        verbose_name_plural = 'ข้อมูลปลายทาง'
 
     def __str__(self):
         return self.base_site_name
@@ -197,13 +223,16 @@ class BaseCustomerSite(models.Model):
         null=True,
         blank=True,
         to_field='base_site_id',  # Specify the correct field here
-        verbose_name="หน้างาน"
+        verbose_name="ปลายทาง"
     )
+    v_stamp = models.DateTimeField(auto_now=True)
+
     class Meta:
         db_table = 'base_customer_site'
         ordering=('id',)
-        verbose_name = 'ลูกค้าและหน้างาน'
-        verbose_name_plural = 'ข้อมูลลูกค้าและหน้างาน'
+        verbose_name = 'ลูกค้าและปลายทาง'
+        verbose_name_plural = 'ข้อมูลลูกค้าและปลายทาง'
+        unique_together = 'customer', 'site'
 
     def __str__(self):
         return str(self.customer)
@@ -315,7 +344,15 @@ class Weight(models.Model):
     price_down_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลงรวม
     freight_cost_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุกรวม
     base_weight_station_name = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
-    is_s = models.BooleanField(default=False, verbose_name="พิเศษ")
+    v_stamp = models.DateTimeField(auto_now=True)
+
+    # export to express
+    is_s = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+    exp_bill = models.CharField(blank=True, null=True,max_length=255)#บิลขาย
+    exp_change = models.CharField(blank=True, null=True,max_length=255)#ปรับปรุง
+    exp_remission = models.CharField(blank=True, null=True,max_length=255)#ลดหนี้
+    exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
+    exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
 
     class Meta:
         db_table = 'weight'
@@ -397,6 +434,15 @@ class WeightHistory(models.Model):
     update = models.DateTimeField(default=timezone.now)#เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
     user_update = models.ForeignKey(User,on_delete=models.CASCADE,related_name='user_update', blank=True, null=True)
     weight_id = models.IntegerField(blank=True, null=True)
+    v_stamp = models.DateTimeField(auto_now=True)
+    
+    # export to express
+    is_s = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+    exp_bill = models.CharField(blank=True, null=True,max_length=255)#บิลขาย
+    exp_change = models.CharField(blank=True, null=True,max_length=255)#ปรับปรุง
+    exp_remission = models.CharField(blank=True, null=True,max_length=255)#ลดหนี้
+    exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
+    exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
 
     class Meta:
         db_table = 'weight_history'
@@ -473,7 +519,13 @@ def save_weight_history(sender, instance, **kwargs):
                     freight_cost_total = old_weight.freight_cost_total,
                     base_weight_station_name = old_weight.base_weight_station_name,
                     weight_id = old_weight.pk,
-                    weight_table = old_weight
+                    weight_table = old_weight,
+                    is_s = old_weight.is_s,
+                    exp_bill = old_weight.exp_bill,
+                    exp_change = old_weight.exp_change,
+                    exp_remission = old_weight.exp_remission,
+                    exp_note = old_weight.exp_note,
+                    exp_type = old_weight.exp_type
             )
         except Weight.DoesNotExist:
             pass

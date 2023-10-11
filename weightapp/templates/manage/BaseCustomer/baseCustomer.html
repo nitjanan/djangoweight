@@ -81,6 +81,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th>รหัสลูกค้า</th>
                     <th>ชื่อลูกค้า</th>
+                    <th>ปรเภทเครื่องชั่ง</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -88,6 +89,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b><a href="{% url 'editBaseCustomer' i.customer_id %}">{{i.customer_id}}</a></b></td>
                     <td>{{i.customer_name}}</td>
+                    <td>{{i.weight_type}}</td>
                   </tr>
                   {% empty %}
                   <tr>

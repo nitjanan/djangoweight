@@ -78,8 +78,8 @@ class BaseMillFilter(django_filters.FilterSet):
         model = BaseMill
         fields = ('mill_id', 'mill_name',)
 
-BaseMillFilter.base_filters['mill_id'].label = 'รหัสโรงโม่'
-BaseMillFilter.base_filters['mill_name'].label = 'ชื่อโรงโม่'
+BaseMillFilter.base_filters['mill_id'].label = 'รหัสต้นทาง'
+BaseMillFilter.base_filters['mill_name'].label = 'ชื่อต้นทาง'
 
 
 class BaseJobTypeFilter(django_filters.FilterSet):
@@ -150,8 +150,8 @@ class BaseSiteFilter(django_filters.FilterSet):
         model = BaseSite
         fields = ('base_site_id', 'base_site_name')
 
-BaseSiteFilter.base_filters['base_site_id'].label = 'รหัสหน้างาน'
-BaseSiteFilter.base_filters['base_site_name'].label = 'ชื่อหน้างาน'
+BaseSiteFilter.base_filters['base_site_id'].label = 'รหัสปลายทาง'
+BaseSiteFilter.base_filters['base_site_name'].label = 'ชื่อปลายทาง'
 
 
 class BaseCustomerFilter(django_filters.FilterSet):
@@ -175,7 +175,7 @@ class BaseCustomerSiteFilter(django_filters.FilterSet):
         fields = ('customer', 'site')
 
 BaseCustomerSiteFilter.base_filters['customer'].label = 'ลูกค้า'
-BaseCustomerSiteFilter.base_filters['site'].label = 'หน้างาน'
+BaseCustomerSiteFilter.base_filters['site'].label = 'ปลายทาง'
 
 class BaseDriverFilter(django_filters.FilterSet):
     driver_id = django_filters.CharFilter(field_name="driver_id", lookup_expr='icontains')

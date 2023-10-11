@@ -72,6 +72,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th>รหัสผู้ตัก</th>
                     <th>ชื่อผู้ตัก</th>
+                    <th>บริษัท</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -79,6 +80,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b><a href="{% url 'editBaseScoop' i.scoop_id %}">{{i.scoop_id}}</a></b></td>
                     <td>{{i.scoop_name}}</td>
+                    <td>{{i.company}}</td>
                   </tr>
                   {% empty %}
                   <tr>

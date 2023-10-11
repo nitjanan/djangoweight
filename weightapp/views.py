@@ -1370,14 +1370,18 @@ def createBaseMill(request):
     form = BaseMillForm(request.POST or None)
     if form.is_valid():
         form = BaseMillForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseMill')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseMill')
 
     context = {
         'form':form,
         'setting_page':'active',
         'setting_base_mill_page': 'active',
-        'table_name' : 'โรงโม่',
+        'table_name' : 'ต้นทาง',
         'text_mode' : 'เพิ่ม',
     }
 
@@ -1389,19 +1393,22 @@ def editBaseMill(request, id):
     if request.method == 'POST':
         form = BaseMillForm(request.POST, instance=data)
         if form.is_valid():
-            mill_form = form.save()
+            try:
+                mill_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
-            weights.update(mill_name = mill_form.mill_name)
-
-            return redirect('settingBaseMill')
+                # update weight ด้วย
+                weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
+                weights.update(mill_name = mill_form.mill_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseMill')
 
     context = {
         'form':form,
         'setting_page':'active',
         'setting_base_mill_page': 'active',
-        'table_name' : 'โรงโม่',
+        'table_name' : 'ต้นทาง',
         'text_mode' : 'เปลี่ยน',
     }
 
@@ -1428,8 +1435,12 @@ def createBaseJobType(request):
     form = BaseJobTypeForm(request.POST or None)
     if form.is_valid():
         form = BaseJobTypeForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseJobType')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseJobType')
 
     context = {
         'form':form,
@@ -1447,8 +1458,12 @@ def editBaseJobType(request, id):
     if request.method == 'POST':
         form = BaseJobTypeForm(request.POST, instance=data)
         if form.is_valid():
-            job_type_form = form.save()
-            return redirect('settingBaseJobType')
+            try:
+                job_type_form = form.save()
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseJobType')
 
     context = {
         'form':form,
@@ -1480,8 +1495,12 @@ def createBaseStoneType(request):
     form = BaseStoneTypeForm(request.POST or None)
     if form.is_valid():
         form = BaseStoneTypeForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseStoneType')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseStoneType')
 
     context = {
         'form':form,
@@ -1500,13 +1519,16 @@ def editBaseStoneType(request, id):
     if request.method == 'POST':
         form = BaseStoneTypeForm(request.POST, instance=data)
         if form.is_valid():
-            stone_type_form = form.save()
+            try:
+                stone_type_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
-            weights.update(stone_type_name = stone_type_form.base_stone_type_name)
-
-            return redirect('settingBaseStoneType')
+                # update weight ด้วย
+                weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
+                weights.update(stone_type_name = stone_type_form.base_stone_type_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseStoneType')
 
     context = {
         'form':form,
@@ -1538,8 +1560,12 @@ def createBaseScoop(request):
     form = BaseScoopForm(request.POST or None)
     if form.is_valid():
         form = BaseScoopForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseScoop')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseScoop')
 
     context = {
         'form':form,
@@ -1558,13 +1584,16 @@ def editBaseScoop(request, id):
     if request.method == 'POST':
         form = BaseScoopForm(request.POST, instance=data)
         if form.is_valid():
-            scoop_form = form.save()
+            try:
+                scoop_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
-            weights.update(scoop_name = scoop_form.scoop_name)
-
-            return redirect('settingBaseScoop')
+                # update weight ด้วย
+                weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
+                weights.update(scoop_name = scoop_form.scoop_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseScoop')
 
     context = {
         'form':form,
@@ -1596,8 +1625,12 @@ def createBaseCarTeam(request):
     form = BaseCarTeamForm(request.POST or None)
     if form.is_valid():
         form = BaseCarTeamForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseCarTeam')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseCarTeam')
 
     context = {
         'form':form,
@@ -1616,13 +1649,16 @@ def editBaseCarTeam(request, id):
     if request.method == 'POST':
         form = BaseCarTeamForm(request.POST, instance=data)
         if form.is_valid():
-            car_team_form = form.save()
+            try:
+                car_team_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
-            weights.update(car_team_name = car_team_form.car_team_name)
-
-            return redirect('settingBaseCarTeam')
+                # update weight ด้วย
+                weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
+                weights.update(car_team_name = car_team_form.car_team_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseCarTeam')
 
     context = {
         'form':form,
@@ -1713,8 +1749,12 @@ def createBaseSite(request):
     form = BaseSiteForm(request.POST or None)
     if form.is_valid():
         form = BaseSiteForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseSite')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseSite')
 
     context = {
         'form':form,
@@ -1733,13 +1773,16 @@ def editBaseSite(request, id):
     if request.method == 'POST':
         form = BaseSiteForm(request.POST, instance=data)
         if form.is_valid():
-            site_form = form.save()
+            try:
+                site_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
-            weights.update(site_name = site_form.base_site_name)         
-
-            return redirect('settingBaseSite')
+                # update weight ด้วย
+                weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
+                weights.update(site_name = site_form.base_site_name)   
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseSite')
 
     context = {
         'form':form,
@@ -1753,7 +1796,7 @@ def editBaseSite(request, id):
 
 ################### BaesCustomer ####################
 def settingBaseCustomer(request):
-    data = BaseCustomer.objects.all().order_by('-customer_id')
+    data = BaseCustomer.objects.all().order_by('-weight_type_id','customer_id')
 
     #กรองข้อมูล
     myFilter = BaseCustomerFilter(request.GET, queryset = data)
@@ -1771,8 +1814,12 @@ def createBaseCustomer(request):
     form = BaseCustomerForm(request.POST or None)
     if form.is_valid():
         form = BaseCustomerForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseCustomer')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseCustomer')
 
     context = {
         'form':form,
@@ -1791,13 +1838,16 @@ def editBaseCustomer(request, id):
     if request.method == 'POST':
         form = BaseCustomerForm(request.POST, instance=data)
         if form.is_valid():
-            customer_form = form.save()
+            try:
+                customer_form = form.save()
 
-            # update weight ด้วย iiiiiiiiiiiiiii
-            weights = Weight.objects.filter(customer_id = customer_form.pk)
-            weights.update(customer_name = customer_form.customer_name)
-
-            return redirect('settingBaseCustomer')
+                # update weight ด้วย iiiiiiiiiiiiiii
+                weights = Weight.objects.filter(customer_id = customer_form.pk)
+                weights.update(customer_name = customer_form.customer_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseCustomer')
 
     context = {
         'form':form,
@@ -1829,8 +1879,12 @@ def createBaseDriver(request):
     form = BaseDriverForm(request.POST or None)
     if form.is_valid():
         form = BaseDriverForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseDriver')
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseDriver')
 
     context = {
         'form':form,
@@ -1849,14 +1903,16 @@ def editBaseDriver(request, id):
     if request.method == 'POST':
         form = BaseDriverForm(request.POST, instance=data)
         if form.is_valid():
-            driver_form = form.save()
+            try:
+                driver_form = form.save()
 
-            # update weight ด้วย
-            weights = Weight.objects.filter(driver_id = driver_form.pk)
-            weights.update(driver_name = driver_form.driver_name)
-
-            return redirect('settingBaseDriver')
-
+                # update weight ด้วย
+                weights = Weight.objects.filter(driver_id = driver_form.pk)
+                weights.update(driver_name = driver_form.driver_name)
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseDriver')
     context = {
         'form':form,
         'setting_page':'active',
@@ -1942,11 +1998,17 @@ def settingBaseCustomerSite(request):
     return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
 
 def createBaseCustomerSite(request):
-    form = BaseCustomerSiteForm(request.POST or None)
-    if form.is_valid():
+    if request.method == 'POST':
         form = BaseCustomerSiteForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseCustomerSite')
+        if form.is_valid():
+            try:
+                form.save()
+            except IntegrityError:
+                form.add_error(None, 'This combination of field1 and field2 is not unique.')
+            else:
+                return redirect('settingBaseCustomerSite')
+    else:
+        form = BaseCustomerSiteForm()
 
     context = {
         'form':form,
@@ -1965,9 +2027,12 @@ def editBaseCustomerSite(request, id):
     if request.method == 'POST':
         form = BaseCustomerSiteForm(request.POST, instance=data)
         if form.is_valid():
-            customer_site_form = form.save()
-
-            return redirect('settingBaseCustomerSite')
+            try:
+                customer_site_form = form.save()
+            except IntegrityError:
+                form.add_error(None, 'This combination of field1 and field2 is not unique.')
+            else:
+                return redirect('settingBaseCustomerSite')
 
     context = {
         'form':form,
@@ -2035,6 +2100,7 @@ def apiWeightOverview(request):
         'Detail By Date':'/weight/api/detail/date/<str:str_date>/',
         'Create':'/weight/api/create/',
         'Update':'/weight/api/update/<str:pk>/',
+        'VStamp':'/weight/api/vStamp/<str:dt>/<str:str_lc>/',
     }
     return Response(api_urls)
 
@@ -2059,6 +2125,24 @@ def weightDetailByDate(request, str_date , str_lc):
     latest_weights = WeightHistory.objects.filter(date = str_date, base_weight_station_name__id = str_lc).values('weight_id').distinct()
     queryset = Weight.objects.filter(weight_id__in = latest_weights)
 
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightVStamp(request, dt, str_lc):
+    latest_weights = WeightHistory.objects.filter(v_stamp__gte = dt, base_weight_station_name__id = str_lc).order_by('v_stamp').values('weight_id').distinct()
+    queryset = Weight.objects.filter(weight_id__in = latest_weights)
+    
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightVStampAll(request, dt):
+    latest_weights = WeightHistory.objects.filter(v_stamp__gte = dt).order_by('v_stamp').values('weight_id').distinct()
+    queryset = Weight.objects.filter(weight_id__in = latest_weights)
+    
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)
 
@@ -2131,6 +2215,13 @@ def baseScoopDetail(request, pk):
     queryset = BaseScoop.objects.get(scoop_id=pk)
     serializer = BaseScoopSerializer(queryset, many = False)
     return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseScoopVStamp(request, dt):
+    queryset = BaseScoop.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseScoopSerializer(queryset, many = True)
+    return Response(serializer.data)
         
 ############# BaseMill API ###############
 @api_view(['GET'])
@@ -2142,6 +2233,7 @@ def apiBaseMillOverview(request):
         'Create':'/baseMill/api/create/',
         'Update':'/baseMill/api/update/<str:pk>/',
         'Delete':'/baseMill/api/delete/<str:pk>/',
+        'VStamp':'/baseMill/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2188,6 +2280,13 @@ def baseMillDelete(request, pk):
 
     return Response("Item successfully delete!")
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseMillVStamp(request, dt):
+    queryset = BaseMill.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseMillSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# base customer API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -2197,6 +2296,7 @@ def apiBaseCustomerOverview(request):
         'Detail View':'/baseCustomer/api/detail/<str:pk>/',
         'Create':'/baseCustomer/api/create/',
         'Update':'/baseCustomer/api/update/<str:pk>/',
+        'VStamp':'/baseCustomer/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2252,6 +2352,12 @@ def baseCustomerUpdate(request, pk):
     except BaseCustomer.DoesNotExist or Weight.DoesNotExist:
         return Response({'error': 'Record not found'}, status=404)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCustomerVStamp(request, dt):
+    queryset = BaseCustomer.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseCustomerSerializer(queryset, many = True)
+    return Response(serializer.data)
 
 ############# BaseStoneType API ###############
 @api_view(['GET'])
@@ -2263,6 +2369,7 @@ def apiBaseStoneTypeOverview(request):
         'Create':'/baseStoneType/api/create/',
         'Update':'/baseStoneType/api/update/<str:pk>/',
         'Delete':'/baseStoneType/api/delete/<str:pk>/',
+        'VStamp':'/baseStoneType/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2301,9 +2408,17 @@ def baseStoneTypeUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseStoneTypeVStamp(request, dt):
+    queryset = BaseStoneType.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseStoneTypeSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 class BaseStoneTypeList(generics.ListCreateAPIView):
     queryset = BaseStoneType.objects.all()
     serializer_class = BaseStoneTypeTestSerializer
+    
 
 ############# BaseCarTeam API ###############
 @api_view(['GET'])
@@ -2315,6 +2430,7 @@ def apiBaseCarTeamOverview(request):
         'Create':'/baseCarTeam/api/create/',
         'Update':'/baseCarTeam/api/update/<str:pk>/',
         'Delete':'/baseCarTeam/api/delete/<str:pk>/',
+        'VStamp':'/baseCarTeam/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2353,6 +2469,12 @@ def baseCarTeamUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCarTeamVStamp(request, dt):
+    queryset = BaseCarTeam.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseCarTeamSerializer(queryset, many = True)
+    return Response(serializer.data)
 
 ############# BaseDriver API ###############
 @api_view(['GET'])
@@ -2364,6 +2486,7 @@ def apiBaseDriverOverview(request):
         'Create':'/baseDriver/api/create/',
         'Update':'/baseDriver/api/update/<str:pk>/',
         'Delete':'/baseDriver/api/delete/<str:pk>/',
+        'VStamp':'/baseDriver/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2402,6 +2525,13 @@ def baseDriverUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseDriverVStamp(request, dt):
+    queryset = BaseDriver.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseDriverSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# BaseCarRegistration API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -2412,6 +2542,7 @@ def apiBaseCarRegistrationOverview(request):
         'Create':'/baseCarRegistration/api/create/',
         'Update':'/baseCarRegistration/api/update/<str:pk>/',
         'Delete':'/baseCarRegistration/api/delete/<str:pk>/',
+        'VStamp':'/baseCarRegistration/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2450,6 +2581,13 @@ def baseCarRegistrationUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCarRegistrationVStamp(request, dt):
+    queryset = BaseCarRegistration.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseCarRegistrationSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# BaseSite API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -2460,6 +2598,7 @@ def apiBaseSiteOverview(request):
         'Create':'/baseSite/api/create/',
         'Update':'/baseSite/api/update/<str:pk>/',
         'Delete':'/baseSite/api/delete/<str:pk>/',
+        'VStamp':'/baseSite/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2498,6 +2637,13 @@ def baseSiteUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseSiteVStamp(request, dt):
+    queryset = BaseSite.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseSiteSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# BaseCar API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -2508,6 +2654,7 @@ def apiBaseCarOverview(request):
         'Create':'/baseCar/api/create/',
         'Update':'/baseCar/api/update/<str:pk>/',
         'Delete':'/baseCar/api/delete/<str:pk>/',
+        'VStamp':'/baseCar/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2546,6 +2693,13 @@ def baseCarUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCarVStamp(request, dt):
+    queryset = BaseCar.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseCarSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# BaseJobType API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -2556,6 +2710,7 @@ def apiBaseJobTypeOverview(request):
         'Create':'/baseJobType/api/create/',
         'Update':'/baseJobType/api/update/<str:pk>/',
         'Delete':'/baseJobType/api/delete/<str:pk>/',
+        'VStamp':'/baseJobType/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2594,6 +2749,13 @@ def baseJobTypeUpdate(request, pk):
 
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseJobTypeVStamp(request, dt):
+    queryset = BaseJobType.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseJobTypeSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 
 ############# BaseCustomerSite API ###############
 @api_view(['GET'])
@@ -2605,6 +2767,7 @@ def apiBaseCustomerSiteOverview(request):
         'Create':'/baseCustomerSite/api/create/',
         'Update':'/baseCustomerSite/api/update/<str:pk>/',
         'Delete':'/baseCustomerSite/api/delete/<str:pk>/',
+        'VStamp':'/baseCustomerSite/api/vStamp/<str:dt>/',
     }
     return Response(api_urls)
 
@@ -2641,5 +2804,12 @@ def baseCustomerSiteUpdate(request, pk):
     if serializer.is_valid():
         serializer.save()
 
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCustomerSiteVStamp(request, dt):
+    queryset = BaseCustomerSite.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = BaseCustomerSiteSerializer(queryset, many = True)
     return Response(serializer.data)
 

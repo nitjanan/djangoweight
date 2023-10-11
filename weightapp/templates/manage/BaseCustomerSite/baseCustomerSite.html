@@ -23,7 +23,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     <div class="page-title">
       <div class="row">
         <div class="col-12 col-md-6 order-md-1 order-last">
-          <h3>ข้อมูลลูกค้าและหน้างาน</h3>
+          <h3>ข้อมูลลูกค้าและปลายทาง</h3>
         </div>
         <div class="col-12 col-md-6 order-md-2 order-first">
           <nav
@@ -35,7 +35,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <a href="{% url 'home' %}">Dashboard</a>
               </li>
               <li class="breadcrumb-item active" aria-current="page">
-                ข้อมูลลูกค้าและหน้างาน
+                ข้อมูลลูกค้าและปลายทาง
               </li>
             </ol>
           </nav>
@@ -47,7 +47,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     <section class="section">
       <div class="card">
         <div class="card-header">
-          <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseCustomerSite' %}">เพิ่ม ลูกค้าและหน้างาน <i class="fa-solid fa-circle-plus"></i></a>
+          <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseCustomerSite' %}">เพิ่ม ลูกค้าและปลายทาง <i class="fa-solid fa-circle-plus"></i></a>
         </div>
         <div class="card-body">
           <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">
@@ -70,9 +70,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <table class="table table-hover">
                 <thead class="table-dark">
                   <tr>
-                    <th>รหัสลูกค้าและหน้างาน</th>
+                    <th>รหัสลูกค้าและปลายทาง</th>
                     <th>ลูกค้า</th>
-                    <th>หน้างาน</th>
+                    <th>ปลายทาง</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -86,7 +86,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th scope="row" colspan="9" class="text-center">
                       <div class="alert alert-light-warning color-warning">
-                        <i class="bi bi-exclamation-triangle"></i>  ไม่มีลูกค้าและหน้างานนี้
+                        <i class="bi bi-exclamation-triangle"></i>  ไม่มีลูกค้าและปลายทางนี้
                       </div>
                     </th>
                   </tr>
@@ -96,9 +96,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <!--Pagination-->
               <nav aria-label="Page navigation">
                 <ul class="pagination float-end">
-                {% if base_car_team.has_previous %}
+                {% if base_customer_site.has_previous %}
                     <li class="page-item">
-                    <a class="page-link" href="{% my_url base_car_team.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
+                    <a class="page-link" href="{% my_url base_customer_site.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
                   </li>
                 {% else %}
                     <li class="page-item disabled">
@@ -106,30 +106,30 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </li>
                 {% endif %}
 
-                {% if base_car_team.number|add:'-4' > 1 %}
-                    <li class="page-item"><a class="page-link" href="{% my_url base_car_team.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% if base_customer_site.number|add:'-4' > 1 %}
+                    <li class="page-item"><a class="page-link" href="{% my_url base_customer_site.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
                 {% endif %}
 
-                {% for i in base_car_team.paginator.page_range %}
-                    {% if base_car_team.number == i %}
+                {% for i in base_customer_site.paginator.page_range %}
+                    {% if base_customer_site.number == i %}
                         <li class="page-item active" aria-current="page">
                       <span class="page-link">
                         {{ i }}
                         <span class="sr-only">(current)</span>
                       </span>
                     </li>
-                    {% elif i > base_car_team.number|add:'-5' and i < base_car_team.number|add:'5' %}
+                    {% elif i > base_customer_site.number|add:'-5' and i < base_customer_site.number|add:'5' %}
                         <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
                     {% endif %}
                 {% endfor %}
 
-                {% if base_car_team.paginator.num_pages > base_car_team.number|add:'4' %}
-                  <li class="page-item"><a class="page-link" href="{% my_url base_car_team.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% if base_customer_site.paginator.num_pages > base_customer_site.number|add:'4' %}
+                  <li class="page-item"><a class="page-link" href="{% my_url base_customer_site.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
                 {% endif %}
 
-                {% if base_car_team.has_next %}
+                {% if base_customer_site.has_next %}
                     <li class="page-item">
-                    <a class="page-link"  href="{% my_url base_car_team.next_page_number 'page' request.GET.urlencode %}">Next</a>
+                    <a class="page-link"  href="{% my_url base_customer_site.next_page_number 'page' request.GET.urlencode %}">Next</a>
                   </li>
                 {% else %}
                     <li class="page-item disabled">

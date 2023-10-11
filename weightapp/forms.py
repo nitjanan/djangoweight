@@ -16,6 +16,7 @@ from django.forms.models import BaseInlineFormSet
 
 from django.forms.widgets import TextInput
 from django.utils.dateparse import parse_duration
+import re
 
 #new check error id 
 def has_only_en(name):
@@ -307,7 +308,9 @@ class BaseMillForm(forms.ModelForm):
         hoen = has_only_en(id)
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
-            raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+            raise forms.ValidationError(u"รหัสต้นทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 4 or not id.endswith("MA"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxMA' (e.g., 12MA) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -379,6 +382,8 @@ class BaseStoneTypeForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 4 or not id.endswith("ST"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxST' (e.g., 23ST) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -415,6 +420,8 @@ class BaseScoopForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 4 or not id.endswith("TK"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxTK' (e.g., 23TK) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -503,7 +510,9 @@ class BaseSiteForm(forms.ModelForm):
         hoen = has_only_en(id)
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
-            raise forms.ValidationError(u"รหัสหน้างานผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+            raise forms.ValidationError(u"รหัสปลายทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 5 or not id.endswith("PL"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxxPL' (e.g., 123PL) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -544,8 +553,13 @@ class BaseCustomerForm(forms.ModelForm):
         id = cleaned_data.get('customer_id')
         hoen = has_only_en(id)
 
+        pattern1 = re.compile(r'^\d{2}RM$')
+        pattern2 = re.compile(r'^\d{2}-V-\d{3}$')
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสลูกค้าผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or not (pattern1.match(id) or pattern2.match(id)):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xx-V-xxx' หรือ 'xxRM' (e.g., 01-V-001, 01RM) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -594,6 +608,8 @@ class BaseDriverForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 4 or not id.endswith("KB"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxKB' (e.g., 23KB) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -638,6 +654,8 @@ class BaseCarRegistrationForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสทะเบียนรถผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif not id or len(id) != 5 or not id.endswith("CR"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxxCR' (e.g., 012CR) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):

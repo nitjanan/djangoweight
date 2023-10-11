@@ -9,9 +9,18 @@ class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['base_vat_type_id', 'base_vat_type_name', 'base_vat_type_des'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+class BaseJobTypeResource(resources.ModelResource):     
+
+    class Meta:
+        model = BaseJobType
+        import_id_fields = ('base_job_type_id',)
+        fields = ('base_job_type_id', 'base_job_type_name',)
+        export_order = ('base_job_type_id', 'base_job_type_name',)
+
 class BaseJobTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['base_job_type_id', 'base_job_type_name'] #แสดงรายการสินค้าในรูปแบบตาราง
-    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    resource_class = BaseJobTypeResource
+    list_display = ('base_job_type_id', 'base_job_type_name',)
+    search_fields = ('base_job_type_id', 'base_job_type_name')
 
 class BaseCustomerResource(resources.ModelResource):
     base_vat_type = fields.Field(

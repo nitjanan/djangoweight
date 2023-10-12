@@ -262,7 +262,7 @@ class WeightStockForm(forms.ModelForm):
     
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total')
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total', 'site', 'site_name', 'note')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'customer_name': forms.HiddenInput(),
@@ -271,6 +271,7 @@ class WeightStockForm(forms.ModelForm):
         'car_registration_name': forms.HiddenInput(),
         'driver_name': forms.HiddenInput(),
         'scoop_name': forms.HiddenInput(),
+        'site_name': forms.HiddenInput(),
        }
        labels = {
             'date': _('วันที่ผลิต'),

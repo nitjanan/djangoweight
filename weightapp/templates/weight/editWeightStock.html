@@ -99,11 +99,21 @@ input.del[type=checkbox] {
                     </div>
 
                     <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">โรงโม่</label>
+                      <label for="first-name-horizontal">ต้นทาง
+                      </label>
                     </div>
                     <div class="col-md-10 form-group">
                       {{form.mill |attr:"readonly"  | add_class:"form-control"}}
                       {{form.mill_name | add_class:"form-control"}}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">ปลายทาง
+                      </label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.site|attr:"readonly" | add_class:"form-control"}}
+                      {{form.site_name| add_class:"form-control"}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -120,6 +130,13 @@ input.del[type=checkbox] {
                     <div class="col-md-10 form-group">
                       {{form.scoop |attr:"readonly" | add_class:"form-control" }}
                       {{form.scoop_name | add_class:"form-control" }}
+                    </div>
+
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">หมายเหตุ</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.note | add_class:"form-control" }}
                     </div>
 
                   <hr class="my-3">
@@ -204,6 +221,7 @@ input.del[type=checkbox] {
   $('#id_car_registration_name option:contains("{{weight.car_registration_name}}")').prop('selected', true);
   $('#id_driver_name option:contains("{{weight.driver_name}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
+  $('#id_site_name option:contains("{{weight.site_name}}")').prop('selected', true);
 
   // BEFORE form submission
   $('form').submit(function() {
@@ -213,6 +231,7 @@ input.del[type=checkbox] {
     $("#id_scoop_name").val($("#id_scoop").find(":selected").text());
     $("#id_mill_name").val($("#id_mill").find(":selected").text());
     $("#id_stone_type_name").val($("#id_stone_type").find(":selected").text());
+    $("#id_site_name").val($("#id_site").find(":selected").text());
 
     customer_name = $('#id_customer_name').val();
     if(customer_name == 'ยกเลิก'){
@@ -262,6 +281,10 @@ input.del[type=checkbox] {
 
   $("#id_mill").change(function(){
     $("#id_mill_name").val($(this).find(":selected").text());
+  });
+
+  $("#id_site").change(function(){
+    $("#id_site_name").val($(this).find(":selected").text());
   });
 
   $("#id_stone_type").change(function(){

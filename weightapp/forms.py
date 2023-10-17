@@ -310,8 +310,8 @@ class BaseMillForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสต้นทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 4 or not id.endswith("MA"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxMA' (e.g., 12MA) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != 5 or not id.endswith("MA"):
+            raise forms.ValidationError(u"รหัสควรมี  format 'xxxMA' (e.g., 012MA) กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):

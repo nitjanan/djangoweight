@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale
 
 # Register your models here.
 class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -224,6 +224,10 @@ class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['name', 'code'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['user', 'scale_id', 'scale_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 	
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -249,6 +253,7 @@ admin.site.register(BaseCarTeam, BaseCarTeamAdmin)
 admin.site.register(BaseCar, BaseCarAdmin)
 admin.site.register(BaseFertilizer, BaseFertilizerAdmin)
 admin.site.register(BaseCompany, BaseCompanyAdmin)
+admin.site.register(UserScale, UserScaleAdmin)
 
 
 

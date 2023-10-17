@@ -62,6 +62,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </ul>
                 {{form | crispy}}
                 <div class="col-12 d-flex justify-content-end">
+                  {% if text_mode == 'เปลี่ยน' %}
+                    <h6 class="text-warning me-3">* หากแก้ไขข้อมูล จะข้อมูลจะไปแก้ไขที่ตาชั่งด้วย</h6>
+                  {% endif %}
                   <button type="submit" class="btn btn-primary me-1 mb-1">
                     บันทึก
                   </button>
@@ -84,13 +87,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <p>2023 &copy; Nitjanan</p>
       </div>
       <div class="float-end">
-        <p>
+        <!-- p>
           Crafted with
           <span class="text-danger"
             ><i class="bi bi-heart-fill icon-mid"></i
           ></span>
           by <a href="https://saugi.me">Saugi</a>
-        </p>
+        </p -->
       </div>
     </div>
   </footer>

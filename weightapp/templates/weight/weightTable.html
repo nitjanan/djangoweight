@@ -94,7 +94,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <table class="table table-hover">
               <thead class="table-dark">
                 <tr>
-                  <th>weight_id</th>
                   <th>เลขที่ชั่ง</th>
                   <th>วันที่</th>
                   <th>เวลาเข้า</th>
@@ -106,13 +105,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>นน.ออก</th>
                   <th>นน.สุทธิ</th>
                   <th>lc.</th>
+                  <th>ผู้ชั่ง</th>
                   <th>แก้ไข</th>
                 </tr>
               </thead>
               <tbody>
                 {% for i in weight%}
                 <tr>
-                  <td>{{i.weight_id}}</td>
                   <td>{{i.doc_id}}</td>
                   <td>{{i.date |date:"d/m/Y"}}</td>
                   <td>{{i.time_in}}</td>
@@ -124,6 +123,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
                   <td>{{i.base_weight_station_name.id }}</td>
+                  <td>{{i.scale_name}}</td>
                   <td>
                     <a href="{% url 'editWeight' i.base_weight_station_name.weight_type.id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
                   </td>
@@ -190,13 +190,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <p>2023 &copy; Nitjanan</p>
       </div>
       <div class="float-end">
-        <p>
+        <!-- p>
           Crafted with
           <span class="text-danger"
             ><i class="bi bi-heart-fill icon-mid"></i
           ></span>
           by <a href="https://saugi.me">Saugi</a>
-        </p>
+        </p -->
       </div>
     </div>
   </footer>

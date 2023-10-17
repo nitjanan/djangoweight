@@ -347,12 +347,13 @@ class Weight(models.Model):
     v_stamp = models.DateTimeField(auto_now=True)
 
     # export to express
-    is_s = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+    is_s = models.BooleanField(default=False, verbose_name="สถานะ non vat")#สถานะ non vat
     exp_bill = models.CharField(blank=True, null=True,max_length=255)#บิลขาย
     exp_change = models.CharField(blank=True, null=True,max_length=255)#ปรับปรุง
     exp_remission = models.CharField(blank=True, null=True,max_length=255)#ลดหนี้
     exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
+    is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
 
     class Meta:
         db_table = 'weight'
@@ -437,12 +438,13 @@ class WeightHistory(models.Model):
     v_stamp = models.DateTimeField(auto_now=True)
     
     # export to express
-    is_s = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+    is_s = models.BooleanField(default=False, verbose_name="สถานะ non vat")#สถานะ non vat
     exp_bill = models.CharField(blank=True, null=True,max_length=255)#บิลขาย
     exp_change = models.CharField(blank=True, null=True,max_length=255)#ปรับปรุง
     exp_remission = models.CharField(blank=True, null=True,max_length=255)#ลดหนี้
     exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
+    is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
 
     class Meta:
         db_table = 'weight_history'
@@ -521,6 +523,7 @@ def save_weight_history(sender, instance, **kwargs):
                     weight_id = old_weight.pk,
                     weight_table = old_weight,
                     is_s = old_weight.is_s,
+                    is_cancel = old_weight.is_cancel,
                     exp_bill = old_weight.exp_bill,
                     exp_change = old_weight.exp_change,
                     exp_remission = old_weight.exp_remission,
@@ -679,3 +682,16 @@ class StoneEstimateItem(models.Model):
     
     class Meta:
         db_table = 'stone_estimate_item'
+
+#USER PROFILE
+class UserScale(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
+    scale_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผู้ชั่ง")#รหัสผู้ชั่ง
+    scale_name = models.CharField(blank=True, null=True,max_length=255, verbose_name="ชื่อผู้ชั่ง")#ชื่อผู้ชั่ง
+
+    class Meta:
+        verbose_name = 'ผู้ชั่ง'
+        verbose_name_plural = 'ข้อมูลผู้ชั่ง'
+    
+    def __str__(self):
+        return self.scale_name

@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale
 from django.db.models import Sum, Q, Max
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -245,6 +245,9 @@ def calculatePersent(num, num_all):
         persent = (num/num_all)*100
     return f'{round(persent)}'
 
+def is_scale(user):
+    return user.groups.filter(name='scale').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -266,7 +269,12 @@ def logoutUser(request):
     return redirect('login')
 
 def weightTable(request):
-    data = Weight.objects.all().order_by('date','weight_id')
+
+    if is_scale(request.user):
+        us = UserScale.objects.get(user = request.user)
+        data = Weight.objects.filter(scale_id = us.scale_id).order_by('date','weight_id')
+    elif request.user.is_superuser:
+        data = Weight.objects.all().order_by('date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -2158,6 +2166,7 @@ def weightCreate(request):
         except IntegrityError as e:
             return Response(serializer.data, status=status.HTTP_409_CONFLICT)
     else:
+        print('serializer.errors ========='+ str(serializer.errors))
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT'])

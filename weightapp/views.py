@@ -381,12 +381,12 @@ def searchNumCalQ(request):
     return JsonResponse(data)
 
 def searchTeamFromCar(request):
-    if 'car_registration_name' in request.GET:
+    if 'car_registration_name' in request.GET :
         car_registration_name = request.GET.get('car_registration_name')
-        qs = BaseCar.objects.filter(car_name = car_registration_name).first()
-        val = qs.base_car_team.car_team_id
+
+        team = BaseCar.objects.filter(car_name = car_registration_name).values('base_car_team__car_team_id','base_car_team__car_team_name')
     data = {
-        'val': val,
+        'team_list': list(team),
     }
     return JsonResponse(data)
 

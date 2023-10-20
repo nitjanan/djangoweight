@@ -234,6 +234,7 @@ class WeightForm(forms.ModelForm):
         'mill_name': forms.HiddenInput(),
         'stone_type_name': forms.HiddenInput(),
         'scoop_name': forms.HiddenInput(),
+        'car_team': forms.HiddenInput(),
         'car_team_name': forms.HiddenInput(),
         }
        labels = {

@@ -143,6 +143,9 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">ทีม</label>
                     </div>
                     <div class="col-md-5 form-group">
+                      <select id="select_team" name="select_team_list" class="form-control">
+                        <option value>---------</option>
+                      </select>
                       {{form.car_team  | add_class:"form-control"}}                      
                       {{form.car_team_name  | add_class:"form-control"}}
                     </div>
@@ -347,6 +350,11 @@ input.del[type=checkbox] {
     $('#select_site option:contains("{{weight.site.base_site_name}}")').prop('selected', true);
   }
 
+  if('{{weight.car_team}}' != 'None'){
+    $("#select_team").append(new Option('{{weight.car_team.car_team_name}}', '{{weight.car_team.car_team_id}}'));
+    $('#select_team option:contains("{{weight.car_team.car_team_name}}")').prop('selected', true);
+  }
+
 
   $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
@@ -368,9 +376,10 @@ input.del[type=checkbox] {
     }
     //set data to id
     $("#id_site").val($("#select_site").val());
-    
-    setDataEmptyName("#id_car_team", "#id_car_team_name");
+    $("#id_car_team").val($("#select_team").val());
     setDataEmptyName("#select_site", "#id_site_name");
+    setDataEmptyName("#select_team", "#id_car_team_name");
+
     setDataEmptyName("#id_mill", "#id_mill_name");
     setDataEmptyName("#id_stone_type", "#id_stone_type_name");
     setDataEmptyName("#id_scoop", "#id_scoop_name");
@@ -537,10 +546,10 @@ input.del[type=checkbox] {
   });
 
   $("#id_weight_total").blur(function(){
-    calculateAll();
-
     tmp = parseFloat($(this).val());
     $(this).val(tmp.toFixed(3));
+
+    calculateAll();
   });
 
   $("#id_weight_in, #id_weight_out").blur(function(){
@@ -549,24 +558,28 @@ input.del[type=checkbox] {
     searchNumCalQ();
   });
 
+  function twoDecimal(number){
+    return Math.round(number * 100) / 100;
+  }
+
   function calculateAll(){
     vat_type = $('input[name="vat_type_group"]:checked').val();
 
-    weight_total = $('#id_weight_total').val();
-    price_per_ton = $('#id_price_per_ton').val();
+    var weight_total = $('#id_weight_total').val();
+    var price_per_ton = $('#id_price_per_ton').val();
     if(weight_total && price_per_ton){
-      amount = parseFloat(weight_total) * parseFloat(price_per_ton);
-      vat = (amount * 7)/100;
-      amount_vat = vat + amount;
+      var amount = parseFloat(weight_total) * parseFloat(price_per_ton) ;
+      var vat = (amount * 7)/100;
+      var amount_vat = vat + amount;
 
       if(vat_type == 'รวมภาษี'){
-        $('#id_amount').val(amount.toFixed(2));
-        $('#id_amount_vat').val(amount.toFixed(2));
+        $('#id_amount').val(twoDecimal(amount).toFixed(2));
+        $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
         $('#id_vat').val('0.00');
       }else if(vat_type == 'ไม่รวมภาษี'){
-        $('#id_amount').val(amount.toFixed(2));
-        $('#id_amount_vat').val(amount_vat.toFixed(2));
-        $('#id_vat').val(vat.toFixed(2));
+        $('#id_amount').val(twoDecimal(amount).toFixed(2));
+        $('#id_amount_vat').val(twoDecimal(amount_vat).toFixed(2));
+        $('#id_vat').val(twoDecimal(vat).toFixed(2));
       }
     }
   }
@@ -587,9 +600,13 @@ input.del[type=checkbox] {
   });
 
   function calculateQ(num_cal_q){
-    var weight_total =  parseFloat($("#id_weight_total").val());
-    var num_q = weight_total / num_cal_q;
-    $("#id_q").val(num_q.toFixed(2));
+    if (num_cal_q == 0.0){
+      $("#id_q").val('0.00');
+    }else{
+      var weight_total =  parseFloat($("#id_weight_total").val());
+      var num_q = weight_total / num_cal_q;
+      $("#id_q").val(num_q.toFixed(2));
+    }
   }
 
 
@@ -610,8 +627,13 @@ input.del[type=checkbox] {
     searchTeamFromCar();
   } );
 
+  $("#id_car_registration_name").blur(function(){
+    searchTeamFromCar();
+  });
 
   function searchTeamFromCar(){
+    var tempTeam = $("#id_car_team").val();
+
     if($('#id_car_registration_name').val() != ""){
         var idInput = $('#id_car_registration_name').val();
         // Create Ajax Call
@@ -623,16 +645,20 @@ input.del[type=checkbox] {
                 },
                 dataType: 'json',
                 success: function (data) {
-                    if (data.val) {
-                      $('#id_car_team').val(data.val);
-                      $('#id_car_team_name').val($('#id_car_team').find(":selected").text());
+                    if (data.team_list) {
+                            $("#select_team").find('option').not(':first').remove();
+                            //set option 
+                            for(var i = 0; i < data.team_list.length; i++){
+                                $("#select_team").append(new Option(data.team_list[i].base_car_team__car_team_name, data.team_list[i].base_car_team__car_team_id));
+                            }
                     }
+                    $('#select_team option[value="'+tempTeam +'"]').attr('selected','selected');
                 }
             });
         }
         return false;
     }else{
-      $('#id_car_team_name').val("");
+      $("#select_team").find('option').not(':first').remove();
     }
   }
 

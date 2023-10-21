@@ -13,8 +13,8 @@ class WeightFilter(django_filters.FilterSet):
     doc_id = django_filters.CharFilter(field_name="doc_id", lookup_expr='icontains')
     customer_name = django_filters.CharFilter(field_name="customer_name", lookup_expr='icontains')
     stone_type_name = django_filters.CharFilter(field_name="stone_type_name", lookup_expr='icontains')
-    weight_type =  django_filters.ModelChoiceFilter(field_name="base_weight_station_name__weight_type", queryset= BaseWeightType.objects.all())
-    vat_type =  django_filters.ModelChoiceFilter(field_name="base_weight_station_name__vat_type", queryset= BaseVatType.objects.all())
+    weight_type =  django_filters.ModelChoiceFilter(field_name="bws__weight_type", queryset= BaseWeightType.objects.all())
+    vat_type =  django_filters.ModelChoiceFilter(field_name="bws__vat_type", queryset= BaseVatType.objects.all())
 
     class Meta:
         model = Weight

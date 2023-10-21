@@ -343,7 +343,8 @@ class Weight(models.Model):
     price_up_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าขึ้นรวม
     price_down_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลงรวม
     freight_cost_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุกรวม
-    base_weight_station_name = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
+    bws = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
+    base_weight_station_name = models.CharField(blank=True, null=True,max_length=255)#lc.
     v_stamp = models.DateTimeField(auto_now=True)
 
     # export to express
@@ -430,11 +431,12 @@ class WeightHistory(models.Model):
     price_up_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าขึ้นรวม
     price_down_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าลงรวม
     freight_cost_total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10)#ค่าบรรทุกรวม
-    base_weight_station_name = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
+    bws = models.ForeignKey(BaseWeightStation,on_delete=models.CASCADE, null = True)
     weight_table = models.ForeignKey(Weight,on_delete=models.CASCADE, null = True)
     update = models.DateTimeField(default=timezone.now)#เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
     user_update = models.ForeignKey(User,on_delete=models.CASCADE,related_name='user_update', blank=True, null=True)
     weight_id = models.IntegerField(blank=True, null=True)
+    base_weight_station_name = models.CharField(blank=True, null=True,max_length=255)#lc.
     v_stamp = models.DateTimeField(auto_now=True)
     
     # export to express
@@ -519,7 +521,7 @@ def save_weight_history(sender, instance, **kwargs):
                     price_up_total = old_weight.price_up_total,
                     price_down_total = old_weight.price_down_total,
                     freight_cost_total = old_weight.freight_cost_total,
-                    base_weight_station_name = old_weight.base_weight_station_name,
+                    bws = old_weight.bws,
                     weight_id = old_weight.pk,
                     weight_table = old_weight,
                     is_s = old_weight.is_s,

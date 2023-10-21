@@ -122,10 +122,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
-                  <td>{{i.base_weight_station_name.id }}</td>
+                  <td>{{i.base_weight_station_name}}</td>
                   <td>{{i.scale_name}}</td>
                   <td>
-                    <a href="{% url 'editWeight' i.base_weight_station_name.weight_type.id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
+                    <a href="{% url 'editWeight' i.bws.weight_type.id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
                   </td>
                 </tr>
                 {% endfor %}

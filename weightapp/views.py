@@ -69,9 +69,9 @@ def set_border(ws, side=None, blank=True):
 
 def getSumByStone(mode, stoneType, type):
     if type == 1:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     else:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getSumOther(mode, list_sum_stone, type):
@@ -80,11 +80,11 @@ def getSumOther(mode, list_sum_stone, type):
         query_filters |= Q(stone_type_name__startswith=item_number_prefix)
 
     if type == 1:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก'), query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก'), query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(base_weight_station_name__weight_type = mode, stone_type_name__icontains = 'ส่งออก', date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).values('stone_type_name').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__icontains = 'ส่งออก', date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).values('stone_type_name').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 3:
-        w = Weight.objects.filter(Q(stone_type_name__icontains = 'สต๊อก')| Q(stone_type_name__icontains = 'สต็อก'), base_weight_station_name__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(Q(stone_type_name__icontains = 'สต๊อก')| Q(stone_type_name__icontains = 'สต็อก'), bws__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getNumListStoneWeightChart(mode, stone_list_name, type):
@@ -101,13 +101,13 @@ def getNumListStoneWeightChart(mode, stone_list_name, type):
 
 @login_required(login_url='login')
 def index(request):
-    weight = Weight.objects.filter(date='2023-02-02', base_weight_station_name__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
-    sum_all_weight = Weight.objects.filter(date='2023-02-02', base_weight_station_name__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+    weight = Weight.objects.filter(date='2023-02-02', bws__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
+    sum_all_weight = Weight.objects.filter(date='2023-02-02', bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
-    data_sum_produc_all = Weight.objects.filter(date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill1 = Weight.objects.filter(mill_name='โรงโม่ 1' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill2 = Weight.objects.filter(mill_name='โรงโม่ 2' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill3 = Weight.objects.filter(mill_name='โรงโม่ 3' ,date = '2023-02-02', base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_all = Weight.objects.filter(date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill1 = Weight.objects.filter(mill_name='โรงโม่ 1' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill2 = Weight.objects.filter(mill_name='โรงโม่ 2' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill3 = Weight.objects.filter(mill_name='โรงโม่ 3' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
     
     '''
     tf_to_day = Weight.objects.filter(stone_type = 'หิน 3/4', date ='2023-03-02').aggregate(Sum('weight_total'))
@@ -410,9 +410,9 @@ def autocompalteSite(request):
 
 def excelProductionByStone(request, my_q, list_date):
     # Query ข้อมูลขาย
-    data = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 1).order_by('date','mill_name').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    data = Weight.objects.filter( my_q, bws__weight_type = 1).order_by('date','mill_name').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     # Query ข้อมูลผลิตรวม
-    data_sum_produc = Weight.objects.filter( my_q, base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').order_by('date','mill_name').values_list('date','mill_name').annotate(sum_weight_total = Sum('weight_total'))
+    data_sum_produc = Weight.objects.filter( my_q, bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').order_by('date','mill_name').values_list('date','mill_name').annotate(sum_weight_total = Sum('weight_total'))
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -932,8 +932,8 @@ def excelProductionAndLoss(request, my_q):
                 production = Production.objects.filter(mill = mill, line_type = line_type, created = created_date).first()
                 accumulated_goal = Production.objects.filter(mill = mill, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
 
-                data_sum_produc = Weight.objects.filter(mill_name=mill ,date = created_date, base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-                accumulated_produc = Weight.objects.filter(mill_name=mill ,date__range=(date_from_accumulated, created_date) , base_weight_station_name__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+                data_sum_produc = Weight.objects.filter(mill_name=mill ,date = created_date, bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+                accumulated_produc = Weight.objects.filter(mill_name=mill ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
 
                 sum_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
                 cal_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
@@ -1186,7 +1186,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
         list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.mill_name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
+        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), bws__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.mill_name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2
@@ -1256,16 +1256,16 @@ def exportExcelStoneEstimateAndProduction(request):
                     #หมายเหตุ
                     production_note = Production.objects.filter(mill = mill, created = created_date).values_list('note', flat=True).first()
                     #หินเขา
-                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), base_weight_station_name__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), bws__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
                     #หินเข้าโม่ทั้งหมด
-                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), base_weight_station_name__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), bws__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
                     for stone_type_name in weight_stone_types:
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), base_weight_station_name__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
                         if weight_time1:
                             row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
                         else:
@@ -2130,7 +2130,7 @@ def weightDetail(request, pk):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightDetailByDate(request, str_date , str_lc):
-    latest_weights = WeightHistory.objects.filter(date = str_date, base_weight_station_name__id = str_lc).values('weight_id').distinct()
+    latest_weights = WeightHistory.objects.filter(date = str_date, bws__id = str_lc).values('weight_id').distinct()
     queryset = Weight.objects.filter(weight_id__in = latest_weights)
 
     serializer = WeightSerializer(queryset, many = True)
@@ -2139,7 +2139,7 @@ def weightDetailByDate(request, str_date , str_lc):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightVStamp(request, dt, str_lc):
-    latest_weights = WeightHistory.objects.filter(v_stamp__gte = dt, base_weight_station_name__id = str_lc).order_by('v_stamp').values('weight_id').distinct()
+    latest_weights = WeightHistory.objects.filter(v_stamp__gte = dt, bws__id = str_lc).order_by('v_stamp').values('weight_id').distinct()
     queryset = Weight.objects.filter(weight_id__in = latest_weights)
     
     serializer = WeightSerializer(queryset, many = True)

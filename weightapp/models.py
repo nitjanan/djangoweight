@@ -687,7 +687,7 @@ class StoneEstimateItem(models.Model):
 
 #USER PROFILE
 class UserScale(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
+    user = models.ForeignKey(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
     scale_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผู้ชั่ง")#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255, verbose_name="ชื่อผู้ชั่ง")#ชื่อผู้ชั่ง
 

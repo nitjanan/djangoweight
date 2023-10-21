@@ -253,13 +253,6 @@ class WeightForm(forms.ModelForm):
 
 class WeightStockForm(forms.ModelForm):
     customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
-    #hidden
-    #customer_name = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
-    #mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
-    #stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
-    #car_registration_name = forms.ModelChoiceField(label='ชื่อทะเบียนรถ', queryset = BaseCarRegistration.objects.all())
-    #driver_name = forms.ModelChoiceField(label='ชื่อผู้ขับ', queryset = BaseDriver.objects.all())
-    #scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
     
     class Meta:
        model = Weight

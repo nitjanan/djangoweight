@@ -101,13 +101,17 @@ def getNumListStoneWeightChart(mode, stone_list_name, type):
 
 @login_required(login_url='login')
 def index(request):
-    weight = Weight.objects.filter(date='2023-02-02', bws__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
-    sum_all_weight = Weight.objects.filter(date='2023-02-02', bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+    # today date
+    current_date = datetime.now()
+    previous_day = current_date - timedelta(days=1)
 
-    data_sum_produc_all = Weight.objects.filter(date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill1 = Weight.objects.filter(mill_name='โรงโม่ 1' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill2 = Weight.objects.filter(mill_name='โรงโม่ 2' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill3 = Weight.objects.filter(mill_name='โรงโม่ 3' ,date = '2023-02-02', bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+    weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
+    sum_all_weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+
+    data_sum_produc_all = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill1 = Weight.objects.filter(site='009PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill2 = Weight.objects.filter(site='010PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_mill3 = Weight.objects.filter(site='011PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
     
     '''
     tf_to_day = Weight.objects.filter(stone_type = 'หิน 3/4', date ='2023-03-02').aggregate(Sum('weight_total'))

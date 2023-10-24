@@ -77,7 +77,7 @@ input.del[type=checkbox] {
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">จ่ายเงิน</label>
                     </div>
-                    <div class="col-md-10 form-group mt-2">
+                    <div class="col-md-4 form-group mt-2">
                       <fieldset id="pay_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
                           <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินสด">
@@ -99,6 +99,13 @@ input.del[type=checkbox] {
                         </div>
                       </fieldset>
                       {{form.pay}}
+                    </div>
+                    <div class="col-md-1 form-group">
+                      <label for="first-name-horizontal">S.</label>
+                    </div>
+                    <div class="col-md-5 form-group">
+                      {{form.is_s}}
+                      {{form.is_cancel| add_class:"d-none"}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -368,11 +375,14 @@ input.del[type=checkbox] {
 
   // BEFORE form submission
   $('form').submit(function() {
-    customer_name = $('#id_customer_name').val();
-    if(customer_name == 'ยกเลิก'){
+    customer_id = $('#id_customer').val();
+    if(customer_id == '09-V-001' || customer_id == '99'){
         $('#id_weight_in').val('0.000');
         $('#id_weight_out').val('0.000');
         $('#id_weight_total').val('0.000');
+        $('#id_is_cancel').prop( "checked", true );
+    }else{
+        $('#id_is_cancel').prop( "checked", false );
     }
     //set data to id
     $("#id_site").val($("#select_site").val());

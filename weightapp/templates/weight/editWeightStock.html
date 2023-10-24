@@ -72,6 +72,7 @@ input.del[type=checkbox] {
                       </div>
                       <div class="col-md-8 form-group">
                         {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
+                        {{form.is_cancel| add_class:"d-none"}}
                     </div>
 
                     <div class="col-md-2 form-group">
@@ -233,11 +234,14 @@ input.del[type=checkbox] {
     $("#id_stone_type_name").val($("#id_stone_type").find(":selected").text());
     $("#id_site_name").val($("#id_site").find(":selected").text());
 
-    customer_name = $('#id_customer_name').val();
-    if(customer_name == 'ยกเลิก'){
+    customer_id = $('#id_customer').val();
+    if(customer_id == '09-V-001' || customer_id == '99'){
         $('#id_weight_in').val('0.000');
         $('#id_weight_out').val('0.000');
         $('#id_weight_total').val('0.000');
+        $('#id_is_cancel').prop( "checked", true );
+    }else{
+        $('#id_is_cancel').prop( "checked", false );
     }
   });
 

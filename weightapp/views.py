@@ -1363,7 +1363,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
 ################### BaesMill ####################
 def settingBaseMill(request):
-    data = BaseMill.objects.all().order_by('mill_id')
+    data = BaseMill.objects.all().order_by('-mill_id')
 
     #กรองข้อมูล
     myFilter = BaseMillFilter(request.GET, queryset = data)
@@ -1489,7 +1489,7 @@ def editBaseJobType(request, id):
 
 ################### BaesStoneType ####################
 def settingBaseStoneType(request):
-    data = BaseStoneType.objects.all().order_by('base_stone_type_id')
+    data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
 
     #กรองข้อมูล
     myFilter = BaseStoneTypeFilter(request.GET, queryset = data)
@@ -1554,7 +1554,7 @@ def editBaseStoneType(request, id):
 
 ################### BaesScoop ####################
 def settingBaseScoop(request):
-    data = BaseScoop.objects.all().order_by('scoop_id')
+    data = BaseScoop.objects.all().order_by('-scoop_id')
 
     #กรองข้อมูล
     myFilter = BaseScoopFilter(request.GET, queryset = data)
@@ -1619,7 +1619,7 @@ def editBaseScoop(request, id):
 
 ################### BaseCarTeam ####################
 def settingBaseCarTeam(request):
-    data = BaseCarTeam.objects.all().order_by('car_team_id')
+    data = BaseCarTeam.objects.all().order_by('-car_team_id')
 
     #กรองข้อมูล
     myFilter = BaseCarTeamFilter(request.GET, queryset = data)
@@ -1684,7 +1684,7 @@ def editBaseCarTeam(request, id):
 
 ################### BaseCar ####################
 def settingBaseCar(request):
-    data = BaseCar.objects.all().order_by('car_id')
+    data = BaseCar.objects.all().order_by('-car_id')
 
     #กรองข้อมูล
     myFilter = BaseCarFilter(request.GET, queryset = data)
@@ -1743,7 +1743,7 @@ def editBaseCar(request, id):
 
 ################### BaesSite ####################
 def settingBaseSite(request):
-    data = BaseSite.objects.all().order_by('base_site_id')
+    data = BaseSite.objects.all().order_by('-base_site_id')
 
     #กรองข้อมูล
     myFilter = BaseSiteFilter(request.GET, queryset = data)
@@ -1808,7 +1808,7 @@ def editBaseSite(request, id):
 
 ################### BaesCustomer ####################
 def settingBaseCustomer(request):
-    data = BaseCustomer.objects.all().order_by('-weight_type_id','customer_id')
+    data = BaseCustomer.objects.all().order_by('-weight_type_id','-customer_id')
 
     #กรองข้อมูล
     myFilter = BaseCustomerFilter(request.GET, queryset = data)
@@ -1873,7 +1873,7 @@ def editBaseCustomer(request, id):
 
 ################### BaseDriver ####################
 def settingBaseDriver(request):
-    data = BaseDriver.objects.all().order_by('driver_id')
+    data = BaseDriver.objects.all().order_by('-driver_id')
 
     #กรองข้อมูล
     myFilter = BaseDriverFilter(request.GET, queryset = data)
@@ -1937,7 +1937,7 @@ def editBaseDriver(request, id):
 
 ################### BaseCarRegistration ####################
 def settingBaseCarRegistration(request):
-    data = BaseCarRegistration.objects.all().order_by('car_registration_id')
+    data = BaseCarRegistration.objects.all().order_by('-car_registration_id')
 
     #กรองข้อมูล
     myFilter = BaseCarRegistrationFilter(request.GET, queryset = data)

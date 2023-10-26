@@ -76,10 +76,11 @@ class BaseMillFilter(django_filters.FilterSet):
 
     class Meta:
         model = BaseMill
-        fields = ('mill_id', 'mill_name',)
+        fields = ('mill_id', 'mill_name','weight_type')
 
 BaseMillFilter.base_filters['mill_id'].label = 'รหัสต้นทาง'
 BaseMillFilter.base_filters['mill_name'].label = 'ชื่อต้นทาง'
+BaseMillFilter.base_filters['weight_type'].label = 'ชนิดเครื่องชั่ง'
 
 
 class BaseJobTypeFilter(django_filters.FilterSet):
@@ -148,10 +149,11 @@ class BaseSiteFilter(django_filters.FilterSet):
 
     class Meta:
         model = BaseSite
-        fields = ('base_site_id', 'base_site_name')
+        fields = ('base_site_id', 'base_site_name', 'weight_type')
 
 BaseSiteFilter.base_filters['base_site_id'].label = 'รหัสปลายทาง'
 BaseSiteFilter.base_filters['base_site_name'].label = 'ชื่อปลายทาง'
+BaseSiteFilter.base_filters['weight_type'].label = 'ชนิดเครื่องชั่ง'
 
 
 class BaseCustomerFilter(django_filters.FilterSet):

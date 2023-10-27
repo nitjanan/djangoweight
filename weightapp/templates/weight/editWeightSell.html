@@ -135,7 +135,7 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">ทะเบียนรถ</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      {{form.car_registration_name | add_class:"form-control"}}
+                      {{form.car_registration_name |attr:"readonly" | add_class:"form-control"}}
                     </div>
                     <div class="col-md-2 form-group">
                       {{form.province  | add_class:"form-control"}}
@@ -223,7 +223,7 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักเข้า</label>
                   </div>
                   <div class="col-md-9 form-group">
-                    {{form.weight_in | add_class:"form-control" }}
+                    {{form.weight_in |attr:"readonly" | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -233,7 +233,7 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักออก</label>
                   </div>
                   <div class="col-md-9 form-group">
-                    {{form.weight_out | add_class:"form-control" }}
+                    {{form.weight_out |attr:"readonly" | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -243,10 +243,10 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
                   </div>
                   <div class="col-md-7 form-group">
-                    {{form.weight_total | add_class:"form-control" }}
+                    {{form.weight_total |attr:"readonly" | add_class:"form-control" }}
                   </div>
                   <div class="col-md-2 form-group">
-                    {{form.q | add_class:"form-control" }}
+                    {{form.q |attr:"readonly" | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>

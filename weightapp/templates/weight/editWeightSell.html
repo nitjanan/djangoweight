@@ -135,7 +135,7 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">ทะเบียนรถ</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      {{form.car_registration_name |attr:"readonly" | add_class:"form-control"}}
+                      {{form.car_registration_name | add_class:"form-control"}}
                     </div>
                     <div class="col-md-2 form-group">
                       {{form.province  | add_class:"form-control"}}
@@ -223,7 +223,7 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักเข้า</label>
                   </div>
                   <div class="col-md-9 form-group">
-                    {{form.weight_in |attr:"readonly" | add_class:"form-control" }}
+                    {{form.weight_in | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -233,7 +233,7 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักออก</label>
                   </div>
                   <div class="col-md-9 form-group">
-                    {{form.weight_out |attr:"readonly" | add_class:"form-control" }}
+                    {{form.weight_out | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -243,10 +243,10 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
                   </div>
                   <div class="col-md-7 form-group">
-                    {{form.weight_total |attr:"readonly" | add_class:"form-control" }}
+                    {{form.weight_total | add_class:"form-control" }}
                   </div>
                   <div class="col-md-2 form-group">
-                    {{form.q |attr:"readonly" | add_class:"form-control" }}
+                    {{form.q | add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -372,6 +372,20 @@ input.del[type=checkbox] {
   setDataRadio();
   setDataCustomer();
   searchNumCalQ();
+
+  "{% if is_edit_weight %}"
+    $("#id_car_registration_name").attr('readonly', false);
+    $("#id_weight_in").attr('readonly', false);
+    $("#id_weight_out").attr('readonly', false);
+    $("#id_weight_total").attr('readonly', false);
+    $("#id_q").attr('readonly', false);
+  "{% else %}"
+    $("#id_car_registration_name").attr('readonly', true);
+    $("#id_weight_in").attr('readonly', true);
+    $("#id_weight_out").attr('readonly', true);
+    $("#id_weight_total").attr('readonly', true);
+    $("#id_q").attr('readonly', true);
+  "{% endif %}"
 
   // BEFORE form submission
   $('form').submit(function() {

@@ -252,6 +252,9 @@ def calculatePersent(num, num_all):
 def is_scale(user):
     return user.groups.filter(name='scale').exists()
 
+def is_edit_weight(user):
+    return user.groups.filter(name='edit_weight').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -305,6 +308,10 @@ def editWeight(request, mode, weight_id):
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
 
+    #ถ้ามีสิทธิแก้น้ำหนัก
+    print("is editttttttt = " + str(is_edit_weight(request.user)))
+
+
     if request.method == 'POST':
         form = tmp_form_post
         if form.is_valid():
@@ -318,7 +325,7 @@ def editWeight(request, mode, weight_id):
     else:
         form = tmp_form
 
-    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data}
+    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user)}
     return render(request, template_name, context)
 
 def searchDataCustomer(request):

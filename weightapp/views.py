@@ -1236,6 +1236,8 @@ def exportExcelStoneEstimateAndProduction(request):
         row_index = 3
         for created_date in created_dates:
             len_row_index = 0
+            total_working_time = None
+            production_note = None
             for i in range(len(list_customer_name)):
                 for j, time in enumerate(list_time):
                     len_row_index +=1

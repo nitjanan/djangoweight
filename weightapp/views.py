@@ -2100,6 +2100,7 @@ def apiWeightOverview(request):
         'Create':'/weight/api/create/',
         'Update':'/weight/api/update/<str:pk>/',
         'VStamp':'/weight/api/vStamp/<str:dt>/<str:str_lc>/',
+        'Detail By Date Between and Weight Type':'/weight/api/between/<str:start_date>/<str:end_date>/<str:weight_type/',
     }
     return Response(api_urls)
 
@@ -2145,6 +2146,15 @@ def weightVStampAll(request, dt):
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)
 
+# For Insert Report weight 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightDetailBetween(request, start_date, end_date , weight_type):
+    queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type)
+
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def weightCreate(request):
@@ -2157,7 +2167,6 @@ def weightCreate(request):
         except IntegrityError as e:
             return Response(serializer.data, status=status.HTTP_409_CONFLICT)
     else:
-        print('serializer.errors ========='+ str(serializer.errors))
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT'])

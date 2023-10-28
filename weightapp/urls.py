@@ -126,6 +126,7 @@ urlpatterns = [
      path('weight/api/detail/date/<str:str_date>/<str:str_lc>/',views.weightDetailByDate,name="weightDetailByDate"),
      path('weight/api/vStamp/<str:dt>/<str:str_lc>/',views.weightVStamp,name="weightVStamp"),
      path('weight/api/all/vStamp/<str:dt>/',views.weightVStampAll,name="weightVStampAll"),
+     path('weight/api/between/<str:start_date>/<str:end_date>/<int:weight_type>/',views.weightDetailBetween,name="weightDetailBetween"),
 
      path('baseCustomer/api/',views.apiBaseCustomerOverview,name="apiBaseCustomerOverview"),
      path('baseCustomer/api/list/',views.baseCustomerList,name="baseCustomerList"),

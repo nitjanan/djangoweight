@@ -148,7 +148,7 @@
             </div>
             <div class="card-body">
               <div class="alert alert-light-info color-info">
-                วันที่ {{weight.1.date}} <p class="float-end"> รวม {{sum_all_weight |intcomma}} ตัน</p>
+                วันที่ {{previous_day |date:"d/m/Y"}} <p class="float-end"> รวม {{sum_all_weight |intcomma}} ตัน</p>
               </div>
               <div class="table-responsive">
                 <table class="table table-striped" id="table1"><!--เปลี่ยนจำนวนรายการที่แสดงต่อหน้า perPage:5 -->
@@ -422,9 +422,6 @@
           name: 'sell',
           data: {{sell_list|safe}}
         }, {
-          name: 'sell (Ex)',
-          data: {{sell_ex_list|safe}}
-        }, {
           name: 'stock',
           data: {{stock_list|safe}}
         }, {
@@ -460,7 +457,7 @@
           colors: ['transparent']
         },
         xaxis: {
-          categories: ['หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก', 'อื่นๆ',],
+          categories: ['หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',],
         },
         yaxis: {
           title: {

@@ -70,32 +70,42 @@ def set_border(ws, side=None, blank=True):
         wb._cell_styles[0].borderId = len(wb._borders) - 1
 
 def getSumByStone(mode, stoneType, type):
+    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+
+    #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
-        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
-    else:
-        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__startswith = stoneType, date__range=('2023-02-01', '2023-02-28')).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 2:
+        w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+    elif type == 3:
+        w = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getSumOther(mode, list_sum_stone, type):
+    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+
     query_filters = Q()
     for item_number_prefix in list_sum_stone:
         query_filters |= Q(stone_type_name__startswith=item_number_prefix)
 
+    #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
-        w = Weight.objects.filter(bws__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(Q(stone_type_name__contains = 'ส่งออก'), query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(bws__weight_type = mode, stone_type_name__icontains = 'ส่งออก', date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).values('stone_type_name').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
-        w = Weight.objects.filter(Q(stone_type_name__icontains = 'สต๊อก')| Q(stone_type_name__icontains = 'สต็อก'), bws__weight_type = mode, date__range=('2023-02-01', '2023-02-28')).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
-def getNumListStoneWeightChart(mode, stone_list_name, type):
+def getNumListStoneWeightChart(mode, stone_list_id, type):
     #sell
     list_sum_stone = []
-    for stone in stone_list_name:
-        list_sum_stone.append(getSumByStone(mode, stone, type))
+    for stone_id in stone_list_id:
+        list_sum_stone.append(getSumByStone(mode, stone_id, type))
 
-    list_sum_stone.append(getSumOther(mode, stone_list_name, type))
+    list_sum_stone.append(getSumOther(mode, stone_list_id, type))
     #list_sum_stone.append(0.0)
     return list_sum_stone
 
@@ -115,37 +125,22 @@ def index(request):
     data_sum_produc_mill2 = Weight.objects.filter(site='010PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
     data_sum_produc_mill3 = Weight.objects.filter(site='011PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
     
-    '''
-    tf_to_day = Weight.objects.filter(stone_type = 'หิน 3/4', date ='2023-03-02').aggregate(Sum('weight_total'))
-    fex_to_day = Weight.objects.filter(stone_type = 'หินใหญ่ขนาด 40-80 มม.(ส่งออก)', date ='2023-03-02').aggregate(Sum('weight_total'))
-    du_to_day = Weight.objects.filter( Q(stone_type='หินฝุ่น') & Q(stone_type='หินฝุ่น(แทนทราย)'), date ='2023-03-02').aggregate(Sum('weight_total'))
-    mix_to_day = Weight.objects.filter(Q(stone_type='หินคลุก A') & Q(stone_type='หินคลุก B'), date ='2023-03-02').aggregate(Sum('weight_total'))
-    '''
-    
-    stone_type_list = ['หิน 3/4','หินใหญ่ขนาด 40-80 มม.', 'หินใหญ่ขนาด 40-80 มม.(ส่งออก)','หินฝุ่น','หินฝุ่น(แทนทราย)','หินฝุ่นโดโลไมท์(ส่งออก)','หินใหญ่ขนาด 40-80 มม.(กองสต๊อก)','หินฝุ่น', 'หินฝุ่น(กองสต็อก)']
-    
-    sell_list_name = ['หิน 3/4','หินใหญ่ขนาด 40-80 มม.','หินฝุ่น','หินคลุก']
+    #'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
+    sell_list_name = ['01ST','16ST','07ST','09ST','10ST']
     sell_list = getNumListStoneWeightChart(1, sell_list_name, 1)
 
-    sell_ex_list_name = ['หิน 3/4(ส่งออก)','หินใหญ่ขนาด 40-80 มม.(ส่งออก)','หินฝุ่นโดโลไมท์(ส่งออก)','หินคลุก(ส่งออก)']
-    sell_ex_list = getNumListStoneWeightChart(1, sell_ex_list_name, 2)
+    stock_list_name = ['01ST','16ST','07ST','09ST','10ST']
+    stock_list = getNumListStoneWeightChart(2, stock_list_name, 2)
 
-    stock_list_name = ['หิน 3/4(กองสต็อก)','หินใหญ่ขนาด 40-80 มม.(กองสต๊อก)','หินฝุ่น(กองสต๊อก)','หินคลุก']
-    stock_list = getNumListStoneWeightChart(2, stock_list_name, 3)
-
-    produce_list_name = ['หิน 3/4(กองสต็อก)','หินใหญ่ขนาด 40-80 มม.(กองสต๊อก)','หินฝุ่น(กองสต๊อก)','หินคลุก']
-    #produce_list = getNumListStoneWeightChart(2, produce_list_name, 4)
+    produce_list_name = ['01ST','16ST','07ST','09ST','10ST']
+    produce_list = getNumListStoneWeightChart(2, produce_list_name, 3)
     produce_list = [0.0, 0.0, 0.0, 0.0, 0.0]
 
     #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
-    #start_date = datetime.strptime(startDateInMonth(request, str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    #end_date = datetime.strptime(endDateInMonth(request, str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    #now_date = datetime.strptime(str(datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d")
-    #เทสระบบ
-    start_date = datetime.strptime('2023-02-01', "%Y-%m-%d")
-    end_date = datetime.strptime('2023-02-28', "%Y-%m-%d")
-    now_date = datetime.strptime('2023-02-16', "%Y-%m-%d")
- 
+    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    now_date = datetime.strptime(str(datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d")
+
     ####################################
     ########### chart mill #############
     ####################################
@@ -226,11 +221,10 @@ def index(request):
     list_persent_loss_weight = [persent_loss_weight_mill3, persent_loss_weight_mill2, persent_loss_weight_mill1, persent_loss_weight_all]
 
     context = { 'weight': weight,
+                'previous_day':previous_day,
                 'actual_working_time_all':actual_working_time_all,
                 'sum_all_weight': sum_all_weight,
-                'stone_type_list': stone_type_list,
                 'sell_list':sell_list,
-                'sell_ex_list':sell_ex_list,
                 'stock_list':stock_list,
                 'produce_list':produce_list,
                 'data_sum_produc_all':data_sum_produc_all,
@@ -309,9 +303,6 @@ def editWeight(request, mode, weight_id):
         template_name = "weight/editWeightStock.html"
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
-
-    #ถ้ามีสิทธิแก้น้ำหนัก
-    print("is editttttttt = " + str(is_edit_weight(request.user)))
 
 
     if request.method == 'POST':
@@ -628,7 +619,7 @@ def exportExcelProductionByStone(request):
 
     my_q &= ~Q(customer_name ='ยกเลิก')
    
-    startDate = datetime.strptime(start_created or startDateInMonth(request, datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    startDate = datetime.strptime(start_created or startDateInMonth(datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d").date()
     endDate = datetime.strptime(end_created or datetime.today().strftime('%Y-%m-%d'), "%Y-%m-%d").date()
 
     #สร้าง list ระหว่าง start_date และ end_date
@@ -640,7 +631,7 @@ def exportExcelProductionByStone(request):
 def exportExcelProductionByStoneInDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
     end_created = datetime.today().strftime('%Y-%m-%d')
-    start_created = startDateInMonth(request, end_created)
+    start_created = startDateInMonth(end_created)
 
     my_q = Q()
     if start_created is not None:
@@ -833,13 +824,13 @@ def removeProduction(request, pd_id):
     return redirect('viewProduction')
 
 #หาวันแรกของเดือนนี้
-def startDateInMonth(request, day):
+def startDateInMonth(day):
     dt = datetime.strptime(f"{day}", '%Y-%m-%d')
     result = dt.replace(day=1).date()
     return f"{result}"
 
 #หาวันสุดท้ายของเดือนนี้
-def endDateInMonth(request, day):
+def endDateInMonth(day):
     dt = datetime.strptime(f"{day}", '%Y-%m-%d')
     day = calendar.monthrange(dt.year, dt.month)[1]
     result = dt.replace(day=day).date()
@@ -929,7 +920,7 @@ def excelProductionAndLoss(request, my_q):
             row_persent_accumulated_produc = ['']
             sum_capacity_per_hour = Decimal('0.0')
             
-            date_from_accumulated = startDateInMonth(request, created_date)
+            date_from_accumulated = startDateInMonth(created_date)
 
             for line_type in BaseLineType.objects.filter(id__in=line_types):
                 production = Production.objects.filter(mill = mill, line_type = line_type, created = created_date).first()
@@ -1046,12 +1037,8 @@ def exportExcelProductionAndLoss(request):
 
 def exportExcelProductionAndLossDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
-    #end_created = datetime.today().strftime('%Y-%m-%d')
-    #start_created = startDateInMonth(request, end_created)
-
-    # เทสระบบ
-    end_created = '2023-02-28'
-    start_created = startDateInMonth(request, end_created)
+    end_created = datetime.today().strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
 
     my_q = Q()
     if start_created is not None:
@@ -1165,9 +1152,8 @@ def calculateEstimate(percent, sum_all):
 def exportExcelStoneEstimateAndProduction(request):
     date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
 
-    # เทสระบบ
-    end_created = '2023-02-28'
-    start_created = startDateInMonth(request, end_created)
+    end_created = datetime.today().strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
 
     my_q = Q()
     if start_created is not None:

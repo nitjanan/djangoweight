@@ -49,6 +49,8 @@ from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 from .tokens import create_jwt_pair_for_user
+import csv
+from io import StringIO
 
 def generate_pastel_color():
     # Generate random pastel colors by restricting the RGB channels within a specific range
@@ -421,9 +423,9 @@ def autocompalteSite(request):
 
 def excelProductionByStone(request, my_q, list_date):
     # Query ข้อมูลขาย
-    data = Weight.objects.filter( my_q, bws__weight_type = 1).order_by('date','mill_name').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    data = Weight.objects.filter( Q(mill='010MA') | Q(mill='011MA') | Q(mill='012MA'),my_q, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     # Query ข้อมูลผลิตรวม
-    data_sum_produc = Weight.objects.filter( my_q, bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').order_by('date','mill_name').values_list('date','mill_name').annotate(sum_weight_total = Sum('weight_total'))
+    data_sum_produc = Weight.objects.filter( Q(site='009PL') | Q(site='010PL') | Q(site='011PL'),my_q, bws__weight_type = 2).order_by('date','site').values_list('date','site_name').annotate(sum_weight_total = Sum('weight_total'))
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -624,13 +626,10 @@ def exportExcelProductionByStone(request):
     if stone_type is not None :
         my_q &=Q(stone_type_name__icontains = stone_type)
 
-    my_q &= ~Q(customer_name ='ยกเลิก') & Q(mill_name__in = ["โรงโม่ 1", "โรงโม่ 2", "โรงโม่ 3"])
+    my_q &= ~Q(customer_name ='ยกเลิก')
    
-    #startDate = datetime.strptime(start_created or '2023-01-01', "%Y-%m-%d").date()
-    #endDate = datetime.strptime(end_created or datetime.today().strftime('%Y-%m-%d'), "%Y-%m-%d").date()
-
-    startDate = datetime.strptime(start_created or '2023-01-01', "%Y-%m-%d").date()
-    endDate = datetime.strptime(end_created or '2023-03-31', "%Y-%m-%d").date()
+    startDate = datetime.strptime(start_created or startDateInMonth(request, datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or datetime.today().strftime('%Y-%m-%d'), "%Y-%m-%d").date()
 
     #สร้าง list ระหว่าง start_date และ end_date
     list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
@@ -640,11 +639,7 @@ def exportExcelProductionByStone(request):
 
 def exportExcelProductionByStoneInDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
-    #end_created = datetime.today().strftime('%Y-%m-%d')
-    #start_created = startDateInMonth(request, end_created)
-
-    # เทสระบบ
-    end_created = '2023-02-28'
+    end_created = datetime.today().strftime('%Y-%m-%d')
     start_created = startDateInMonth(request, end_created)
 
     my_q = Q()
@@ -652,11 +647,9 @@ def exportExcelProductionByStoneInDashboard(request):
         my_q &= Q(date__gte = start_created)
     if end_created is not None:
         my_q &=Q(date__lte = end_created)
-    my_q &= ~Q(customer_name ='ยกเลิก') & Q(mill_name__in = ["โรงโม่ 1", "โรงโม่ 2", "โรงโม่ 3"])
+    my_q &= ~Q(customer_name ='ยกเลิก')
 
-    #startDate = datetime.strptime(start_created or '2023-01-01', "%Y-%m-%d").date()
-    #endDate = datetime.strptime(end_created or datetime.today().strftime('%Y-%m-%d'), "%Y-%m-%d").date()
-
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
     startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
     endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
 
@@ -791,7 +784,6 @@ def editProduction(request, pd_id):
         formset = ProductionLossItemInlineFormset(request.POST, request.FILES, instance=pd_data)
         form = ProductionForm(request.POST, request.FILES, instance=pd_data)
         pd_goal_form = ProductionGoalForm(request.POST, request.FILES, instance=pd_data.pd_goal)
-        print("Form instanceeeeeeeeeee:", form) 
 
         if form.is_valid() and formset.is_valid() and pd_goal_form.is_valid():
             # save production

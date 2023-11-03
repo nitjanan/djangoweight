@@ -81,7 +81,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <tbody>
                   {% for i in base_site%}
                   <tr>
-                    <td><b><a href="{% url 'editBaseSite' i.base_site_id %}">{{i.base_site_id}}</a></b></td>
+                    <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseSite' i.base_site_id %}">{{i.base_site_id}}</a>{% else %}{{i.base_site_id}}{%endif%}</b></td>
                     <td>{{i.base_site_name}}</td>
                     <td>{{i.weight_type.name}}</td>
                   </tr>

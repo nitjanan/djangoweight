@@ -77,7 +77,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <tbody>
                   {% for i in base_stone_type%}
                   <tr>
-                    <td><b><a href="{% url 'editBaseStoneType' i.base_stone_type_id %}">{{i.base_stone_type_id}}</a></b></td>
+                    <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseStoneType' i.base_stone_type_id %}">{{i.base_stone_type_id}}</a>{% else %}{{i.base_stone_type_id}}{%endif%}</b></td>
                     <td>{{i.base_stone_type_name}}</td>
                   </tr>
                   {% empty %}

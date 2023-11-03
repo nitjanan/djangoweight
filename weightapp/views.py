@@ -251,6 +251,9 @@ def is_scale(user):
 def is_edit_weight(user):
     return user.groups.filter(name='edit_weight').exists()
 
+def is_edit_setting(user):
+    return user.groups.filter(name='edit_setting').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -1361,7 +1364,7 @@ def settingBaseMill(request):
     page = request.GET.get('page')
     base_mill = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseMill.html",context)
 
 
@@ -1426,7 +1429,7 @@ def settingBaseJobType(request):
     page = request.GET.get('page')
     base_job_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseJobType.html",context)
 
 
@@ -1487,7 +1490,7 @@ def settingBaseStoneType(request):
     page = request.GET.get('page')
     base_stone_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):
@@ -1552,7 +1555,7 @@ def settingBaseScoop(request):
     page = request.GET.get('page')
     base_scoop = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseScoop.html",context)
 
 def createBaseScoop(request):
@@ -1617,7 +1620,7 @@ def settingBaseCarTeam(request):
     page = request.GET.get('page')
     base_car_team = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseCarTeam.html",context)
 
 def createBaseCarTeam(request):
@@ -1682,7 +1685,7 @@ def settingBaseCar(request):
     page = request.GET.get('page')
     base_car = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseCar.html",context)
 
 def createBaseCar(request):
@@ -1741,7 +1744,7 @@ def settingBaseSite(request):
     page = request.GET.get('page')
     base_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/BaseSite/baseSite.html",context)
 
 def createBaseSite(request):
@@ -1806,7 +1809,7 @@ def settingBaseCustomer(request):
     page = request.GET.get('page')
     base_customer = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/BaseCustomer/baseCustomer.html",context)
 
 def createBaseCustomer(request):
@@ -1871,7 +1874,7 @@ def settingBaseDriver(request):
     page = request.GET.get('page')
     base_driver = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseDriver.html",context)
 
 def createBaseDriver(request):
@@ -1935,7 +1938,7 @@ def settingBaseCarRegistration(request):
     page = request.GET.get('page')
     base_car_registration = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseCarRegistration.html",context)
 
 def createBaseCarRegistration(request):
@@ -1993,7 +1996,7 @@ def settingBaseCustomerSite(request):
     page = request.GET.get('page')
     base_customer_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, }
+    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
 
 def createBaseCustomerSite(request):

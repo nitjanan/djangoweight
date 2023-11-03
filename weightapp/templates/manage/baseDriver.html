@@ -78,7 +78,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <tbody>
                   {% for i in base_driver%}
                   <tr>
-                    <td><b><a href="{% url 'editBaseDriver' i.driver_id %}">{{i.driver_id}}</a></b></td>
+                    <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseDriver' i.driver_id %}">{{i.driver_id}}</a>{% else %}{{i.driver_id}}{%endif%}</b></td>
                     <td>{{i.driver_name}}</td>
                     <td>{{i.company}}</td>
                   </tr>

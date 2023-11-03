@@ -308,6 +308,8 @@ class BaseMillForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสต้นทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 5 or not id.endswith("MA"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxxMA' (e.g., 012MA) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseMill.objects.filter(mill_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -343,6 +345,8 @@ class BaseJobTypeForm(forms.ModelForm):
 
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสประเภทงานผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+        elif BaseJobType.objects.filter(base_job_type_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -381,6 +385,8 @@ class BaseStoneTypeForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 4 or not id.endswith("ST"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxST' (e.g., 23ST) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseStoneType.objects.filter(base_stone_type_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -419,6 +425,8 @@ class BaseScoopForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 4 or not id.endswith("TK"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxTK' (e.g., 23TK) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseScoop.objects.filter(scoop_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -447,6 +455,14 @@ class BaseCarTeamForm(forms.ModelForm):
             name_field = name_field.strip()  # Remove spaces from the beginning and end
         return name_field
     
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('car_team_id')
+
+        if BaseCarTeam.objects.filter(car_team_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
+        return cleaned_data
+    
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.car_team_id = instance.car_team_id.replace(" ", "")
@@ -473,6 +489,14 @@ class BaseCarForm(forms.ModelForm):
         if name_field:
             name_field = name_field.strip()  # Remove spaces from the beginning and end
         return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('car_id')
+
+        if BaseCar.objects.filter(car_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -510,6 +534,8 @@ class BaseSiteForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสปลายทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 5 or not id.endswith("PL"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxxPL' (e.g., 123PL) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseSite.objects.filter(base_site_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -557,6 +583,8 @@ class BaseCustomerForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสลูกค้าผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or not (pattern1.match(id) or pattern2.match(id)):
             raise forms.ValidationError(u"รหัสควรมี  format 'xx-V-xxx' หรือ 'xxRM' (e.g., 01-V-001, 01RM) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseCustomer.objects.filter(customer_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -607,6 +635,8 @@ class BaseDriverForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 4 or not id.endswith("KB"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxKB' (e.g., 23KB) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseDriver.objects.filter(driver_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -653,6 +683,8 @@ class BaseCarRegistrationForm(forms.ModelForm):
             raise forms.ValidationError(u"รหัสทะเบียนรถผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
         elif not id or len(id) != 5 or not id.endswith("CR"):
             raise forms.ValidationError(u"รหัสควรมี  format 'xxxCR' (e.g., 012CR) กรุณาเปลี่ยนรหัสใหม่.")
+        elif BaseCarRegistration.objects.filter(car_registration_id = id).exists():
+            raise forms.ValidationError("มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):

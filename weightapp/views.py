@@ -117,7 +117,7 @@ def index(request):
     current_date = datetime.now()
     previous_day = current_date - timedelta(days=1)
 
-    weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).values('date','customer_name').order_by('customer_name').annotate(sum_weight_total=Sum('weight_total'))
+    weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
     sum_all_weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
     data_sum_produc_all = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
@@ -1759,7 +1759,7 @@ def createBaseSite(request):
         'form':form,
         'setting_page':'active',
         'setting_base_site_page': 'active',
-        'table_name' : 'หน้างาน',
+        'table_name' : 'ปลายทาง',
         'text_mode' : 'เพิ่ม',
     }
 
@@ -1787,7 +1787,7 @@ def editBaseSite(request, id):
         'form':form,
         'setting_page':'active',
         'setting_base_site_page': 'active',
-        'table_name' : 'หน้างาน',
+        'table_name' : 'ปลายทาง',
         'text_mode' : 'เปลี่ยน',
     }
 

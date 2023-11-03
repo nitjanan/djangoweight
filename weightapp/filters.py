@@ -71,8 +71,8 @@ StoneEstimateFilter.base_filters['mill'].label = 'โรงโม่'
 
 
 class BaseMillFilter(django_filters.FilterSet):
-    mill_id = django_filters.CharFilter(field_name="id", lookup_expr='icontains')
-    mill_name = django_filters.CharFilter(field_name="name", lookup_expr='icontains')
+    mill_id = django_filters.CharFilter(field_name="mill_id", lookup_expr='icontains')
+    mill_name = django_filters.CharFilter(field_name="mill_name", lookup_expr='icontains')
 
     class Meta:
         model = BaseMill

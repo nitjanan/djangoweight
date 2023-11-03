@@ -88,11 +88,11 @@ def getSumOther(mode, list_sum_stone, type):
 
     query_filters = Q()
     for item_number_prefix in list_sum_stone:
-        query_filters |= Q(stone_type_name__startswith=item_number_prefix)
+        query_filters |= Q(stone_type = item_number_prefix)
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
-        w = Weight.objects.filter(bws__weight_type = mode, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
         w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:

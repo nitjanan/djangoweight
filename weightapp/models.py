@@ -142,6 +142,7 @@ class BaseCustomer(models.Model):
     weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True, verbose_name="ชนิดเครื่องชั่ง")
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     v_stamp = models.DateTimeField(auto_now=True)
+    is_disable = models.BooleanField(default=False, verbose_name="ปิดการใช้งาน")
     
     class Meta:
         db_table = 'base_customer'

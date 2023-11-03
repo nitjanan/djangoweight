@@ -362,7 +362,7 @@ class BaseJobTypeForm(forms.ModelForm):
 class BaseStoneTypeForm(forms.ModelForm):
     class Meta:
        model = BaseStoneType
-       fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q', 'is_stone_estimate',)
+       fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q',)
        widgets = {
         }
        labels = {
@@ -550,7 +550,7 @@ class BaseSiteForm(forms.ModelForm):
 class BaseCustomerForm(forms.ModelForm):
     class Meta:
        model = BaseCustomer
-       fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to','is_stone_estimate')
+       fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to',)
        widgets = {
            
         }

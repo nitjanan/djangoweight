@@ -1798,7 +1798,7 @@ def editBaseSite(request, id):
 
 ################### BaesCustomer ####################
 def settingBaseCustomer(request):
-    data = BaseCustomer.objects.all().order_by('-weight_type_id','-customer_id')
+    data = BaseCustomer.objects.filter(is_disable = False).order_by('-weight_type_id','-customer_id')
 
     #กรองข้อมูล
     myFilter = BaseCustomerFilter(request.GET, queryset = data)
@@ -2367,7 +2367,8 @@ def baseCustomerUpdate(request, pk):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def baseCustomerVStamp(request, dt):
-    queryset = BaseCustomer.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    # รายการ disable ไม่ให้อัพเดท (เนื่องจากไม่ได้ใช้งานแล้ว แต่ต้องเก็บข้อมูลไว้)
+    queryset = BaseCustomer.objects.filter(v_stamp__gte = dt, is_disable = False).order_by('v_stamp')
     serializer = BaseCustomerSerializer(queryset, many = True)
     return Response(serializer.data)
 

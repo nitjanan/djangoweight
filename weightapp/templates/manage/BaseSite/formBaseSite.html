@@ -115,4 +115,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+<script>
+  id_name = "{{id_name}}";
+  if("{{mode}}" == 1){
+    $(id_name).prop('readonly', true);
+  }
+</script>
 {% endblock %}

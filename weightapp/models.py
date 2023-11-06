@@ -65,6 +65,7 @@ class BaseCar(models.Model):
         db_table = 'base_car'
         verbose_name = 'รถร่วมและทีม'
         verbose_name_plural = 'ข้อมูลรถร่วมและทีม'
+        unique_together = 'car_name', 'base_car_team'
 
     def __str__(self):
         return self.car_id

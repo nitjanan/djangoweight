@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -34,6 +34,7 @@ from re import escape as reescape
 from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat
 from django.contrib.auth.decorators import login_required
+from django.urls import reverse
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework import generics, viewsets, permissions, status
@@ -1369,38 +1370,15 @@ def settingBaseMill(request):
 
 
 def createBaseMill(request):
-    form = BaseMillForm(request.POST or None)
-    if form.is_valid():
-        form = BaseMillForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+    form = BaseMillForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseMill.objects.filter(mill_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseMill')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_mill_page': 'active',
-        'table_name' : 'ต้นทาง',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/formBase.html", context)
-
-def editBaseMill(request, id):
-    data = BaseMill.objects.get(mill_id = id)
-    form = BaseMillForm(instance=data)
-    if request.method == 'POST':
-        form = BaseMillForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                mill_form = form.save()
-
-                # update weight ด้วย
-                weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
-                weights.update(mill_name = mill_form.mill_name)
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1411,7 +1389,37 @@ def editBaseMill(request, id):
         'setting_page':'active',
         'setting_base_mill_page': 'active',
         'table_name' : 'ต้นทาง',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_mill_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseMill(request, id):
+    obj = get_object_or_404(BaseMill, mill_id = id)
+ 
+    form = BaseMillForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            mill_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
+            weights.update(mill_name = mill_form.mill_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseMill')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_mill_page': 'active',
+        'table_name' : 'ต้นทาง',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_mill_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1432,36 +1440,16 @@ def settingBaseJobType(request):
     context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseJobType.html",context)
 
-
 def createBaseJobType(request):
-    form = BaseJobTypeForm(request.POST or None)
-    if form.is_valid():
-        form = BaseJobTypeForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+    form = BaseJobTypeForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseJobType.objects.filter(base_job_type_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseJobType')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_job_type_page': 'active',
-        'table_name' : 'ประเภทงานของลูกค้า',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/formBase.html", context)
-
-def editBaseJobType(request, id):
-    data = BaseJobType.objects.get(base_job_type_id = id)
-    form = BaseJobTypeForm(instance=data)
-    if request.method == 'POST':
-        form = BaseJobTypeForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                job_type_form = form.save()
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1472,9 +1460,34 @@ def editBaseJobType(request, id):
         'setting_page':'active',
         'setting_base_job_type_page': 'active',
         'table_name' : 'ประเภทงานของลูกค้า',
-        'text_mode' : 'เปลี่ยน',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_base_job_type_id',
+        'mode' : 0,
     }
+    return render(request, "manage/formBase.html", context)
 
+def editBaseJobType(request, id):
+    obj = get_object_or_404(BaseJobType, base_job_type_id = id)
+ 
+    form = BaseJobTypeForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseJobType')
+ 
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_job_type_page': 'active',
+        'table_name' : 'ประเภทงานของลูกค้า',
+        'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_base_job_type_id',
+        'mode' : 1,
+    }
+ 
     return render(request, "manage/formBase.html", context)
 
 ################### BaesStoneType ####################
@@ -1494,11 +1507,43 @@ def settingBaseStoneType(request):
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):
-    form = BaseStoneTypeForm(request.POST or None)
+    form = BaseStoneTypeForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseStoneType.objects.filter(base_stone_type_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
+        else:
+            try:
+                new_contact.save()
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseStoneType')
+            
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_stone_type_page': 'active',
+        'table_name' : 'ชนิดหิน',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_base_stone_type_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseStoneType(request, id):            
+    obj = get_object_or_404(BaseStoneType, base_stone_type_id = id)
+ 
+    form = BaseStoneTypeForm(request.POST or None, instance = obj)
     if form.is_valid():
-        form = BaseStoneTypeForm(request.POST or None, request.FILES)
         try:
-            form.save()
+            stone_type_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
+            weights.update(stone_type_name = stone_type_form.base_stone_type_name)
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -1509,35 +1554,9 @@ def createBaseStoneType(request):
         'setting_page':'active',
         'setting_base_stone_type_page': 'active',
         'table_name' : 'ชนิดหิน',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/formBase.html", context)
-
-def editBaseStoneType(request, id):
-    data = BaseStoneType.objects.get(base_stone_type_id = id)
-    
-    form = BaseStoneTypeForm(instance=data)
-    if request.method == 'POST':
-        form = BaseStoneTypeForm(request.POST, instance=data)
-        if form.is_valid():
-            try:
-                stone_type_form = form.save()
-
-                # update weight ด้วย
-                weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
-                weights.update(stone_type_name = stone_type_form.base_stone_type_name)
-            except IntegrityError:
-                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
-            else:
-                return redirect('settingBaseStoneType')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_stone_type_page': 'active',
-        'table_name' : 'ชนิดหิน',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_base_stone_type_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1558,40 +1577,16 @@ def settingBaseScoop(request):
     context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseScoop.html",context)
 
-def createBaseScoop(request):
-    form = BaseScoopForm(request.POST or None)
-    if form.is_valid():
-        form = BaseScoopForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+def createBaseScoop(request):        
+    form = BaseScoopForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseScoop.objects.filter(scoop_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseScoop')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_scoop_page': 'active',
-        'table_name' : 'ผู้ตัก',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/formBase.html", context)
-
-def editBaseScoop(request, id):
-    data = BaseScoop.objects.get(scoop_id = id)
-    
-    form = BaseScoopForm(instance=data)
-    if request.method == 'POST':
-        form = BaseScoopForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                scoop_form = form.save()
-
-                # update weight ด้วย
-                weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
-                weights.update(scoop_name = scoop_form.scoop_name)
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1602,7 +1597,37 @@ def editBaseScoop(request, id):
         'setting_page':'active',
         'setting_base_scoop_page': 'active',
         'table_name' : 'ผู้ตัก',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_scoop_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseScoop(request, id):            
+    obj = get_object_or_404(BaseScoop, scoop_id = id)
+ 
+    form = BaseScoopForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            scoop_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
+            weights.update(scoop_name = scoop_form.scoop_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseScoop')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_scoop_page': 'active',
+        'table_name' : 'ผู้ตัก',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_scoop_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1623,40 +1648,16 @@ def settingBaseCarTeam(request):
     context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/baseCarTeam.html",context)
 
-def createBaseCarTeam(request):
-    form = BaseCarTeamForm(request.POST or None)
-    if form.is_valid():
-        form = BaseCarTeamForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+def createBaseCarTeam(request):    
+    form = BaseCarTeamForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseCarTeam.objects.filter(car_team_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseCarTeam')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_car_team_page': 'active',
-        'table_name' : 'ทีม',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/formBase.html", context)
-
-def editBaseCarTeam(request, id):
-    data = BaseCarTeam.objects.get(car_team_id = id)
-    
-    form = BaseCarTeamForm(instance=data)
-    if request.method == 'POST':
-        form = BaseCarTeamForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                car_team_form = form.save()
-
-                # update weight ด้วย
-                weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
-                weights.update(car_team_name = car_team_form.car_team_name)
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1667,7 +1668,37 @@ def editBaseCarTeam(request, id):
         'setting_page':'active',
         'setting_base_car_team_page': 'active',
         'table_name' : 'ทีม',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_car_team_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/formBase.html", context)
+
+def editBaseCarTeam(request, id):            
+    obj = get_object_or_404(BaseCarTeam, car_team_id = id)
+ 
+    form = BaseCarTeamForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            car_team_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
+            weights.update(car_team_name = car_team_form.car_team_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseCarTeam')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_car_team_page': 'active',
+        'table_name' : 'ทีม',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_car_team_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1689,11 +1720,19 @@ def settingBaseCar(request):
     return render(request, "manage/baseCar.html",context)
 
 def createBaseCar(request):
-    form = BaseCarForm(request.POST or None)
-    if form.is_valid():
-        form = BaseCarForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseCar')
+    form = BaseCarForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseCar.objects.filter(car_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
+        else:
+            try:
+                new_contact.save()
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseCar')
 
     context = {
         'form':form,
@@ -1701,17 +1740,18 @@ def createBaseCar(request):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_car_id',
+        'mode' : 0,
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseCar(request, id):
-    data = BaseCar.objects.get(car_id = id)
-    
-    form = BaseCarForm(instance=data)
-    if request.method == 'POST':
-        form = BaseCarForm(request.POST, instance=data)
-        if form.is_valid():
+def editBaseCar(request, id):        
+    obj = get_object_or_404(BaseCar, car_id = id)
+ 
+    form = BaseCarForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
             car_form = form.save()
 
             '''
@@ -1719,6 +1759,9 @@ def editBaseCar(request, id):
             weights = Weight.objects.filter(scoop_id = scoop_form.pk)
             weights.update(scoop_name = scoop_form.scoop_name)         
             '''
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
             return redirect('settingBaseCar')
 
     context = {
@@ -1727,6 +1770,8 @@ def editBaseCar(request, id):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_car_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1747,40 +1792,16 @@ def settingBaseSite(request):
     context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
     return render(request, "manage/BaseSite/baseSite.html",context)
 
-def createBaseSite(request):
-    form = BaseSiteForm(request.POST or None)
-    if form.is_valid():
-        form = BaseSiteForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+def createBaseSite(request): 
+    form = BaseSiteForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseSite.objects.filter(base_site_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseSite')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_site_page': 'active',
-        'table_name' : 'ปลายทาง',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/BaseSite/formBaseSite.html", context)
-
-def editBaseSite(request, id):
-    data = BaseSite.objects.get(base_site_id = id)
-    
-    form = BaseSiteForm(instance=data)
-    if request.method == 'POST':
-        form = BaseSiteForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                site_form = form.save()
-
-                # update weight ด้วย
-                weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
-                weights.update(site_name = site_form.base_site_name)   
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1791,7 +1812,37 @@ def editBaseSite(request, id):
         'setting_page':'active',
         'setting_base_site_page': 'active',
         'table_name' : 'ปลายทาง',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_base_site_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/BaseSite/formBaseSite.html", context)
+
+def editBaseSite(request, id):
+    obj = get_object_or_404(BaseSite, base_site_id = id)
+ 
+    form = BaseSiteForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            site_form = form.save()
+
+            # update weight ด้วย
+            weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
+            weights.update(site_name = site_form.base_site_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseStoneType')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_site_page': 'active',
+        'table_name' : 'ปลายทาง',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_base_site_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/BaseSite/formBaseSite.html", context)
@@ -1813,39 +1864,15 @@ def settingBaseCustomer(request):
     return render(request, "manage/BaseCustomer/baseCustomer.html",context)
 
 def createBaseCustomer(request):
-    form = BaseCustomerForm(request.POST or None)
-    if form.is_valid():
-        form = BaseCustomerForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+    form = BaseCustomerForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseCustomer.objects.filter(customer_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseCustomer')
-
-    context = {
-        'form':form,
-        'setting_page':'active',
-        'setting_base_customer_page': 'active',
-        'table_name' : 'ลูกค้า',
-        'text_mode' : 'เพิ่ม',
-    }
-
-    return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
-
-def editBaseCustomer(request, id):
-    data = BaseCustomer.objects.get(customer_id = id)
-    
-    form = BaseCustomerForm(instance=data)
-    if request.method == 'POST':
-        form = BaseCustomerForm(request.POST, instance=data)
-        if form.is_valid():
             try:
-                customer_form = form.save()
-
-                # update weight ด้วย iiiiiiiiiiiiiii
-                weights = Weight.objects.filter(customer_id = customer_form.pk)
-                weights.update(customer_name = customer_form.customer_name)
+                new_contact.save()
             except IntegrityError:
                 form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
             else:
@@ -1856,7 +1883,37 @@ def editBaseCustomer(request, id):
         'setting_page':'active',
         'setting_base_customer_page': 'active',
         'table_name' : 'ลูกค้า',
+        'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_customer_id',
+        'mode' : 0,
+    }
+
+    return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
+
+def editBaseCustomer(request, id):
+    obj = get_object_or_404(BaseCustomer, customer_id = id)
+ 
+    form = BaseCustomerForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            customer_form = form.save()
+
+            # update weight ด้วย iiiiiiiiiiiiiii
+            weights = Weight.objects.filter(customer_id = customer_form.pk)
+            weights.update(customer_name = customer_form.customer_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseCustomer')
+
+    context = {
+        'form':form,
+        'setting_page':'active',
+        'setting_base_customer_page': 'active',
+        'table_name' : 'ลูกค้า',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_customer_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
@@ -1878,15 +1935,19 @@ def settingBaseDriver(request):
     return render(request, "manage/baseDriver.html",context)
 
 def createBaseDriver(request):
-    form = BaseDriverForm(request.POST or None)
-    if form.is_valid():
-        form = BaseDriverForm(request.POST or None, request.FILES)
-        try:
-            form.save()
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+    form = BaseDriverForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseDriver.objects.filter(driver_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseDriver')
+            try:
+                new_contact.save()
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseDriver')
 
     context = {
         'form':form,
@@ -1894,33 +1955,36 @@ def createBaseDriver(request):
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_driver_id',
+        'mode' : 0,
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseDriver(request, id):
-    data = BaseDriver.objects.get(driver_id = id)
-    
-    form = BaseDriverForm(instance=data)
-    if request.method == 'POST':
-        form = BaseDriverForm(request.POST, instance=data)
-        if form.is_valid():
-            try:
-                driver_form = form.save()
+def editBaseDriver(request, id):            
+    obj = get_object_or_404(BaseDriver, driver_id = id)
+ 
+    form = BaseDriverForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
+            driver_form = form.save()
 
-                # update weight ด้วย
-                weights = Weight.objects.filter(driver_id = driver_form.pk)
-                weights.update(driver_name = driver_form.driver_name)
-            except IntegrityError:
-                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
-            else:
-                return redirect('settingBaseDriver')
+            # update weight ด้วย
+            weights = Weight.objects.filter(driver_id = driver_form.pk)
+            weights.update(driver_name = driver_form.driver_name)
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
+            return redirect('settingBaseDriver')
+        
     context = {
         'form':form,
         'setting_page':'active',
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_driver_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)
@@ -1942,11 +2006,19 @@ def settingBaseCarRegistration(request):
     return render(request, "manage/baseCarRegistration.html",context)
 
 def createBaseCarRegistration(request):
-    form = BaseCarRegistrationForm(request.POST or None)
-    if form.is_valid():
-        form = BaseCarRegistrationForm(request.POST or None, request.FILES)
-        form.save()
-        return redirect('settingBaseCarRegistration')
+    form = BaseCarRegistrationForm(request.POST or None) 
+    if form.is_valid(): 
+        new_contact = form.save(commit = False)
+        duplicate = BaseCarRegistration.objects.filter(car_registration_id = new_contact.pk).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
+        else:
+            try:
+                new_contact.save()
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseCarRegistration')
 
     context = {
         'form':form,
@@ -1954,23 +2026,26 @@ def createBaseCarRegistration(request):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เพิ่ม',
+        'id_name' : '#id_car_registration_id',
+        'mode' : 0,
     }
 
     return render(request, "manage/formBase.html", context)
 
 def editBaseCarRegistration(request, id):
-    data = BaseCarRegistration.objects.get(car_registration_id = id)
-    
-    form = BaseCarRegistrationForm(instance=data)
-    if request.method == 'POST':
-        form = BaseCarRegistrationForm(request.POST, instance=data)
-        if form.is_valid():
+    obj = get_object_or_404(BaseCarRegistration, car_registration_id = id)
+ 
+    form = BaseCarRegistrationForm(request.POST or None, instance = obj)
+    if form.is_valid():
+        try:
             car_registration_form = form.save()
 
             # update weight ด้วย
             weights = Weight.objects.filter(car_registration_id = car_registration_form.pk)
             weights.update(car_registration_name = car_registration_form.car_registration_name)
-
+        except IntegrityError:
+            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        else:
             return redirect('settingBaseCarRegistration')
 
     context = {
@@ -1979,6 +2054,8 @@ def editBaseCarRegistration(request, id):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เปลี่ยน',
+        'id_name' : '#id_car_registration_id',
+        'mode' : 1,
     }
 
     return render(request, "manage/formBase.html", context)

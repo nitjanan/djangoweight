@@ -55,11 +55,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
-                <ul class="errorlist">
-                  {% for error in form.non_field_errors %}
-                      <li class="text-danger">{{ error }}</li>
-                  {% endfor %}
-                </ul>
                 {{form | crispy}}
                 <div class="col-12 d-flex justify-content-end">
                   {% if text_mode == 'เปลี่ยน' %}
@@ -108,5 +103,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
 <script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
 <script src="{% static 'js/pages/datatables.js' %}"></script>
-
+<script>
+  id_name = "{{id_name}}";
+  if("{{mode}}" == 1){
+    $(id_name).prop('readonly', true);
+  }
+</script>
 {% endblock %}

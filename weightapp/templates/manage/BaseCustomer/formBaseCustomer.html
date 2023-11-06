@@ -109,6 +109,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 <script type="text/javascript">
+
+  id_name = "{{id_name}}";
+    if("{{mode}}" == 1){
+      $(id_name).prop('readonly', true);
+  }
+
   //After load
   $("#id_weight_type").prop('required',true);
 

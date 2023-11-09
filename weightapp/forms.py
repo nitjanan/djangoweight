@@ -217,7 +217,7 @@ class WeightForm(forms.ModelForm):
     scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())    
     '''
 
-    stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all())
+    stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
 
     class Meta:

@@ -15,6 +15,7 @@ class WeightFilter(django_filters.FilterSet):
     stone_type_name = django_filters.CharFilter(field_name="stone_type_name", lookup_expr='icontains')
     weight_type =  django_filters.ModelChoiceFilter(field_name="bws__weight_type", queryset= BaseWeightType.objects.all())
     vat_type =  django_filters.ModelChoiceFilter(field_name="bws__vat_type", queryset= BaseVatType.objects.all())
+    lc = django_filters.CharFilter(field_name="base_weight_station_name", lookup_expr='icontains')
 
     class Meta:
         model = Weight
@@ -30,6 +31,7 @@ WeightFilter.base_filters['customer_name'].label = 'ชื่อลูกค้�
 WeightFilter.base_filters['stone_type_name'].label = 'ชนิดหิน'
 WeightFilter.base_filters['weight_type'].label = 'ประเภทชั่ง'
 WeightFilter.base_filters['vat_type'].label = 'vat'
+WeightFilter.base_filters['lc'].label = 'lc.'
 
 
 class ProductionFilter(django_filters.FilterSet):
@@ -133,6 +135,7 @@ BaseCarTeamFilter.base_filters['car_team_name'].label = 'ชื่อทีม'
 class BaseCarFilter(django_filters.FilterSet):
     car_id = django_filters.CharFilter(field_name="car_id", lookup_expr='icontains')
     car_name = django_filters.CharFilter(field_name="car_name", lookup_expr='icontains')
+    base_car_team = django_filters.CharFilter(field_name="base_car_team__car_team_name", lookup_expr='icontains')
 
     class Meta:
         model = BaseCar

@@ -80,21 +80,27 @@ input.del[type=checkbox] {
                     <div class="col-md-4 form-group mt-2">
                       <fieldset id="pay_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินสด">
+                          <input class="form-check-input" type="radio" name="pay_group" id="pg_1" checked="" value="เงินสด" onclick="radiostateP1(this)">
                           <label class="form-check-label" for="Primary">
                             เงินสด
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินเชื่อ">
+                          <input class="form-check-input" type="radio" name="pay_group" id="pg_2" checked="" value="เงินเชื่อ" onclick="radiostateP2(this)">
                           <label class="form-check-label" for="Primary">
                             เงินเชื่อ
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="Primary" checked="" value="เงินโอน">
+                          <input class="form-check-input" type="radio" name="pay_group" id="pg_3" checked="" value="เงินโอน" onclick="radiostateP3(this)">
                           <label class="form-check-label" for="Primary">
                             เงินโอน
+                          </label>
+                        </div>
+                        <div class="d-none form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="pay_group" id="pg_4" checked="" value="">
+                          <label class="form-check-label" for="Primary">
+                            ว่าง
                           </label>
                         </div>
                       </fieldset>
@@ -182,21 +188,27 @@ input.del[type=checkbox] {
                     <div class="col-md-5 form-group">
                       <fieldset id="clean_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="ล้างหิน">
+                          <input class="form-check-input" type="radio" name="clean_group" id="cg_1" checked="" value="ล้างหิน" onclick="radiostateCg1(this)">
                           <label class="form-check-label" for="Primary">
                             ล้างหิน
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="สเปรย์น้ำ">
+                          <input class="form-check-input" type="radio" name="clean_group" id="cg_2" checked="" value="สเปรย์น้ำ" onclick="radiostateCg2(this)">
                           <label class="form-check-label" for="Primary">
                             สเปรย์น้ำ
                           </label>
                         </div>
                         <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="clean_group" id="Primary" checked="" value="ไม่มี">
+                          <input class="form-check-input" type="radio" name="clean_group" id="cg_3" checked="" value="ไม่มี" onclick="radiostateCg3(this)">
                           <label class="form-check-label" for="Primary">
                             ไม่มี
+                          </label>
+                        </div>
+                        <div class="d-none form-check form-check-primary form-check-inline me-4">
+                          <input class="form-check-input" type="radio" name="clean_group" id="cg_4" checked="" value="">
+                          <label class="form-check-label" for="Primary">
+                            ว่าง
                           </label>
                         </div>
                       </fieldset>
@@ -409,10 +421,89 @@ input.del[type=checkbox] {
     setDataEmptyName("#id_scoop", "#id_scoop_name");
 
     //set data radio
-    $("#id_pay").val($('input[name="pay_group"]:checked').val());
-    $("#id_clean_type").val($('input[name="clean_group"]:checked').val());
+    //pay
+    var pay_val = $('input[name="pay_group"]:checked').val();
+    if(pay_val == undefined)
+      $("#id_pay").val("");
+    else
+      $("#id_pay").val(pay_val);
+
+    //clean
+    var clean_val = $('input[name="clean_group"]:checked').val();
+    if(clean_val == undefined)
+      $("#id_clean_type").val("");
+    else
+      $("#id_clean_type").val(clean_val);
+
+    //vat 
     $("#id_vat_type").val($('input[name="vat_type_group"]:checked').val());
   });
+
+  var stateP1 = false;
+  function radiostateP1(element){
+    if(stateP1 == false) {
+      element.checked = true;
+      stateP1 = true;
+    }else{
+      element.checked = false;
+      stateP1 = false;
+    }
+  }
+
+  var stateP2 = false;
+  function radiostateP2(element){
+    if(stateP2 == false) {
+      element.checked = true;
+      stateP2 = true;
+    }else{
+      element.checked = false;
+      stateP2 = false;
+    }
+  }
+
+  var stateP3 = false;
+  function radiostateP3(element){
+    if(stateP3 == false) {
+      element.checked = true;
+      stateP3 = true;
+    }else{
+      element.checked = false;
+      stateP3 = false;
+    }
+  }
+
+  var stateCg1 = false;
+  function radiostateCg1(element){
+    if(stateCg1 == false) {
+      element.checked = true;
+      stateCg1 = true;
+    }else{
+      element.checked = false;
+      stateCg1 = false;
+    }
+  }
+
+  var stateCg2 = false;
+  function radiostateCg2(element){
+    if(stateCg2 == false) {
+      element.checked = true;
+      stateCg2 = true;
+    }else{
+      element.checked = false;
+      stateCg2 = false;
+    }
+  }
+
+  var stateCg3 = false;
+  function radiostateCg3(element){
+    if(stateCg3 == false) {
+      element.checked = true;
+      stateCg3 = true;
+    }else{
+      element.checked = false;
+      stateCg3 = false;
+    }
+  }
 
   function setDataEmptyName(fk, name){
     if($(fk+" option:selected").index() > 0) {

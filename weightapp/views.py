@@ -255,6 +255,9 @@ def is_edit_weight(user):
 def is_edit_setting(user):
     return user.groups.filter(name='edit_setting').exists()
 
+def is_view_weight(user):
+    return user.groups.filter(name='view_weight').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -279,9 +282,9 @@ def weightTable(request):
 
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
-        data = Weight.objects.filter(scale_id__in = us).order_by('date','weight_id')
-    elif request.user.is_superuser:
-        data = Weight.objects.all().order_by('date','weight_id')
+        data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
+    elif request.user.is_superuser or is_view_weight(request.user):
+        data = Weight.objects.all().order_by('-date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -292,7 +295,7 @@ def weightTable(request):
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', }
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user)}
     return render(request, "weight/weightTable.html",context)
 
 @login_required

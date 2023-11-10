@@ -283,7 +283,7 @@ def weightTable(request):
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
         data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
-    elif request.user.is_superuser or is_view_weight(request.user):
+    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user):
         data = Weight.objects.all().order_by('-date','weight_id')
 
     #กรองข้อมูล

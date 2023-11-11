@@ -1190,8 +1190,13 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
 def excelStoneEstimateAndProduction(request, my_q):
     date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
 
-    end_created = datetime.today().strftime('%Y-%m-%d')
-    start_created = startDateInMonth(end_created)
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    if end_created is None:
+       end_created = datetime.today().strftime('%Y-%m-%d')
+    if start_created is None:
+       start_created = startDateInMonth(end_created)
 
     se_site = StoneEstimate.objects.filter(my_q).values_list('site',flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = se_site)
@@ -1209,7 +1214,7 @@ def excelStoneEstimateAndProduction(request, my_q):
 
         list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=('2023-11-01', '2023-11-30'), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
+        mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=(start_created, end_created), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2

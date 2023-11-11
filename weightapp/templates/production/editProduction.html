@@ -59,12 +59,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <div class="row">
                 {% csrf_token %}
                 <div class="col-md-2">
-                  <p class="fw-bolder">{{form.mill.label}}</p>
+                  <p class="fw-bolder">{{form.site.label}}</p>
                 </div>
                 <div class="col-md-10">
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
-                      {{form.mill | add_class:"form-control" |attr:"required:true"}}
+                      {{form.site | add_class:"form-control" |attr:"required:true"}}
                       <div class="form-control-icon">
                         <i class="fa-solid fa-industry"></i>
                       </div>
@@ -305,7 +305,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   
   $('form').submit(function() {
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
-    if($("#id_mill").val() == '03'){
+    if($("#id_site").val() == '011PL'){
       $('#id_run_start_time').val('');
       $('#id_run_end_time').val('');
     }
@@ -314,10 +314,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       $('#id_mile_run_end_time').val('');
     }
 
-    //เช็คว่าวันนี้มี save โรงโม่ และ line นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+    //เช็คว่าวันนี้มี save ปลายทาง และ line นี้หรือยัง ถ้ามีแล้วไม่ให้ save
     if(have_production){
-      $("#id_mill").trigger( "focus" );
-      alert('มีข้อมูลโรงโม่ และ line ของวันนี้อยู่แล้ว กรุณาเปลี่ยน โรงโม่ และ line');
+      $("#id_site").trigger( "focus" );
+      alert('มีข้อมูลปลายทาง และ line ของวันนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง และ line');
       return false;
     }
 
@@ -326,7 +326,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     //after load
     $(window).on('load', function() {
   
-      if($("#id_mill").val() == '03'){
+      if($("#id_site").val() == '011PL'){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -342,8 +342,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
   });
 
-  $("#id_mill").on( "change", function() {
-    if($(this).val() == '03'){
+  $("#id_site").on( "change", function() {
+    if($(this).val() == '011PL'){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -360,23 +360,23 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       
   } );
 
-  $('#id_mill, #id_line_type, #id_created').change(function() {
+  $('#id_site, #id_line_type, #id_created').change(function() {
       searchProductionGoal();
   });
 
 	function searchProductionGoal(){
-        var mill = $("#id_mill").val();
+        var site = $("#id_site").val();
         var line_type = $("#id_line_type").val();
         var created = $("#id_created").val();
         var pd_id = '{{pd.id}}';
 
         // Create Ajax Call
-        if(mill && line_type && created){
+        if(site && line_type && created){
                 //set id_distributor
               $.ajax({
                 url: '{% url "searchProductionGoal" %}',
                 data: {
-                        'mill_id': mill,
+                        'site_id': site,
                         'line_type_id': line_type,
                         'created': created,
                         'pd_id':pd_id,

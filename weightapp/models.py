@@ -596,14 +596,15 @@ def calculatorDiffTime(start_time, end_time):
 class ProductionGoal(models.Model):
     date = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต")
     accumulated_goal = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#เป้าสะสมของเดือนปีนั้นๆ
-    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
     line_type = models.ForeignKey(BaseLineType,on_delete=models.CASCADE, null = True, blank=True)
+    site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ปลายทาง")
 
     class Meta:
         db_table = 'production_goal'
 
 class Production(models.Model):
-    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ปลายทาง")
+    
     line_type = models.ForeignKey(BaseLineType,on_delete=models.CASCADE, null = True, blank=True)
 
     created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ผลิต

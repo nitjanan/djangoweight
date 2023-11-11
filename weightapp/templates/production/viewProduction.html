@@ -55,7 +55,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               {{ filter.form.end_created|as_crispy_field }}
             </div>
             <div class="form-group col-md-2 mb-0">
-              {{ filter.form.mill|as_crispy_field }}
+              {{ filter.form.site|as_crispy_field }}
             </div>
             <div class="form-group col-md-1 mb-0">
               {{ filter.form.line_type|as_crispy_field }}
@@ -100,7 +100,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   {% for i in product%}
                   <tr>
                     <td>{{i.created}}</td>
-                    <td>{{i.mill}}</td>
+                    <td>{{i.site}}</td>
                     <td>{{i.line_type}}</td>
                     <!--td>
                       {% for item in i.productionlossitem_set.all %}

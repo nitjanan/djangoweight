@@ -149,9 +149,9 @@ def index(request):
     list_date_between = pd.date_range(start_date, end_date).tolist()
     list_date = [date.strftime("%Y-%m-%d") for date in list_date_between]
 
-    sum_goal_mill_1 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 1').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_2 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 2').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_3 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , mill__mill_name = 'โรงโม่ 3').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_1 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '009PL').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_2 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '010PL').aggregate(s=Sum('accumulated_goal'))["s"]
+    sum_goal_mill_3 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '011PL').aggregate(s=Sum('accumulated_goal'))["s"]
 
     list_goal_mill_1 = []
     list_goal_mill_2 = []
@@ -159,24 +159,21 @@ def index(request):
 
     weight_mill1 = Weight.objects.filter(
         date__range=(start_date, end_date),
-        mill_name='โรงโม่ 1',
-        stone_type_name__icontains='เข้าโม่'
+        site = '009PL'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
 
     weight_mill2 = Weight.objects.filter(
         date__range=(start_date, end_date),
-        mill_name='โรงโม่ 2',
-        stone_type_name__icontains='เข้าโม่'
+        site = '010PL'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
 
     weight_mill3 = Weight.objects.filter(
         date__range=(start_date, end_date),
-        mill_name='โรงโม่ 3',
-        stone_type_name__icontains='เข้าโม่'
+        site = '011PL'
     ).values('date').annotate(
         cumulative_total=Sum('weight_total', distinct=True),
     ).order_by('date')
@@ -202,17 +199,17 @@ def index(request):
         list_goal_mill_3.append(calculatePersent(cumulative_total3, sum_goal_mill_3))
 
     ####################################
-    ######## chart loss weight #########
+    ##chart loss weight เวลาที่เสีย (ผลิต)##
     ####################################
     actual_working_time_all = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 1').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 2').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', mill__mill_name = 'โรงโม่ 3').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '009PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '010PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '011PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
     total_loss_time_all = Production.objects.filter(created__range = (start_date, end_date)).aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 1').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill2 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 2').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill3 = Production.objects.filter(created__range = (start_date, end_date), mill__mill_name = 'โรงโม่ 3').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), site = '009PL').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill2 = Production.objects.filter(created__range = (start_date, end_date), site = '010PL').aggregate(s=Sum('total_loss_time'))["s"]
+    total_loss_time_mill3 = Production.objects.filter(created__range = (start_date, end_date), site = '011PL').aggregate(s=Sum('total_loss_time'))["s"]
     
     persent_loss_weight_all = calculatePersent(total_loss_time_all if total_loss_time_all else None, actual_working_time_all)
     persent_loss_weight_mill1 = calculatePersent(total_loss_time_mill1 if total_loss_time_mill1 else None, actual_working_time_mill1)
@@ -658,7 +655,7 @@ def exportExcelProductionByStoneInDashboard(request):
     return response
 
 def viewProduction(request):
-    data = Production.objects.all().order_by('-created', 'mill')
+    data = Production.objects.all().order_by('-created', 'site')
 
     #กรองข้อมูล
     myFilter = ProductionFilter(request.GET, queryset = data)
@@ -702,8 +699,8 @@ def setDurationTime(request, duration):
     return result
 
 def searchProductionGoal(request):
-    if 'mill_id' in request.GET and 'line_type_id' in request.GET and 'created' in request.GET and 'pd_id' in request.GET:
-        mill_id = request.GET.get('mill_id')
+    if 'site_id' in request.GET and 'line_type_id' in request.GET and 'created' in request.GET and 'pd_id' in request.GET:
+        site_id = request.GET.get('site_id')
         line_type_id = request.GET.get('line_type_id')
         created =  request.GET.get('created')
         pd_id =  request.GET.get('pd_id')
@@ -711,14 +708,14 @@ def searchProductionGoal(request):
         date_object = datetime.strptime(created, "%Y-%m-%d")
 
         #เอาออก line_type__id = line_type_id เพราะโรงโม่เดียวกันใช้เป้าผลิตเท่ากัน
-        pd_goal = ProductionGoal.objects.filter(date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , mill__mill_id = mill_id).values('mill', 'line_type', 'date' , 'accumulated_goal', 'id')
+        pd_goal = ProductionGoal.objects.filter(date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , site = site_id).values('site', 'line_type', 'date' , 'accumulated_goal', 'id')
         #if pd_id == '' create mode , else edit mode
         if pd_id == '':
-            have_production = Production.objects.filter(created = created, mill__mill_id = mill_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(created = created, site = site_id, line_type__id = line_type_id ).exists()
         else:
-            have_production = Production.objects.filter(~Q(id = pd_id), created = created, mill__mill_id = mill_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(~Q(id = pd_id), created = created, site = site_id, line_type__id = line_type_id ).exists()
         #ดึงข้อมูล line 1 มาเพื่อไป set default ใน line อื่นๆ
-        pd_line1 = Production.objects.filter(created = created, mill__mill_id = mill_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
+        pd_line1 = Production.objects.filter(created = created, site = site_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
         
         
     data = {
@@ -746,7 +743,7 @@ def createProduction(request):
             else:
                 pd_goal = ProductionGoal.objects.create(accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal'])
             
-            pd_goal.mill = production.mill
+            pd_goal.site = production.site
             pd_goal.line_type = production.line_type
             pd_goal.date = production.created
             pd_goal.save()
@@ -776,7 +773,7 @@ def editProduction(request, pd_id):
     pd_data = Production.objects.get(id = pd_id)
 
     #หาบันทึกปฎิบัติการของวันนี้ เพื่อเช็คไม่ให้ save mill และ line ซ้ำกัน
-    production_on_day = Production.objects.filter(~Q(id = pd_data.id), created = datetime.today()).values('mill', 'line_type', 'created')
+    production_on_day = Production.objects.filter(~Q(id = pd_data.id), created = datetime.today()).values('site', 'line_type', 'created')
 
     if request.method == "POST":
         formset = ProductionLossItemInlineFormset(request.POST, request.FILES, instance=pd_data)
@@ -793,7 +790,7 @@ def editProduction(request, pd_id):
             else:
                 pd_goal = ProductionGoal.objects.create(accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal'])
             
-            pd_goal.mill = production.mill
+            pd_goal.site = production.site
             pd_goal.line_type = production.line_type
             pd_goal.date = production.created
             pd_goal.save()
@@ -858,15 +855,15 @@ def formatHourMinute(time):
 
 def excelProductionAndLoss(request, my_q):
     count_loss = BaseLossType.objects.all()
-    pd_mills = Production.objects.filter(my_q).values_list('mill', flat=True).distinct()
-    mills = BaseMill.objects.filter(mill_id__in = pd_mills)
+    pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
+    sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
 
     workbook = openpyxl.Workbook()
-    for mill in mills:
-        sheet = workbook.create_sheet(title=mill.mill_name)
+    for site in sites:
+        sheet = workbook.create_sheet(title=site.base_site_name)
 
         # Fetch distinct line types for the current mill
-        line_types = Production.objects.filter(my_q, mill=mill).values_list('line_type', flat=True).distinct()
+        line_types = Production.objects.filter(my_q, site=site).values_list('line_type', flat=True).distinct()
 
         line_type =  BaseLineType.objects.filter(id__in=line_types)
 
@@ -918,7 +915,7 @@ def excelProductionAndLoss(request, my_q):
         sheet.append(headers3)
 
         # Fetch distinct 'created' dates for the current mill
-        created_dates = Production.objects.filter(my_q, mill=mill).values_list('created', flat=True).order_by('created').distinct()
+        created_dates = Production.objects.filter(my_q, site=site).values_list('created', flat=True).order_by('created').distinct()
 
         for created_date in created_dates:
             row = [created_date]
@@ -930,14 +927,14 @@ def excelProductionAndLoss(request, my_q):
             date_from_accumulated = startDateInMonth(created_date)
 
             for line_type in BaseLineType.objects.filter(id__in=line_types):
-                production = Production.objects.filter(mill = mill, line_type = line_type, created = created_date).first()
-                accumulated_goal = Production.objects.filter(mill = mill, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
+                production = Production.objects.filter(site = site, line_type = line_type, created = created_date).first()
+                accumulated_goal = Production.objects.filter(site = site, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
 
-                data_sum_produc = Weight.objects.filter(mill_name=mill ,date = created_date, bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
-                accumulated_produc = Weight.objects.filter(mill_name=mill ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2, stone_type_name__icontains = 'เข้าโม่').aggregate(s=Sum("weight_total"))["s"]
+                data_sum_produc = Weight.objects.filter(site=site ,date = created_date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+                accumulated_produc = Weight.objects.filter(site=site ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
 
-                sum_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
-                cal_by_mill = Production.objects.filter(my_q, mill=mill, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+                sum_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
+                cal_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
                 capacity_per_hour = calculatCapacityPerHour(request, data_sum_produc, accumulated_produc)
                 if production:
@@ -949,12 +946,12 @@ def excelProductionAndLoss(request, my_q):
                     row.extend(['' for i in range(len(count_loss) + 14)])
 
                 row_sum.extend([len(created_dates), '' , '', 'ชั่วโมงทำงานรวม', formatHourMinute(sum_by_mill['plan_time__sum']), '', '', formatHourMinute(sum_by_mill['run_time__sum'])])
-                row_sum.extend([formatHourMinute(pd_loos_item['sum_loss_time']) for pd_loos_item in ProductionLossItem.objects.filter(production__mill=mill, production__line_type = line_type).order_by('loss_type__id').values('loss_type__id').annotate(sum_loss_time=Coalesce(Sum('loss_time'), None))])
+                row_sum.extend([formatHourMinute(pd_loos_item['sum_loss_time']) for pd_loos_item in ProductionLossItem.objects.filter(production__site=site, production__line_type = line_type).order_by('loss_type__id').values('loss_type__id').annotate(sum_loss_time=Coalesce(Sum('loss_time'), None))])
 
                 row_sum.extend([formatHourMinute(sum_by_mill['total_loss_time__sum']), formatHourMinute(cal_by_mill), 'diff จากเป้า' , calculatorDiff(request, accumulated_goal , accumulated_produc) , sum_capacity_per_hour/len(created_dates),''])
 
                 loss_items = ProductionLossItem.objects.filter(
-                    production__mill=mill,
+                    production__site=site,
                     production__line_type=line_type
                 ).order_by('loss_type__id').values('loss_type__id').annotate(
                     sum_loss_time=Coalesce(Sum('loss_time'), None)
@@ -1031,7 +1028,7 @@ def excelProductionAndLoss(request, my_q):
 def exportExcelProductionAndLoss(request):
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
-    mill = request.GET.get('mill') or None
+    site = request.GET.get('site') or None
 
     my_q = Q()
     if start_created is not None:

@@ -48,9 +48,11 @@ class WeightStockForm(forms.ModelForm):
        }
        
 class ProductionForm(forms.ModelForm):
+    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(weight_type = 2))
+    
     class Meta:
        model = Production
-       fields = ('created', 'mill', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note',)
+       fields = ('created', 'site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note',)
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'plan_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
@@ -61,7 +63,7 @@ class ProductionForm(forms.ModelForm):
         }
        labels = {
             'created': _('วันที่ผลิต'),
-            'mill': _('โรงโม่'),
+            'site': _('ปลายทาง'),
             'line_type': _('Line'),
             'goal': _('เป้าต่อวัน (ตัน)'),
             'plan_start_time': _('ชั่วโมงตามแผน (เริ่ม)'),
@@ -74,13 +76,14 @@ class ProductionForm(forms.ModelForm):
        }
 
 class ProductionModelForm(forms.ModelForm):
+    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(weight_type = 2))
 
     class Meta:
         model = Production
-        fields = ('created', 'mill', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',)
+        fields = ('created','site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',)
         labels = {
                 'created': _('วันที่สร้าง'),
-                'mill': _('โรงโม่'),
+                'site': _('ปลายทาง'),
                 'line_type': _('Line'),
                 'goal': _('เป้าต่อวัน (ตัน)'),
                 'plan_start_time': _('ชั่วโมงตามแผน (เริ่ม)'),
@@ -101,7 +104,7 @@ class ProductionModelForm(forms.ModelForm):
 ProductionFormset = formset_factory(ProductionForm)
 ProductionModelFormset = modelformset_factory(
     Production,
-    fields=('created', 'mill', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',),
+    fields=('created', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',),
     extra=1,
         widgets = {
             'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),

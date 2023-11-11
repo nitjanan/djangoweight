@@ -78,12 +78,12 @@ input.del[type=checkbox] {
                 </div>
                 
                 <div class="col-md-2">
-                  <p class="fw-bolder">{{se_form.mill.label}}</p>
+                  <p class="fw-bolder">{{se_form.site.label}}</p>
                 </div>
                 <div class="col-md-10">
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
-                      {{se_form.mill | add_class:"form-control" |attr:"required:true"}}
+                      {{se_form.site | add_class:"form-control" |attr:"required:true"}}
                       <div class="form-control-icon">
                         <i class="fa-solid fa-industry"></i>
                       </div>
@@ -189,8 +189,8 @@ input.del[type=checkbox] {
   $('form').submit(function() {
     //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
     if(have_estimate){
-      $("#id_mill").trigger( "focus" );
-      alert('มีข้อมูลโรงโม่ของวันนี้อยู่แล้ว กรุณาเปลี่ยน โรงโม่');
+      $("#id_site").trigger( "focus" );
+      alert('มีข้อมูลการประมาณการณ์ของวันนี้ ปลายทางนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง');
       return false;
     }
     if(checkOverPercent()){
@@ -273,20 +273,20 @@ input.del[type=checkbox] {
   });
 
 
-  $('#id_mill, #id_created').change(function() {
+  $('#id_site, #id_created').change(function() {
     searchStoneEstimate();
   });
   
 	function searchStoneEstimate(){
-        var mill = $("#id_mill").val();
+        var site = $("#id_site").val();
         var created = $("#id_created").val();
         var se_id = '{{se.id}}';
         // Create Ajax Call
-        if(mill && created){
+        if(site && created){
               $.ajax({
                 url: '{% url "searchStoneEstimate" %}',
                 data: {
-                        'mill_id': mill,
+                        'site_id': site,
                         'created': created,
                         'se_id': se_id,
                 },

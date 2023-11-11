@@ -173,13 +173,13 @@ class ProductionGoalForm(forms.ModelForm):
 class StoneEstimateForm(forms.ModelForm):
     class Meta:
        model = StoneEstimate
-       fields = ('created', 'mill',)
+       fields = ('created','site',)
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         }
        labels = {
             'created': _('วันที่ประมาณการณ์'),
-            'mill': _('โรงโม่'),
+            'site': _('ปลายทาง'),
        }
 
 class StoneEstimateItemForm(forms.ModelForm):

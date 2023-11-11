@@ -61,15 +61,15 @@ ProductionFilter.base_filters['line_type'].label = 'Line'
 class StoneEstimateFilter(django_filters.FilterSet):
     start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
     end_created = django_filters.DateFilter(field_name = "created", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
-    mill =  django_filters.ModelChoiceFilter(field_name="mill", queryset= BaseMill.objects.all())
+    site =  django_filters.ModelChoiceFilter(field_name="site", queryset= BaseSite.objects.filter(weight_type = 2))
 
     class Meta:
         model = StoneEstimate
-        fields = ('created', 'mill',)
+        fields = ('created', 'site',)
 
 StoneEstimateFilter.base_filters['start_created'].label = 'วันที่'
 StoneEstimateFilter.base_filters['end_created'].label = 'ถึง'
-StoneEstimateFilter.base_filters['mill'].label = 'โรงโม่'
+StoneEstimateFilter.base_filters['site'].label = 'ปลายทาง'
 
 
 class BaseMillFilter(django_filters.FilterSet):

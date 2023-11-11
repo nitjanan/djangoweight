@@ -95,6 +95,7 @@ urlpatterns = [
     path('baseCarRegistration/edit/<str:id>',views.editBaseCarRegistration,name="editBaseCarRegistration"),
 
     path('exportExcelStoneEstimateAndProduction/', views.exportExcelStoneEstimateAndProduction,name="exportExcelStoneEstimateAndProduction"),
+    path('exportExcelStoneEstimateAndProduction/dashboard', views.exportExcelStoneEstimateAndProductionDashboard,name="exportExcelStoneEstimateAndProductionDashboard"),
 
     path('reset_password/', auth_views.PasswordResetView.as_view(template_name = "account/forgotPassword.html"),
           name="reset_password"),

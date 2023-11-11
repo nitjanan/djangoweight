@@ -595,7 +595,7 @@ def excelProductionByStone(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename=export.xlsx'
+    response['Content-Disposition'] = 'attachment; filename=stone.xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
@@ -1035,6 +1035,8 @@ def exportExcelProductionAndLoss(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+    if site is not None:
+        my_q &=Q(site = site)
     
     response = excelProductionAndLoss(request, my_q)
     return response
@@ -1054,7 +1056,7 @@ def exportExcelProductionAndLossDashboard(request):
     return response
 
 def viewStoneEstimate(request):
-    data = StoneEstimate.objects.all().order_by('-created', 'mill')
+    data = StoneEstimate.objects.all().order_by('-created', 'site')
 
     #กรองข้อมูล
     myFilter = StoneEstimateFilter(request.GET, queryset = data)
@@ -1125,18 +1127,18 @@ def removeStoneEstimate(request, se_id):
     return redirect('viewStoneEstimate')
 
 def searchStoneEstimate(request):
-    if 'mill_id' in request.GET and 'created' in request.GET and 'se_id' in request.GET:
-        mill_id = request.GET.get('mill_id')
+    if 'site_id' in request.GET and 'created' in request.GET and 'se_id' in request.GET:
+        site_id = request.GET.get('site_id')
         created =  request.GET.get('created')
         se_id =  request.GET.get('se_id')
 
         #if se_id == '' create mode , else edit mode
         if se_id == '':
-            have_estimate = StoneEstimate.objects.filter(created = created, mill__mill_id= mill_id).exists()
+            have_estimate = StoneEstimate.objects.filter(created = created, site = site_id).exists()
         else:
-            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id), created = created, mill__mill_id = mill_id).exists()
+            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id), created = created, site = site_id).exists()
         #ดึงเปอร์เซ็นคำนวนหินเปอร์ที่คีย์ไปล่าสุด
-        last_se = StoneEstimate.objects.filter(mill__mill_id = mill_id).order_by('-created').first()
+        last_se = StoneEstimate.objects.filter(site = site_id).order_by('-created').first()
         last_se_item = StoneEstimateItem.objects.filter(se = last_se).values('stone_type', 'percent')
         
     data = {
@@ -1153,9 +1155,25 @@ def calculateEstimate(percent, sum_all):
         result = f"{result:.2f}"
     return result
 
-def exportExcelStoneEstimateAndProduction(request):
-    date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
 
+def exportExcelStoneEstimateAndProduction(request):
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    site = request.GET.get('site') or None
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(created__lte = end_created)
+    if site is not None:
+        my_q &=Q(site = site)
+    
+    response = excelStoneEstimateAndProduction(request, my_q)
+    return response
+
+def exportExcelStoneEstimateAndProductionDashboard(request):
+    #ดึงรายงานของเดือนนั้นๆ
     end_created = datetime.today().strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
@@ -1164,22 +1182,34 @@ def exportExcelStoneEstimateAndProduction(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+    
+    response = excelStoneEstimateAndProduction(request, my_q)
+    return response
 
-    se_mills = StoneEstimate.objects.filter(my_q).values_list('mill', flat=True).distinct()
-    mills = BaseMill.objects.filter(mill_id__in = se_mills)
 
-    base_stone_type = BaseStoneType.objects.all().values_list('base_stone_type_name', flat=True)
+def excelStoneEstimateAndProduction(request, my_q):
+    date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+
+    end_created = datetime.today().strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
+
+    se_site = StoneEstimate.objects.filter(my_q).values_list('site',flat=True).distinct()
+    sites = BaseSite.objects.filter(base_site_id__in = se_site)
+
+    se_id = StoneEstimate.objects.filter(my_q).values_list('id',flat=True).distinct()
+    #ดึงเฉพาะชนิดหิน estimate
+    base_stone_type = StoneEstimateItem.objects.select_related('stone_type').filter(se__in = se_id).values_list('stone_type__base_stone_type_name', flat=True).distinct()
 
     #list_customer_name = ['สมัย','วีระวุฒิ','NCK']
     list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
 
     workbook = openpyxl.Workbook()
-    for mill in mills:
-        sheet = workbook.create_sheet(title=mill.mill_name)
+    for site in sites:
+        sheet = workbook.create_sheet(title=site.base_site_name)
 
-        list_time = BaseTimeEstimate.objects.filter(mill = mill).values('time_from', 'time_to', 'time_name')
+        list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        weight_stone_types = Weight.objects.filter(Q(stone_type_name__icontains = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), bws__weight_type = 2, date__range=('2023-02-01', '2023-02-28'), mill_name = mill.mill_name).order_by('stone_type_name').values_list('stone_type_name', flat=True).distinct()
+        mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=('2023-11-01', '2023-11-30'), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2
@@ -1197,8 +1227,8 @@ def exportExcelStoneEstimateAndProduction(request):
         sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
         column_index += 1
-        for wst in weight_stone_types:
-            sheet.cell(row=1, column = column_index, value = wst)
+        for mt in mill_type:
+            sheet.cell(row=1, column = column_index, value = mt)
             sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
             sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
             column_index += 2
@@ -1222,7 +1252,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
 
         headers2 = ['Date','พนักงาน', 'กะ', 'ชม.ทำงาน', 'ที่ผลิตได้',]
-        for i in range(len(weight_stone_types) + 1):
+        for i in range(len(mill_type) + 1):
             headers2.extend(['เที่ยว','ตัน',])
 
         headers2.extend(['AAA'])
@@ -1234,8 +1264,8 @@ def exportExcelStoneEstimateAndProduction(request):
         sheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
         sheet.append(headers2)
 
-        # Fetch distinct 'created' dates for the current mill
-        created_dates = StoneEstimate.objects.filter(my_q, mill=mill).values_list('created', flat=True).order_by('created').distinct()
+        # Fetch distinct 'created' dates for the current site
+        created_dates = StoneEstimate.objects.filter(my_q, site = site).values_list('created', flat=True).order_by('created').distinct()
 
         row_index = 3
         for created_date in created_dates:
@@ -1247,20 +1277,21 @@ def exportExcelStoneEstimateAndProduction(request):
                     len_row_index +=1
 
                     #ชั่วโมงทำงาน
-                    total_working_time = Production.objects.filter(created = created_date, mill=mill).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+                    total_working_time = Production.objects.filter(created = created_date, site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
                     #หมายเหตุ
-                    production_note = Production.objects.filter(mill = mill, created = created_date).values_list('note', flat=True).first()
+                    production_note = Production.objects.filter(site = site, created = created_date).values_list('note', flat=True).first()
                     #หินเขา
-                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name = 'เข้าโม่') | Q(stone_type_name = 'กองสต็อก'), bws__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), bws__weight_type = 2, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+
                     #หินเข้าโม่ทั้งหมด
-                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(stone_type_name__contains = 'เข้าโม่'), bws__weight_type = 2, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
-                    for stone_type_name in weight_stone_types:
+                    for mill in mill_type:
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, stone_type_name = stone_type_name, mill_name = mill.mill_name, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
                         if weight_time1:
                             row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
                         else:
@@ -1268,7 +1299,7 @@ def exportExcelStoneEstimateAndProduction(request):
 
                     row1.extend([crush1['c_weight'], crush1['s_weight']])
                     row1.extend(['1'])
-                    row1.extend([calculateEstimate(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__mill = mill).values_list('percent', flat=True)])
+                    row1.extend([calculateEstimate(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).values_list('percent', flat=True)])
                     sheet.append(row1)
 
                 #merge_cells พนักงาน
@@ -1325,7 +1356,7 @@ def exportExcelStoneEstimateAndProduction(request):
                     if cell.column == 5:
                         cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
 
-                    column_crush = len(weight_stone_types) * 2 + 6
+                    column_crush = len(mill_type) * 2 + 6
                     if cell.column == column_crush or cell.column == column_crush + 1:
                         cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
 

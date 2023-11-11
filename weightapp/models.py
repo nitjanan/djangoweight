@@ -556,7 +556,7 @@ class BaseLineType(models.Model):
 
     
 class BaseTimeEstimate(models.Model):
-    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True)
     time_from = models.TimeField(null = True, blank=True)
     time_to = models.TimeField(null = True, blank=True)
     time_name = models.CharField(blank=True, null=True, max_length=120)
@@ -675,7 +675,7 @@ class ProductionLossItem(models.Model):
 
 class StoneEstimate(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
-    mill = models.ForeignKey(BaseMill,on_delete=models.CASCADE, null = True, blank=True)
+    site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True)
     
     class Meta:
         db_table = 'stone_estimate'

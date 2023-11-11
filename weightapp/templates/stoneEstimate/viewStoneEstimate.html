@@ -55,7 +55,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               {{ filter.form.end_created|as_crispy_field }}
             </div>
             <div class="form-group col-md-2 mb-0">
-              {{ filter.form.mill|as_crispy_field }}
+              {{ filter.form.site|as_crispy_field }}
             </div>
             <div class="form-group col-md-2 mb-0">
               <div>
@@ -82,7 +82,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <thead class="table-dark">
                   <tr>
                     <th>วันที่</th>
-                    <th>โรงโม่</th>
+                    <th>ปลายทาง</th>
                     <th>ชนิดหิน</th>
                     <th>แก้ไข</th>
                     <th>ลบ</th>
@@ -92,7 +92,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   {% for i in stone_estimate%}
                   <tr>
                     <td>{{i.created}}</td>
-                    <td>{{i.mill}}</td>
+                    <td>{{i.site}}</td>
                     <td>
                       {% for item in i.stoneestimateitem_set.all %}
                         {% if item.percent %}<li>{{ item.stone_type }} : {{ item.percent }}%</li>{%endif%}

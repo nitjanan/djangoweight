@@ -374,12 +374,12 @@ input.del[type=checkbox] {
     $('#select_team option:contains("{{weight.car_team.car_team_name}}")').prop('selected', true);
   }
 
-
   $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
-  $('#id_stone_color option:contains("{{weight.stone_color}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
   $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);
+  if("{{weight.stone_color}}" != "")
+    $('#id_stone_color option:contains("{{weight.stone_color}}")').prop('selected', true);
 
   setDataRadio();
   setDataCustomer();

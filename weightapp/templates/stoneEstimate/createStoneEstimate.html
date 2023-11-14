@@ -284,7 +284,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 success: function (data) {
                     have_estimate = data.have_estimate;
                     if (data.last_se_item != "") {
-                      /*
+
                       var inputs = $(".stone_type");
                       for(var i = 0; i < inputs.length; i++){
                           if($(inputs[i]).val()){
@@ -295,11 +295,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             }
                           }
                       }
-                      */
 
+                      /*
                       for(var j = 0; j < data.last_se_item.length; j++){
                         $("#id_form-"+j+"-percent").val(data.last_se_item[j].percent);
                       }
+                      */
                     }else{
                       $(".percent").val('');
                     }

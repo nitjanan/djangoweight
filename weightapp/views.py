@@ -1203,7 +1203,7 @@ def excelStoneEstimateAndProduction(request, my_q):
 
     se_id = StoneEstimate.objects.filter(my_q).values_list('id',flat=True).distinct()
     #ดึงเฉพาะชนิดหิน estimate
-    base_stone_type = StoneEstimateItem.objects.select_related('stone_type').filter(se__in = se_id).values_list('stone_type__base_stone_type_name', flat=True).distinct()
+    base_stone_type = StoneEstimateItem.objects.select_related('stone_type').filter(se__in = se_id).order_by('stone_type').values_list('stone_type__base_stone_type_name', flat=True).distinct()
 
     #list_customer_name = ['สมัย','วีระวุฒิ','NCK']
     list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
@@ -1304,7 +1304,7 @@ def excelStoneEstimateAndProduction(request, my_q):
 
                     row1.extend([crush1['c_weight'], crush1['s_weight']])
                     row1.extend(['1'])
-                    row1.extend([calculateEstimate(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).values_list('percent', flat=True)])
+                    row1.extend([calculateEstimate(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
                     sheet.append(row1)
 
                 #merge_cells พนักงาน

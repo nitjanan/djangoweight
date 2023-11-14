@@ -682,7 +682,7 @@ class StoneEstimate(models.Model):
 
 class StoneEstimateItem(models.Model):
     stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
-    percent = models.IntegerField(blank=True, null=True)
+    percent = models.IntegerField(blank=True, null=True, default=0)
     se = models.ForeignKey(StoneEstimate,on_delete=models.CASCADE, null = True, blank=True)
     
     class Meta:

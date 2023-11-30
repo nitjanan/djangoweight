@@ -11,6 +11,11 @@ rel="stylesheet"
 href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<style>
+  input.del[type=checkbox] {
+   display: none;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -204,7 +209,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="col-md-10">
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
-                      {{pd_goal_form.accumulated_goal | add_class:"form-control" }}
+                      {{pd_goal_form.accumulated_goal | add_class:"form-control"|attr:"required:true" }}
                       <div class="form-control-icon">
                         <i class="bi bi-graph-up-arrow"></i>
                       </div>
@@ -226,17 +231,35 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
                 {{ formset.management_form }}
                 {% for form in formset %}
-                <!-- จำเป็นมาก -->{{form.id}} 
-                  <div class="col-md-6 col-12">
+                <div class="row form-row spacer" id="div-{% if form.id.value %}{{form.id.value}}{% else %}None{% endif %}">
+                  <div class="col-md-5 col-12">
+                    <div class="form-group">
+                       <!-- จำเป็นมาก -->{{form.id}}<!-- จำเป็นมาก -->{{form.mc_type | add_class:"form-control mc_type"}}
+                    </div>
+                  </div>
+                  <div class="col-md-4 col-12">
                     <div class="form-group">
                       {{form.loss_type | add_class:"form-control loss_type"}}
                     </div>
                   </div>
-                  <div class="col-md-6 col-12">
+                  <div class="col-md-2 col-12">
                     <div class="form-group">
-                      {{form.loss_time}}
+                      {{form.loss_time | add_class:"form-control"}}
                     </div>
                   </div>
+                  <div class="col-md-1 col-12">
+                    {% if form.id.value %}
+                      <div class="input-group-append text-right">
+                        <button type="button" class="btn btn-danger hidden-print" onclick="hideDiv('{{form.id.value}}')">-</button>
+                    </div>
+                    {% else %}
+                      <div class="input-group-append text-right">
+                          <button class="btn btn-success add-form-row hidden-print">+</button>
+                      </div>
+                    {% endif %}
+                    {{ form.DELETE| add_class:"del"}}
+                  </div>
+              </div>
                 {% endfor %}
                 <div class="col-md-2">
                   <p class="fw-bolder">{{form.note.label}}</p>
@@ -297,11 +320,78 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 
 <script>
+
+function hideDiv(id){
+    var inputId = $("#div-"+id+" div.col-md-5 div.form-group input[value='"+id+"']").attr("id").match(/\d+/);
+    $("#id_productionlossitem_set-"+inputId+"-DELETE").prop('checked', true);
+    $("#div-"+id).hide();
+  }
+  
+  function updateElementIndex(el, prefix, ndx) {
+      var id_regex = new RegExp('(' + prefix + '-\\d+)');
+      var replacement = prefix + '-' + ndx;
+      if ($(el).attr("for")) $(el).attr("for", $(el).attr("for").replace(id_regex, replacement));
+      if (el.id) el.id = el.id.replace(id_regex, replacement);
+      if (el.name) el.name = el.name.replace(id_regex, replacement);
+  }
+  function cloneMore(selector, prefix) {
+      var newElement = $(selector).clone(true);
+      var total = $('#id_' + prefix + '-TOTAL_FORMS').val();
+      newElement.find(':input:not([type=button]):not([type=submit]):not([type=reset])').each(function() {
+          var name = $(this).attr('name')
+          if(name) {
+              name = name.replace('-' + (total-1) + '-', '-' + total + '-');
+              var id = 'id_' + name;
+              $(this).attr({'name': name, 'id': id}).val('').removeAttr('checked');
+          }
+      });
+      newElement.find('label').each(function() {
+          var forValue = $(this).attr('for');
+          if (forValue) {
+            forValue = forValue.replace('-' + (total-1) + '-', '-' + total + '-');
+            $(this).attr({'for': forValue});
+          }
+      });
+      total++;
+      $('#id_' + prefix + '-TOTAL_FORMS').val(total);
+      $(selector).after(newElement);
+      var conditionRow = $('.form-row:not(:last)');
+      conditionRow.find('.btn.add-form-row')
+      .removeClass('btn-success').addClass('btn-danger')
+      .removeClass('add-form-row').addClass('remove-form-row')
+      .html('-');
+      return false;
+  }
+  function deleteForm(prefix, btn) {
+      var total = parseInt($('#id_' + prefix + '-TOTAL_FORMS').val());
+      if (total > 1){
+          btn.closest('.form-row').remove();
+          var forms = $('.form-row');
+          $('#id_' + prefix + '-TOTAL_FORMS').val(forms.length);
+          for (var i=0, formCount=forms.length; i<formCount; i++) {
+              $(forms.get(i)).find(':input').each(function() {
+                  updateElementIndex(this, prefix, i);
+              });
+          }
+      }
+      return false;
+  }
+  $(document).on('click', '.add-form-row', function(e){
+      e.preventDefault();
+      cloneMore('.form-row:last', 'productionlossitem_set');
+      return false;
+  });
+  $(document).on('click', '.remove-form-row', function(e){
+      e.preventDefault();
+      deleteForm('productionlossitem_set', $(this));
+      return false;
+  });
+
   var have_production = false;
   $('#id_created').val('{{pd.created|date:"Y-m-d"}}');
   
   //ห้ามเปลี่ยน select option
-  $('.loss_type').css('pointer-events','none');
+  //$('.loss_type').css('pointer-events','none');
   
   $('form').submit(function() {
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน

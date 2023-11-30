@@ -546,6 +546,15 @@ class BaseLossType(models.Model):
     def __str__(self):
         return self.name
     
+class BaseMachineType(models.Model):
+    name = models.CharField(unique=True, blank=True, null=True, max_length=255)
+    class Meta:
+        db_table = 'base_machine_type'
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name
+    
 class BaseLineType(models.Model):
     name = models.CharField(unique=True, blank=True, null=True, max_length=255)
     class Meta:
@@ -662,6 +671,7 @@ class Production(models.Model):
 class ProductionLossItem(models.Model):
     production = models.ForeignKey(Production,on_delete=models.CASCADE, null = True, blank=True)
     loss_type = models.ForeignKey(BaseLossType,on_delete=models.CASCADE, null = True, blank=True)
+    mc_type = models.ForeignKey(BaseMachineType,on_delete=models.CASCADE, null = True, blank=True)
     loss_time = models.DurationField(null = True, blank=True)
     
     def save(self, *args, **kwargs):

@@ -55,11 +55,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
-                <ul class="errorlist">
-                  {% for error in form.non_field_errors %}
-                      <li class="text-danger">{{ error }}</li>
-                  {% endfor %}
-                </ul>
                 {{form | crispy}}
                 <div class="col-12 d-flex justify-content-end">
                   {% if text_mode == 'เปลี่ยน' %}

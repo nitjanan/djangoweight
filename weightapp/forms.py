@@ -152,7 +152,7 @@ ProductionLossItemInlineFormset = inlineformset_factory(
     Production,
     ProductionLossItem,
     form=ProductionLossItemForm,
-    fields=('loss_type', 'loss_time'),
+    fields=('mc_type', 'loss_type', 'loss_time'),
     widgets = {
         'loss_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
     },

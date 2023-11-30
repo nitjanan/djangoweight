@@ -69,14 +69,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </div>
             </div>
           </form>
-            <div class="dropdown">
-              <button class="btn btn-success dropdown-toggle me-1" type="button" id="dropdownMenuButton2" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                <i class="fa-solid fa-file-excel"></i> รายงานบันทึกปฎิบัติการงานโรงโม่
-              </button>
-              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton2">
-                <a class="dropdown-item" href="{% url 'exportExcelProductionAndLoss' %}?{{request.GET.urlencode}}">Export EXCEL</a>
-                <a class="dropdown-item" href="#">Export CSV</a>
-                <a class="dropdown-item" href="#">Export PDF</a>
+            <div class="row">
+              <div class="col">
+                <a href="{% url 'summaryProduction' %}" class="btn btn-primary">Weekly Report</a>
+                <a href="{% url 'exportExcelProductionAndLoss' %}?{{request.GET.urlencode}}" class="btn btn-success">รายงานบันทึกปฎิบัติการงานโรงโม่</a>
               </div>
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createProduction' %}">สร้างบันทึกปฎิบัติการงานโรงโม่ <i class="fa-solid fa-circle-plus"></i></a>

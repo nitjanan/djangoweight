@@ -4,8 +4,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale
-from django.db.models import Sum, Q, Max
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType
+from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
@@ -80,7 +80,11 @@ def getSumByStone(mode, stoneType, type):
     elif type == 2:
         w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
-        w = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Decimal('0.0')
+        se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
+        for i in se_item:
+            crush = Weight.objects.filter(site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+            w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
 def getSumOther(mode, list_sum_stone, type):
@@ -97,7 +101,11 @@ def getSumOther(mode, list_sum_stone, type):
     elif type == 2:
         w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
-        w = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Decimal('0.0')
+        se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
+        for i in se_item:
+            crush = Weight.objects.filter(site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+            w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
 def getNumListStoneWeightChart(mode, stone_list_id, type):
@@ -107,7 +115,6 @@ def getNumListStoneWeightChart(mode, stone_list_id, type):
         list_sum_stone.append(getSumByStone(mode, stone_id, type))
 
     list_sum_stone.append(getSumOther(mode, stone_list_id, type))
-    #list_sum_stone.append(0.0)
     return list_sum_stone
 
 # Create your views here.
@@ -135,7 +142,6 @@ def index(request):
 
     produce_list_name = ['01ST','16ST','07ST','09ST','10ST']
     produce_list = getNumListStoneWeightChart(2, produce_list_name, 3)
-    produce_list = [0.0, 0.0, 0.0, 0.0, 0.0]
 
     #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
     start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
@@ -241,7 +247,7 @@ def calculatePersent(num, num_all):
     persent = 0.0
     if num_all and num:
         persent = (num/num_all)*100
-    return f'{round(persent)}'
+    return round(persent)
 
 def is_scale(user):
     return user.groups.filter(name='scale').exists()
@@ -275,6 +281,7 @@ def logoutUser(request):
     logout(request)
     return redirect('login')
 
+@login_required(login_url='login')
 def weightTable(request):
 
     if is_scale(request.user):
@@ -295,7 +302,7 @@ def weightTable(request):
     context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user)}
     return render(request, "weight/weightTable.html",context)
 
-@login_required
+@login_required(login_url='login')
 def editWeight(request, mode, weight_id):
     weight_data = get_object_or_404(Weight, pk=weight_id)
 
@@ -669,6 +676,43 @@ def viewProduction(request):
     context = {'production_page':'active', 'product': product,'filter':myFilter, }
     return render(request, "production/viewProduction.html",context)
 
+def summaryProduction(request):
+    date_object = datetime.today()
+
+    pd = Production.objects.filter(created__year = date_object.year, created__month = date_object.month).order_by('site__base_site_id').values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').annotate(sum_goal = Sum('goal')
+        , persent = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField()))
+
+    pd_loss = ProductionLossItem.objects.filter(production__created__year = date_object.year, production__created__month = date_object.month, mc_type__in = [2,3,5]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
+
+    list_ls1_name = getLossNameByMill('009PL', date_object, 1)
+    list_ls1_val = getLossNameByMill('009PL', date_object, 2)
+    
+    list_ls2_name = getLossNameByMill('010PL', date_object, 1)
+    list_ls2_val = getLossNameByMill('010PL', date_object, 2)
+
+    list_ls3_name = getLossNameByMill('011PL', date_object, 1)
+    list_ls3_val = getLossNameByMill('011PL', date_object, 2)
+
+    context = {'production_page':'active','pd':pd,
+               'pd_loss':pd_loss, 'date_object':date_object,
+               'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
+               'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
+               'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
+    }
+    return render(request, "production/summaryProduction.html",context)
+
+
+def getLossNameByMill(site, date, mode):
+    list_loss = []
+    pd_loss = ProductionLossItem.objects.filter(production__site = site, production__created__year = date.year, production__created__month = date.month).order_by('mc_type').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    pd_loss_all = ProductionLossItem.objects.filter(production__site = site, production__created__year = date.year, production__created__month = date.month).aggregate(s=Sum('loss_time'))["s"]
+    for i in pd_loss:
+        if mode == 1:
+            list_loss.append(i['mc_type__name'])
+        elif mode == 2:
+            list_loss.append(calculatePersent(i['sum_time'], pd_loss_all))
+    return list_loss
+
 def calculatorDiffTime(request, start_time, end_time):
     difference = None
     if start_time is None:
@@ -729,7 +773,7 @@ def searchProductionGoal(request):
 def createProduction(request):
     base_loss_type = BaseLossType.objects.all()
 
-    ProductionLossItemFormSet = modelformset_factory(ProductionLossItem, fields=('loss_type', 'loss_time'), extra=len(base_loss_type), widgets={'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),})
+    ProductionLossItemFormSet = modelformset_factory(ProductionLossItem, fields=('mc_type', 'loss_type', 'loss_time'), extra=1, widgets={'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),})
     if request.method == 'POST':
         pd_goal_form = ProductionGoalForm(request.POST)
         production_form = ProductionForm(request.POST)
@@ -766,7 +810,7 @@ def createProduction(request):
         pd_goal_form = ProductionGoalForm()
         formset = ProductionLossItemFormSet(queryset=ProductionLossItem.objects.none())
 
-    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': production_form, 'formset': formset, 'base_loss_type':base_loss_type,}
+    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': production_form, 'formset': formset}
     return render(request, "production/createProduction.html",context)
 
 def editProduction(request, pd_id):
@@ -1149,7 +1193,13 @@ def searchStoneEstimate(request):
     return JsonResponse(data)
 
 def calculateEstimate(percent, sum_all):
-    result = None
+    result = Decimal(0.0)
+    if percent and sum_all:
+        result = Decimal(sum_all) * Decimal(percent)/100
+    return result
+
+def calculateEstimateToString(percent, sum_all):
+    result = Decimal(0.0)
     if percent and sum_all:
         result = Decimal(sum_all) * Decimal(percent)/100
         result = f"{result:.2f}"
@@ -1304,7 +1354,7 @@ def excelStoneEstimateAndProduction(request, my_q):
 
                     row1.extend([crush1['c_weight'], crush1['s_weight']])
                     row1.extend(['1'])
-                    row1.extend([calculateEstimate(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
+                    row1.extend([calculateEstimateToString(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
                     sheet.append(row1)
 
                 #merge_cells พนักงาน

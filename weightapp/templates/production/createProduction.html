@@ -142,6 +142,33 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
 
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.actual_start_time.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.actual_start_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{form.actual_end_time.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{form.actual_end_time}}
+                      <div class="form-control-icon">
+                        <i class="bi bi-alarm"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="col-md-2 f-time">
                   <p class="fw-bolder">{{form.run_start_time.label}}</p>
                 </div>

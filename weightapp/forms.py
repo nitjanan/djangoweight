@@ -52,13 +52,15 @@ class ProductionForm(forms.ModelForm):
     
     class Meta:
        model = Production
-       fields = ('created', 'site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note',)
+       fields = ('created', 'site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note', 'actual_start_time', 'actual_end_time')
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'plan_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'plan_end_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'run_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'run_end_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
+        'actual_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
+        'actual_end_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'note': forms.Textarea(attrs={'class':'form-control','rows':2, 'cols':15}),
         }
        labels = {
@@ -72,6 +74,8 @@ class ProductionForm(forms.ModelForm):
             'run_end_time': _('ชั่วโมงเดินเครื่อง (สิ้นสุด)'),
             'mile_run_start_time': _('เลขไมล์ (เริ่ม)'),
             'mile_run_end_time': _('เลขไมล์ (สิ้นสุด)'),
+            'actual_start_time': _('กำหนดจริง (เริ่ม)'),
+            'actual_end_time': _('กำหนดจริง (สิ้นสุด)'),
             'note': _('หมายเหตุ'),
        }
 
@@ -80,7 +84,7 @@ class ProductionModelForm(forms.ModelForm):
 
     class Meta:
         model = Production
-        fields = ('created','site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',)
+        fields = ('created','site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note', 'actual_start_time', 'actual_end_time')
         labels = {
                 'created': _('วันที่สร้าง'),
                 'site': _('ปลายทาง'),
@@ -90,6 +94,8 @@ class ProductionModelForm(forms.ModelForm):
                 'plan_end_time': _('ชั่วโมงตามแผน (สิ้นสุด)'),
                 'run_start_time': _('ชั่วโมงเดินเครื่อง (เริ่ม)'),
                 'run_end_time': _('ชั่วโมงเดินเครื่อง (สิ้นสุด)'),
+                'actual_start_time': _('กำหนดจริง (เริ่ม)'),
+                'actual_end_time': _('กำหนดจริง (สิ้นสุด)'),
                 'note': _('หมายเหตุ'),
         }
         widgets = {
@@ -98,13 +104,15 @@ class ProductionModelForm(forms.ModelForm):
             'plan_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'run_start_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'run_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+            'actual_start_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+            'actual_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'note': forms.Textarea(attrs={'class':'form-control','rows':2, 'cols':15}),
         }
 
 ProductionFormset = formset_factory(ProductionForm)
 ProductionModelFormset = modelformset_factory(
     Production,
-    fields=('created', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','note',),
+    fields=('created', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time', 'note', 'actual_start_time', 'actual_end_time'),
     extra=1,
         widgets = {
             'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
@@ -112,6 +120,8 @@ ProductionModelFormset = modelformset_factory(
             'plan_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'run_start_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'run_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+            'actual_start_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+            'actual_end_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
             'note': forms.Textarea(attrs={'class':'form-control','rows':2, 'cols':15}),
         }
 )
@@ -144,7 +154,7 @@ ProductionLossItemFormset = forms.modelformset_factory(
     fields=('loss_type', 'loss_time'),
     extra= len(BaseLossType.objects.all()),  # Number of empty forms to display
     widgets={
-        'loss_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+        'loss_time': forms.TimeInput(format='%H:%M',attrs={'class':'form-control', 'type': 'time'}),
     }
 )
 
@@ -154,7 +164,7 @@ ProductionLossItemInlineFormset = inlineformset_factory(
     form=ProductionLossItemForm,
     fields=('mc_type', 'loss_type', 'loss_time'),
     widgets = {
-        'loss_time': forms.TimeInput(attrs={'class':'form-control', 'type': 'time'}),
+        'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),
     },
     extra=1,
 )

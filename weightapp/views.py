@@ -71,8 +71,11 @@ def set_border(ws, side=None, blank=True):
         wb._cell_styles[0].borderId = len(wb._borders) - 1
 
 def getSumByStone(mode, stoneType, type):
-    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    start_date = datetime.strptime(startDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
@@ -88,8 +91,11 @@ def getSumByStone(mode, stoneType, type):
     return  float(w)
 
 def getSumOther(mode, list_sum_stone, type):
-    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    start_date = datetime.strptime(startDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
 
     query_filters = Q()
     for item_number_prefix in list_sum_stone:
@@ -144,9 +150,9 @@ def index(request):
     produce_list = getNumListStoneWeightChart(2, produce_list_name, 3)
 
     #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
-    start_date = datetime.strptime(startDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(datetime.today().strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    now_date = datetime.strptime(str(datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d")
+    start_date = datetime.strptime(startDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    now_date = datetime.strptime(str(previous_day.strftime('%Y-%m-%d')), "%Y-%m-%d")
 
     ####################################
     ########### chart mill #############
@@ -630,8 +636,11 @@ def exportExcelProductionByStone(request):
 
     my_q &= ~Q(customer_name ='ยกเลิก')
    
-    startDate = datetime.strptime(start_created or startDateInMonth(datetime.today().strftime('%Y-%m-%d')), "%Y-%m-%d").date()
-    endDate = datetime.strptime(end_created or datetime.today().strftime('%Y-%m-%d'), "%Y-%m-%d").date()
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    startDate = datetime.strptime(start_created or startDateInMonth(previous_date_time.strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or previous_date_time.strftime('%Y-%m-%d'), "%Y-%m-%d").date()
 
     #สร้าง list ระหว่าง start_date และ end_date
     list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
@@ -641,7 +650,10 @@ def exportExcelProductionByStone(request):
 
 def exportExcelProductionByStoneInDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
-    end_created = datetime.today().strftime('%Y-%m-%d')
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
     my_q = Q()
@@ -677,7 +689,8 @@ def viewProduction(request):
     return render(request, "production/viewProduction.html",context)
 
 def summaryProduction(request):
-    date_object = datetime.today()
+    current_date_time = datetime.today()
+    date_object = current_date_time - timedelta(days=1)
 
     pd = Production.objects.filter(created__year = date_object.year, created__month = date_object.month).order_by('site__base_site_id').values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').annotate(sum_goal = Sum('goal')
         , persent = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField()))
@@ -1087,7 +1100,11 @@ def exportExcelProductionAndLoss(request):
 
 def exportExcelProductionAndLossDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
-    end_created = datetime.today().strftime('%Y-%m-%d')
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
     my_q = Q()
@@ -1224,7 +1241,10 @@ def exportExcelStoneEstimateAndProduction(request):
 
 def exportExcelStoneEstimateAndProductionDashboard(request):
     #ดึงรายงานของเดือนนั้นๆ
-    end_created = datetime.today().strftime('%Y-%m-%d')
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
     my_q = Q()
@@ -1243,8 +1263,11 @@ def excelStoneEstimateAndProduction(request, my_q):
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
 
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
     if end_created is None:
-       end_created = datetime.today().strftime('%Y-%m-%d')
+       end_created = previous_date_time.strftime('%Y-%m-%d')
     if start_created is None:
        start_created = startDateInMonth(end_created)
 

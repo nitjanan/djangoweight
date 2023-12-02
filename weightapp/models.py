@@ -632,6 +632,10 @@ class Production(models.Model):
     mile_run_end_time = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#ชั่วโมงเดินเครื่องเลขไมล์(สิ้นสุด)
     run_time = models.DurationField(null = True, blank=True)#ชั่วโมงเดินเครื่อง run_end_time - run_start_time
 
+    actual_start_time = models.DurationField(null = True, blank=True)#กำหนดจริง (เริ่ม)
+    actual_end_time = models.DurationField(null = True, blank=True)#กำหนดจริง (สิ้นสุด)
+    actual_time = models.DurationField(null = True, blank=True)#กำหนดจริง actual_start_time - actual_end_time
+
     total_loss_time = models.DurationField(null = True, blank=True)#รวมเวลาในการสูญเสีย
     actual_working_time = models.DurationField(null = True, blank=True)#ชั่วโมงการทำงานจริง
 
@@ -655,9 +659,15 @@ class Production(models.Model):
         # Convert the timedelta to string and extract the hours and minutes
         self.plan_start_time = setDurationTime(self.plan_start_time)
         self.plan_end_time = setDurationTime(self.plan_end_time)
+
         self.run_start_time = setDurationTime(self.run_start_time)
         self.run_end_time = setDurationTime(self.run_end_time)
+
+        self.actual_start_time = setDurationTime(self.actual_start_time)
+        self.actual_end_time = setDurationTime(self.actual_end_time)
+
         self.plan_time = calculatorDiffTime(self.plan_start_time, self.plan_end_time)#ชั่วโมงทำงาน
+        self.actual_time = calculatorDiffTime(self.actual_start_time, self.actual_end_time)#กำหนดจริง
         if self.run_start_time and self.run_end_time:
             self.run_time = calculatorDiffTime(self.run_start_time, self.run_end_time)#ชั่วโมงเดินเครื่อง
         elif self.mile_run_start_time and self.mile_run_end_time:
@@ -675,8 +685,14 @@ class ProductionLossItem(models.Model):
     loss_time = models.DurationField(null = True, blank=True)
     
     def save(self, *args, **kwargs):
-        # Convert the timedelta to string and extract the hours and minutes
-        self.loss_time = setDurationTime(self.loss_time)
+        #แปลงแค่ตอน create
+        if self.pk is not None:
+            old_instance = ProductionLossItem.objects.get(pk=self.pk)
+            if self.loss_time != old_instance.loss_time:
+                self.loss_time = setDurationTime(self.loss_time)
+        else:
+            self.loss_time = setDurationTime(self.loss_time)
+
         super().save(*args, **kwargs)
 
     class Meta:

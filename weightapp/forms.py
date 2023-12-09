@@ -171,10 +171,10 @@ ProductionLossItemInlineFormset = inlineformset_factory(
 
 
 class ProductionGoalForm(forms.ModelForm):
-    pk = forms.IntegerField(widget = forms.HiddenInput(), required = False)
+    pk_goal = forms.IntegerField(widget = forms.HiddenInput(), required = False)
     class Meta:
        model = ProductionGoal
-       fields = ('accumulated_goal','pk')
+       fields = ('accumulated_goal','pk_goal')
        labels = {
             'accumulated_goal': _('เป้าที่คาดการณ์ของเดือนนี้'),
        }

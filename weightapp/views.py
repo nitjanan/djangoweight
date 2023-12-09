@@ -810,8 +810,8 @@ def createProduction(request):
         if production_form.is_valid() and formset.is_valid() and pd_goal_form.is_valid():
             production = production_form.save()
 
-            if pd_goal_form.cleaned_data['pk']:
-                pd_goal = ProductionGoal.objects.get(id = pd_goal_form.cleaned_data['pk'])
+            if pd_goal_form.cleaned_data['pk_goal']:
+                pd_goal = ProductionGoal.objects.get(id = pd_goal_form.cleaned_data['pk_goal'])
                 pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
                 pd_goal.save()
             else:
@@ -857,18 +857,9 @@ def editProduction(request, pd_id):
             # save production
             production = form.save()
 
-            if pd_goal_form.cleaned_data['pk']:
-                pd_goal = ProductionGoal.objects.get(id = pd_goal_form.cleaned_data['pk'])
-                pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
-            else:
-                pd_goal = ProductionGoal.objects.create(accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal'])
-            
-            pd_goal.site = production.site
-            pd_goal.line_type = production.line_type
-            pd_goal.date = production.created
+            pd_goal = ProductionGoal.objects.get(id = pd_data.pd_goal.id)
+            pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
             pd_goal.save()
-
-            production.pd_goal = pd_goal
 
             # save ProductionLossItem
             instances = formset.save(commit=False)

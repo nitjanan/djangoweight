@@ -223,7 +223,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
                 <hr class="my-4">
-                {{pd_goal_form.pk}}
+                {{pd_goal_form.pk_goal}}
                 <div class="col-md-2">
                   <p class="fw-bolder text-warning">{{pd_goal_form.accumulated_goal.label}}</p>
                 </div>
@@ -499,10 +499,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
                     if (data.pd_goal_list == "") {
                       $("#id_accumulated_goal").val('');
-                      $("#id_pk").val('');
+                      $("#id_pk_goal").val('');
                     }else{
                       $("#id_accumulated_goal").val(data.pd_goal_list[0].accumulated_goal);
-                      $("#id_pk").val(data.pd_goal_list[0].id);
+                      $("#id_pk_goal").val(data.pd_goal_list[0].id);
                     }
 
                     //set ข้อมูล line 1 ใน line อื่นๆ

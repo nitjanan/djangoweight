@@ -26,10 +26,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         @page { size: landscape; }
 	}
 
-    .doubleUnderline {
-        text-decoration-line: underline;
-        text-decoration-style: double;
-    }
+  .doubleUnderline {
+    text-decoration-line: underline;
+    text-decoration-style: double;
+  }
     
   </style>
 {% endblock %}
@@ -80,7 +80,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             </div>
             <div class="table-responsive">
             <div class="row">
-                {% for i in pd %}
+              {% for i in pd %}
                 <div class="col">
                     <div class="table-responsive my-3 col">
                         <table id="myTable" class="table table-hover">
@@ -102,7 +102,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             </tr>
                             <tr>
                                 <td>คิดเป็น</td>
-                                <td>{{i.persent}}%</td>
+                                <td>{{i.percent_goal}}%</td>
                                 <td></td>
                             </tr>
                             <tr>
@@ -112,224 +112,66 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             </tr>
                             <tr>
                                 <td>กำลังการผลิต (Performance)</td>
-                                <td>170.86</td>
+                                <td>{{i.capacity |floatformat:2 }}</td>
                                 <td>ตัน</td>
                             </tr>
                             <tr>
                                 <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
                             </tr>
+                            {% for mc in mc_type %}
                             <tr>
-                                <td>- หยุดซ่อมบำรุง JAW CRUSHER</td>
-                                <td>{% for pl in pd_loss %}{% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == 2 %}{{pl.sum_time| format_duration_substring}}{% endif %}{% endfor %}</td>
+                                <td><form class="form-inline ml-3" id="search" method="GET"><b onClick="searchDetailMcType('{{i.site__base_site_id}}', '{{mc.id}}')" data-target="#mySearch" data-toggle="modal" style="cursor: pointer;">- หยุดซ่อมบำรุง {{mc.name}}</b></form></td>
+                                <td>{% for pl in pd_loss_mc %}
+                                      {% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == mc.id %}
+                                          {{pl.sum_time| format_duration_substring}}
+                                      {% endif %}
+                                  {% endfor %}
+                                </td>
                                 <td>ชม./เดือน</td>
                             </tr>
-                            <tr>
-                                <td>- หยุดซ่อมบำรุง CONE CRUSHER</td>
-                                <td>{% for pl in pd_loss %}{% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == 3 %}{{pl.sum_time| format_duration_substring}}{% endif %}{% endfor %}</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>- หยุดซ่อมบำรุง VIBRATING SCREEN / WARRIOR</td>
-                                <td class="text-decoration-underline">{% for pl in pd_loss %}{% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == 5 %}{{pl.sum_time| format_duration_substring}}{% endif %}{% endfor %}</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>- รวมเวลาสูญเสียจากการหยุดซ่อมบำรุงเครื่องจักรทั้งหมด</td>
-                                <td class="text-danger doubleUnderline">19:37</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรสูงสุดในการใช้งาน</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรในการใช้งานจริง</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>เครื่องจักรหยุดทำงานอันเป็นสาเหตุ <p class="text-primary">จากตัวเครื่องโม่</p></td>
-                                <td class="text-danger doubleUnderline">5%</td>
-                                <td></td>
+                            {% endfor %}
+
+                            <tr style="height: 40px;">
+                              <td></td>
+                              <td></td>
+                              <td></td>
                             </tr>
 
-                            <tr>
-                                <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากเหมืองศิลาชัย</td>
-                            </tr>
-                            <tr>
-                                <td>- รอหินป้อนเข้าโรงโม่</td>
-                                <td>6:44</td>
+                            {% with outer_counter=forloop.counter0 %}
+                              {% for plp in pd_loss_pro %}
+                                {% ifchanged plp.mc_type__name %}
+                                <tr class="{% if outer_counter == 0 %}table-success{% elif outer_counter == 1%}table-primary{% elif outer_counter == 2%}table-warning{%endif%}">
+                                  <td colspan="3">{{plp.mc_type__name}}</td>
+                                </tr>
+                                {% endifchanged %}
+                                <tr>
+                                  <td> - {{plp.loss_type__name}}</td>
+                                  <td>{% if i.site__base_site_id == plp.production__site__base_site_id %} {{plp.sum_time| format_duration_substring}}{% else %}0:00{%endif%}</td>
+                                  <td>ชม./เดือน</td>
+                                </tr>
+                              {% endfor %}
+                            {% endwith %}
+                              <tr class="table-danger">
+                                <td>รวมเวลาสูญเสียทั้งหมด</td>
+                                <td>{{i.sum_loss| format_duration_substring}}</td>
                                 <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>- หินใหญ่เกินขนาดติดปากจอว์</td>
-                                <td>3:27</td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>รวมความพร้อมของเครื่องจักร</td>
+                                <td>{{i.working_time| format_duration_substring}}</td>
                                 <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>- เคาะแผ่นตระแกรง (แก้ไขคุณภาพหิน)</td>
-                                <td class="text-decoration-underline">8:37</td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>เปอร์เซ็นในการสูญเสีย</td>
+                                <td>{{i.percent_loss}}%</td>
                                 <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>- รวมเวลาสูญสียจากเหมืองเจโอบีทั้งหมด</td>
-                                <td class="text-danger doubleUnderline">19:37</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรสูงสุดในการใช้งาน</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรในการใช้งานจริง</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>เครื่องจักรหยุดทำงานอันเป็นสาเหตุ <p class="text-primary">จากวัตถุดิบและคนทำงาน</p></td>
-                                <td class="text-danger doubleUnderline">5%</td>
-                                <td></td>
-                            </tr>
-                            <tr>
-                                <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}" colspan="3">สรุปประสิทธิภาพในการทำงานโดยรวมเครื่องจักร</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรสูงสุดในการใช้งาน</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>ความพร้อมของเครื่องจักรในการใช้งานจริง</td>
-                                <td>255:21</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>เครื่องจักรหยุดทำงานอันเป็นสาเหตุ <p class="text-primary">จากตัวเครื่องโม่</p></td>
-                                <td class="text-danger">19:00</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
-                            <tr>
-                                <td>เครื่องจักรหยุดทำงานอันเป็นสาเหตุ <p class="text-primary">จากวัตถุดิบและคนทำงาน</p></td>
-                                <td class="text-danger">12:05</td>
-                                <td>ชม./เดือน</td>
-                            </tr>
+                              </tr>
                           </tbody>
                         </table>
                     </div>
                 </div>
                 {% endfor %}
             </div>
-            <div class="row">
-                <div class="col">
-                    <div class="table-responsive my-3 col">
-                        <table class="table table-hover">
-                          <tbody>
-                            <tr>
-                                <td> - JAW CRUSHER</td>
-                                <td>6:44</td>
-                            </tr>
-                            <tr>
-                                <td> - CONE CRUSHER</td>
-                                <td>3:27</td>
-                            </tr>
-                            <tr>
-                                <td> - SCREEN</td>
-                                <td>8:49</td>
-                            </tr>
-                            <tr>
-                                <td> - รอหินป้อน</td>
-                                <td>6:19</td>
-                            </tr>
-                            <tr>
-                                <td> - หินใหญ่เกินขนาด</td>
-                                <td>0:44</td>
-                            </tr>
-                            <tr>
-                                <td> - เคาะแผ่นตะแกรง</td>
-                                <td>5:03</td>
-                            </tr>
-                            <tr class="table-success">
-                                <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>31:05</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="table-responsive my-3 col">
-                        <table class="table table-hover">
-                          <tbody>
-                            <tr>
-                                <td> - JAW CRUSHER</td>
-                                <td>6:44</td>
-                            </tr>
-                            <tr>
-                                <td> - CONE CRUSHER</td>
-                                <td>3:27</td>
-                            </tr>
-                            <tr>
-                                <td> - SCREEN</td>
-                                <td>8:49</td>
-                            </tr>
-                            <tr>
-                                <td> - รอหินป้อน</td>
-                                <td>6:19</td>
-                            </tr>
-                            <tr>
-                                <td> - หินใหญ่เกินขนาด</td>
-                                <td>0:44</td>
-                            </tr>
-                            <tr>
-                                <td> - เคาะแผ่นตะแกรง</td>
-                                <td>5:03</td>
-                            </tr>
-                            <tr class="table-primary">
-                                <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>31:05</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="table-responsive my-3 col">
-                        <table class="table table-hover">
-                          <tbody>
-                            <tr>
-                                <td> - JAW CRUSHER</td>
-                                <td>6:44</td>
-                            </tr>
-                            <tr>
-                                <td> - CONE CRUSHER</td>
-                                <td>3:27</td>
-                            </tr>
-                            <tr>
-                                <td> - SCREEN</td>
-                                <td>8:49</td>
-                            </tr>
-                            <tr>
-                                <td> - รอหินป้อน</td>
-                                <td>6:19</td>
-                            </tr>
-                            <tr>
-                                <td> - หินใหญ่เกินขนาด</td>
-                                <td>0:44</td>
-                            </tr>
-                            <tr>
-                                <td> - เคาะแผ่นตะแกรง</td>
-                                <td>5:03</td>
-                            </tr>
-                            <tr class="table-warning">
-                                <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>31:05</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                    </div>
-                </div>
                 <div class="row">
                     <div class="col">
                         <div class="card-body">
@@ -347,12 +189,28 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
       </div>
     </section>
     <!-- Basic Tables end -->
+    <!-- Modal Search-->
+    <div class="modal fade" id="mySearch" role="dialog">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h4 class="modal-title">Details ในการสูญเสีย</h4>
+              <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p id="pShowSearch"></p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+      </div>
+    </div>
   </div>
   <footer>
     <div class="footer clearfix mb-0 text-muted">
@@ -409,7 +267,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
 
     // site 1
-       var optionsSite1 = {
+    var optionsSite1 = {
         series: {{list_ls1_val|safe}},
         chart: {
           width: '100%',
@@ -448,7 +306,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         dataLabels: {
           formatter(val, opts) {
             const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, val + '%']
+            return [name, parseInt(val) + '%']
           }
         },
         legend: {
@@ -496,7 +354,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         dataLabels: {
           formatter(val, opts) {
             const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, val + '%']
+            return [name, parseInt(val) + '%']
           }
         },
         legend: {
@@ -544,7 +402,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         dataLabels: {
           formatter(val, opts) {
             const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, val + '%']
+            return [name, parseInt(val) + '%']
           }
         },
         legend: {
@@ -560,5 +418,39 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
         var chart = new ApexCharts(document.querySelector("#chart_site_3"), optionsSite3);
         chart.render();
+
+    // Modal search
+    function searchDetailMcType(site_id , mc_id){
+      var site_id = site_id;
+      var mc_id = mc_id;
+
+      if (site_id && mc_id) {
+          // Create Ajax Call
+          $.ajax({
+              url: '{% url "searchDetailMcType" %}',
+              data: {
+                  'site_id': site_id,
+                  'mc_id': mc_id,
+              },
+              dataType: 'json',
+              success: function (data) {
+                if (data.instance) {
+                  openModal(data.instance);
+                  e.preventDefault();
+                }else{
+                  $("#pShowSearch").html('ไม่รายละเอียดที่ค้นหา');
+                }
+              }
+          });
+      } else {
+        
+      }
+      return false;
+  }
+
+function openModal(instance) {
+  $("#pShowSearch").html(instance);
+  $('#mySearch').modal('show');
+}
 </script>
 {% endblock %}

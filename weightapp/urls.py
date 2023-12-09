@@ -50,6 +50,7 @@ urlpatterns = [
     path('setDataCarryType/',views.setDataCarryType,name="setDataCarryType"),
     path('searchTeamFromCar/',views.searchTeamFromCar,name="searchTeamFromCar"),
     path('searchDataBaesCustomer/',views.searchDataBaesCustomer,name="searchDataBaesCustomer"),
+    path('searchDetailMcType', views.searchDetailMcType, name="searchDetailMcType"),
 
     path('baseMill/setting',views.settingBaseMill,name="settingBaseMill"),
     path('baseMill/create',views.createBaseMill,name="createBaseMill"),

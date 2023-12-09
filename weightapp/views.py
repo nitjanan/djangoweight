@@ -81,7 +81,7 @@ def getSumByStone(mode, stoneType, type):
     if type == 1:
         w = Weight.objects.filter(bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = Weight.objects.filter(site__base_site_name__contains='สต็อค', bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
@@ -105,7 +105,7 @@ def getSumOther(mode, list_sum_stone, type):
     if type == 1:
         w = Weight.objects.filter(bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(Q(site='005PL') | Q(site='006PL') | Q(site='007PL')| Q(site='008PL'), bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = Weight.objects.filter(site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
@@ -213,10 +213,11 @@ def index(request):
     ####################################
     ##chart loss weight เวลาที่เสีย (ผลิต)##
     ####################################
-    actual_working_time_all = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '009PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '010PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '011PL').annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_all = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '009PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '010PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '011PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+
 
     total_loss_time_all = Production.objects.filter(created__range = (start_date, end_date)).aggregate(s=Sum('total_loss_time'))["s"]
     total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), site = '009PL').aggregate(s=Sum('total_loss_time'))["s"]
@@ -258,6 +259,9 @@ def calculatePersent(num, num_all):
 def is_scale(user):
     return user.groups.filter(name='scale').exists()
 
+def is_account(user):
+    return user.groups.filter(name='account').exists()
+
 def is_edit_weight(user):
     return user.groups.filter(name='edit_weight').exists()
 
@@ -293,7 +297,7 @@ def weightTable(request):
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
         data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
-    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user):
+    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
         data = Weight.objects.all().order_by('-date','weight_id')
 
     #กรองข้อมูล
@@ -689,36 +693,48 @@ def viewProduction(request):
     return render(request, "production/viewProduction.html",context)
 
 def summaryProduction(request):
-    current_date_time = datetime.today()
-    date_object = current_date_time - timedelta(days=1)
 
-    pd = Production.objects.filter(created__year = date_object.year, created__month = date_object.month).order_by('site__base_site_id').values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').annotate(sum_goal = Sum('goal')
-        , persent = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField()))
+    end_created = datetime.today().strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
 
-    pd_loss = ProductionLossItem.objects.filter(production__created__year = date_object.year, production__created__month = date_object.month, mc_type__in = [2,3,5]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
-
-    list_ls1_name = getLossNameByMill('009PL', date_object, 1)
-    list_ls1_val = getLossNameByMill('009PL', date_object, 2)
+    pd = Production.objects.filter(created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
+        , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time')
+        , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
+        , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
+        , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
+        , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.IntegerField()))
     
-    list_ls2_name = getLossNameByMill('010PL', date_object, 1)
-    list_ls2_val = getLossNameByMill('010PL', date_object, 2)
+    pd_loss_mc = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
+    
+    pd_loss_pro = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+    mc_type  = BaseMachineType.objects.filter(id__lt = 5)
 
-    list_ls3_name = getLossNameByMill('011PL', date_object, 1)
-    list_ls3_val = getLossNameByMill('011PL', date_object, 2)
+    list_ls1_name = getLossNameByMill('009PL', start_created, end_created, 1)
+    list_ls1_val = getLossNameByMill('009PL', start_created, end_created, 2)
+    
+    list_ls2_name = getLossNameByMill('010PL', start_created, end_created, 1)
+    list_ls2_val = getLossNameByMill('010PL', start_created, end_created, 2)
+
+    list_ls3_name = getLossNameByMill('011PL', start_created, end_created, 1)
+    list_ls3_val = getLossNameByMill('011PL', start_created, end_created, 2)
+
+    pd_loss_all = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
     context = {'production_page':'active','pd':pd,
-               'pd_loss':pd_loss, 'date_object':date_object,
+               'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
+               'date_object':end_created, 'mc_type':mc_type,
                'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
                'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
                'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
+               'pd_loss_all'  :pd_loss_all  ,
     }
     return render(request, "production/summaryProduction.html",context)
 
 
-def getLossNameByMill(site, date, mode):
+def getLossNameByMill(site, start_created, end_created, mode):
     list_loss = []
-    pd_loss = ProductionLossItem.objects.filter(production__site = site, production__created__year = date.year, production__created__month = date.month).order_by('mc_type').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
-    pd_loss_all = ProductionLossItem.objects.filter(production__site = site, production__created__year = date.year, production__created__month = date.month).aggregate(s=Sum('loss_time'))["s"]
+    pd_loss = ProductionLossItem.objects.filter(production__site = site, production__created__range=(start_created, end_created)).order_by('mc_type').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    pd_loss_all = ProductionLossItem.objects.filter(production__site = site, production__created__range=(start_created, end_created)).aggregate(s=Sum('loss_time'))["s"]
     for i in pd_loss:
         if mode == 1:
             list_loss.append(i['mc_type__name'])
@@ -797,13 +813,13 @@ def createProduction(request):
             if pd_goal_form.cleaned_data['pk']:
                 pd_goal = ProductionGoal.objects.get(id = pd_goal_form.cleaned_data['pk'])
                 pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
+                pd_goal.save()
             else:
                 pd_goal = ProductionGoal.objects.create(accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal'])
-            
-            pd_goal.site = production.site
-            pd_goal.line_type = production.line_type
-            pd_goal.date = production.created
-            pd_goal.save()
+                pd_goal.site = production.site
+                pd_goal.line_type = production.line_type
+                pd_goal.date = production.created
+                pd_goal.save()
 
             production.pd_goal = pd_goal
 
@@ -3011,4 +3027,26 @@ def baseCustomerSiteVStamp(request, dt):
     queryset = BaseCustomerSite.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
     serializer = BaseCustomerSiteSerializer(queryset, many = True)
     return Response(serializer.data)
+
+def searchDetailMcType(request):
+    site_id = request.GET.get('site_id', None)
+    mc_id = request.GET.get('mc_id', None)
+    loss = ProductionLossItem.objects.filter(production__site = site_id, mc_type = mc_id).values('loss_type__name', 'production__site__base_site_name', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+
+    index = 1
+    try:
+        strName = "<table class='table'><thead class='table-info'><tr><th colspan='4'>"+ loss[0]['mc_type__name'] +"</th></thead></tr>"
+        for i in loss:
+            strName = ''.join([strName, "<tr>"])
+            strName = ''.join([strName, "<td>" + str(index) + ")</td><td><b>"+ i['loss_type__name'] + "</td><td>"+ str(i['sum_time'])  + "</td><td> ชม./เดือน </td>"])
+            strName = ''.join([strName, "</tr>"])
+            index += 1
+        strName = ''.join([strName, "</table>"])
+    except:
+        strName = ''
+
+    data = {
+        'instance': strName,
+    }
+    return JsonResponse(data)
 

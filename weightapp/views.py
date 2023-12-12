@@ -693,7 +693,7 @@ def viewProduction(request):
     return render(request, "production/viewProduction.html",context)
 
 def summaryProduction(request):
-
+    date_object = datetime.today()
     end_created = datetime.today().strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
@@ -723,7 +723,7 @@ def summaryProduction(request):
 
     context = {'production_page':'active','pd':pd,
                'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
-               'date_object':end_created, 'mc_type':mc_type,
+               'date_object':date_object, 'mc_type':mc_type,
                'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
                'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
                'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,

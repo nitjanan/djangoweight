@@ -138,15 +138,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             </tr>
 
                             {% with outer_counter=forloop.counter0 %}
-                              {% for plp in pd_loss_pro %}
-                                {% ifchanged plp.mc_type__name %}
+                              {% for ml in mc_loos_type %}
+                                {% ifchanged ml.mc_type__name %}
                                 <tr class="{% if outer_counter == 0 %}table-success{% elif outer_counter == 1%}table-primary{% elif outer_counter == 2%}table-warning{%endif%}">
-                                  <td colspan="3">{{plp.mc_type__name}}</td>
+                                  <td colspan="3">{{ml.mc_type__name}}</td>
                                 </tr>
                                 {% endifchanged %}
                                 <tr>
-                                  <td> - {{plp.loss_type__name}}</td>
-                                  <td>{% if i.site__base_site_id == plp.production__site__base_site_id %} {{plp.sum_time| format_duration_substring}}{% else %}0:00{%endif%}</td>
+                                  <td> - {{ml.loss_type__name}}</td>
+                                  <td>
+                                    {% for plp in pd_loss_pro %}
+                                      {% if i.site__base_site_id == plp.production__site__base_site_id and ml.mc_type__name == plp.mc_type__name and ml.loss_type__name == plp.loss_type__name %}
+                                        {{plp.sum_time| format_duration_substring}}
+                                      {% endif %}
+                                    {% endfor %}
+                                  </td>
                                   <td>ชม./เดือน</td>
                                 </tr>
                               {% endfor %}

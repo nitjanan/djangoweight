@@ -608,7 +608,7 @@ def excelProductionByStone(request, my_q, list_date):
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
     else:
-        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดผลิตตามประเภทหินของเดือนนี้')
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -706,6 +706,7 @@ def summaryProduction(request):
     
     pd_loss_mc = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
+    mc_loos_type = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).values('mc_type__name', 'loss_type__name').distinct()
     pd_loss_pro = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
     mc_type  = BaseMachineType.objects.filter(id__lt = 5)
 
@@ -726,7 +727,7 @@ def summaryProduction(request):
                'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
                'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
                'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
-               'pd_loss_all'  :pd_loss_all  ,
+               'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
     }
     return render(request, "production/summaryProduction.html",context)
 

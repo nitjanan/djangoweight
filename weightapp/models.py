@@ -9,6 +9,30 @@ from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
+class BaseVisible(models.Model):
+    name = models.CharField(max_length=255,unique=True, verbose_name="ชื่อแท็บการใช้งาน")
+
+    class Meta:
+        db_table = 'base_visible'
+        ordering=('id',)
+        verbose_name = 'แท็บการใช้งาน'
+        verbose_name_plural = 'ข้อมูลแท็บการใช้งาน'
+    
+    def __str__(self):
+        return str(self.name)
+
+#USER PROFILE
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
+    visible = models.ManyToManyField(BaseVisible,verbose_name="การมองเห็นแท็ปการใช้งาน")
+
+    class Meta:
+        verbose_name = 'ผู้ใช้และตำแหน่งงาน'
+        verbose_name_plural = 'ข้อมูลผู้ใช้และตำแหน่งงาน'
+        
+    def __str__(self):
+        return self.user.username
+    
 class BaseWeightType(models.Model):
     name = models.CharField(blank=True, null=True, max_length=120)
     class Meta:

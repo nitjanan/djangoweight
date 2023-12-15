@@ -92,28 +92,29 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           <tbody>
                             <tr>
                               <td>กำหนดยอดป้อน วันที่ 1-{{date_object|date:"j F Y" }}</td>
-                              <td>{{i.pd_goal__accumulated_goal|intcomma }}</td>
+                              <td id="id_goal_{{forloop.counter0}}">{{i.pd_goal__accumulated_goal|floatformat:2|intcomma}}</td>
                               <td>ตัน</td>
                             </tr>
                             <tr>
                                 <td>ทำการผลิตหินจริง</td>
-                                <td>{{i.sum_goal|intcomma}}</td>
+                                <td id="id_real_{{forloop.counter0}}">{% for r in real_pd %}{% if i.site__base_site_id == r.site__base_site_id %}{{r.sum_weight|floatformat:2|intcomma}}{%endif%}{% endfor %}</td>
                                 <td>ตัน</td>
                             </tr>
                             <tr>
                                 <td>คิดเป็น</td>
-                                <td>{{i.percent_goal}}%</td>
+                                <td id="id_percent_{{forloop.counter0}}"></td>
                                 <td></td>
                             </tr>
                             <tr>
                                 <td>ยอดที่หายไป</td>
-                                <td>{{i.loss_weight|intcomma}}</td>
+                                <td id="id_loss_{{forloop.counter0}}"></td>
                                 <td>ตัน</td>
                             </tr>
                             <tr>
                                 <td>กำลังการผลิต (Performance)</td>
-                                <td>{{i.capacity |floatformat:2 }}</td>
-                                <td>ตัน</td>
+                                <td id="id_working_time_de_{{forloop.counter0}}" class="d-none">{{i.working_time_de}}</td>
+                                <td id="id_capacity_{{forloop.counter0}}"></td>
+                                <td>ตัน/ชม.</td>
                             </tr>
                             <tr>
                                 <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
@@ -249,6 +250,24 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
 <script>
+    $(window).on('load', function() {
+      "{% for i in pd %}"
+        var goal = $('#id_goal_{{forloop.counter0}}').text().replace(',', '');
+        var real = $('#id_real_{{forloop.counter0}}').text().replace(',', '');
+        var working_time_de = $('#id_working_time_de_{{forloop.counter0}}').text();
+
+        var loss = parseFloat(goal) - parseFloat(real);
+        $('#id_loss_{{forloop.counter0}}').html(loss.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+
+        var percent = (parseFloat(real)/ parseFloat(goal)) * 100;
+        $('#id_percent_{{forloop.counter0}}').html(percent.toFixed(0)+'%');
+
+        var capacity = parseFloat(real) / (parseFloat(working_time_de)/1000000/3600);
+        $('#id_capacity_{{forloop.counter0}}').html(capacity.toFixed(2));
+
+      "{% endfor %}"
+    });
+
     function exportToExcel() {
         var table = document.getElementById("myTable");
         var rows = table.querySelectorAll("tbody tr");

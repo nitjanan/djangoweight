@@ -22,7 +22,7 @@ from datetime import date, timedelta, datetime, time
 from django.views import generic
 from django.forms import formset_factory, modelformset_factory, inlineformset_factory
 from django import forms
-from django.db.models import Sum
+from django.db.models import Sum, Subquery
 import random
 from django.db.models.functions import Coalesce
 from django.db.models import F, ExpressionWrapper
@@ -697,13 +697,17 @@ def summaryProduction(request):
     end_created = datetime.today().strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
+    b_site = Production.objects.all().values('site').distinct()
+
+    real_pd = Weight.objects.filter(site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
+
     pd = Production.objects.filter(created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
         , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time')
         , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
         , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
         , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.IntegerField()))
-    
+
     pd_loss_mc = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
     mc_loos_type = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).values('mc_type__name', 'loss_type__name').distinct()
@@ -721,13 +725,14 @@ def summaryProduction(request):
 
     pd_loss_all = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
-    context = {'production_page':'active','pd':pd,
+    context = {'dashboard_page':'active','pd':pd,
                'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
                'date_object':date_object, 'mc_type':mc_type,
                'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
                'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
                'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
                'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
+               'real_pd':real_pd,
     }
     return render(request, "production/summaryProduction.html",context)
 
@@ -1950,7 +1955,7 @@ def editBaseSite(request, id):
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
-            return redirect('settingBaseStoneType')
+            return redirect('settingBaseSite')
 
     context = {
         'form':form,

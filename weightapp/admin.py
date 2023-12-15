@@ -2,7 +2,11 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile
+from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
+from django import forms
+from django.db.models.fields.related import ManyToManyField
+from django.db import models
 
 # Register your models here.
 class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -234,7 +238,18 @@ class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['user', 'scale_id', 'scale_name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class BaseVisibleAdmin(ImportExportModelAdmin):
+    list_display = ('name',)
 	
+class UserProfileAdmin(ImportExportModelAdmin):
+    formfield_overrides = {
+        models.ManyToManyField: {'widget': CheckboxSelectMultiple},
+    }
+    list_display = ['user'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['user__first_name', 'user__last_name']
+
+admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
 admin.site.register(BaseWeightType, BaseWeightTypeAdmin)
@@ -261,6 +276,7 @@ admin.site.register(BaseCar, BaseCarAdmin)
 admin.site.register(BaseFertilizer, BaseFertilizerAdmin)
 admin.site.register(BaseCompany, BaseCompanyAdmin)
 admin.site.register(UserScale, UserScaleAdmin)
+admin.site.register(UserProfile, UserProfileAdmin)
 
 
 

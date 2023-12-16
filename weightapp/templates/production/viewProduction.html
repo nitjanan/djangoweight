@@ -104,10 +104,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                       {% endfor %}
                     </td-->
                     <td class="text-end">{{i.goal| intcomma}}</td>
-                    <td>{% if i.run_start_time %}{{i.run_start_time | format_duration_substring}}{% elif i.mile_run_start_time %}{{i.mile_run_start_time}}{% endif %}</td>
-                    <td>{% if i.run_end_time %}{{i.run_end_time| format_duration_substring}}{% elif i.mile_run_end_time %}{{i.mile_run_end_time}}{% endif %}</td>
-                    <td>{{i.run_time| format_duration_substring}}</td>
-                    <td>{% if i.total_loss_time %}{{i.total_loss_time| format_duration_substring}}{% endif %}</td>
+                    <td>{% if i.run_start_time %}{{i.run_start_time | format_duration}}{% elif i.mile_run_start_time %}{{i.mile_run_start_time}}{% endif %}</td>
+                    <td>{% if i.run_end_time %}{{i.run_end_time| format_duration}}{% elif i.mile_run_end_time %}{{i.mile_run_end_time}}{% endif %}</td>
+                    <td>{{i.run_time| format_duration}}</td>
+                    <td>{% if i.total_loss_time %}{{i.total_loss_time| format_duration}}{% endif %}</td>
                     <td>
                       <a href="{% url 'editProduction' i.id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
                     </td>

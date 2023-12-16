@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% load humanize %}
+{% load templatehelpers %}
 
 {% block css %}
 <style>
@@ -508,7 +509,7 @@
                 label: 'ชั่วโมงทำงาน',
                 color: '#9370DB',
                 formatter: function (w) {
-                  return '{{actual_working_time_all | intcomma}}';
+                  return '{{actual_working_time_all | format_duration }}' + ' ชม.';
                 },
                 style: {
                   color: 'red' // Set the color of the text here

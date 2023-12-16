@@ -124,7 +124,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td><form class="form-inline ml-3" id="search" method="GET"><b onClick="searchDetailMcType('{{i.site__base_site_id}}', '{{mc.id}}')" data-target="#mySearch" data-toggle="modal" style="cursor: pointer;">- หยุดซ่อมบำรุง {{mc.name}}</b></form></td>
                                 <td>{% for pl in pd_loss_mc %}
                                       {% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == mc.id %}
-                                          {{pl.sum_time| format_duration_substring}}
+                                          {{pl.sum_time| format_duration}}
                                       {% endif %}
                                   {% endfor %}
                                 </td>
@@ -150,7 +150,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                   <td>
                                     {% for plp in pd_loss_pro %}
                                       {% if i.site__base_site_id == plp.production__site__base_site_id and ml.mc_type__name == plp.mc_type__name and ml.loss_type__name == plp.loss_type__name %}
-                                        {{plp.sum_time| format_duration_substring}}
+                                        {{plp.sum_time| format_duration}}
                                       {% endif %}
                                     {% endfor %}
                                   </td>
@@ -160,12 +160,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             {% endwith %}
                               <tr class="table-danger">
                                 <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>{{i.sum_loss| format_duration_substring}}</td>
+                                <td>{{i.sum_loss| format_duration}}</td>
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">
                                 <td>รวมความพร้อมของเครื่องจักร</td>
-                                <td>{{i.working_time| format_duration_substring}}</td>
+                                <td>{{i.working_time| format_duration}}</td>
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">

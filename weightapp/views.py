@@ -1301,6 +1301,14 @@ def excelStoneEstimateAndProduction(request, my_q):
         list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
         #ดึงชนิดหินที่มีคำว่าเข้าโม่
         mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=(start_created, end_created), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
+
+        tmp_stock_name = "กองสต็อค" + site.base_site_name
+        try:
+            stock_type = BaseSite.objects.get(base_site_name = tmp_stock_name)
+            stock_type_name = stock_type.base_site_name
+        except:
+            stock_type_name = "ไม่มีกองสต็อค"
+
         #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
         column_index = 2
@@ -1324,6 +1332,11 @@ def excelStoneEstimateAndProduction(request, my_q):
             sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
             column_index += 2
 
+        sheet.cell(row=1, column = column_index, value = stock_type_name)
+        sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
+        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+        column_index += 2
+
         sheet.cell(row=1, column = column_index, value = "หินเข้าโม่ทั้งหมด")
         sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
         sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
@@ -1345,6 +1358,8 @@ def excelStoneEstimateAndProduction(request, my_q):
         headers2 = ['Date','พนักงาน', 'กะ', 'ชม.ทำงาน', 'ที่ผลิตได้',]
         for i in range(len(mill_type) + 1):
             headers2.extend(['เที่ยว','ตัน',])
+
+        headers2.extend(['เที่ยว','ตัน',])
 
         headers2.extend(['AAA'])
         headers2.extend([i for i in base_stone_type])
@@ -1377,6 +1392,9 @@ def excelStoneEstimateAndProduction(request, my_q):
                     #หินเข้าโม่ทั้งหมด
                     crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
+                    #กองสต็อกตามโรงโม่
+                    stock1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+
                     #สร้างแถว 1
                     row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
@@ -1388,6 +1406,7 @@ def excelStoneEstimateAndProduction(request, my_q):
                         else:
                             row1.extend(['' for i in range(3)])
 
+                    row1.extend([stock1['c_weight'], stock1['s_weight']])
                     row1.extend([crush1['c_weight'], crush1['s_weight']])
                     row1.extend(['1'])
                     row1.extend([calculateEstimateToString(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
@@ -1447,7 +1466,7 @@ def excelStoneEstimateAndProduction(request, my_q):
                     if cell.column == 5:
                         cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
 
-                    column_crush = len(mill_type) * 2 + 6
+                    column_crush = len(mill_type) * 2 + 8
                     if cell.column == column_crush or cell.column == column_crush + 1:
                         cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
 

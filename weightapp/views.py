@@ -1229,12 +1229,12 @@ def calculateEstimate(percent, sum_all):
     return result
 
 def calculateEstimateToString(percent, sum_all):
-    result = Decimal(0.0)
+    #result = Decimal(0.0) ลดการปริ้น 0
+    result = None
     if percent and sum_all:
         result = Decimal(sum_all) * Decimal(percent)/100
         result = f"{result:.2f}"
     return result
-
 
 def exportExcelStoneEstimateAndProduction(request):
     start_created = request.GET.get('start_created') or None

@@ -935,15 +935,15 @@ def formatHourMinute(time):
        result = f'{time}'[:-3]
     return result
 
-def excelProductionAndLoss(request, my_q, start_created, end_created):
+def excelProductionAndLoss(request, my_q, sc_q):
+    
     pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
 
     workbook = openpyxl.Workbook()
     if sites:
         for site in sites:
-            #test
-            count_loss = ProductionLossItem.objects.filter(production__created__range = (start_created, end_created), production__site = site).order_by('mc_type__id', 'loss_type__id').values('production__site__base_site_id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+            count_loss = ProductionLossItem.objects.filter(sc_q, production__site = site).order_by('mc_type__id', 'loss_type__id').values('production__site__base_site_id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
 
             sheet = workbook.create_sheet(title=site.base_site_name)
 
@@ -1150,8 +1150,14 @@ def exportExcelProductionAndLoss(request):
         my_q &=Q(created__lte = end_created)
     if site is not None:
         my_q &=Q(site = site)
+
+    sc_q = Q()
+    if start_created is not None:
+        sc_q &= Q(production__created__gte = start_created)
+    if end_created is not None:
+        sc_q &=Q(production__created__lte = end_created)
     
-    response = excelProductionAndLoss(request, my_q, start_created, end_created)
+    response = excelProductionAndLoss(request, my_q, sc_q)
     return response
 
 def exportExcelProductionAndLossDashboard(request):
@@ -1168,8 +1174,14 @@ def exportExcelProductionAndLossDashboard(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+
+    sc_q = Q()
+    if start_created is not None:
+        sc_q &= Q(production__created__gte = start_created)
+    if end_created is not None:
+        sc_q &=Q(production__created__lte = end_created)
     
-    response = excelProductionAndLoss(request, my_q, start_created, end_created)
+    response = excelProductionAndLoss(request, my_q, sc_q)
     return response
 
 def viewStoneEstimate(request):
@@ -1288,7 +1300,7 @@ def calculateSumEstimateToString(stone_type, site, customer_name, list_date, tim
             percent = StoneEstimateItem.objects.get(se__created = ld, se__site = site, stone_type = stone_type).percent
         except:
             percent = None
-        sum_all = Weight.objects.filter(Q(time_out__gte=time_in) & Q(time_out__lte=time_out), bws__weight_type = 2 , date = ld, customer_name = customer_name, site = site).aggregate(s_weight = Sum("weight_total"))['s_weight']
+        sum_all = Weight.objects.filter( Q(time_out__gte=time_in) & Q(time_out__lte=time_out) , bws__weight_type = 2 , date = ld, customer_name = customer_name, site = site).aggregate(s_weight = Sum("weight_total"))['s_weight']
         
         if percent and sum_all:
             tmp = Decimal(sum_all) * Decimal(percent)/100
@@ -1305,8 +1317,14 @@ def exportExcelStoneEstimateAndProduction(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+
+    sc_q = Q()
+    if start_created is not None:
+        sc_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        sc_q &=Q(date__lte = end_created)
     
-    response = excelStoneEstimateAndProduction(request, my_q)
+    response = excelStoneEstimateAndProduction(request, my_q, sc_q)
     return response
 
 def exportExcelStoneEstimateAndProductionDashboard(request):
@@ -1322,24 +1340,21 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+
+    sc_q = Q()
+    if start_created is not None:
+        sc_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        sc_q &=Q(date__lte = end_created)
     
-    response = excelStoneEstimateAndProduction(request, my_q)
+    response = excelStoneEstimateAndProduction(request, my_q, sc_q)
     return response
 
 
-def excelStoneEstimateAndProduction(request, my_q):
+def excelStoneEstimateAndProduction(request, my_q, sc_q):
+
+
     date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
-
-    start_created = request.GET.get('start_created') or None
-    end_created = request.GET.get('end_created') or None
-
-    current_date_time = datetime.today()
-    previous_date_time = current_date_time - timedelta(days=1)
-
-    if end_created is None:
-       end_created = previous_date_time.strftime('%Y-%m-%d')
-    if start_created is None:
-       start_created = startDateInMonth(end_created)
 
     se_site = StoneEstimate.objects.filter(my_q).values_list('site',flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = se_site)
@@ -1358,7 +1373,7 @@ def excelStoneEstimateAndProduction(request, my_q):
 
             list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
             #ดึงชนิดหินที่มีคำว่าเข้าโม่
-            mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=(start_created, end_created), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
+            mill_type = Weight.objects.filter(sc_q, bws__weight_type = 2, site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
 
             tmp_stock_name = "กองสต็อค" + site.base_site_name
             try:
@@ -1519,25 +1534,25 @@ def excelStoneEstimateAndProduction(request, my_q):
                     len_row_index_total += 1
 
                     #ชั่วโมงทำงาน
-                    total_working_time_tt = Production.objects.filter(created__range = ('2023-12-01', '2023-12-25'), site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+                    total_working_time_tt = Production.objects.filter(my_q, site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
                     #หินเขา
-                    mountain_tt  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), Q(site = site) | Q(site__base_site_name = stock_type_name), bws__weight_type = 2, customer_name = list_customer_name[i], date__range = ('2023-12-01', '2023-12-25'),).aggregate(s_weight = Sum("weight_total"))
+                    mountain_tt  = Weight.objects.filter(sc_q, Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), Q(site = site) | Q(site__base_site_name = stock_type_name), bws__weight_type = 2, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
 
                     #หินเข้าโม่ทั้งหมด
-                    crush_tt = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    crush_tt = Weight.objects.filter(sc_q, Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
                     #กองสต็อกตามโรงโม่
-                    stock_tt = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    stock_tt = Weight.objects.filter(sc_q, Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
                     
                     #สร้างแถว
                     row_tt = ["รวม", list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time_tt), mountain_tt['s_weight']]
 
                     for mill in mill_type:
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
-                        if weight_time1:
-                            row_tt.extend([weight_time1['c_weight'], weight_time1['s_weight']])
+                        weight_time_tt = Weight.objects.filter(sc_q, Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        if weight_time_tt:
+                            row_tt.extend([weight_time_tt['c_weight'], weight_time_tt['s_weight']])
                         else:
                             row_tt.extend(['' for i in range(3)])
 

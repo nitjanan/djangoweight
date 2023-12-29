@@ -412,7 +412,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   $('form').submit(function() {
 
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
-    if($("#id_site").val() == '011PL'){
+    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' ){
       $('#id_run_start_time').val('');
       $('#id_run_end_time').val('');
     }
@@ -433,7 +433,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   $("#id_site").on( "change", function() {
     //โรงโม่ 3 เปลี่ยน input
-    if($(this).val() == '011PL'){
+    if($(this).val() == '011PL' || $("#id_site").val() == '028PL'){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -449,6 +449,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
       
   } );
+
+  $("#id_mile_run_start_time").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+  $("#id_mile_run_end_time") .blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
 
   $("#id_line_type").on( "change", function() {
     //หากไม่ใช่ line 1  ให้เปลี่ยนเป้าเป็น 0.0

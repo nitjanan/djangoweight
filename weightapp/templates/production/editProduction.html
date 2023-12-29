@@ -423,7 +423,7 @@ function hideDiv(id){
   
   $('form').submit(function() {
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
-    if($("#id_site").val() == '011PL'){
+    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL'){
       $('#id_run_start_time').val('');
       $('#id_run_end_time').val('');
     }
@@ -444,7 +444,7 @@ function hideDiv(id){
     //after load
     $(window).on('load', function() {
   
-      if($("#id_site").val() == '011PL'){
+      if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL'){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -461,7 +461,7 @@ function hideDiv(id){
   });
 
   $("#id_site").on( "change", function() {
-    if($(this).val() == '011PL'){
+    if($(this).val() == '011PL' || $("#id_site").val() == '028PL'){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -477,6 +477,14 @@ function hideDiv(id){
     }
       
   } );
+
+  $("#id_mile_run_start_time").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+  $("#id_mile_run_end_time") .blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
 
   $('#id_site, #id_line_type, #id_created').change(function() {
       searchProductionGoal();

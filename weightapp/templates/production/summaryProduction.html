@@ -85,7 +85,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <div class="table-responsive my-3 col">
                         <table id="myTable" class="table table-hover">
                           <thead class="table-dark">
-                            <tr class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}">
+                            <tr class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{% elif forloop.counter0  == 3%}table-info{%endif%}">
                               <th colspan="3">{{i.site__base_site_name}}</th>
                             </tr>
                           </thead>
@@ -117,7 +117,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>ตัน/ชม.</td>
                             </tr>
                             <tr>
-                                <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
+                                <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{% elif forloop.counter0  == 3%}table-info{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
                             </tr>
                             {% for mc in mc_type %}
                             <tr>
@@ -141,7 +141,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             {% with outer_counter=forloop.counter0 %}
                               {% for ml in mc_loos_type %}
                                 {% ifchanged ml.mc_type__name %}
-                                <tr class="{% if outer_counter == 0 %}table-success{% elif outer_counter == 1%}table-primary{% elif outer_counter == 2%}table-warning{%endif%}">
+                                <tr class="{% if outer_counter == 0 %}table-success{% elif outer_counter == 1%}table-primary{% elif outer_counter == 2%}table-warning{% elif outer_counter == 3%}table-info{%endif%}">
                                   <td colspan="3">{{ml.mc_type__name}}</td>
                                 </tr>
                                 {% endifchanged %}
@@ -195,6 +195,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <div id="chart_site_3"></div>
                         </div>
                     </div>
+                    <div class="col">
+                      <div class="card-body">
+                          <div id="chart_site_4"></div>
+                      </div>
+                  </div>
                 </div>
             </div>
         </div>
@@ -435,6 +440,54 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         }
         };
 
+        // site 3.2
+        var optionsSite4 = {
+        series: {{list_ls4_val|safe}},
+        chart: {
+          width: '100%',
+          type: 'pie',
+        },
+        /*
+        colors:[
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)',
+        'rgba(255, 51, 227, 0.8)',
+        'rgba(39, 16, 205, 0.8)',
+        'rgba(205, 45, 16, 0.8)',
+        ],
+        */
+        labels: {{list_ls4_name|safe}},
+        plotOptions: {
+          pie: {
+            dataLabels: {
+              offset: -5
+            }
+          }
+        },
+        title: {
+          text: "สาเหตุการหยุดทำงาน โรงโม่ 3.2",
+          style: {
+            fontSize:  '16px',
+            fontWeight:  'bold',
+            fontFamily:  undefined,
+            color:  '#5D6D7E',
+            },
+        },
+        dataLabels: {
+          formatter(val, opts) {
+            const name = opts.w.globals.labels[opts.seriesIndex]
+            return [name, parseInt(val) + '%']
+          }
+        },
+        legend: {
+          show: false
+        }
+        };
+
         var chart = new ApexCharts(document.querySelector("#chart_site_1"), optionsSite1);
         chart.render();
 
@@ -442,6 +495,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         chart.render();
 
         var chart = new ApexCharts(document.querySelector("#chart_site_3"), optionsSite3);
+        chart.render();
+
+        var chart = new ApexCharts(document.querySelector("#chart_site_4"), optionsSite4);
         chart.render();
 
     // Modal search

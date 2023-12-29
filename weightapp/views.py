@@ -731,6 +731,9 @@ def summaryProduction(request):
     list_ls3_name = getLossNameByMill('011PL', start_created, end_created, 1)
     list_ls3_val = getLossNameByMill('011PL', start_created, end_created, 2)
 
+    list_ls4_name = getLossNameByMill('028PL', start_created, end_created, 1)
+    list_ls4_val = getLossNameByMill('028PL', start_created, end_created, 2)
+
     pd_loss_all = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
     context = {'dashboard_page':'active','pd':pd,
@@ -739,6 +742,7 @@ def summaryProduction(request):
                'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
                'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
                'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
+               'list_ls4_name':list_ls4_name, 'list_ls4_val':list_ls4_val,
                'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
                'real_pd':real_pd,
     }

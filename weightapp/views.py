@@ -910,10 +910,10 @@ def endDateInMonth(day):
     result = dt.replace(day=day).date()
     return f"{result}"
 
-def calculatCapacityPerHour(request, data_sum_produc, accumulated_produc):
+def calculatCapacityPerHour(request, data_sum_produc, wk_time):
     result = Decimal('0.0')
-    if data_sum_produc and accumulated_produc:
-        result = data_sum_produc/accumulated_produc/24
+    if data_sum_produc and wk_time:
+        result = data_sum_produc/(wk_time/1000000/3600)
     return result
 
 def formatHourMinute(time):
@@ -923,171 +923,204 @@ def formatHourMinute(time):
        result = f'{time}'[:-3]
     return result
 
-def excelProductionAndLoss(request, my_q):
-    count_loss = BaseLossType.objects.all()
+def excelProductionAndLoss(request, my_q, start_created, end_created):
     pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
 
     workbook = openpyxl.Workbook()
-    for site in sites:
-        sheet = workbook.create_sheet(title=site.base_site_name)
+    if sites:
+        for site in sites:
+            #test
+            count_loss = ProductionLossItem.objects.filter(production__created__range = (start_created, end_created), production__site = site).order_by('mc_type__id', 'loss_type__id').values('production__site__base_site_id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
 
-        # Fetch distinct line types for the current mill
-        line_types = Production.objects.filter(my_q, site=site).values_list('line_type', flat=True).distinct()
+            sheet = workbook.create_sheet(title=site.base_site_name)
 
-        line_type =  BaseLineType.objects.filter(id__in=line_types)
+            # Fetch distinct line types for the current mill
+            line_types = Production.objects.filter(my_q, site=site).values_list('line_type', flat=True).distinct()
 
-        # Create a list of colors for each line_type
-        line_type_colors = [generate_pastel_color() for i  in range(len(line_type) + 1)]
+            line_type =  BaseLineType.objects.filter(id__in=line_types)
 
-        column_index = 2
-        for line in line_type:
-            sheet.cell(row=1, column = column_index, value = line.name)
-            sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + len(count_loss) + 14) -1 )
-            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
-            column_index += len(count_loss) + 14
+            # Create a list of colors for each line_type
+            line_type_colors = [generate_pastel_color() for i  in range(len(line_type) + 1)]
 
-        headers2 = ['Date']
-        for i in  range(len(line_type)):
-            headers2.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', 'ชั่วโมงตามแผน', 'ชั่วโมงตามแผน', 'ชั่วโมงทำงาน', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง'])
-            headers2.extend(['เวลาในการสูญเสีย' for i in range(len(count_loss))])
-            headers2.extend(['รวม','ชั่วโมงการทำงานจริง', 'ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
+            column_index = 2
+            for line in line_type:
+                sheet.cell(row=1, column = column_index, value = line.name)
+                sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + len(count_loss) + 17) -1 )
+                sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+                column_index += len(count_loss) + 17
 
-        sheet.append(headers2)
+            headers2 = ['Date']
+            for i in  range(len(line_type)):
+                headers2.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', 'ชั่วโมงตามแผน', 'ชั่วโมงตามแผน', 'ชั่วโมงทำงาน','ชั่วโมงกำหนดจริง', 'ชั่วโมงกำหนดจริง', 'ชั่วโมงกำหนดจริง', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง'])
+                headers2.extend([cl['mc_type__name'] for cl in count_loss])
+                headers2.extend(['รวม','ชั่วโมงการทำงานจริง', 'ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
 
-        merge_cells_num = 0
-        headers3 = ['Date']
-        for i in  range(len(line_type)):
-            headers3.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงทำงาน', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงเดินเครื่อง'])
-            headers3.extend([loss_type.name for loss_type in BaseLossType.objects.all()])
-            headers3.extend(['รวมเวลา','ชั่วโมงการทำงานจริง', 'ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
-            # merge_cells headers เป้าต่อวัน, เป้าสะสม(ตัน),ชั่วโมงทำงาน,ชั่วโมงเดินเครื่อง
-            sheet.merge_cells(start_row=2, start_column = 2 + merge_cells_num , end_row=3, end_column = 2 + merge_cells_num)
-            sheet.merge_cells(start_row=2, start_column = 3 + merge_cells_num , end_row=3, end_column = 3 + merge_cells_num)
-            sheet.merge_cells(start_row=2, start_column = 6 + merge_cells_num , end_row=3, end_column = 6 + merge_cells_num)
-            sheet.merge_cells(start_row=2, start_column = 9 + merge_cells_num , end_row=3, end_column = 9 + merge_cells_num)
-            sheet.merge_cells(start_row=2, start_column = 10 + merge_cells_num + len(count_loss) , end_row=3, end_column = 10 + merge_cells_num + len(count_loss))
-            sheet.merge_cells(start_row=2, start_column = 11 + merge_cells_num + len(count_loss) , end_row=3, end_column = 11 + merge_cells_num + len(count_loss))
-            sheet.merge_cells(start_row=2, start_column = 12 + merge_cells_num + len(count_loss) , end_row=3, end_column = 12 + merge_cells_num + len(count_loss))
-            sheet.merge_cells(start_row=2, start_column = 13 + merge_cells_num + len(count_loss) , end_row=3, end_column = 13 + merge_cells_num + len(count_loss))
-            sheet.merge_cells(start_row=2, start_column = 14 + merge_cells_num + len(count_loss) , end_row=3, end_column = 14 + merge_cells_num + len(count_loss))
-            sheet.merge_cells(start_row=2, start_column = 15 + merge_cells_num + len(count_loss) , end_row=3, end_column = 15 + merge_cells_num + len(count_loss))
+            sheet.append(headers2)
 
-            # merge_cells headers loos_type
-            sheet.merge_cells(start_row = 2, start_column = 4 + merge_cells_num , end_row = 2, end_column = 5 + merge_cells_num)
-            sheet.merge_cells(start_row = 2, start_column = 7 + merge_cells_num , end_row = 2, end_column = 8 + merge_cells_num)
-            sheet.merge_cells(start_row = 2, start_column = 10 + merge_cells_num , end_row = 2, end_column = 9 + merge_cells_num + len(count_loss))
+            merge_cells_num = 0
+            headers3 = ['Date']
+            for i in  range(len(line_type)):
+                headers3.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงทำงาน', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงกำหนดจริง', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงเดินเครื่อง'])
+                headers3.extend([cl['loss_type__name'] for cl in count_loss])
+                headers3.extend(['รวมเวลา','ชั่วโมงการทำงานจริง', 'ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
+                # merge_cells headers เป้าต่อวัน, เป้าสะสม(ตัน),ชั่วโมงทำงาน,ชั่วโมงเดินเครื่อง
+                sheet.merge_cells(start_row=2, start_column = 2 + merge_cells_num , end_row=3, end_column = 2 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column = 3 + merge_cells_num , end_row=3, end_column = 3 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column = 6 + merge_cells_num , end_row=3, end_column = 6 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column = 9 + merge_cells_num , end_row=3, end_column = 9 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column = 12 + merge_cells_num , end_row=3, end_column = 12 + merge_cells_num)
+
+                #ช่องหลังจาก loos_item
+                sheet.merge_cells(start_row=2, start_column = 13 + merge_cells_num + len(count_loss) , end_row=3, end_column = 13 + merge_cells_num + len(count_loss))
+                sheet.merge_cells(start_row=2, start_column = 14 + merge_cells_num + len(count_loss) , end_row=3, end_column = 14 + merge_cells_num + len(count_loss))
+                sheet.merge_cells(start_row=2, start_column = 15 + merge_cells_num + len(count_loss) , end_row=3, end_column = 15 + merge_cells_num + len(count_loss))            
+                sheet.merge_cells(start_row=2, start_column = 16 + merge_cells_num + len(count_loss) , end_row=3, end_column = 16 + merge_cells_num + len(count_loss))
+                sheet.merge_cells(start_row=2, start_column = 17 + merge_cells_num + len(count_loss) , end_row=3, end_column = 17 + merge_cells_num + len(count_loss))
+                sheet.merge_cells(start_row=2, start_column = 18 + merge_cells_num + len(count_loss) , end_row=3, end_column = 18 + merge_cells_num + len(count_loss))     
+
+                # merge_cells headers loos_type
+                sheet.merge_cells(start_row = 2, start_column = 4 + merge_cells_num , end_row = 2, end_column = 5 + merge_cells_num)
+                sheet.merge_cells(start_row = 2, start_column = 7 + merge_cells_num , end_row = 2, end_column = 8 + merge_cells_num)
+                sheet.merge_cells(start_row = 2, start_column = 10 + merge_cells_num , end_row = 2, end_column = 11 + merge_cells_num)
+                #sheet.merge_cells(start_row = 2, start_column = 13 + merge_cells_num , end_row = 2, end_column = 12 + merge_cells_num + len(count_loss))
+                
+                merge_cells_num += len(count_loss) + 17
+
+
+            sheet.cell(row=1, column = 1, value = 'วัน/เดือน/ปี')
+            sheet.merge_cells(start_row=1, start_column = 1, end_row=3, end_column=1)
+            sheet.append(headers3)
+
+            # Fetch distinct 'created' dates for the current mill
+            created_dates = Production.objects.filter(my_q, site=site).values_list('created', flat=True).order_by('created').distinct()
+
+            for created_date in created_dates:
+                row = [created_date]
+                row_sum = ['']
+                row_persent_loss = ['']
+                row_persent_accumulated_produc = ['']
+                sum_capacity_per_hour = Decimal('0.0')
+                
+                date_from_accumulated = startDateInMonth(created_date)
+
+                for line_type in BaseLineType.objects.filter(id__in=line_types):
+                    production = Production.objects.filter(site = site, line_type = line_type, created = created_date).first()
+                    accumulated_goal = Production.objects.filter(site = site, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
+
+                    data_sum_produc = Weight.objects.filter(site=site, date = created_date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+                    wk_time = Production.objects.filter(site=site, line_type = line_type, created = created_date).annotate(working_time_de = ExpressionWrapper(F('actual_time') - F('total_loss_time') , output_field= models.DecimalField())).aggregate(total_working_time=Sum('working_time_de'))['total_working_time']
+
+                    accumulated_produc = Weight.objects.filter(site=site ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+
+                    #3) sum_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
+                    #4) cal_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+
+                    capacity_per_hour = calculatCapacityPerHour(request, data_sum_produc, wk_time)
+                    if production:
+                        row.extend([production.goal, accumulated_goal , formatHourMinute(production.plan_start_time), formatHourMinute(production.plan_end_time), formatHourMinute(production.plan_time), formatHourMinute(production.actual_start_time), formatHourMinute(production.actual_end_time) , formatHourMinute(production.actual_time), formatHourMinute(production.run_start_time) if production.run_start_time else production.mile_run_start_time  , formatHourMinute(production.run_end_time) if production.run_end_time else production.mile_run_end_time, formatHourMinute(production.run_time)])
+                    else:
+                        row.extend(['' for i in range(17)])
+
+                    if  count_loss:
+                        for i in range(len(count_loss)):
+                            tmp_mc = sheet.cell(row=2, column = i+13).value
+                            tmp_loss = sheet.cell(row=3, column = i+13).value
+                            lss = ProductionLossItem.objects.filter(production = production, mc_type__name = tmp_mc, loss_type__name = tmp_loss).aggregate(s=Sum('loss_time'))['s']
+                            row.extend([formatHourMinute(lss)])
+                    else:
+                        row.extend(['' for i in range(len(count_loss))])
+
+                    if  production:
+                        row.extend([formatHourMinute(production.total_loss_time), formatHourMinute(calculatorDiffTime(request, production.total_loss_time, production.run_time)), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
+                        sum_capacity_per_hour += capacity_per_hour
+
+                    ''' 1) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด
+                    row_sum.extend([len(created_dates), '' , '', 'ชั่วโมงทำงานรวม', formatHourMinute(sum_by_mill['plan_time__sum']), '', '', formatHourMinute(sum_by_mill['run_time__sum'])])
+                    row_sum.extend(['eiei'+formatHourMinute(pd_loos_item['sum_loss_time']) for pd_loos_item in ProductionLossItem.objects.filter(production__site=site, production__line_type = line_type).order_by('mc_type__id', 'loss_type__id').values('loss_type__id').annotate(sum_loss_time=Coalesce(Sum('loss_time'), None))])
+
+                    row_sum.extend([formatHourMinute(sum_by_mill['total_loss_time__sum']), formatHourMinute(cal_by_mill), 'diff จากเป้า' , calculatorDiff(request, accumulated_goal , accumulated_produc) , sum_capacity_per_hour/len(created_dates),''])
+
+                    loss_items = ProductionLossItem.objects.filter(
+                        production__site=site,
+                        production__line_type=line_type
+                    ).order_by('loss_type__id').values('loss_type__id').annotate(
+                        sum_loss_time=Coalesce(Sum('loss_time'), None)
+                    )
+
+                    row_persent_accumulated_produc.extend(['', '' , '', '', '', '', '', ''])
+                    row_persent_accumulated_produc.extend(['C' for i in range(len(count_loss))])
+                    row_persent_accumulated_produc.extend(['', '', '' , str(round(calculatorDiff(request, accumulated_goal , accumulated_produc) / accumulated_goal, 2)) + "%" if accumulated_goal and accumulated_produc else None , '',''])
+
+                    row_persent_loss.extend(['', '' , '', '', '', '', '% ชม.สูญเสีย ต่อ ชม.ทำงานจริง', ''])
+                    row_persent_loss.extend([str(round(pd_loos_item['sum_loss_time'] / sum_by_mill['total_loss_time__sum'] * 100, 2)) + "%" if pd_loos_item['sum_loss_time'] else None for pd_loos_item in loss_items])
+                    row_persent_loss.extend(['100%', '', '' , '' , '',''])                
+                    '''
+
+
+                sheet.append(row)
+
+            if len(created_dates) > 0:
+                sheet.append(row_sum)
+                sheet.append(row_persent_accumulated_produc)
+                sheet.append(row_persent_loss)
+                # 2) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด sheet.cell(row = len(created_dates) + 4, column = 1, value = f'จำนวนวันทำงาน' )        
+
+
+
+            # Set column width and border for all columns
+            for column in sheet.columns:
+                max_length = 0
+                column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
+                
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+
+                adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
+                sheet.column_dimensions[column_letter].width = adjusted_width
+                
+                # Set border for each cell in the column
+                border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+                for cell in column:
+                    cell.alignment = Alignment(horizontal='center')
+
+                    # 2 row สุดท้าย ไม่ใส่ border และ set ตัวหนังสือสีแดง
+                    if cell.row > sheet.max_row - 3:
+                        cell.font = Font(color="FF0000")
+                    else:
+                        cell.border = border
             
-            merge_cells_num += len(count_loss) + 14
+            column_index = 2
+            for line_index, line in enumerate(line_types):
+                # Set the background color for the current line_type
+                fill = PatternFill(start_color=line_type_colors[line_index % len(line_type_colors)], fill_type="solid")
+                sheet.cell(row=1, column=column_index).fill = fill
+                column_index += len(count_loss) + 17
 
-        sheet.cell(row=1, column = 1, value = 'วัน/เดือน/ปี')
-        sheet.merge_cells(start_row=1, start_column = 1, end_row=3, end_column=1)
-        sheet.append(headers3)
-
-        # Fetch distinct 'created' dates for the current mill
-        created_dates = Production.objects.filter(my_q, site=site).values_list('created', flat=True).order_by('created').distinct()
-
-        for created_date in created_dates:
-            row = [created_date]
-            row_sum = ['']
-            row_persent_loss = ['']
-            row_persent_accumulated_produc = ['']
-            sum_capacity_per_hour = Decimal('0.0')
-            
-            date_from_accumulated = startDateInMonth(created_date)
-
-            for line_type in BaseLineType.objects.filter(id__in=line_types):
-                production = Production.objects.filter(site = site, line_type = line_type, created = created_date).first()
-                accumulated_goal = Production.objects.filter(site = site, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
-
-                data_sum_produc = Weight.objects.filter(site=site ,date = created_date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-                accumulated_produc = Weight.objects.filter(site=site ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-
-                sum_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
-                cal_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-
-                capacity_per_hour = calculatCapacityPerHour(request, data_sum_produc, accumulated_produc)
-                if production:
-                    row.extend([production.goal, accumulated_goal , formatHourMinute(production.plan_start_time), formatHourMinute(production.plan_end_time), formatHourMinute(production.plan_time), formatHourMinute(production.run_start_time) if production.run_start_time else production.mile_run_start_time  , formatHourMinute(production.run_end_time) if production.run_end_time else production.mile_run_end_time, formatHourMinute(production.run_time)])
-                    row.extend([formatHourMinute(pd_loos_item.loss_time) for pd_loos_item in ProductionLossItem.objects.filter(production = production).order_by('loss_type__id')])
-                    row.extend([formatHourMinute(production.total_loss_time), formatHourMinute(calculatorDiffTime(request, production.total_loss_time, production.run_time)), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
-                    sum_capacity_per_hour += capacity_per_hour
-                else:
-                    row.extend(['' for i in range(len(count_loss) + 14)])
-
-                row_sum.extend([len(created_dates), '' , '', 'ชั่วโมงทำงานรวม', formatHourMinute(sum_by_mill['plan_time__sum']), '', '', formatHourMinute(sum_by_mill['run_time__sum'])])
-                row_sum.extend([formatHourMinute(pd_loos_item['sum_loss_time']) for pd_loos_item in ProductionLossItem.objects.filter(production__site=site, production__line_type = line_type).order_by('loss_type__id').values('loss_type__id').annotate(sum_loss_time=Coalesce(Sum('loss_time'), None))])
-
-                row_sum.extend([formatHourMinute(sum_by_mill['total_loss_time__sum']), formatHourMinute(cal_by_mill), 'diff จากเป้า' , calculatorDiff(request, accumulated_goal , accumulated_produc) , sum_capacity_per_hour/len(created_dates),''])
-
-                loss_items = ProductionLossItem.objects.filter(
-                    production__site=site,
-                    production__line_type=line_type
-                ).order_by('loss_type__id').values('loss_type__id').annotate(
-                    sum_loss_time=Coalesce(Sum('loss_time'), None)
-                )
-
-                row_persent_accumulated_produc.extend(['', '' , '', '', '', '', '', ''])
-                row_persent_accumulated_produc.extend(['' for i in range(len(count_loss))])
-                row_persent_accumulated_produc.extend(['', '', '' , str(round(calculatorDiff(request, accumulated_goal , accumulated_produc) / accumulated_goal, 2)) + "%" if accumulated_goal and accumulated_produc else None , '',''])
-
-                row_persent_loss.extend(['', '' , '', '', '', '', '% ชม.สูญเสีย ต่อ ชม.ทำงานจริง', ''])
-                row_persent_loss.extend([str(round(pd_loos_item['sum_loss_time'] / sum_by_mill['total_loss_time__sum'] * 100, 2)) + "%" if pd_loos_item['sum_loss_time'] else None for pd_loos_item in loss_items])
-                row_persent_loss.extend(['100%', '', '' , '' , '',''])
-
-            sheet.append(row)
-
-        if len(created_dates) > 0:
-            sheet.append(row_sum)
-            sheet.append(row_persent_accumulated_produc)
-            sheet.append(row_persent_loss)
-            sheet.cell(row = len(created_dates) + 4, column = 1, value = f'จำนวนวันทำงาน' )
-
-        # Set column width and border for all columns
-        for column in sheet.columns:
-            max_length = 0
-            column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
-            
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(cell.value)
-                except:
-                    pass
-
-            adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
-            sheet.column_dimensions[column_letter].width = adjusted_width
-            
-            # Set border for each cell in the column
-            border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-            for cell in column:
-                cell.alignment = Alignment(horizontal='center')
-
-                # 2 row สุดท้าย ไม่ใส่ border และ set ตัวหนังสือสีแดง
-                if cell.row > sheet.max_row - 3:
-                    cell.font = Font(color="FF0000")
-                else:
+            for row in sheet.iter_rows(min_row=1, max_row=3):
+                # Set the background color for each cell in the column
+                for cell in row:
                     cell.border = border
-        
-        column_index = 2
-        for line_index, line in enumerate(line_types):
-            # Set the background color for the current line_type
-            fill = PatternFill(start_color=line_type_colors[line_index % len(line_type_colors)], fill_type="solid")
-            sheet.cell(row=1, column=column_index).fill = fill
-            column_index += len(count_loss) + 14
+                    cell.alignment = Alignment(horizontal='center')
+                    line_index = (cell.column - 2) // (len(count_loss) + 17)
+                    fill_color = line_type_colors[line_index % len(line_type_colors)]
+                    fill = PatternFill(start_color=fill_color, fill_type="solid")
+                    cell.fill = fill
 
+            # 1) merge_cells loos header mc_type
+            for col_index in range(1, sheet.max_column):
+                if sheet.cell(row=2, column=col_index).value == sheet.cell(row=2, column=col_index + 1).value:
+                    sheet.merge_cells(start_row=2, start_column=col_index, end_row=2, end_column=col_index + 1)
 
-        for row in sheet.iter_rows(min_row=1, max_row=3):
-            # Set the background color for each cell in the column
-            for cell in row:
-                cell.border = border
-                cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 2) // (len(count_loss) + 14)
-                fill_color = line_type_colors[line_index % len(line_type_colors)]
-                fill = PatternFill(start_color=fill_color, fill_type="solid")
-                cell.fill = fill
+        workbook.remove(workbook['Sheet'])
+    else:
+        worksheet = workbook.active
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลบันทึกปฎิบัติการโรงโม่ดือนนี้')
 
-    workbook.remove(workbook['Sheet'])
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="production_data.xlsx"'
@@ -1108,7 +1141,7 @@ def exportExcelProductionAndLoss(request):
     if site is not None:
         my_q &=Q(site = site)
     
-    response = excelProductionAndLoss(request, my_q)
+    response = excelProductionAndLoss(request, my_q, start_created, end_created)
     return response
 
 def exportExcelProductionAndLossDashboard(request):
@@ -1126,7 +1159,7 @@ def exportExcelProductionAndLossDashboard(request):
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
     
-    response = excelProductionAndLoss(request, my_q)
+    response = excelProductionAndLoss(request, my_q, start_created, end_created)
     return response
 
 def viewStoneEstimate(request):
@@ -1295,197 +1328,201 @@ def excelStoneEstimateAndProduction(request, my_q):
     list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
 
     workbook = openpyxl.Workbook()
-    for site in sites:
-        sheet = workbook.create_sheet(title=site.base_site_name)
+    if sites:
+        for site in sites:
+            sheet = workbook.create_sheet(title=site.base_site_name)
 
-        list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
-        #ดึงชนิดหินที่มีคำว่าเข้าโม่
-        mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=(start_created, end_created), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
+            list_time = BaseTimeEstimate.objects.filter(site = site).values('time_from', 'time_to', 'time_name')
+            #ดึงชนิดหินที่มีคำว่าเข้าโม่
+            mill_type = Weight.objects.filter(bws__weight_type = 2, date__range=(start_created, end_created), site = site).order_by('mill_name').values_list('mill_name', flat=True).distinct()
 
-        tmp_stock_name = "กองสต็อค" + site.base_site_name
-        try:
-            stock_type = BaseSite.objects.get(base_site_name = tmp_stock_name)
-            stock_type_name = stock_type.base_site_name
-        except:
-            stock_type_name = "ไม่มีกองสต็อค"
+            tmp_stock_name = "กองสต็อค" + site.base_site_name
+            try:
+                stock_type = BaseSite.objects.get(base_site_name = tmp_stock_name)
+                stock_type_name = stock_type.base_site_name
+            except:
+                stock_type_name = "ไม่มีกองสต็อค"
 
-        #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
+            #weight_stone_type = BaseStoneType.objects.filter(base_stone_type_name__in=weight_stone_types)
 
-        column_index = 2
-        sheet.cell(row=1, column = column_index, value = "พนักงาน")
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= (column_index + 2) -1 )
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            column_index = 2
+            sheet.cell(row=1, column = column_index, value = "พนักงาน")
+            sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= (column_index + 2) -1 )
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
-        column_index += 2
-        sheet.cell(row=1, column = column_index, value = "ชม.ทำงาน")
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= column_index)
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            column_index += 2
+            sheet.cell(row=1, column = column_index, value = "ชม.ทำงาน")
+            sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= column_index)
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
-        column_index += 1
-        sheet.cell(row=1, column = column_index, value = "หินเขา")
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            column_index += 1
+            sheet.cell(row=1, column = column_index, value = "หินเขา")
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
-        column_index += 1
-        for mt in mill_type:
-            sheet.cell(row=1, column = column_index, value = mt)
+            column_index += 1
+            for mt in mill_type:
+                sheet.cell(row=1, column = column_index, value = mt)
+                sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
+                sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+                column_index += 2
+
+            sheet.cell(row=1, column = column_index, value = stock_type_name)
             sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
             sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
             column_index += 2
 
-        sheet.cell(row=1, column = column_index, value = stock_type_name)
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
-        column_index += 2
+            sheet.cell(row=1, column = column_index, value = "หินเข้าโม่ทั้งหมด")
+            sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
-        sheet.cell(row=1, column = column_index, value = "หินเข้าโม่ทั้งหมด")
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + 2) -1 )
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            column_index += 2
+            sheet.cell(row=1, column = column_index, value = "สต็อกคงเหลือ")
 
-        column_index += 2
-        sheet.cell(row=1, column = column_index, value = "สต็อกคงเหลือ")
+            column_index += 1
+            sheet.cell(row=1, column = column_index, value = 'ประเภทหินตัน')
+            sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + len(base_stone_type)) -1 )
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            column_index += len(base_stone_type)
 
-        column_index += 1
-        sheet.cell(row=1, column = column_index, value = 'ประเภทหินตัน')
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + len(base_stone_type)) -1 )
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
-        column_index += len(base_stone_type)
-
-        sheet.cell(row=1, column = column_index, value = 'หินเข้าโม่รวม(ตัน)')
-        sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= column_index)
-        sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
+            sheet.cell(row=1, column = column_index, value = 'หินเข้าโม่รวม(ตัน)')
+            sheet.merge_cells(start_row=1, start_column = column_index, end_row=2, end_column= column_index)
+            sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
 
 
-        headers2 = ['Date','พนักงาน', 'กะ', 'ชม.ทำงาน', 'ที่ผลิตได้',]
-        for i in range(len(mill_type) + 1):
+            headers2 = ['Date','พนักงาน', 'กะ', 'ชม.ทำงาน', 'ที่ผลิตได้',]
+            for i in range(len(mill_type) + 1):
+                headers2.extend(['เที่ยว','ตัน',])
+
             headers2.extend(['เที่ยว','ตัน',])
 
-        headers2.extend(['เที่ยว','ตัน',])
+            headers2.extend(['AAA'])
+            headers2.extend([i for i in base_stone_type])
+            headers2.extend(['หินเข้าโม่รวม(ตัน)', 'ผลิตตัน/ชม.', 'หมายเหตุ'])
 
-        headers2.extend(['AAA'])
-        headers2.extend([i for i in base_stone_type])
-        headers2.extend(['หินเข้าโม่รวม(ตัน)', 'ผลิตตัน/ชม.', 'หมายเหตุ'])
+            sheet.cell(row=1, column = 1, value = 'วัน/เดือน/ปี')
+            #merge_cells วัน/เดือน/ปี
+            sheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
+            sheet.append(headers2)
 
-        sheet.cell(row=1, column = 1, value = 'วัน/เดือน/ปี')
-        #merge_cells วัน/เดือน/ปี
-        sheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
-        sheet.append(headers2)
+            # Fetch distinct 'created' dates for the current site
+            created_dates = StoneEstimate.objects.filter(my_q, site = site).values_list('created', flat=True).order_by('created').distinct()
 
-        # Fetch distinct 'created' dates for the current site
-        created_dates = StoneEstimate.objects.filter(my_q, site = site).values_list('created', flat=True).order_by('created').distinct()
+            row_index = 3
+            for created_date in created_dates:
+                len_row_index = 0
+                total_working_time = None
+                production_note = None
+                for i in range(len(list_customer_name)):
+                    for j, time in enumerate(list_time):
+                        len_row_index +=1
 
-        row_index = 3
-        for created_date in created_dates:
-            len_row_index = 0
-            total_working_time = None
-            production_note = None
-            for i in range(len(list_customer_name)):
-                for j, time in enumerate(list_time):
-                    len_row_index +=1
+                        #ชั่วโมงทำงาน
+                        total_working_time = Production.objects.filter(created = created_date, site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+                        #หมายเหตุ
+                        production_note = Production.objects.filter(site = site, created = created_date).values_list('note', flat=True).first()
+                        #หินเขา
+                        mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), bws__weight_type = 2, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
 
-                    #ชั่วโมงทำงาน
-                    total_working_time = Production.objects.filter(created = created_date, site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-                    #หมายเหตุ
-                    production_note = Production.objects.filter(site = site, created = created_date).values_list('note', flat=True).first()
-                    #หินเขา
-                    mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), bws__weight_type = 2, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                        #หินเข้าโม่ทั้งหมด
+                        crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
-                    #หินเข้าโม่ทั้งหมด
-                    crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        #กองสต็อกตามโรงโม่
+                        stock1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
-                    #กองสต็อกตามโรงโม่
-                    stock1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        #สร้างแถว 1
+                        row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
 
-                    #สร้างแถว 1
-                    row1 = [created_date, list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time), mountain1['s_weight']]
+                        for mill in mill_type:
 
-                    for mill in mill_type:
+                            weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                            if weight_time1:
+                                row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
+                            else:
+                                row1.extend(['' for i in range(3)])
 
-                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
-                        if weight_time1:
-                            row1.extend([weight_time1['c_weight'], weight_time1['s_weight']])
-                        else:
-                            row1.extend(['' for i in range(3)])
+                        row1.extend([stock1['c_weight'], stock1['s_weight']])
+                        row1.extend([crush1['c_weight'], crush1['s_weight']])
+                        row1.extend(['1'])
+                        row1.extend([calculateEstimateToString(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
+                        sheet.append(row1)
 
-                    row1.extend([stock1['c_weight'], stock1['s_weight']])
-                    row1.extend([crush1['c_weight'], crush1['s_weight']])
-                    row1.extend(['1'])
-                    row1.extend([calculateEstimateToString(se_item, crush1['s_weight']) for se_item in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('percent', flat=True)])
-                    sheet.append(row1)
+                    #merge_cells พนักงาน
+                    sheet.merge_cells(start_row = row_index + len_row_index -2 , start_column = 2, end_row = row_index + len_row_index -1, end_column=2)
 
-                #merge_cells พนักงาน
-                sheet.merge_cells(start_row = row_index + len_row_index -2 , start_column = 2, end_row = row_index + len_row_index -1, end_column=2)
-
-            sheet.cell(row = row_index + len_row_index, column=1, value='รวมทั้งหมด')
-            sum_by_col = Decimal('0.00')
-            for col in range(5, column_index):
-                for row in range(row_index, len_row_index + row_index):
-                    sum_by_col = sum_by_col + Decimal( sheet.cell(row=row, column=col).value or '0.00' )
-                sheet.cell(row=row_index + len_row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
-                sheet.cell(row=row_index + len_row_index, column=col).font = Font(bold=True)
+                sheet.cell(row = row_index + len_row_index, column=1, value='รวมทั้งหมด')
                 sum_by_col = Decimal('0.00')
-            row_index +=  len_row_index + 1
+                for col in range(5, column_index):
+                    for row in range(row_index, len_row_index + row_index):
+                        sum_by_col = sum_by_col + Decimal( sheet.cell(row=row, column=col).value or '0.00' )
+                    sheet.cell(row=row_index + len_row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+                    sheet.cell(row=row_index + len_row_index, column=col).font = Font(bold=True)
+                    sum_by_col = Decimal('0.00')
+                row_index +=  len_row_index + 1
 
-            sum_in_row = Decimal('0.00')
-            for row in range(3, row_index):
-                for col in range(column_index - len(base_stone_type), column_index):
-                    sum_in_row = sum_in_row + Decimal( sheet.cell(row=row, column=col).value or '0.00' )
-                sheet.cell(row=row, column=column_index, value=sum_in_row).number_format = '#,##0.00'
-                sheet.cell(row=row, column=column_index).font = Font(color="FF0000", bold=True)
                 sum_in_row = Decimal('0.00')
+                for row in range(3, row_index):
+                    for col in range(column_index - len(base_stone_type), column_index):
+                        sum_in_row = sum_in_row + Decimal( sheet.cell(row=row, column=col).value or '0.00' )
+                    sheet.cell(row=row, column=column_index, value=sum_in_row).number_format = '#,##0.00'
+                    sheet.cell(row=row, column=column_index).font = Font(color="FF0000", bold=True)
+                    sum_in_row = Decimal('0.00')
 
-            #หินเข้าโม่รวม(ตัน) ของวันนั้นๆ
-            sum_crush = sheet.cell(row=row_index-1, column=column_index).value
-            if total_working_time:
-                (h, m, s) = str(total_working_time).split(':')
-                decimal_time = int(h) + (int(m) / 100)
-                decimal_time = Decimal(decimal_time)
-                #ผลิตตัน/ชม
-                capacity_per_hour = sum_crush/decimal_time
-                sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+1, value = f"{capacity_per_hour:.2f}")
-                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+1, end_row = (row_index - 1 ), end_column=column_index+1)
-            #หมายเหตุ
-            sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+2, value = production_note)
-            sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+2, end_row = (row_index - 1 ), end_column=column_index+2)
+                #หินเข้าโม่รวม(ตัน) ของวันนั้นๆ
+                sum_crush = sheet.cell(row=row_index-1, column=column_index).value
+                if total_working_time:
+                    (h, m, s) = str(total_working_time).split(':')
+                    decimal_time = int(h) + (int(m) / 100)
+                    decimal_time = Decimal(decimal_time)
+                    #ผลิตตัน/ชม
+                    capacity_per_hour = sum_crush/decimal_time
+                    sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+1, value = f"{capacity_per_hour:.2f}")
+                    sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+1, end_row = (row_index - 1 ), end_column=column_index+1)
+                #หมายเหตุ
+                sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+2, value = production_note)
+                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+2, end_row = (row_index - 1 ), end_column=column_index+2)
 
-            #merge_cells วันที่, ชม.ทำงาน
-            sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 1, end_row = (row_index - 1 ), end_column=1)
-            sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 4, end_row = (row_index - 1 ), end_column=4)
+                #merge_cells วันที่, ชม.ทำงาน
+                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 1, end_row = (row_index - 1 ), end_column=1)
+                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 4, end_row = (row_index - 1 ), end_column=4)
 
-            # Set column width and border for all columns
-            for column in sheet.columns:
-                max_length = 0
-                column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
+                # Set column width and border for all columns
+                for column in sheet.columns:
+                    max_length = 0
+                    column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
 
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(cell.value) + 2
-                    except:
-                        pass
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(cell.value) + 2
+                        except:
+                            pass
 
-                    if cell.column == 5:
-                        cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
+                        if cell.column == 5:
+                            cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
 
-                    column_crush = len(mill_type) * 2 + 8
-                    if cell.column == column_crush or cell.column == column_crush + 1:
-                        cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
+                        column_crush = len(mill_type) * 2 + 8
+                        if cell.column == column_crush or cell.column == column_crush + 1:
+                            cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
 
-                    if cell.column == column_crush + 2:
-                        cell.fill = PatternFill(start_color='F7BF94', end_color='F7BF94', fill_type='solid')
+                        if cell.column == column_crush + 2:
+                            cell.fill = PatternFill(start_color='F7BF94', end_color='F7BF94', fill_type='solid')
 
-                adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
-                sheet.column_dimensions[column_letter].width = adjusted_width
+                    adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
+                    sheet.column_dimensions[column_letter].width = adjusted_width
 
-                # Set border for each cell in the column
-                border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-                for cell in column:
-                    if cell.row < 3:
-                        cell.alignment = Alignment(horizontal='center', vertical='center')
-                    else:
-                        cell.alignment = Alignment(horizontal='right', vertical='center')
-                    cell.border = border
-        
-    workbook.remove(workbook['Sheet'])
+                    # Set border for each cell in the column
+                    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+                    for cell in column:
+                        if cell.row < 3:
+                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                        else:
+                            cell.alignment = Alignment(horizontal='right', vertical='center')
+                        cell.border = border
+            
+        workbook.remove(workbook['Sheet'])
+    else:
+        worksheet = workbook.active
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานการผลิตหินดือนนี้')
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="stone_estimate.xlsx"'
@@ -3066,3 +3103,61 @@ def searchDetailMcType(request):
     }
     return JsonResponse(data)
 
+def exportWeightToExpress(request):
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+
+    queryset = Weight.objects.filter(my_q)
+    if not queryset.exists():
+        return HttpResponse("No data to export.")
+
+    data = {'docid': queryset.values_list('doc_id', flat=True),
+            'docdat': queryset.values_list('date', flat=True),
+            'datin': queryset.values_list('date_in', flat=True),
+            'datout': queryset.values_list('date_out', flat=True),
+            'tmin': queryset.values_list('time_in', flat=True),
+            'tmout': queryset.values_list('time_out', flat=True),
+            'truck': queryset.values_list('car_registration_name', flat=True),
+            'cuscod': queryset.values_list('customer_id', flat=True),
+            'cusname': queryset.values_list('customer_name', flat=True),
+            'depcod': queryset.values_list('base_weight_station_name', flat=True),
+            'stkcod': queryset.values_list('stone_type_id', flat=True),
+            'stkdes': queryset.values_list('stone_type_name', flat=True),
+            'trnqty': queryset.values_list('weight_total', flat=True),
+            'unitpr': queryset.values_list('price_per_ton', flat=True),
+            'amount': queryset.values_list('amount', flat=True),
+            'vat': queryset.values_list('vat', flat=True),
+            'stonenam': queryset.values_list('stone_color', flat=True),
+            'transport': queryset.values_list('transport', flat=True),
+            'nillnam': queryset.values_list('mill_name', flat=True),
+            'iscancle': queryset.values_list('is_cancel', flat=True),
+            'sttcod': queryset.values_list('base_weight_station_name', flat=True),
+            'scaleid': queryset.values_list('scale_id', flat=True),
+            'scalenam': queryset.values_list('scale_name', flat=True),
+            'scoopnam': queryset.values_list('scoop_name', flat=True),
+            'siteid': queryset.values_list('site_id', flat=True),
+            'isvat': queryset.values_list('is_s', flat=True),
+            'vattyp': queryset.values_list('vat_type', flat=True),
+            }
+
+    df = pd.DataFrame(data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=weight_express '+ start_created + " to "+ end_created +'.xlsx'
+
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response

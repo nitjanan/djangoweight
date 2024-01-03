@@ -66,15 +66,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </div>
             </div>
           </form>
-            <div class="dropdown">
-              <button class="btn btn-success dropdown-toggle me-1" type="button" id="dropdownMenuButton2" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                <i class="fa-solid fa-file-excel"></i> รายงานการผลิตเหมือง 200 ไร่
-              </button>
-              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton2">
-                <a class="dropdown-item" href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}">Export EXCEL</a>
-                <a class="dropdown-item" href="#">Export CSV</a>
-                <a class="dropdown-item" href="#">Export PDF</a>
-              </div>
+            <div class="row">
+              <div class="col-2">
+                <a href="{% url 'exportExcelStoneEstimateAndProductionDashboard' %}" class="btn btn-success btn-block">รายงานการผลิตหิน</a>
+              </div>              
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStoneEstimate' %}">สร้างการประมาณการณ์หิน <i class="fa-solid fa-circle-plus"></i></a>
             <div class="table-responsive my-3">

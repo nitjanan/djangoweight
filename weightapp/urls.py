@@ -98,6 +98,7 @@ urlpatterns = [
 
     path('exportExcelStoneEstimateAndProduction/', views.exportExcelStoneEstimateAndProduction,name="exportExcelStoneEstimateAndProduction"),
     path('exportExcelStoneEstimateAndProduction/dashboard', views.exportExcelStoneEstimateAndProductionDashboard,name="exportExcelStoneEstimateAndProductionDashboard"),
+    path('exportWeightToExpress/', views.exportWeightToExpress,name="exportWeightToExpress"),
 
     path('reset_password/', auth_views.PasswordResetView.as_view(template_name = "account/forgotPassword.html"),
           name="reset_password"),

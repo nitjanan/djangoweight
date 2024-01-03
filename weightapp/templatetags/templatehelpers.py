@@ -15,9 +15,12 @@ def my_url(value, field_name, urlencode=None):
 
 @register.filter
 def format_duration(duration):
-    hours = duration // timedelta(hours=1)
-    minutes = (duration % timedelta(hours=1)) // timedelta(minutes=1)
-    return f"{hours:02d}:{minutes:02d}"
+    result = None
+    if duration:
+        hours = duration // timedelta(hours=1)
+        minutes = (duration % timedelta(hours=1)) // timedelta(minutes=1)
+        result = f"{hours:02d}:{minutes:02d}"
+    return result
 
 @register.filter
 def format_duration_substring(tmpStr):

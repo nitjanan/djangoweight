@@ -121,7 +121,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             </tr>
                             {% for mc in mc_type %}
                             <tr>
-                                <td><form class="form-inline ml-3" id="search" method="GET"><b onClick="searchDetailMcType('{{i.site__base_site_id}}', '{{mc.id}}')" data-target="#mySearch" data-toggle="modal" style="cursor: pointer;">- หยุดซ่อมบำรุง {{mc.name}}</b></form></td>
+                                <td><form class="form-inline ml-3" id="search" method="GET"><b onClick="searchDetailMcType('{{i.site__base_site_id}}', '{{mc.id}}')" data-target="#mySearch" data-toggle="modal" style="cursor: pointer;" class="text-primary">- หยุดซ่อมบำรุง {{mc.name}}</b></form></td>
                                 <td>{% for pl in pd_loss_mc %}
                                       {% if i.site__base_site_id == pl.production__site__base_site_id and pl.mc_type == mc.id %}
                                           {{pl.sum_time| format_duration}}

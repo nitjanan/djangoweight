@@ -3151,6 +3151,7 @@ def exportWeightToExpress(request):
             'siteid': queryset.values_list('site_id', flat=True),
             'isvat': queryset.values_list('is_s', flat=True),
             'vattyp': queryset.values_list('vat_type', flat=True),
+            'pay': queryset.values_list('pay', flat=True),
             }
 
     df = pd.DataFrame(data)

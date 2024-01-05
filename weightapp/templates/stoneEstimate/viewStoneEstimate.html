@@ -68,7 +68,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col-2">
-                <a href="{% url 'exportExcelStoneEstimateAndProductionDashboard' %}" class="btn btn-success btn-block">รายงานการผลิตหิน</a>
+                <a href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}" class="btn btn-success btn-block">รายงานการผลิตหิน</a>
               </div>              
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStoneEstimate' %}">สร้างการประมาณการณ์หิน <i class="fa-solid fa-circle-plus"></i></a>

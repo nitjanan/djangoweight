@@ -53,13 +53,21 @@ from .tokens import create_jwt_pair_for_user
 import csv
 from io import StringIO
 
+def format_duration(duration):
+    result = None
+    if duration:
+        hours = duration // timedelta(hours=1)
+        minutes = (duration % timedelta(hours=1)) // timedelta(minutes=1)
+        result = f"{hours:02d}:{minutes:02d}"
+    return result
+
 def generate_pastel_color():
     # Generate random pastel colors by restricting the RGB channels within a specific range
     red = random.randint(150, 255)
     green = random.randint(150, 255)
     blue = random.randint(150, 255)
     return f"{red:02x}{green:02x}{blue:02x}"
-
+    
 def set_border(ws, side=None, blank=True):
     wb = ws._parent
     side = side if side else Side(border_style='thin', color='000000')
@@ -1066,8 +1074,6 @@ def excelProductionAndLoss(request, my_q, start_created, end_created):
                 sheet.append(row_persent_loss)
                 # 2) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด sheet.cell(row = len(created_dates) + 4, column = 1, value = f'จำนวนวันทำงาน' )        
 
-
-
             # Set column width and border for all columns
             for column in sheet.columns:
                 max_length = 0
@@ -1111,7 +1117,7 @@ def excelProductionAndLoss(request, my_q, start_created, end_created):
                     fill = PatternFill(start_color=fill_color, fill_type="solid")
                     cell.fill = fill
 
-            # 1) merge_cells loos header mc_type
+            #1) merge_cells loos header mc_type
             for col_index in range(1, sheet.max_column):
                 if sheet.cell(row=2, column=col_index).value == sheet.cell(row=2, column=col_index + 1).value:
                     sheet.merge_cells(start_row=2, start_column=col_index, end_row=2, end_column=col_index + 1)
@@ -1269,6 +1275,22 @@ def calculateEstimateToString(percent, sum_all):
         result = f"{result:.2f}"
     return result
 
+def calculateSumEstimateToString(stone_type, site, customer_name, list_date, time_in, time_out):
+    result = Decimal(0)
+    tmp = Decimal(0)
+
+    for ld in list_date:
+        try:
+            percent = StoneEstimateItem.objects.get(se__created = ld, se__site = site, stone_type = stone_type).percent
+        except:
+            percent = None
+        sum_all = Weight.objects.filter(Q(time_out__gte=time_in) & Q(time_out__lte=time_out), bws__weight_type = 2 , date = ld, customer_name = customer_name, site = site).aggregate(s_weight = Sum("weight_total"))['s_weight']
+        
+        if percent and sum_all:
+            tmp = Decimal(sum_all) * Decimal(percent)/100
+            result = result + tmp
+    return f"{result:.2f}" if result != 0.00 else None
+
 def exportExcelStoneEstimateAndProduction(request):
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
@@ -1279,8 +1301,6 @@ def exportExcelStoneEstimateAndProduction(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
-    if site is not None:
-        my_q &=Q(site = site)
     
     response = excelStoneEstimateAndProduction(request, my_q)
     return response
@@ -1421,7 +1441,7 @@ def excelStoneEstimateAndProduction(request, my_q):
                         #หมายเหตุ
                         production_note = Production.objects.filter(site = site, created = created_date).values_list('note', flat=True).first()
                         #หินเขา
-                        mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), bws__weight_type = 2, site = site, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
+                        mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), Q(site = site) | Q(site__base_site_name = stock_type_name), bws__weight_type = 2, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
 
                         #หินเข้าโม่ทั้งหมด
                         crush1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date = created_date, customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
@@ -1470,7 +1490,7 @@ def excelStoneEstimateAndProduction(request, my_q):
                 #หินเข้าโม่รวม(ตัน) ของวันนั้นๆ
                 sum_crush = sheet.cell(row=row_index-1, column=column_index).value
                 if total_working_time:
-                    (h, m, s) = str(total_working_time).split(':')
+                    (h, m) = str(format_duration(total_working_time)).split(':')
                     decimal_time = int(h) + (int(m) / 100)
                     decimal_time = Decimal(decimal_time)
                     #ผลิตตัน/ชม
@@ -1485,39 +1505,102 @@ def excelStoneEstimateAndProduction(request, my_q):
                 sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 1, end_row = (row_index - 1 ), end_column=1)
                 sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 4, end_row = (row_index - 1 ), end_column=4)
 
-                # Set column width and border for all columns
-                for column in sheet.columns:
-                    max_length = 0
-                    column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
+                
 
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(cell.value) + 2
-                        except:
-                            pass
+            # Total last
+            len_row_index_total = 0
+            for i in range(len(list_customer_name)):
 
-                        if cell.column == 5:
-                            cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
+                for j, time in enumerate(list_time):
+                    len_row_index_total += 1
 
-                        column_crush = len(mill_type) * 2 + 8
-                        if cell.column == column_crush or cell.column == column_crush + 1:
-                            cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
+                    #ชั่วโมงทำงาน
+                    total_working_time_tt = Production.objects.filter(created__range = ('2023-12-01', '2023-12-25'), site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
-                        if cell.column == column_crush + 2:
-                            cell.fill = PatternFill(start_color='F7BF94', end_color='F7BF94', fill_type='solid')
+                    #หินเขา
+                    mountain_tt  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), Q(site = site) | Q(site__base_site_name = stock_type_name), bws__weight_type = 2, customer_name = list_customer_name[i], date__range = ('2023-12-01', '2023-12-25'),).aggregate(s_weight = Sum("weight_total"))
 
-                    adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
-                    sheet.column_dimensions[column_letter].width = adjusted_width
+                    #หินเข้าโม่ทั้งหมด
+                    crush_tt = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i], site = site).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
 
-                    # Set border for each cell in the column
-                    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-                    for cell in column:
-                        if cell.row < 3:
-                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                    #กองสต็อกตามโรงโม่
+                    stock_tt = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2 , date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i], site__base_site_name = stock_type_name).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                    
+                    #สร้างแถว
+                    row_tt = ["รวม", list_customer_name[i], str(time['time_name']), formatHourMinute(total_working_time_tt), mountain_tt['s_weight']]
+
+                    for mill in mill_type:
+
+                        weight_time1 = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), bws__weight_type = 2, mill_name = mill, site = site, date__range = ('2023-12-01', '2023-12-25'), customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"), c_weight=Count('weight_total'))
+                        if weight_time1:
+                            row_tt.extend([weight_time1['c_weight'], weight_time1['s_weight']])
                         else:
-                            cell.alignment = Alignment(horizontal='right', vertical='center')
-                        cell.border = border
+                            row_tt.extend(['' for i in range(3)])
+
+                    row_tt.extend([stock_tt['c_weight'], stock_tt['s_weight']])
+                    row_tt.extend([crush_tt['c_weight'], crush_tt['s_weight']])
+                    row_tt.extend(['1'])
+                    row_tt.extend([calculateSumEstimateToString(stone_type , site, list_customer_name[i], created_dates, time['time_from'], time['time_to']) for stone_type in StoneEstimateItem.objects.filter(se__created = created_date, se__site = site).order_by('stone_type').values_list('stone_type', flat=True)])
+                    row_tt.extend([crush_tt['s_weight']])
+                    sheet.append(row_tt)
+
+                #merge_cells พนักงาน
+                sheet.merge_cells(start_row = row_index + len_row_index_total -2 , start_column = 2, end_row = row_index + len_row_index_total -1, end_column=2)
+
+            #merge_cells วันที่, ชม.ทำงาน
+            sheet.merge_cells(start_row = row_index, start_column = 1, end_row = (row_index + len_row_index_total -1), end_column=1)
+            sheet.merge_cells(start_row = row_index, start_column = 4, end_row = (row_index + len_row_index_total -1), end_column=4)
+            sheet.merge_cells(start_row = row_index, start_column = column_index+1, end_row = (row_index + len_row_index_total -1), end_column=column_index+1)
+            sheet.merge_cells(start_row = row_index, start_column = column_index+2, end_row = (row_index + len_row_index_total -1), end_column=column_index+2)
+
+
+            # Set background color for the merged cells
+            fill = PatternFill(start_color='F5CBA7', end_color='F5CBA7', fill_type='solid')  # Replace 'FF0000' with your desired color code
+            sheet.cell(row = row_index + len_row_index_total, column=1, value='รวมทั้งหมด').fill = fill
+            sheet.merge_cells(start_row = row_index + len_row_index_total, start_column = 1, end_row = row_index + len_row_index_total, end_column=4)
+
+            sum_by_col_tt = Decimal('0.00')
+            for col in range(5, column_index):
+                for row in range(row_index, len_row_index_total + row_index):
+                    sum_by_col_tt = sum_by_col_tt + Decimal( sheet.cell(row=row, column=col).value or '0.00' )
+                sheet.cell(row=row_index + len_row_index_total, column=col, value=sum_by_col_tt).number_format = '#,##0.00'
+                sheet.cell(row=row_index + len_row_index_total, column=col).font = Font(bold=True)
+                sum_by_col_tt = Decimal('0.00')
+            row_index +=  len_row_index_total + 1
+
+            # Set column width and border for all columns
+            for column in sheet.columns:
+                max_length = 0
+                column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
+
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value) + 2
+                    except:
+                        pass
+
+                    if cell.column == 5:
+                        cell.fill = PatternFill(start_color='93eef5', end_color='93eef5', fill_type='solid')
+
+                    column_crush = len(mill_type) * 2 + 8
+                    if cell.column == column_crush or cell.column == column_crush + 1:
+                        cell.fill = PatternFill(start_color='FFD548', end_color='FFD548', fill_type='solid')
+
+                    if cell.column == column_crush + 2:
+                        cell.fill = PatternFill(start_color='F7BF94', end_color='F7BF94', fill_type='solid')
+
+                adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
+                sheet.column_dimensions[column_letter].width = adjusted_width
+
+                # Set border for each cell in the column
+                border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+                for cell in column:
+                    if cell.row < 3:
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    else:
+                        cell.alignment = Alignment(horizontal='right', vertical='center')
+                    cell.border = border
             
         workbook.remove(workbook['Sheet'])
     else:

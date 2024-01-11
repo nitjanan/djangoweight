@@ -685,6 +685,7 @@ def exportExcelProductionByStoneInDashboard(request):
     response = excelProductionByStone(request, my_q, list_date)
     return response
 
+@login_required(login_url='login')
 def viewProduction(request):
     data = Production.objects.all().order_by('-created', 'site')
 
@@ -1122,9 +1123,13 @@ def excelProductionAndLoss(request, my_q, sc_q):
                     cell.fill = fill
 
             #1) merge_cells loos header mc_type
-            for col_index in range(1, sheet.max_column):
+            num_loss = 0
+            for col_index in range(12, sheet.max_column):
                 if sheet.cell(row=2, column=col_index).value == sheet.cell(row=2, column=col_index + 1).value:
-                    sheet.merge_cells(start_row=2, start_column=col_index, end_row=2, end_column=col_index + 1)
+                    num_loss += 1
+                else:
+                    sheet.merge_cells(start_row=2, start_column=col_index - num_loss, end_row=2, end_column=col_index)
+                    num_loss = 0
 
         workbook.remove(workbook['Sheet'])
     else:
@@ -1184,6 +1189,7 @@ def exportExcelProductionAndLossDashboard(request):
     response = excelProductionAndLoss(request, my_q, sc_q)
     return response
 
+@login_required(login_url='login')
 def viewStoneEstimate(request):
     data = StoneEstimate.objects.all().order_by('-created', 'site')
 
@@ -1352,8 +1358,6 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
 
 
 def excelStoneEstimateAndProduction(request, my_q, sc_q):
-
-
     date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
 
     se_site = StoneEstimate.objects.filter(my_q).values_list('site',flat=True).distinct()
@@ -1633,6 +1637,7 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
     return response
 
 ################### BaesMill ####################
+@login_required(login_url='login')
 def settingBaseMill(request):
     data = BaseMill.objects.all().order_by('-mill_id')
 
@@ -1705,6 +1710,7 @@ def editBaseMill(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaseJobType ####################
+@login_required(login_url='login')
 def settingBaseJobType(request):
     data = BaseJobType.objects.all().order_by('base_job_type_id')
 
@@ -1771,6 +1777,7 @@ def editBaseJobType(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaesStoneType ####################
+@login_required(login_url='login')
 def settingBaseStoneType(request):
     data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
 
@@ -1842,6 +1849,7 @@ def editBaseStoneType(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaesScoop ####################
+@login_required(login_url='login')
 def settingBaseScoop(request):
     data = BaseScoop.objects.all().order_by('-scoop_id')
 
@@ -1913,6 +1921,7 @@ def editBaseScoop(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaseCarTeam ####################
+@login_required(login_url='login')
 def settingBaseCarTeam(request):
     data = BaseCarTeam.objects.all().order_by('-car_team_id')
 
@@ -1984,6 +1993,7 @@ def editBaseCarTeam(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaseCar ####################
+@login_required(login_url='login')
 def settingBaseCar(request):
     data = BaseCar.objects.all().order_by('-car_id')
 
@@ -2057,6 +2067,7 @@ def editBaseCar(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaesSite ####################
+@login_required(login_url='login')
 def settingBaseSite(request):
     data = BaseSite.objects.all().order_by('-base_site_id')
 
@@ -2128,6 +2139,7 @@ def editBaseSite(request, id):
     return render(request, "manage/BaseSite/formBaseSite.html", context)
 
 ################### BaesCustomer ####################
+@login_required(login_url='login')
 def settingBaseCustomer(request):
     data = BaseCustomer.objects.filter(is_disable = False).order_by('-weight_type_id','-customer_id')
 
@@ -2199,6 +2211,7 @@ def editBaseCustomer(request, id):
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
 
 ################### BaseDriver ####################
+@login_required(login_url='login')
 def settingBaseDriver(request):
     data = BaseDriver.objects.all().order_by('-driver_id')
 
@@ -2270,6 +2283,7 @@ def editBaseDriver(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaseCarRegistration ####################
+@login_required(login_url='login')
 def settingBaseCarRegistration(request):
     data = BaseCarRegistration.objects.all().order_by('-car_registration_id')
 
@@ -2341,6 +2355,7 @@ def editBaseCarRegistration(request, id):
     return render(request, "manage/formBase.html", context)
 
 ################### BaseCustomerSite ####################
+@login_required(login_url='login')
 def settingBaseCustomerSite(request):
     data = BaseCustomerSite.objects.all().order_by('id')
 
@@ -2506,11 +2521,11 @@ def weightVStampAll(request, dt):
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)
 
-# For Insert Report weight 
+# For Insert Report weight for SLC
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightDetailBetween(request, start_date, end_date , weight_type):
-    queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type)
+    queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
 
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)

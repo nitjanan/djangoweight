@@ -3199,9 +3199,16 @@ def baseCustomerSiteVStamp(request, dt):
     return Response(serializer.data)
 
 def searchDetailMcType(request):
+    #ดึงรายงานของเดือนนั้นๆ
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
+
     site_id = request.GET.get('site_id', None)
     mc_id = request.GET.get('mc_id', None)
-    loss = ProductionLossItem.objects.filter(production__site = site_id, mc_type = mc_id).values('loss_type__name', 'production__site__base_site_name', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    loss = ProductionLossItem.objects.filter(production__site = site_id, mc_type = mc_id, production__created__range=[start_created, end_created]).values('loss_type__name', 'production__site__base_site_name', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
     index = 1
     try:

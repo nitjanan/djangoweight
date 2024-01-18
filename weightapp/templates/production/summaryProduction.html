@@ -180,26 +180,34 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 {% endfor %}
             </div>
                 <div class="row">
+                    {% if list_ls1_val%}
                     <div class="col">
                         <div class="card-body">
                             <div id="chart_site_1"></div>
                         </div>
                     </div>
+                    {% endif %}
+                    {% if list_ls2_val%}
                     <div class="col">
                         <div class="card-body">
                             <div id="chart_site_2"></div>
                         </div>
                     </div>
+                    {% endif %}
+                    {% if list_ls3_val%}
                     <div class="col">
                         <div class="card-body">
                             <div id="chart_site_3"></div>
                         </div>
                     </div>
+                    {% endif %}
+                    {% if list_ls4_val%}
                     <div class="col">
                       <div class="card-body">
                           <div id="chart_site_4"></div>
                       </div>
                   </div>
+                  {% endif %}
                 </div>
             </div>
         </div>

@@ -20,11 +20,23 @@ class BaseVisible(models.Model):
     
     def __str__(self):
         return str(self.name)
+    
+class BaseCompany(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อบริษัท")
+    code = models.CharField(blank=True, null=True, max_length=120, verbose_name="โค้ดบริษัท")
+    class Meta:
+        db_table = 'base_comp'
+        verbose_name = 'บริษัท'
+        verbose_name_plural = 'ข้อมูลบริษัท'
+
+    def __str__(self):
+        return self.code
 
 #USER PROFILE
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
     visible = models.ManyToManyField(BaseVisible,verbose_name="การมองเห็นแท็ปการใช้งาน")
+    company = models.ManyToManyField(BaseCompany,verbose_name="การมองเห็นแท็ปบริษัท")
 
     class Meta:
         verbose_name = 'ผู้ใช้และตำแหน่งงาน'
@@ -40,17 +52,6 @@ class BaseWeightType(models.Model):
 
     def __str__(self):
         return self.name
-    
-class BaseCompany(models.Model):
-    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อบริษัท")
-    code = models.CharField(blank=True, null=True, max_length=120, verbose_name="โค้ดบริษัท")
-    class Meta:
-        db_table = 'base_comp'
-        verbose_name = 'บริษัท'
-        verbose_name_plural = 'ข้อมูลบริษัท'
-
-    def __str__(self):
-        return self.code
 
 class BaseMill(models.Model):
     mill_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสต้นทาง")

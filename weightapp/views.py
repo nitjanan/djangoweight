@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -52,6 +52,19 @@ from django.db import IntegrityError
 from .tokens import create_jwt_pair_for_user
 import csv
 from io import StringIO
+
+def findCompanyIn(request):
+    code = request.session['company_code']
+
+    #หาหน้าต่างการมองเห็นบริษัททั้งหมดของ user
+    user_profile = UserProfile.objects.get(user = request.user.id)
+    company_all = BaseCompany.objects.filter(userprofile = user_profile).values('code')
+
+    if code == "ALL":
+        company_in = company_all
+    else:
+        company_in = BaseCompany.objects.filter(code = code).values('code')
+    return company_in
 
 def format_duration(duration):
     result = None
@@ -289,11 +302,27 @@ def loginPage(request):
             #ถ้าล็อกอินสำเร็จไปหน้า home else ให้ไปสมัครใหม่
             if user is not None:
                 login(request, user)
+                ''' CPT*เลือกตามบริษัท 
+                try:
+                    user_profile = UserProfile.objects.get(user = request.user.id)
+                    company = BaseCompany.objects.filter(userprofile = user_profile).first()
+                except:
+                    company = None
+                request.session['company_code'] = company.code
+                request.session['company'] = company.name
+                '''
                 return redirect('home')
+            else:
+                return redirect('signUp')
     else:
         form = AuthenticationForm()
+        ''' CPT*เลือกตามบริษัท 
+        company = BaseCompany.objects.first()
+        request.session['company_code'] = company.code
+        request.session['company'] = company.name
+        '''
 
-    return render(request, "account/login.html", {'form':form,})
+    return render(request, 'account/login.html', {'form':form,})
 
 def logoutUser(request):
     logout(request)
@@ -301,6 +330,18 @@ def logoutUser(request):
 
 @login_required(login_url='login')
 def weightTable(request):
+    active = None
+    ''' CPT*เลือกตามบริษัท 
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    if is_scale(request.user):
+        us = UserScale.objects.filter(user = request.user).values_list('scale_id')
+        data = Weight.objects.filter(scale_id__in = us, bws__company__code__in = company_in).order_by('-date','weight_id')
+    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
+        data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
+    '''
 
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
@@ -317,7 +358,7 @@ def weightTable(request):
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user)}
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user),  active :"active",}
     return render(request, "weight/weightTable.html",context)
 
 @login_required(login_url='login')
@@ -3286,3 +3327,19 @@ def exportWeightToExpress(request):
     df.to_excel(response, index=False, engine='openpyxl')
 
     return response
+
+def setSessionCompany(request):
+    name = request.GET.get('title', None)
+    request.session['company_code'] = name
+    
+    try:
+        company = BaseCompany.objects.get(code=request.session['company_code'])
+        request.session['company'] = company.name
+    except BaseCompany.DoesNotExist:
+        print(f"Company with code {request.session['company_code']} not found.")
+
+    data = {
+        'instance': request.session['company_code'],
+    }
+
+    return JsonResponse(data)

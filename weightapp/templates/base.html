@@ -224,39 +224,28 @@
         </div>
       </div>
       <div id="main">
-        <!-- Scrollable Tab-->
-        <!--ul id="nav-tabs" class="nav nav-tabs nav-fill bg-light my-3">
-          <li class="nav-item">
-            <button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-bnp-1">ศิลาชัย</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">ยูนิไมนิ่ง</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">39 ศิลาทอง</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">ครีเอทีฟ มิเนอรัล</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-1">โชคพนาไมนิ่ง</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-2">เซ้าเทิร์นพอร์ท(กระบี่)</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">โชคพนา (2512)</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">เจ.โอ.บี</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">เซ้าเทิร์นพอร์ท(สุราษฎร์)</button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bnp-3">เหมืองทุ่งใหญ่</button>
-          </li>
-        </ul-->
+        <!-- Scrollable Tab CPT*เลือกตามบริษัท-->
+        {% if request.user.is_authenticated %}
+          <!--div class="my-3">
+            <div class="scroller scroller-left float-start mt-2"><i class="bi bi-caret-left-fill"></i></div>
+            <div class="scroller scroller-right float-end mt-2"><i class="bi bi-caret-right-fill"></i></div>
+            <div class="wrapper-nav">
+                <nav class="nav nav-tabs list mt-2" id="myTab" role="tablist">
+                  {% for tab in company_tab %}
+                    {% if 'ALL' in tab.code %}
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{ALL}}" data-bs-toggle="tab" data-bs-target="#tab1" role="tab" aria-controls="public" aria-selected="true" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {%endif%}
+                    {% if 'SLC' in tab.code %}
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{SLC}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {%endif%}
+                    {% if 'CTM' in tab.code %}
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{CTM}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {%endif%}
+                  {%endfor%}
+                </nav>
+            </div>
+          </div-->
+        {%endif%}
         <!-- End Scrollable Tab-->
         {% block content %}
         {% endblock %}
@@ -278,9 +267,10 @@
         </footer-->
       </div>
     </div>
+
     <script src="https://kit.fontawesome.com/fdd38baacb.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
-    
+
     <!-- Bootstrap Framework -->
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js" integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+" crossorigin="anonymous"></script>
@@ -288,13 +278,49 @@
     <script src="{% static 'js/nav/bootstrap-nav-paginator.jquery.min.js' %}"></script>
     <!-- As A Vanilla JS Plugin -->
     <script src="{% static 'js/nav/bootstrap-nav-paginator.min.js' %}"></script>
-    
+
+    <!-- CSS3 backed JavaScript animation framework -->
+    <script src="{% static 'js/move/move.min.js' %}"></script>
+
+    <!-- scrollable-tabs framework -->
+    <link href="{% static 'css/scrolling/scrollable-tabs.css' %}" rel="stylesheet" />
+    <script src="{% static 'js/scrolling/scrollable-tabs.js' %}"></script>
+
     {% block script %}
-      <script>
-        $("#nav-tabs").BsNavPaginator(5,"nav-link");
-        // As A Vanilla JS Plugin
-        document.querySelector("#nav-tabs").BsNavPaginator(5,"nav-link");      
-      </script>
+
     {% endblock %}
+
+    <script>
+      $(document).ready(function () {
+        $('#nav-tabs').on('click', function () {
+          $('#nav-item').toggleClass('active');
+        });
+      });
+
+      function setCompany(name){
+        var titleInput = name;
+        if (titleInput) {
+            // Create Ajax Call
+            $.ajax({
+                url: '{% url "setSessionCompany" %}',
+                data: {
+                    'title': titleInput,
+                },
+                dataType: 'json',
+                success: function (data) {
+                if (data.instance) {
+                    location.reload();
+                    e.preventDefault();
+                }else{
+                }
+                }
+            });
+        } else {
+        
+        }
+        return false;
+      }
+  </script>
+
   </body>
 </html>

@@ -648,7 +648,7 @@ input.del[type=checkbox] {
   });
 
   $('input[name="vat_type_group"]').change(function(){
-    calculateAll();
+    calculateVatAndAmountVat();
   });
   
   $("#id_price_per_ton").on( "keyup", function() {
@@ -675,6 +675,25 @@ input.del[type=checkbox] {
 
   function twoDecimal(number){
     return Math.round(number * 100) / 100;
+  }
+
+  function calculateVatAndAmountVat(){
+    vat_type = $('input[name="vat_type_group"]:checked').val();
+
+    var amount = $('#id_amount').val();
+    if(amount){
+      var amount = parseFloat(amount);
+      var vat = (amount * 7)/100;
+      var amount_vat = vat + amount;
+
+      if(vat_type == 'รวมภาษี'){
+        $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
+        $('#id_vat').val('0.00');
+      }else if(vat_type == 'ไม่รวมภาษี'){
+        $('#id_amount_vat').val(twoDecimal(amount_vat).toFixed(2));
+        $('#id_vat').val(twoDecimal(vat).toFixed(2));
+      }
+    }
   }
 
   function calculateAll(){

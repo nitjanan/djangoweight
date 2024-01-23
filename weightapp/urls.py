@@ -195,4 +195,6 @@ urlpatterns = [
      path('baseCustomerSite/api/create/',views.baseCustomerSiteCreate,name="baseCustomerSiteCreate"),
      path('baseCustomerSite/api/update/<str:pk>/',views.baseCustomerSiteUpdate,name="baseCustomerSiteUpdate"),
      path('baseCustomerSite/api/vStamp/<str:dt>/',views.baseCustomerSiteVStamp,name="baseCustomerSiteVStamp"),
+
+     path('setSessionCompany', views.setSessionCompany, name="setSessionCompany"),
 ]

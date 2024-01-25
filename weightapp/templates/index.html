@@ -284,7 +284,10 @@
         </div>
         <div class="card-content pb-4">
           <div class="recent-message d-flex px-4 py-2">
-            <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block">ยอดขายตามประเภทหิน</a>
+            <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block">ยอดขายตามประเภทหินประจำเดือน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionByStoneAndMonthInDashboard' %}" class="btn btn-danger rounded-pill btn-block">ยอดขายตามประเภทหินประจำปี</a>
           </div>
           <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'exportExcelStoneEstimateAndProductionDashboard' %}" class="btn btn-info rounded-pill btn-block">รายงานการผลิตหิน</a>

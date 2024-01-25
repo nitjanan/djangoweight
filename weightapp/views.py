@@ -24,7 +24,7 @@ from django.forms import formset_factory, modelformset_factory, inlineformset_fa
 from django import forms
 from django.db.models import Sum, Subquery
 import random
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
 from django.db.models import F, ExpressionWrapper
 from django.db import models
 import pandas as pd
@@ -661,7 +661,7 @@ def excelProductionByStone(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename=stone.xlsx'
+    response['Content-Disposition'] = 'attachment; filename=stone_in_month.xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
@@ -724,6 +724,262 @@ def exportExcelProductionByStoneInDashboard(request):
     list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
 
     response = excelProductionByStone(request, my_q, list_date)
+    return response
+
+def excelProductionByStoneAndMonth(request, my_q, list_date):
+    # Query ข้อมูลขาย
+    data = Weight.objects.filter( Q(mill='010MA') | Q(mill='011MA') | Q(mill='012MA'),my_q, bws__weight_type = 1).annotate(
+        month=ExtractMonth('date'),
+        year=ExtractYear('date')
+    ).values_list('year', 'month', 'mill_name', 'stone_type_name').annotate(
+        sum_weight_total=Sum('weight_total')
+    ).order_by('year', 'month', 'mill_name', 'stone_type_name')
+    
+    # Query ข้อมูลผลิตรวม
+    data_sum_produc = Weight.objects.filter( Q(site='009PL') | Q(site='010PL') | Q(site='011PL'),my_q, bws__weight_type = 2).annotate(
+        month=ExtractMonth('date'),
+        year=ExtractYear('date')
+    ).values_list('year', 'month', 'site_name').annotate(
+        sum_weight_total=Sum('weight_total')
+    ).order_by('year', 'month', 'site_name')
+
+    # Create a new workbook and get the active worksheet
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+
+
+    if data or data_sum_produc:
+        date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+        
+        # Create a set of all unique mill and stone values
+        mills = set()
+        stones = set()
+        for item in data:
+            mills.add(item[2])
+            stones.add(item[3]) 
+
+        mill_col_list = []
+
+        
+        # Create a list of colors for each line_type
+        mill_colors = [generate_pastel_color() for i  in range(len(mills) + 1)]
+
+        column_index = 2 + len(mills)
+        for mill in mills:
+            worksheet.cell(row=1, column=column_index, value=f'ยอดขาย{mill}')
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
+            
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.alignment = Alignment(horizontal='center')
+
+            info = {}
+            info['mill'] = mill
+            info['strat_col'] = column_index
+            info['end_col'] = column_index + len(stones)
+            mill_col_list.append(info)
+
+            #อัพเดทจำนวน col ตามชนิดหิน
+            column_index += len(stones)
+
+        #set color in header in row 1-2
+        for row in worksheet.iter_rows(min_row=1, max_row=2):
+            # Set the background color for each cell in the column
+            for cell in row:
+                #cell.border = Border(top=side, bottom=side, left=side, right=side)
+                cell.alignment = Alignment(horizontal='center')
+                line_index = (cell.column - 5) // (len(stones))
+                fill_color = mill_colors[line_index % len(mill_colors)]
+                fill = PatternFill(start_color=fill_color, fill_type="solid")
+                cell.fill = fill
+
+        # Write headers row 2 to the worksheet
+        column_index = 2 + len(mills)
+        for mill in mills:
+            for stone in stones:
+                worksheet.cell(row=2, column=column_index, value=stone).alignment = Alignment(horizontal='center')
+                column_index += 1
+
+        # Create a dictionary to store data by date, mill, and stone
+        date_data = {}
+
+        # Loop through the data and populate the dictionary  
+        for item in data:
+            date = (item[0], item[1])
+            mill = item[2]
+            stone = item[3]
+            value = item[4]
+
+            if date not in date_data:
+                date_data[date] = {}
+
+            if mill not in date_data[date]:
+                date_data[date][mill] = {}
+
+            date_data[date][mill][stone] = value
+
+        row_index = 3
+        for idl, ldate in enumerate(list_date):
+                #เขียนวันที่ใน worksheet column 1
+                worksheet.cell(row=idl+3, column=1, value=str(ldate))
+                worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
+
+                for date, mill_data in date_data.items():
+                    #เขียน weight total ของแต่ละหินใน worksheet
+                    if str(worksheet.cell(row=idl+3, column = 1).value) == str(date):
+                        column_index = 2 + len(mills)
+                        for mill in mills:
+                            stone_data = mill_data.get(mill, {})
+                            for stone in stones:
+                                value = stone_data.get(stone, '')
+                                worksheet.cell(row=idl+3, column=column_index, value=value).number_format = '#,##0.00'
+                                column_index += 1
+                        #row_index += 1
+                row_index += 1
+ 
+        #นำข้อมูลการผลิตมาเรียง
+        sorted_queryset = sorted(data_sum_produc, key=lambda x: (x[0], x[1]))
+
+        # Create a dictionary to store the summed values by date and mill_name
+        summed_values = {}
+        for year, month, mill_name, value in sorted_queryset:
+            key = ((year, month), mill_name)
+            summed_values[key] = summed_values.get(key, 0) + float(value)
+
+        mill_produc_list = []
+
+        # Create headers
+        headers = ['Date'] + list(set(row[2] for row in sorted_queryset))
+        for col_num, header in enumerate(headers, 1):
+            cell = worksheet.cell(row=1, column=col_num)
+            cell.value = f'ยอดผลิต{header}'
+            cell.alignment = Alignment(horizontal='center')
+            worksheet.merge_cells(start_row=1, start_column = col_num, end_row=2, end_column=col_num)
+
+            info = {}
+            if header != 'Date':
+                info['mill'] = header
+                info['col'] = col_num
+                mill_produc_list.append(info)
+
+
+        # Fill in the data ยืด วันที่ จาก วันที่ขายทั้งหมด set(row[0] for row in data หากยึด วันที่ตามวันที่ผลิต set(row[0] for row in sorted_queryset
+        for row_num, date in enumerate(sorted(set(row for row in list_date)), 2):
+            #worksheet.cell(row=row_num, column=4, value=date)
+            row_num += 1 
+            for col_num, mill_name in enumerate(headers[1:], 2):
+                key = (date, mill_name)
+                value = summed_values.get(key, '')
+                worksheet.cell(row=row_num, column=col_num, value=value).number_format = '#,##0.00'
+        
+
+        # Write headers row 1 to the worksheet
+        worksheet.cell(row=1, column=1, value='Date')
+
+        worksheet.cell(row=row_index, column=1, value='รวมทั้งสิ้น')
+        sum_by_col = Decimal('0.00')
+        for col in range(2, column_index):
+            for row in range(3, row_index):
+                sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
+            worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+            worksheet.cell(row=row_index, column=col).font = Font(bold=True)
+            sum_by_col = Decimal('0.00')
+
+        #คิดเป็นเปอร์เซ็น
+        worksheet.cell(row=row_index+1, column=1, value="เปอร์เซ็นต์เฉลี่ย")
+        for col, produc in zip(mill_col_list, mill_produc_list):
+            if col['mill'] == produc['mill']:
+                for i in range(col['strat_col'], col['end_col']):
+                    sum_produc_val = Decimal(worksheet.cell(row=row_index, column = produc['col']).value or '1.00' )
+                    val = Decimal(worksheet.cell(row=row_index, column = i).value or '1.00' )
+                    percent = int(val/sum_produc_val * 100)
+
+                    worksheet.cell(row=row_index+1, column=i, value = " " if val == Decimal('1.00') else f'{percent}%').alignment = Alignment(horizontal='right')
+                    worksheet.cell(row=row_index+1, column=i).font = Font(color="FF0000")
+
+        # Set the column widths
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column = column_cells[2].column_letter
+            for cell in column_cells:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            worksheet.column_dimensions[column].width = adjusted_width
+            worksheet.column_dimensions[column].height = 20
+
+        side = Side(border_style='thin', color='000000')
+        set_border(worksheet, side)
+    else:
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
+
+    # Set the response headers for the Excel file
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=stone_in_year.xlsx'
+
+    # Save the workbook to the response
+    workbook.save(response)
+    return response
+
+def exportExcelProductionByStoneAndMonthInDashboard(request):
+    #ดึงรายงานของเดือนนั้นๆ
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
+    start_created = startDateInMonth(end_created)
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+    my_q &= ~Q(customer_name ='ยกเลิก')
+
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
+
+    # สร้าง list ระหว่าง start_date และ end_date ในรูปแบบ (year, month)
+    list_year_month = [(year, month) for year in range(startDate.year, endDate.year+1) for month in range(1, 13)]
+
+    response = excelProductionByStoneAndMonth(request, my_q, list_year_month)
+    return response
+
+def exportExcelProductionByStoneAndMonth(request):
+
+    doc_id = request.GET.get('doc_id') or None
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    customer_name = request.GET.get('customer_name') or None
+    stone_type = request.GET.get('stone_type') or None
+
+    my_q = Q()
+    if doc_id is not None:
+        my_q &= Q(doc_id__icontains = doc_id)
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+    if customer_name is not None :
+        my_q &=Q(customer_name__icontains = customer_name)
+    if stone_type is not None :
+        my_q &=Q(stone_type_name__icontains = stone_type)
+
+    my_q &= ~Q(customer_name ='ยกเลิก')
+   
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    startDate = datetime.strptime(start_created or startDateInMonth(previous_date_time.strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or previous_date_time.strftime('%Y-%m-%d'), "%Y-%m-%d").date()
+
+    # สร้าง list ระหว่าง start_date และ end_date ในรูปแบบ (year, month)
+    list_year_month = [(year, month) for year in range(startDate.year, endDate.year+1) for month in range(1, 13)]
+
+    response = excelProductionByStoneAndMonth(request, my_q, list_year_month)
     return response
 
 @login_required(login_url='login')

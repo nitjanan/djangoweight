@@ -38,6 +38,9 @@ urlpatterns = [
     path('exportExcelProductionByStone/', views.exportExcelProductionByStone,name="exportExcelProductionByStone"),
     path('exportExcelProductionByStone/dashboard', views.exportExcelProductionByStoneInDashboard,name="exportExcelProductionByStoneInDashboard"),
 
+    path('exportExcelProductionByStoneAndMonth/', views.exportExcelProductionByStoneAndMonth,name="exportExcelProductionByStoneAndMonth"),
+    path('exportExcelProductionByStoneAndMonthInDashboard/', views.exportExcelProductionByStoneAndMonthInDashboard,name="exportExcelProductionByStoneAndMonthInDashboard"),
+
     path('exportExcelProductionAndLoss/', views.exportExcelProductionAndLoss,name="exportExcelProductionAndLoss"),
     path('exportExcelProductionAndLoss/dashboard', views.exportExcelProductionAndLossDashboard,name="exportExcelProductionAndLossDashboard"),
     

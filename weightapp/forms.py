@@ -2,7 +2,7 @@ import os
 from django.contrib.auth import models
 from django.contrib.auth.models import User
 from django import forms
-from django.db.models import fields
+from django.db.models import fields, Q
 from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
@@ -211,18 +211,11 @@ StoneEstimateItemInlineFormset = inlineformset_factory(
 )
 
 class WeightForm(forms.ModelForm):
-    '''
-    def __init__(self,request,*args,**kwargs):
-        super (WeightForm,self).__init__(*args,**kwargs)
-        instance = kwargs.get('instance')
 
-        if instance:
-            # Access the attributes of the model instance if needed
-            customer_id_value = instance.customer_id
-
-        #เปลี่ยนการจัดกลุ่มเป็นแบบอื่นเพราะมีเคสที่ใช้เงื่อนไขนี้ไม่ได้
-        self.fields['site'] = forms.ModelChoiceField(label='หน้างาน', queryset = BaseSite.objects.filter(base_customer_id = customer_id_value), required=False)    
-    '''
+    def __init__(self, *args, **kwargs):
+       super().__init__(*args, **kwargs)
+       if self.instance.bws.company is not None:
+           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)
 
     ''' hidden
     mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
@@ -232,6 +225,8 @@ class WeightForm(forms.ModelForm):
 
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
+
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 1) | Q(weight_type = 3)))
 
     class Meta:
        model = Weight
@@ -267,8 +262,18 @@ class WeightForm(forms.ModelForm):
        }
 
 class WeightStockForm(forms.ModelForm):
-    customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(weight_type = 2))
-    
+
+    def __init__(self, *args, **kwargs):
+       super().__init__(*args, **kwargs)
+       if self.instance.bws.company is not None:
+           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)
+           self.fields['driver'] = forms.ModelChoiceField(label='ผู้ขับ', queryset = BaseDriver.objects.filter(company = self.instance.bws.company), required=False)
+           self.fields['car_registration'] = forms.ModelChoiceField(label='ทะเบียนรถ', queryset = BaseCarRegistration.objects.filter(company = self.instance.bws.company), required=False)
+
+    customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
+    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
+
     class Meta:
        model = Weight
        fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total', 'site', 'site_name', 'note', 'is_cancel')

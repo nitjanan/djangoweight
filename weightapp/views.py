@@ -1704,21 +1704,36 @@ def calculateSumEstimateToString(stone_type, site, customer_name, list_date, tim
     return f"{result:.2f}" if result != 0.00 else None
 
 def exportExcelStoneEstimateAndProduction(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
-    site = request.GET.get('site') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    tmp_end_created = previous_date_time.strftime('%Y-%m-%d')
+    tmp_start_created = startDateInMonth(tmp_end_created)
+
+    if start_created is None:
+        start_created = tmp_start_created
+    if end_created is None:
+        end_created = tmp_end_created
 
     my_q = Q()
     if start_created is not None:
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+    my_q &=Q(company__code__in = company_in)
 
     sc_q = Q()
     if start_created is not None:
         sc_q &= Q(date__gte = start_created)
     if end_created is not None:
         sc_q &=Q(date__lte = end_created)
+    sc_q &=Q(bws__company__code__in = company_in)
     
     response = excelStoneEstimateAndProduction(request, my_q, sc_q)
     return response

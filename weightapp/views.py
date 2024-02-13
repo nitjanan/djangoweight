@@ -1070,7 +1070,7 @@ def summaryProduction(request):
     real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
 
     pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
-        , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time')
+        , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.IntegerField())
         , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
         , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
@@ -1083,6 +1083,8 @@ def summaryProduction(request):
     mc_type  = BaseMachineType.objects.filter(id__lt = 5)
 
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+
+    s_target = BaseSite.objects.filter(s_comp__code = active).values('base_site_id', 'target').order_by('base_site_id')
     
     list_ls_name = [[] for _ in range(len(s_comp_id))]
     list_ls_val = [[] for _ in range(len(s_comp_id))]
@@ -1101,6 +1103,7 @@ def summaryProduction(request):
                'list_ls': list_ls,
                'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
                'real_pd':real_pd,
+               's_target':s_target,
                active :"active",
     }
     return render(request, "production/summaryProduction.html",context)

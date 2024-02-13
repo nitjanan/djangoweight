@@ -73,10 +73,15 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       <div class="card">
         <div class="card-body">
             <div class="row">
-                <button type="button" class="col-2 btn btn-secondary pull-right d-print-none" onclick="window.print();">
-                    <i class="fas fa-print"></i>
-                    ปริ้น Weekly Report
+              <div class="col">
+                <h5>สรุปรายงาน วันที่ 1-{{date_object|date:"j F Y" }}</h5>
+              </div>
+              <div class="col">                
+                <button type="button" class="btn btn-secondary float-end d-print-none" onclick="window.print();">
+                  <i class="fas fa-print"></i>
+                  ปริ้น Weekly Report
                 </button>
+              </div>
             </div>
             <div class="table-responsive">
             <div class="row">
@@ -91,9 +96,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           </thead>
                           <tbody>
                             <tr>
-                              <td>กำหนดยอดป้อน วันที่ 1-{{date_object|date:"j F Y" }}</td>
+                              <td>เป้าผลิต</td>
                               <td id="id_goal_{{forloop.counter0}}">{{i.pd_goal__accumulated_goal|floatformat:2|intcomma}}</td>
-                              <td>ตัน</td>
+                              <td>ตัน/เดือน</td>
                             </tr>
                             <tr>
                                 <td>ทำการผลิตหินจริง</td>
@@ -111,10 +116,20 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>ตัน</td>
                             </tr>
                             <tr>
+                              <td>กำลังการผลิต (Target)</td>
+                              <td id="id_target_{{forloop.counter0}}">{% for s in s_target %}{% if i.site__base_site_id == s.base_site_id %}{{s.target|floatformat:2|intcomma}}{%endif%}{% endfor %}</td>
+                              <td>ตัน/ชม.</td>
+                            </tr>
+                            <tr>
                                 <td>กำลังการผลิต (Performance)</td>
                                 <td id="id_working_time_de_{{forloop.counter0}}" class="d-none">{{i.working_time_de}}</td>
                                 <td id="id_capacity_{{forloop.counter0}}"></td>
                                 <td>ตัน/ชม.</td>
+                            </tr>
+                            <tr>
+                              <td>%A</td>
+                              <td id="id_a_percent_{{forloop.counter0}}"></td>
+                              <td></td>
                             </tr>
                             <tr>
                                 <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{% elif forloop.counter0  == 3%}table-info{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
@@ -164,6 +179,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">
+                                <td>เวลาทำงานที่กำหนด</td>
+                                <td>{{i.sum_actual| format_duration}}</td>
+                                <td>ชม./เดือน</td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>เวลาโม่หินจริง</td>
+                                <td>{{i.sum_run| format_duration}}</td>
+                                <td>ชม./เดือน</td>
+                              </tr>
+                              <tr class="table-danger">
                                 <td>รวมความพร้อมของเครื่องจักร</td>
                                 <td>{{i.working_time| format_duration}}</td>
                                 <td>ชม./เดือน</td>
@@ -171,7 +196,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               <tr class="table-danger">
                                 <td>เปอร์เซ็นในการสูญเสีย</td>
                                 <td>{{i.percent_loss}}%</td>
-                                <td>ชม./เดือน</td>
+                                <td></td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>%P</td>
+                                <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p}}%</td>
+                                <td></td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>%OEE</td>
+                                <td id="id_oee_percent_{{forloop.counter0}}"></td>
+                                <td></td>
                               </tr>
                           </tbody>
                         </table>
@@ -248,7 +283,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       "{% for i in pd %}"
         var goal = $('#id_goal_{{forloop.counter0}}').text().replace(',', '');
         var real = $('#id_real_{{forloop.counter0}}').text().replace(',', '');
+        var target = $('#id_target_{{forloop.counter0}}').text().replace(',', '');
         var working_time_de = $('#id_working_time_de_{{forloop.counter0}}').text();
+        var percent_p = $('#id_percent_p_{{forloop.counter0}}').text().replace(',', '');
 
         var loss = parseFloat(goal) - parseFloat(real);
         $('#id_loss_{{forloop.counter0}}').html(loss.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -258,6 +295,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
         var capacity = parseFloat(real) / (parseFloat(working_time_de)/1000000/3600);
         $('#id_capacity_{{forloop.counter0}}').html(capacity.toFixed(2));
+
+        var a_percent = (parseFloat(capacity)/ parseFloat(target));
+        $('#id_a_percent_{{forloop.counter0}}').html(a_percent.toFixed(0)+'%');
+
+        var oee_percent = (parseFloat(a_percent) * parseFloat(percent_p));
+        $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(0)+'%');
 
       "{% endfor %}"
     });

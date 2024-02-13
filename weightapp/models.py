@@ -230,6 +230,7 @@ class BaseSite(models.Model):
     v_stamp = models.DateTimeField(auto_now=True)
     s_comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True , verbose_name="โรงโม่ของบริษัท (ปลายทาง)")
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ปลายทาง)")
+    target = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="กำลังการผลิต (Target)")
     
     class Meta:
         db_table = 'base_site'

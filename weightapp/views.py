@@ -3807,6 +3807,7 @@ def exportWeightToExpress(request):
             'isvat': queryset.values_list('is_s', flat=True),
             'vattyp': queryset.values_list('vat_type', flat=True),
             'pay': queryset.values_list('pay', flat=True),
+            'company': queryset.values_list('bws__company__code', flat=True),
             }
 
     df = pd.DataFrame(data)

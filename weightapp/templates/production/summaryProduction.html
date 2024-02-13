@@ -179,36 +179,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
                 {% endfor %}
             </div>
-                <div class="row">
-                    {% if list_ls1_val%}
-                    <div class="col">
-                        <div class="card-body">
-                            <div id="chart_site_1"></div>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if list_ls2_val%}
-                    <div class="col">
-                        <div class="card-body">
-                            <div id="chart_site_2"></div>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if list_ls3_val%}
-                    <div class="col">
-                        <div class="card-body">
-                            <div id="chart_site_3"></div>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if list_ls4_val%}
-                    <div class="col">
-                      <div class="card-body">
-                          <div id="chart_site_4"></div>
+                 <div class="row">
+                    {%  for i in list_ls %}
+                      {% if i.0 %}
+                      <div class="col">
+                          <div class="card-body">
+                              <div id="chart_site_{{forloop.counter}}"></div>
+                          </div>
                       </div>
-                  </div>
-                  {% endif %}
-                </div>
+                      {% endif %}
+                    {%endfor%}
+                 </div>
             </div>
         </div>
       </div>
@@ -304,209 +285,47 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         document.body.removeChild(link);
     }
 
-    // site 1
-    var optionsSite1 = {
-        series: {{list_ls1_val|safe}},
-        chart: {
-          width: '100%',
-          type: 'pie',
-        },
-        /*
-        colors:[
-        'rgba(255, 99, 132, 0.8)',
-        'rgba(54, 162, 235, 0.8)',
-        'rgba(255, 206, 86, 0.8)',
-        'rgba(75, 192, 192, 0.8)',
-        'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)',
-        'rgba(255, 51, 227, 0.8)',
-        'rgba(39, 16, 205, 0.8)',
-        'rgba(205, 45, 16, 0.8)',
-        ],
-        */
-        labels: {{list_ls1_name|safe}},
-        plotOptions: {
-          pie: {
-            dataLabels: {
-              offset: -5
-            }
-          }
-        },
-        title: {
-          text: "สาเหตุการหยุดทำงาน โรงโม่ 1",
-          style: {
-            fontSize:  '16px',
-            fontWeight:  'bold',
-            fontFamily:  undefined,
-            color:  '#5D6D7E',
-            },
-        },
-        dataLabels: {
-          formatter(val, opts) {
-            const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, parseInt(val) + '%']
-          }
-        },
-        legend: {
-          show: false
-        }
-        };
+    '{% for item in list_ls %}'
+      '{% if item.0 %}'
+          // site {{ loop.index }}
+          var optionsSite{{ forloop.counter }} = {
+              series: {{ item.1 | safe }},
+              chart: {
+                  width: '100%',
+                  type: 'pie',
+              },
+              labels: {{ item.0 | safe }},
+              plotOptions: {
+                  pie: {
+                      dataLabels: {
+                          offset: -5
+                      }
+                  }
+              },
+              title: {
+                  text: "สาเหตุการหยุดทำงาน โรงโม่ {{forloop.counter}}",
+                  style: {
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      fontFamily: undefined,
+                      color: '#5D6D7E',
+                  },
+              },
+              dataLabels: {
+                  formatter(val, opts) {
+                      const name = opts.w.globals.labels[opts.seriesIndex]
+                      return [name, parseInt(val) + '%']
+                  }
+              },
+              legend: {
+                  show: false
+              }
+          };
 
-        // site 2
-        var optionsSite2 = {
-        series: {{list_ls2_val|safe}},
-        chart: {
-          width: '100%',
-          type: 'pie',
-        },
-        /*
-        colors:[
-        'rgba(255, 99, 132, 0.8)',
-        'rgba(54, 162, 235, 0.8)',
-        'rgba(255, 206, 86, 0.8)',
-        'rgba(75, 192, 192, 0.8)',
-        'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)',
-        'rgba(255, 51, 227, 0.8)',
-        'rgba(39, 16, 205, 0.8)',
-        'rgba(205, 45, 16, 0.8)',
-        ],
-        */
-        labels: {{list_ls2_name|safe}},
-        plotOptions: {
-          pie: {
-            dataLabels: {
-              offset: -5
-            }
-          }
-        },
-        title: {
-          text: "สาเหตุการหยุดทำงาน โรงโม่ 2",
-          style: {
-            fontSize:  '16px',
-            fontWeight:  'bold',
-            fontFamily:  undefined,
-            color:  '#5D6D7E',
-            },
-        },
-        dataLabels: {
-          formatter(val, opts) {
-            const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, parseInt(val) + '%']
-          }
-        },
-        legend: {
-          show: false
-        }
-        };
-        
-        // site 3
-        var optionsSite3 = {
-        series: {{list_ls3_val|safe}},
-        chart: {
-          width: '100%',
-          type: 'pie',
-        },
-        /*
-        colors:[
-        'rgba(255, 99, 132, 0.8)',
-        'rgba(54, 162, 235, 0.8)',
-        'rgba(255, 206, 86, 0.8)',
-        'rgba(75, 192, 192, 0.8)',
-        'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)',
-        'rgba(255, 51, 227, 0.8)',
-        'rgba(39, 16, 205, 0.8)',
-        'rgba(205, 45, 16, 0.8)',
-        ],
-        */
-        labels: {{list_ls3_name|safe}},
-        plotOptions: {
-          pie: {
-            dataLabels: {
-              offset: -5
-            }
-          }
-        },
-        title: {
-          text: "สาเหตุการหยุดทำงาน โรงโม่ 3",
-          style: {
-            fontSize:  '16px',
-            fontWeight:  'bold',
-            fontFamily:  undefined,
-            color:  '#5D6D7E',
-            },
-        },
-        dataLabels: {
-          formatter(val, opts) {
-            const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, parseInt(val) + '%']
-          }
-        },
-        legend: {
-          show: false
-        }
-        };
-
-        // site 3.2
-        var optionsSite4 = {
-        series: {{list_ls4_val|safe}},
-        chart: {
-          width: '100%',
-          type: 'pie',
-        },
-        /*
-        colors:[
-        'rgba(255, 99, 132, 0.8)',
-        'rgba(54, 162, 235, 0.8)',
-        'rgba(255, 206, 86, 0.8)',
-        'rgba(75, 192, 192, 0.8)',
-        'rgba(153, 102, 255, 0.8)',
-        'rgba(255, 159, 64, 0.8)',
-        'rgba(255, 51, 227, 0.8)',
-        'rgba(39, 16, 205, 0.8)',
-        'rgba(205, 45, 16, 0.8)',
-        ],
-        */
-        labels: {{list_ls4_name|safe}},
-        plotOptions: {
-          pie: {
-            dataLabels: {
-              offset: -5
-            }
-          }
-        },
-        title: {
-          text: "สาเหตุการหยุดทำงาน โรงโม่ 3.2",
-          style: {
-            fontSize:  '16px',
-            fontWeight:  'bold',
-            fontFamily:  undefined,
-            color:  '#5D6D7E',
-            },
-        },
-        dataLabels: {
-          formatter(val, opts) {
-            const name = opts.w.globals.labels[opts.seriesIndex]
-            return [name, parseInt(val) + '%']
-          }
-        },
-        legend: {
-          show: false
-        }
-        };
-
-        var chart = new ApexCharts(document.querySelector("#chart_site_1"), optionsSite1);
-        chart.render();
-
-        var chart = new ApexCharts(document.querySelector("#chart_site_2"), optionsSite2);
-        chart.render();
-
-        var chart = new ApexCharts(document.querySelector("#chart_site_3"), optionsSite3);
-        chart.render();
-
-        var chart = new ApexCharts(document.querySelector("#chart_site_4"), optionsSite4);
-        chart.render();
+          var chart = new ApexCharts(document.querySelector("#chart_site_{{forloop.counter}}"), optionsSite{{forloop.counter}});
+          chart.render();
+      '{% endif %}'
+    '{% endfor %}'
 
     // Modal search
     function searchDetailMcType(site_id , mc_id){

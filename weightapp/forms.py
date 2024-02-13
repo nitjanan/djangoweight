@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -48,11 +48,13 @@ class WeightStockForm(forms.ModelForm):
        }
        
 class ProductionForm(forms.ModelForm):
-    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(weight_type = 2))
+    def __init__(self,request,*args,**kwargs):
+        super (ProductionForm,self).__init__(*args,**kwargs)
+        self.fields['site'] = forms.ModelChoiceField(label='ปลายทาง', queryset =  BaseSite.objects.filter(weight_type = 2, s_comp__code =  request.session['company_code']))
     
     class Meta:
        model = Production
-       fields = ('created', 'site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note', 'actual_start_time', 'actual_end_time')
+       fields = ('company','created', 'site', 'line_type', 'goal','plan_start_time','plan_end_time','run_start_time','run_end_time','mile_run_start_time','mile_run_end_time','note', 'actual_start_time', 'actual_end_time')
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'plan_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
@@ -62,6 +64,7 @@ class ProductionForm(forms.ModelForm):
         'actual_start_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'actual_end_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time','required': 'true'}),
         'note': forms.Textarea(attrs={'class':'form-control','rows':2, 'cols':15}),
+        'company' : forms.HiddenInput(),
         }
        labels = {
             'created': _('วันที่ผลิต'),
@@ -174,18 +177,26 @@ class ProductionGoalForm(forms.ModelForm):
     pk_goal = forms.IntegerField(widget = forms.HiddenInput(), required = False)
     class Meta:
        model = ProductionGoal
-       fields = ('accumulated_goal','pk_goal')
+       fields = ('accumulated_goal','pk_goal', 'company')
+       widgets = {
+        'company' : forms.HiddenInput(),
+        }
        labels = {
             'accumulated_goal': _('เป้าที่คาดการณ์ของเดือนนี้'),
        }
 
 #เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
 class StoneEstimateForm(forms.ModelForm):
+    def __init__(self,request,*args,**kwargs):
+        super (StoneEstimateForm,self).__init__(*args,**kwargs)
+        self.fields['site'] = forms.ModelChoiceField(label='ปลายทาง', queryset =  BaseSite.objects.filter(weight_type = 2, s_comp__code =  request.session['company_code']))
+
     class Meta:
        model = StoneEstimate
-       fields = ('created','site',)
+       fields = ('created', 'site', 'company')
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'company' : forms.HiddenInput(),
         }
        labels = {
             'created': _('วันที่ประมาณการณ์'),

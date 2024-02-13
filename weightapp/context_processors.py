@@ -13,8 +13,8 @@ def userVisibleTab(request):
 def companyVisibleTab(request):
     try:
         user_profile = UserProfile.objects.get(user_id = request.user.id)
-        company_tab = BaseCompany.objects.filter(userprofile = user_profile).order_by('code')
-        
+        #มี ALL ด้วย company_tab = BaseCompany.objects.filter(userprofile = user_profile).order_by('code')
+        company_tab = BaseCompany.objects.filter(userprofile = user_profile)
     except:
         company_tab = None
 

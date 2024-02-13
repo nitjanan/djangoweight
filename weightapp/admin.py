@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -12,6 +12,12 @@ from django.db import models
 class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['base_vat_type_id', 'base_vat_type_name', 'base_vat_type_des'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class WeightResource(resources.ModelResource):
+
+    class Meta:
+        model =  Weight
+        import_id_fields = ('weight_id',)
 
 class BaseJobTypeResource(resources.ModelResource):     
 
@@ -113,9 +119,10 @@ class BaseTimeEstimateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    resource_class = WeightResource
     list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'stone_type_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ('weight_id', 'doc_id', 'date','customer_name', 'stone_type_name',)
+    search_fields = ('weight_id', 'doc_id', 'date','customer_name', 'stone_type_name')
 
 class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id' , 'weight_id', 'user_update', 'doc_id', 'customer_name', 'stone_type_name'] #แสดงรายการสินค้าในรูปแบบตาราง
@@ -249,6 +256,14 @@ class UserProfileAdmin(ImportExportModelAdmin):
     list_display = ['user'] #แสดงรายการสินค้าในรูปแบบตาราง
     search_fields = ['user__first_name', 'user__last_name']
 
+class BaseSECAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    formfield_overrides = {
+        models.ManyToManyField: {'widget': CheckboxSelectMultiple},
+    }
+    autocomplete_fields = ['customer']
+    list_display = ['id', 'customer'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -277,6 +292,7 @@ admin.site.register(BaseFertilizer, BaseFertilizerAdmin)
 admin.site.register(BaseCompany, BaseCompanyAdmin)
 admin.site.register(UserScale, UserScaleAdmin)
 admin.site.register(UserProfile, UserProfileAdmin)
+admin.site.register(BaseSEC, BaseSECAdmin)
 
 
 

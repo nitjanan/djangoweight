@@ -66,6 +66,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
                       {{form.site | add_class:"form-control" |attr:"required:true"}}
+                      {{form.company}}
                       <div class="form-control-icon">
                         <i class="fa-solid fa-industry"></i>
                       </div>
@@ -224,6 +225,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
                 <hr class="my-4">
                 {{pd_goal_form.pk_goal}}
+                {{pd_goal_form.company}}
                 <div class="col-md-2">
                   <p class="fw-bolder text-warning">{{pd_goal_form.accumulated_goal.label}}</p>
                 </div>
@@ -490,6 +492,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var line_type = $("#id_line_type").val();
         var created = $("#id_created").val();
         var pd_id = '';
+        var company = "{{ request.session.company_code }}";
+        
         // Create Ajax Call
         if(site && line_type && created){
                 //set id_distributor
@@ -500,6 +504,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                         'line_type_id': line_type,
                         'created': created,
                         'pd_id': pd_id,
+                        'company':company,
                 },
                 dataType: 'json',
                 success: function (data) {

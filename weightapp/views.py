@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -91,7 +91,7 @@ def set_border(ws, side=None, blank=True):
         wb._borders.append(Border(top=white, bottom=white, left=white, right=white))
         wb._cell_styles[0].borderId = len(wb._borders) - 1
 
-def getSumByStone(mode, stoneType, type):
+def getSumByStone(mode, stoneType, type, company_in):
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
@@ -100,18 +100,18 @@ def getSumByStone(mode, stoneType, type):
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
-        w = Weight.objects.filter(bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(site__base_site_name__contains='สต็อค', bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
         for i in se_item:
-            crush = Weight.objects.filter(site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+            crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
             w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
-def getSumOther(mode, list_sum_stone, type):
+def getSumOther(mode, list_sum_stone, type, company_in):
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
@@ -124,133 +124,170 @@ def getSumOther(mode, list_sum_stone, type):
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
-        w = Weight.objects.filter(bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
         for i in se_item:
-            crush = Weight.objects.filter(site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+            crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
             w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
-def getNumListStoneWeightChart(mode, stone_list_id, type):
+def getNumListStoneWeightChart(mode, stone_list_id, type, company_in):
     #sell
     list_sum_stone = []
     for stone_id in stone_list_id:
-        list_sum_stone.append(getSumByStone(mode, stone_id, type))
+        list_sum_stone.append(getSumByStone(mode, stone_id, type, company_in))
 
-    list_sum_stone.append(getSumOther(mode, stone_list_id, type))
+    list_sum_stone.append(getSumOther(mode, stone_list_id, type, company_in))
     return list_sum_stone
 
 # Create your views here.
-
 @login_required(login_url='login')
 def index(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     # today date
     current_date = datetime.now()
     previous_day = current_date - timedelta(days=1)
 
-    weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
-    sum_all_weight = Weight.objects.filter(date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+    ####################################
+    ###### list customer weight ########
+    ####################################
 
-    data_sum_produc_all = Weight.objects.filter(Q(site='009PL') | Q(site='010PL') | Q(site='011PL'), date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill1 = Weight.objects.filter(site='009PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill2 = Weight.objects.filter(site='010PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_mill3 = Weight.objects.filter(site='011PL' ,date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
+    sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+
+    ####################################
+    ######## data weight stock #########
+    ####################################
+    mill_name_list = []
+
+    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+    s_comp_name = BaseSite.objects.filter(s_comp__code = active).values('base_site_name').order_by('base_site_id')
+
+    s_comp = BaseSite.objects.filter(s_comp__code = active).values('base_site_id', 'base_site_name').order_by('base_site_id')
+    data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+
+    data_sum_produc = []
+    data_sum_produc.append(('Total', data_sum_produc_all))
+
+    for site in s_comp:
+        aggregated_value = Weight.objects.filter(
+            bws__company__code__in=company_in,
+            site=site['base_site_id'],
+            date=previous_day,
+            bws__weight_type=2
+        ).aggregate(s=Sum("weight_total"))["s"]
+        
+        # Append a tuple (site_id, aggregated_value) to the list
+        data_sum_produc.append((site['base_site_name'], aggregated_value))
+    
+    ####################################
+    ########### chart stone ############
+    ####################################
     
     #'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
     sell_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    sell_list = getNumListStoneWeightChart(1, sell_list_name, 1)
+    sell_list = getNumListStoneWeightChart(1, sell_list_name, 1, company_in)
 
     stock_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    stock_list = getNumListStoneWeightChart(2, stock_list_name, 2)
+    stock_list = getNumListStoneWeightChart(2, stock_list_name, 2, company_in)
 
     produce_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    produce_list = getNumListStoneWeightChart(2, produce_list_name, 3)
+    produce_list = getNumListStoneWeightChart(2, produce_list_name, 3, company_in)
 
+    ####################################
+    ########### chart mill #############
+    ####################################
     #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
     start_date = datetime.strptime(startDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
     end_date = datetime.strptime(endDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
     now_date = datetime.strptime(str(previous_day.strftime('%Y-%m-%d')), "%Y-%m-%d")
 
-    ####################################
-    ########### chart mill #############
-    ####################################
     #สร้าง list ระหว่าง start_date และ end_date
     list_date_between = pd.date_range(start_date, end_date).tolist()
     list_date = [date.strftime("%Y-%m-%d") for date in list_date_between]
 
-    sum_goal_mill_1 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '009PL').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_2 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '010PL').aggregate(s=Sum('accumulated_goal'))["s"]
-    sum_goal_mill_3 = ProductionGoal.objects.filter(date__year = f'{now_date.year}' , date__month = f'{now_date.month}' , site = '011PL').aggregate(s=Sum('accumulated_goal'))["s"]
+    # Define lists to store cumulative totals and goal percentages for each mill
+    list_goal_mills = [[] for _ in range(len(s_comp_id))]
+    cumulative_totals = [0] * len(s_comp_id)
 
-    list_goal_mill_1 = []
-    list_goal_mill_2 = []
-    list_goal_mill_3 = []
+    # Fetch sum goals for each mill
+    sum_goals = {}
+    for mill_id in s_comp_id:
+        sum_goals[mill_id] = ProductionGoal.objects.filter(
+            date__year=now_date.year,
+            date__month=now_date.month,
+            site=mill_id
+        ).aggregate(s=Sum('accumulated_goal'))['s']
 
-    weight_mill1 = Weight.objects.filter(
-        date__range=(start_date, end_date),
-        site = '009PL'
-    ).values('date').annotate(
-        cumulative_total=Sum('weight_total', distinct=True),
-    ).order_by('date')
+    # Fetch weights for each mill within the date range
+    weights = {}
+    for i, mill_id in enumerate(s_comp_id):
+        weights[mill_id] = Weight.objects.filter(
+            date__range=(start_date, end_date),
+            site=mill_id
+        ).values('date').annotate(
+            cumulative_total=Sum('weight_total')
+        ).order_by('date')
 
-    weight_mill2 = Weight.objects.filter(
-        date__range=(start_date, end_date),
-        site = '010PL'
-    ).values('date').annotate(
-        cumulative_total=Sum('weight_total', distinct=True),
-    ).order_by('date')
-
-    weight_mill3 = Weight.objects.filter(
-        date__range=(start_date, end_date),
-        site = '011PL'
-    ).values('date').annotate(
-        cumulative_total=Sum('weight_total', distinct=True),
-    ).order_by('date')
-
-    
-    cumulative_total1 = 0
-    cumulative_total2 = 0
-    cumulative_total3 = 0
+    # Iterate through list_date
     for date in list_date:
-        for w in weight_mill1:
-            if str(date) == str(w['date']):
-                cumulative_total1 += w['cumulative_total']
-        list_goal_mill_1.append(calculatePersent(cumulative_total1, sum_goal_mill_1))
+        for i, mill_id in enumerate(s_comp_id):
+            # Iterate through weights for the current mill and update cumulative total
+            for w in weights[mill_id]:
+                if str(date) == str(w['date']):
+                    cumulative_totals[i] += w['cumulative_total']
+            # Append goal percentage to the corresponding list
+            list_goal_mills[i].append(calculatePersent(cumulative_totals[i], sum_goals[mill_id]))
 
-        for w in weight_mill2:
-            if str(date) == str(w['date']):
-                cumulative_total2 += w['cumulative_total']
-        list_goal_mill_2.append(calculatePersent(cumulative_total2, sum_goal_mill_2))
-
-        for w in weight_mill3:
-            if str(date) == str(w['date']):
-                cumulative_total3 += w['cumulative_total']
-        list_goal_mill_3.append(calculatePersent(cumulative_total3, sum_goal_mill_3))
+    list_goal_mill = []
+    for i, mill in enumerate(s_comp):
+        list_goal_mill.append((mill['base_site_name'], list_goal_mills[i]))
 
     ####################################
     ##chart loss weight เวลาที่เสีย (ผลิต)##
     ####################################
-    actual_working_time_all = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill1 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '009PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill2 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '010PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
-    actual_working_time_mill3 = Production.objects.filter(created__year = f'{now_date.year}' , created__month = f'{now_date.month}', site = '011PL').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    actual_working_time = {}
+    total_loss_time = {}
+    persent_loss_weight = {}
+    list_persent_loss_weight = []
 
+    # Iterate over the mill site IDs
+    for site_id in s_comp_id:
+        # Filter Production objects for the current mill site and calculate actual working time
+        actual_working_time[site_id] = Production.objects.filter(
+            created__year=f'{now_date.year}',
+            created__month=f'{now_date.month}',
+            site=site_id
+        ).annotate(
+            working_time=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DurationField())
+        ).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
-    total_loss_time_all = Production.objects.filter(created__range = (start_date, end_date)).aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill1 = Production.objects.filter(created__range = (start_date, end_date), site = '009PL').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill2 = Production.objects.filter(created__range = (start_date, end_date), site = '010PL').aggregate(s=Sum('total_loss_time'))["s"]
-    total_loss_time_mill3 = Production.objects.filter(created__range = (start_date, end_date), site = '011PL').aggregate(s=Sum('total_loss_time'))["s"]
-    
+        # Filter Production objects for the current mill site and calculate total loss time
+        total_loss_time[site_id] = Production.objects.filter(
+            created__range=(start_date, end_date),
+            site=site_id
+        ).aggregate(s=Sum('total_loss_time'))["s"]
+
+        # Calculate percentage loss weight for the current mill site
+        persent_loss_weight[site_id] = calculatePersent(
+            total_loss_time[site_id] if total_loss_time[site_id] else None,
+            actual_working_time[site_id]
+        )
+        list_persent_loss_weight.append(persent_loss_weight[site_id])
+
+    actual_working_time_all = Production.objects.filter(company__code = active, created__year = f'{now_date.year}' , created__month = f'{now_date.month}').annotate(working_time = ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+    total_loss_time_all = Production.objects.filter(company__code = active, created__range = (start_date, end_date)).aggregate(s=Sum('total_loss_time'))["s"]
     persent_loss_weight_all = calculatePersent(total_loss_time_all if total_loss_time_all else None, actual_working_time_all)
-    persent_loss_weight_mill1 = calculatePersent(total_loss_time_mill1 if total_loss_time_mill1 else None, actual_working_time_mill1)
-    persent_loss_weight_mill2 = calculatePersent(total_loss_time_mill2 if total_loss_time_mill2 else None, actual_working_time_mill2)
-    persent_loss_weight_mill3 = calculatePersent(total_loss_time_mill3 if total_loss_time_mill3 else None, actual_working_time_mill3)
 
-    list_persent_loss_weight = [persent_loss_weight_mill3, persent_loss_weight_mill2, persent_loss_weight_mill1, persent_loss_weight_all]
+    # Add list
+    list_persent_loss_weight.append(persent_loss_weight_all)
 
     context = { 'weight': weight,
                 'previous_day':previous_day,
@@ -260,15 +297,12 @@ def index(request):
                 'stock_list':stock_list,
                 'produce_list':produce_list,
                 'data_sum_produc_all':data_sum_produc_all,
-                'data_sum_produc_mill1':data_sum_produc_mill1,
-                'data_sum_produc_mill2':data_sum_produc_mill2,
-                'data_sum_produc_mill3':data_sum_produc_mill3,
+                'data_sum_produc':data_sum_produc,
                 'list_date': list_date,
-                'list_goal_mill_1':list_goal_mill_1,
-                'list_goal_mill_2':list_goal_mill_2,
-                'list_goal_mill_3':list_goal_mill_3,
+                'list_goal_mill' : list_goal_mill,
                 'list_persent_loss_weight':list_persent_loss_weight,
-                'dashboard_page':'active',}
+                'dashboard_page':'active',
+                active :"active",}
     return render(request, "index.html",context)
 
 def calculatePersent(num, num_all):
@@ -302,7 +336,7 @@ def loginPage(request):
             #ถ้าล็อกอินสำเร็จไปหน้า home else ให้ไปสมัครใหม่
             if user is not None:
                 login(request, user)
-                ''' CPT*เลือกตามบริษัท 
+                #CPT*เลือกตามบริษัท 
                 try:
                     user_profile = UserProfile.objects.get(user = request.user.id)
                     company = BaseCompany.objects.filter(userprofile = user_profile).first()
@@ -310,17 +344,15 @@ def loginPage(request):
                     company = None
                 request.session['company_code'] = company.code
                 request.session['company'] = company.name
-                '''
                 return redirect('home')
             else:
                 return redirect('signUp')
     else:
         form = AuthenticationForm()
-        ''' CPT*เลือกตามบริษัท 
+        #CPT*เลือกตามบริษัท 
         company = BaseCompany.objects.first()
         request.session['company_code'] = company.code
         request.session['company'] = company.name
-        '''
 
     return render(request, 'account/login.html', {'form':form,})
 
@@ -330,24 +362,25 @@ def logoutUser(request):
 
 @login_required(login_url='login')
 def weightTable(request):
+    ''' old บริษัทเดียว
     active = None
-    ''' CPT*เลือกตามบริษัท 
-    #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
-
-    if is_scale(request.user):
-        us = UserScale.objects.filter(user = request.user).values_list('scale_id')
-        data = Weight.objects.filter(scale_id__in = us, bws__company__code__in = company_in).order_by('-date','weight_id')
-    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
-        data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
-    '''
-
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
         data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
     elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
-        data = Weight.objects.all().order_by('-date','weight_id')
+        data = Weight.objects.all().order_by('-date','weight_id')    
+    '''
+
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    #CPT*เลือกตามบริษัท
+    if is_scale(request.user):
+        us = UserScale.objects.filter(user = request.user).values_list('scale_id')
+        data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
+    elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
+        data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -358,11 +391,14 @@ def weightTable(request):
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user),  active :"active",}
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), active :"active",}
     return render(request, "weight/weightTable.html",context)
 
 @login_required(login_url='login')
 def editWeight(request, mode, weight_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     weight_data = get_object_or_404(Weight, pk=weight_id)
 
     if mode == 1:
@@ -388,7 +424,7 @@ def editWeight(request, mode, weight_id):
     else:
         form = tmp_form
 
-    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user)}
+    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user), active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
 
 def searchDataCustomer(request):
@@ -483,10 +519,16 @@ def autocompalteSite(request):
     return JsonResponse(titles, safe=False)
 
 def excelProductionByStone(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     # Query ข้อมูลขาย
-    data = Weight.objects.filter( Q(mill='010MA') | Q(mill='011MA') | Q(mill='012MA'),my_q, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    m_comp_id = BaseMill.objects.filter(m_comp__code = active).values_list('mill_id').order_by('mill_id')
+    data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    
     # Query ข้อมูลผลิตรวม
-    data_sum_produc = Weight.objects.filter( Q(site='009PL') | Q(site='010PL') | Q(site='011PL'),my_q, bws__weight_type = 2).order_by('date','site').values_list('date','site_name').annotate(sum_weight_total = Sum('weight_total'))
+    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+    data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).order_by('date','site').values_list('date','site_name').annotate(sum_weight_total = Sum('weight_total'))
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -531,7 +573,7 @@ def excelProductionByStone(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 5) // (len(stones))
+                line_index = (cell.column - ( len(mills) + 2 )) // (len(stones))
                 fill_color = mill_colors[line_index % len(mill_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -661,13 +703,15 @@ def excelProductionByStone(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename=stone_in_month.xlsx'
+    response['Content-Disposition'] = f'attachment; filename=stone_by_day_({active}).xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
     return response
 
 def exportExcelProductionByStone(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
 
     doc_id = request.GET.get('doc_id') or None
     start_created = request.GET.get('start_created') or None
@@ -687,6 +731,7 @@ def exportExcelProductionByStone(request):
     if stone_type is not None :
         my_q &=Q(stone_type_name__icontains = stone_type)
 
+    my_q &= Q(bws__company__code__in = company_in)
     my_q &= ~Q(customer_name ='ยกเลิก')
    
     current_date_time = datetime.today()
@@ -702,6 +747,9 @@ def exportExcelProductionByStone(request):
     return response
 
 def exportExcelProductionByStoneInDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -714,6 +762,8 @@ def exportExcelProductionByStoneInDashboard(request):
         my_q &= Q(date__gte = start_created)
     if end_created is not None:
         my_q &=Q(date__lte = end_created)
+
+    my_q &= Q(bws__company__code__in = company_in)
     my_q &= ~Q(customer_name ='ยกเลิก')
 
     #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
@@ -727,8 +777,12 @@ def exportExcelProductionByStoneInDashboard(request):
     return response
 
 def excelProductionByStoneAndMonth(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     # Query ข้อมูลขาย
-    data = Weight.objects.filter( Q(mill='010MA') | Q(mill='011MA') | Q(mill='012MA'),my_q, bws__weight_type = 1).annotate(
+    m_comp_id = BaseMill.objects.filter(m_comp__code = active).values_list('mill_id').order_by('mill_id')
+    data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).annotate(
         month=ExtractMonth('date'),
         year=ExtractYear('date')
     ).values_list('year', 'month', 'mill_name', 'stone_type_name').annotate(
@@ -736,7 +790,8 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     ).order_by('year', 'month', 'mill_name', 'stone_type_name')
     
     # Query ข้อมูลผลิตรวม
-    data_sum_produc = Weight.objects.filter( Q(site='009PL') | Q(site='010PL') | Q(site='011PL'),my_q, bws__weight_type = 2).annotate(
+    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+    data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).annotate(
         month=ExtractMonth('date'),
         year=ExtractYear('date')
     ).values_list('year', 'month', 'site_name').annotate(
@@ -760,7 +815,6 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
 
         mill_col_list = []
 
-        
         # Create a list of colors for each line_type
         mill_colors = [generate_pastel_color() for i  in range(len(mills) + 1)]
 
@@ -787,7 +841,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 5) // (len(stones))
+                line_index = (cell.column - (len(mills) + 2)) // (len(stones))
                 fill_color = mill_colors[line_index % len(mill_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -917,7 +971,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename=stone_in_year.xlsx'
+    response['Content-Disposition'] = f'attachment; filename=stone_by_month_({active}).xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
@@ -984,7 +1038,11 @@ def exportExcelProductionByStoneAndMonth(request):
 
 @login_required(login_url='login')
 def viewProduction(request):
-    data = Production.objects.all().order_by('-created', 'site')
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    data = Production.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
     #กรองข้อมูล
     myFilter = ProductionFilter(request.GET, queryset = data)
@@ -995,62 +1053,62 @@ def viewProduction(request):
     page = request.GET.get('page')
     product = p.get_page(page)
 
-    context = {'production_page':'active', 'product': product,'filter':myFilter, }
+    context = {'production_page':'active', 'product': product,'filter':myFilter, active :"active",}
     return render(request, "production/viewProduction.html",context)
 
 def summaryProduction(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     date_object = datetime.today()
     end_created = datetime.today().strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
-    b_site = Production.objects.all().values('site').distinct()
+    b_site = Production.objects.filter(company__code__in = company_in).values('site').distinct()
 
-    real_pd = Weight.objects.filter(site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
+    real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
 
-    pd = Production.objects.filter(created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
+    pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
         , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time')
         , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
         , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
         , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.IntegerField()))
 
-    pd_loss_mc = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
+    pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
-    mc_loos_type = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).values('mc_type__name', 'loss_type__name').distinct()
-    pd_loss_pro = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).values('mc_type__name', 'loss_type__name').distinct()
+    pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
     mc_type  = BaseMachineType.objects.filter(id__lt = 5)
 
-    list_ls1_name = getLossNameByMill('009PL', start_created, end_created, 1)
-    list_ls1_val = getLossNameByMill('009PL', start_created, end_created, 2)
+    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
     
-    list_ls2_name = getLossNameByMill('010PL', start_created, end_created, 1)
-    list_ls2_val = getLossNameByMill('010PL', start_created, end_created, 2)
+    list_ls_name = [[] for _ in range(len(s_comp_id))]
+    list_ls_val = [[] for _ in range(len(s_comp_id))]
+    list_ls = []
 
-    list_ls3_name = getLossNameByMill('011PL', start_created, end_created, 1)
-    list_ls3_val = getLossNameByMill('011PL', start_created, end_created, 2)
+    for i, mill_id in enumerate(s_comp_id):
+        list_ls_name[i] = getLossNameByMill(company_in, mill_id, start_created, end_created, 1)
+        list_ls_val[i] = getLossNameByMill(company_in, mill_id, start_created, end_created, 2)
+        list_ls.append((list_ls_name[i], list_ls_val[i]))
 
-    list_ls4_name = getLossNameByMill('028PL', start_created, end_created, 1)
-    list_ls4_val = getLossNameByMill('028PL', start_created, end_created, 2)
-
-    pd_loss_all = ProductionLossItem.objects.filter(production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    pd_loss_all = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
     context = {'dashboard_page':'active','pd':pd,
                'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
                'date_object':date_object, 'mc_type':mc_type,
-               'list_ls1_name':list_ls1_name, 'list_ls1_val':list_ls1_val,
-               'list_ls2_name':list_ls2_name, 'list_ls2_val':list_ls2_val,
-               'list_ls3_name':list_ls3_name, 'list_ls3_val':list_ls3_val,
-               'list_ls4_name':list_ls4_name, 'list_ls4_val':list_ls4_val,
+               'list_ls': list_ls,
                'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
                'real_pd':real_pd,
+               active :"active",
     }
     return render(request, "production/summaryProduction.html",context)
 
-
-def getLossNameByMill(site, start_created, end_created, mode):
+def getLossNameByMill(company_in, site, start_created, end_created, mode):
     list_loss = []
-    pd_loss = ProductionLossItem.objects.filter(production__site = site, production__created__range=(start_created, end_created)).order_by('mc_type').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
-    pd_loss_all = ProductionLossItem.objects.filter(production__site = site, production__created__range=(start_created, end_created)).aggregate(s=Sum('loss_time'))["s"]
+    pd_loss = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__site = site, production__created__range=(start_created, end_created)).order_by('mc_type').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    pd_loss_all = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__site = site, production__created__range=(start_created, end_created)).aggregate(s=Sum('loss_time'))["s"]
     for i in pd_loss:
         if mode == 1:
             list_loss.append(i['mc_type__name'])
@@ -1088,23 +1146,25 @@ def setDurationTime(request, duration):
     return result
 
 def searchProductionGoal(request):
-    if 'site_id' in request.GET and 'line_type_id' in request.GET and 'created' in request.GET and 'pd_id' in request.GET:
+    if 'site_id' in request.GET and 'line_type_id' in request.GET and 'created' in request.GET and 'pd_id' in request.GET and 'company' in request.GET:
         site_id = request.GET.get('site_id')
         line_type_id = request.GET.get('line_type_id')
         created =  request.GET.get('created')
         pd_id =  request.GET.get('pd_id')
+        company =  request.GET.get('company')
+
 
         date_object = datetime.strptime(created, "%Y-%m-%d")
 
         #เอาออก line_type__id = line_type_id เพราะโรงโม่เดียวกันใช้เป้าผลิตเท่ากัน
-        pd_goal = ProductionGoal.objects.filter(date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , site = site_id).values('site', 'line_type', 'date' , 'accumulated_goal', 'id')
+        pd_goal = ProductionGoal.objects.filter(company__code = company, date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , site = site_id).values('site', 'line_type', 'date' , 'accumulated_goal', 'id')
         #if pd_id == '' create mode , else edit mode
         if pd_id == '':
-            have_production = Production.objects.filter(created = created, site = site_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(company__code = company, created = created, site = site_id, line_type__id = line_type_id ).exists()
         else:
-            have_production = Production.objects.filter(~Q(id = pd_id), created = created, site = site_id, line_type__id = line_type_id ).exists()
+            have_production = Production.objects.filter(~Q(id = pd_id), company__code = company, created = created, site = site_id, line_type__id = line_type_id ).exists()
         #ดึงข้อมูล line 1 มาเพื่อไป set default ใน line อื่นๆ
-        pd_line1 = Production.objects.filter(created = created, site = site_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
+        pd_line1 = Production.objects.filter(company__code = company, created = created, site = site_id, line_type__id = 1).values('plan_start_time', 'plan_end_time')
         
         
     data = {
@@ -1116,12 +1176,15 @@ def searchProductionGoal(request):
     return JsonResponse(data)
 
 def createProduction(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     base_loss_type = BaseLossType.objects.all()
 
     ProductionLossItemFormSet = modelformset_factory(ProductionLossItem, fields=('mc_type', 'loss_type', 'loss_time'), extra=1, widgets={'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),})
     if request.method == 'POST':
         pd_goal_form = ProductionGoalForm(request.POST)
-        production_form = ProductionForm(request.POST)
+        production_form = ProductionForm(request, request.POST or None, initial={'company': company})
         formset = ProductionLossItemFormSet(request.POST)
         if production_form.is_valid() and formset.is_valid() and pd_goal_form.is_valid():
             production = production_form.save()
@@ -1129,12 +1192,14 @@ def createProduction(request):
             if pd_goal_form.cleaned_data['pk_goal']:
                 pd_goal = ProductionGoal.objects.get(id = pd_goal_form.cleaned_data['pk_goal'])
                 pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
+                pd_goal.company = production.company
                 pd_goal.save()
             else:
                 pd_goal = ProductionGoal.objects.create(accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal'])
                 pd_goal.site = production.site
                 pd_goal.line_type = production.line_type
                 pd_goal.date = production.created
+                pd_goal.company = production.company
                 pd_goal.save()
 
             production.pd_goal = pd_goal
@@ -1151,14 +1216,17 @@ def createProduction(request):
 
             return redirect('viewProduction')
     else:
-        production_form = ProductionForm()
-        pd_goal_form = ProductionGoalForm()
+        production_form = ProductionForm(request, initial={'company': company})
+        pd_goal_form = ProductionGoalForm(initial={'company': company})
         formset = ProductionLossItemFormSet(queryset=ProductionLossItem.objects.none())
 
-    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': production_form, 'formset': formset}
+    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': production_form, 'formset': formset, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "production/createProduction.html",context)
 
 def editProduction(request, pd_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     pd_data = Production.objects.get(id = pd_id)
 
     #หาบันทึกปฎิบัติการของวันนี้ เพื่อเช็คไม่ให้ save mill และ line ซ้ำกัน
@@ -1166,7 +1234,7 @@ def editProduction(request, pd_id):
 
     if request.method == "POST":
         formset = ProductionLossItemInlineFormset(request.POST, request.FILES, instance=pd_data)
-        form = ProductionForm(request.POST, request.FILES, instance=pd_data)
+        form = ProductionForm(request, request.POST, request.FILES, instance=pd_data)
         pd_goal_form = ProductionGoalForm(request.POST, request.FILES, instance=pd_data.pd_goal)
 
         if form.is_valid() and formset.is_valid() and pd_goal_form.is_valid():
@@ -1192,10 +1260,10 @@ def editProduction(request, pd_id):
             return redirect('viewProduction')
     else:
         formset = ProductionLossItemInlineFormset(instance=pd_data)
-        form = ProductionForm(instance=pd_data)
+        form = ProductionForm(request, instance=pd_data)
         pd_goal_form = ProductionGoalForm(instance=pd_data.pd_goal)
 
-    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': form, 'formset': formset, 'pd': pd_data, 'production_on_day': production_on_day}
+    context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': form, 'formset': formset, 'pd': pd_data, 'production_on_day': production_on_day, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "production/editProduction.html",context)
 
 def removeProduction(request, pd_id):
@@ -1234,7 +1302,9 @@ def formatHourMinute(time):
     return result
 
 def excelProductionAndLoss(request, my_q, sc_q):
-    
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
 
@@ -1435,12 +1505,15 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="production_data.xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="production_data_({active}).xlsx"'
 
     workbook.save(response)
     return response
 
 def exportExcelProductionAndLoss(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
     site = request.GET.get('site') or None
@@ -1452,17 +1525,22 @@ def exportExcelProductionAndLoss(request):
         my_q &=Q(created__lte = end_created)
     if site is not None:
         my_q &=Q(site = site)
+    my_q &=Q(company__code__in = company_in)
 
     sc_q = Q()
     if start_created is not None:
         sc_q &= Q(production__created__gte = start_created)
     if end_created is not None:
         sc_q &=Q(production__created__lte = end_created)
+    sc_q &=Q(production__company__code__in = company_in)
     
     response = excelProductionAndLoss(request, my_q, sc_q)
     return response
 
 def exportExcelProductionAndLossDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -1476,19 +1554,24 @@ def exportExcelProductionAndLossDashboard(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+    my_q &=Q(company__code__in = company_in)
 
     sc_q = Q()
     if start_created is not None:
         sc_q &= Q(production__created__gte = start_created)
     if end_created is not None:
         sc_q &=Q(production__created__lte = end_created)
+    sc_q &=Q(production__company__code__in = company_in)
     
     response = excelProductionAndLoss(request, my_q, sc_q)
     return response
 
 @login_required(login_url='login')
 def viewStoneEstimate(request):
-    data = StoneEstimate.objects.all().order_by('-created', 'site')
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    data = StoneEstimate.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
     #กรองข้อมูล
     myFilter = StoneEstimateFilter(request.GET, queryset = data)
@@ -1499,14 +1582,17 @@ def viewStoneEstimate(request):
     page = request.GET.get('page')
     stone_estimate = p.get_page(page)
 
-    context = {'stone_estimate_page':'active', 'stone_estimate': stone_estimate,'filter':myFilter, }
+    context = {'stone_estimate_page':'active', 'stone_estimate': stone_estimate,'filter':myFilter, active :"active",}
     return render(request, "stoneEstimate/viewStoneEstimate.html",context)
 
 def createStoneEstimate(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True)
     StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, fields=('stone_type', 'percent'), extra=len(base_stone_type), widgets={})
     if request.method == 'POST':
-        se_form = StoneEstimateForm(request.POST)
+        se_form = StoneEstimateForm(request, request.POST)
         formset = StoneEstimateItemFormSet(request.POST)
         if se_form.is_valid() and formset.is_valid():
             se = se_form.save()
@@ -1517,18 +1603,21 @@ def createStoneEstimate(request):
                 instance.save()
             return redirect('viewStoneEstimate')
     else:
-        se_form = StoneEstimateForm()
+        se_form = StoneEstimateForm(request, initial={'company': company})
         formset = StoneEstimateItemFormSet(queryset=StoneEstimateItem.objects.none())
 
-    context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset, 'base_stone_type': base_stone_type,}
+    context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset, 'base_stone_type': base_stone_type, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "stoneEstimate/createStoneEstimate.html",context)
 
 def editStoneEstimate(request, se_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     se_data = StoneEstimate.objects.get(id = se_id)
 
     if request.method == "POST":
         formset = StoneEstimateItemInlineFormset(request.POST, request.FILES, instance=se_data)
-        se_form = StoneEstimateForm(request.POST, request.FILES, instance=se_data)
+        se_form = StoneEstimateForm(request, request.POST, request.FILES, instance=se_data)
         if se_form.is_valid() and formset.is_valid():
             # save StoneEstimate
             se = se_form.save()
@@ -1544,9 +1633,9 @@ def editStoneEstimate(request, se_id):
             return redirect('viewStoneEstimate')
     else:
         formset = StoneEstimateItemInlineFormset(instance=se_data)
-        se_form = StoneEstimateForm(instance=se_data)
+        se_form = StoneEstimateForm(request, instance=se_data)
 
-    context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset,'se': se_data,}
+    context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset,'se': se_data, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "stoneEstimate/editStoneEstimate.html",context)
 
 def removeStoneEstimate(request, se_id):
@@ -1559,18 +1648,19 @@ def removeStoneEstimate(request, se_id):
     return redirect('viewStoneEstimate')
 
 def searchStoneEstimate(request):
-    if 'site_id' in request.GET and 'created' in request.GET and 'se_id' in request.GET:
+    if 'site_id' in request.GET and 'created' in request.GET and 'se_id' in request.GET and 'company' in request.GET:
         site_id = request.GET.get('site_id')
         created =  request.GET.get('created')
         se_id =  request.GET.get('se_id')
+        company =  request.GET.get('company')
 
         #if se_id == '' create mode , else edit mode
         if se_id == '':
-            have_estimate = StoneEstimate.objects.filter(created = created, site = site_id).exists()
+            have_estimate = StoneEstimate.objects.filter(company__code = company, created = created, site = site_id).exists()
         else:
-            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id), created = created, site = site_id).exists()
+            have_estimate = StoneEstimate.objects.filter(~Q(id = se_id),company__code = company, created = created, site = site_id).exists()
         #ดึงเปอร์เซ็นคำนวนหินเปอร์ที่คีย์ไปล่าสุด
-        last_se = StoneEstimate.objects.filter(site = site_id).order_by('-created').first()
+        last_se = StoneEstimate.objects.filter(company__code = company, site = site_id).order_by('-created').first()
         last_se_item = StoneEstimateItem.objects.filter(se = last_se).values('stone_type', 'percent')
         
     data = {
@@ -1631,6 +1721,9 @@ def exportExcelStoneEstimateAndProduction(request):
     return response
 
 def exportExcelStoneEstimateAndProductionDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -1643,18 +1736,23 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
         my_q &= Q(created__gte = start_created)
     if end_created is not None:
         my_q &=Q(created__lte = end_created)
+    my_q &=Q(company__code__in = company_in)
 
     sc_q = Q()
     if start_created is not None:
         sc_q &= Q(date__gte = start_created)
     if end_created is not None:
         sc_q &=Q(date__lte = end_created)
+    sc_q &=Q(bws__company__code__in = company_in)
     
     response = excelStoneEstimateAndProduction(request, my_q, sc_q)
     return response
 
 
 def excelStoneEstimateAndProduction(request, my_q, sc_q):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
 
     se_site = StoneEstimate.objects.filter(my_q).values_list('site',flat=True).distinct()
@@ -1665,7 +1763,8 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
     base_stone_type = StoneEstimateItem.objects.select_related('stone_type').filter(se__in = se_id).order_by('stone_type').values_list('stone_type__base_stone_type_name', flat=True).distinct()
 
     #list_customer_name = ['สมัย','วีระวุฒิ','NCK']
-    list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
+    #เปลี่ยนการตั้งค่า 13-02-2024 list_customer_name = BaseCustomer.objects.filter(is_stone_estimate = True).values_list('customer_name', flat=True)
+    list_customer_name = BaseSEC.objects.filter(company__code__in = company_in).values_list('customer__customer_name', flat=True)
 
     workbook = openpyxl.Workbook()
     if sites:
@@ -1823,9 +1922,7 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
 
                 #merge_cells วันที่, ชม.ทำงาน
                 sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 1, end_row = (row_index - 1 ), end_column=1)
-                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 4, end_row = (row_index - 1 ), end_column=4)
-
-                
+                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = 4, end_row = (row_index - 1 ), end_column=4)  
 
             # Total last
             len_row_index_total = 0
@@ -1928,7 +2025,7 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานการผลิตหินดือนนี้')
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="stone_estimate.xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="stone_estimate_({active}).xlsx"'
 
     workbook.save(response)
     return response
@@ -1936,6 +2033,10 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
 ################### BaesMill ####################
 @login_required(login_url='login')
 def settingBaseMill(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseMill.objects.all().order_by('-mill_id')
 
     #กรองข้อมูล
@@ -1947,11 +2048,14 @@ def settingBaseMill(request):
     page = request.GET.get('page')
     base_mill = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseMill.html",context)
 
 
 def createBaseMill(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     form = BaseMillForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -1974,11 +2078,15 @@ def createBaseMill(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_mill_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
 def editBaseMill(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     obj = get_object_or_404(BaseMill, mill_id = id)
  
     form = BaseMillForm(request.POST or None, instance = obj)
@@ -2002,6 +2110,7 @@ def editBaseMill(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_mill_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2009,6 +2118,10 @@ def editBaseMill(request, id):
 ################### BaseJobType ####################
 @login_required(login_url='login')
 def settingBaseJobType(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseJobType.objects.all().order_by('base_job_type_id')
 
     #กรองข้อมูล
@@ -2020,10 +2133,13 @@ def settingBaseJobType(request):
     page = request.GET.get('page')
     base_job_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseJobType.html",context)
 
 def createBaseJobType(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     form = BaseJobTypeForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2046,10 +2162,14 @@ def createBaseJobType(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_base_job_type_id',
         'mode' : 0,
+        active :"active",
     }
     return render(request, "manage/formBase.html", context)
 
 def editBaseJobType(request, id):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     obj = get_object_or_404(BaseJobType, base_job_type_id = id)
  
     form = BaseJobTypeForm(request.POST or None, instance = obj)
@@ -2069,6 +2189,7 @@ def editBaseJobType(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_base_job_type_id',
         'mode' : 1,
+        active :"active",
     }
  
     return render(request, "manage/formBase.html", context)
@@ -2076,6 +2197,10 @@ def editBaseJobType(request, id):
 ################### BaesStoneType ####################
 @login_required(login_url='login')
 def settingBaseStoneType(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
 
     #กรองข้อมูล
@@ -2087,10 +2212,13 @@ def settingBaseStoneType(request):
     page = request.GET.get('page')
     base_stone_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseStoneTypeForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2113,11 +2241,15 @@ def createBaseStoneType(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_base_stone_type_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseStoneType(request, id):            
+def editBaseStoneType(request, id):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)            
+
     obj = get_object_or_404(BaseStoneType, base_stone_type_id = id)
  
     form = BaseStoneTypeForm(request.POST or None, instance = obj)
@@ -2141,6 +2273,7 @@ def editBaseStoneType(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_base_stone_type_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2148,6 +2281,10 @@ def editBaseStoneType(request, id):
 ################### BaesScoop ####################
 @login_required(login_url='login')
 def settingBaseScoop(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseScoop.objects.all().order_by('-scoop_id')
 
     #กรองข้อมูล
@@ -2159,10 +2296,13 @@ def settingBaseScoop(request):
     page = request.GET.get('page')
     base_scoop = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseScoop.html",context)
 
-def createBaseScoop(request):        
+def createBaseScoop(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+        
     form = BaseScoopForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2185,11 +2325,15 @@ def createBaseScoop(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_scoop_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseScoop(request, id):            
+def editBaseScoop(request, id):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request) 
+            
     obj = get_object_or_404(BaseScoop, scoop_id = id)
  
     form = BaseScoopForm(request.POST or None, instance = obj)
@@ -2213,6 +2357,7 @@ def editBaseScoop(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_scoop_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2220,6 +2365,10 @@ def editBaseScoop(request, id):
 ################### BaseCarTeam ####################
 @login_required(login_url='login')
 def settingBaseCarTeam(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseCarTeam.objects.all().order_by('-car_team_id')
 
     #กรองข้อมูล
@@ -2231,10 +2380,13 @@ def settingBaseCarTeam(request):
     page = request.GET.get('page')
     base_car_team = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarTeam.html",context)
 
-def createBaseCarTeam(request):    
+def createBaseCarTeam(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseCarTeamForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2257,11 +2409,15 @@ def createBaseCarTeam(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_car_team_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseCarTeam(request, id):            
+def editBaseCarTeam(request, id):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request) 
+
     obj = get_object_or_404(BaseCarTeam, car_team_id = id)
  
     form = BaseCarTeamForm(request.POST or None, instance = obj)
@@ -2285,6 +2441,7 @@ def editBaseCarTeam(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_car_team_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2292,6 +2449,10 @@ def editBaseCarTeam(request, id):
 ################### BaseCar ####################
 @login_required(login_url='login')
 def settingBaseCar(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseCar.objects.all().order_by('-car_id')
 
     #กรองข้อมูล
@@ -2303,10 +2464,13 @@ def settingBaseCar(request):
     page = request.GET.get('page')
     base_car = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCar.html",context)
 
 def createBaseCar(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseCarForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2329,11 +2493,15 @@ def createBaseCar(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_car_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseCar(request, id):        
+def editBaseCar(request, id):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)         
+
     obj = get_object_or_404(BaseCar, car_id = id)
  
     form = BaseCarForm(request.POST or None, instance = obj)
@@ -2359,6 +2527,7 @@ def editBaseCar(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_car_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2366,6 +2535,10 @@ def editBaseCar(request, id):
 ################### BaesSite ####################
 @login_required(login_url='login')
 def settingBaseSite(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseSite.objects.all().order_by('-base_site_id')
 
     #กรองข้อมูล
@@ -2377,10 +2550,13 @@ def settingBaseSite(request):
     page = request.GET.get('page')
     base_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseSite/baseSite.html",context)
 
-def createBaseSite(request): 
+def createBaseSite(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseSiteForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2403,11 +2579,15 @@ def createBaseSite(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_base_site_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/BaseSite/formBaseSite.html", context)
 
 def editBaseSite(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     obj = get_object_or_404(BaseSite, base_site_id = id)
  
     form = BaseSiteForm(request.POST or None, instance = obj)
@@ -2431,6 +2611,7 @@ def editBaseSite(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_base_site_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/BaseSite/formBaseSite.html", context)
@@ -2438,6 +2619,10 @@ def editBaseSite(request, id):
 ################### BaesCustomer ####################
 @login_required(login_url='login')
 def settingBaseCustomer(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseCustomer.objects.filter(is_disable = False).order_by('-weight_type_id','-customer_id')
 
     #กรองข้อมูล
@@ -2449,10 +2634,13 @@ def settingBaseCustomer(request):
     page = request.GET.get('page')
     base_customer = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomer/baseCustomer.html",context)
 
 def createBaseCustomer(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseCustomerForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2475,11 +2663,15 @@ def createBaseCustomer(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_customer_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
 
 def editBaseCustomer(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     obj = get_object_or_404(BaseCustomer, customer_id = id)
  
     form = BaseCustomerForm(request.POST or None, instance = obj)
@@ -2503,6 +2695,7 @@ def editBaseCustomer(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_customer_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
@@ -2510,6 +2703,10 @@ def editBaseCustomer(request, id):
 ################### BaseDriver ####################
 @login_required(login_url='login')
 def settingBaseDriver(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseDriver.objects.all().order_by('-driver_id')
 
     #กรองข้อมูล
@@ -2521,10 +2718,13 @@ def settingBaseDriver(request):
     page = request.GET.get('page')
     base_driver = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseDriver.html",context)
 
 def createBaseDriver(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseDriverForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2547,11 +2747,15 @@ def createBaseDriver(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_driver_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
-def editBaseDriver(request, id):            
+def editBaseDriver(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+            
     obj = get_object_or_404(BaseDriver, driver_id = id)
  
     form = BaseDriverForm(request.POST or None, instance = obj)
@@ -2575,6 +2779,7 @@ def editBaseDriver(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_driver_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2582,6 +2787,10 @@ def editBaseDriver(request, id):
 ################### BaseCarRegistration ####################
 @login_required(login_url='login')
 def settingBaseCarRegistration(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseCarRegistration.objects.all().order_by('-car_registration_id')
 
     #กรองข้อมูล
@@ -2593,10 +2802,13 @@ def settingBaseCarRegistration(request):
     page = request.GET.get('page')
     base_car_registration = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarRegistration.html",context)
 
 def createBaseCarRegistration(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     form = BaseCarRegistrationForm(request.POST or None) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
@@ -2619,11 +2831,15 @@ def createBaseCarRegistration(request):
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_car_registration_id',
         'mode' : 0,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
 def editBaseCarRegistration(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     obj = get_object_or_404(BaseCarRegistration, car_registration_id = id)
  
     form = BaseCarRegistrationForm(request.POST or None, instance = obj)
@@ -2647,6 +2863,7 @@ def editBaseCarRegistration(request, id):
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_car_registration_id',
         'mode' : 1,
+        active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
@@ -2654,6 +2871,10 @@ def editBaseCarRegistration(request, id):
 ################### BaseCustomerSite ####################
 @login_required(login_url='login')
 def settingBaseCustomerSite(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     data = BaseCustomerSite.objects.all().order_by('id')
 
     #กรองข้อมูล
@@ -2665,10 +2886,13 @@ def settingBaseCustomerSite(request):
     page = request.GET.get('page')
     base_customer_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user)}
+    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
 
 def createBaseCustomerSite(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     if request.method == 'POST':
         form = BaseCustomerSiteForm(request.POST or None, request.FILES)
         if form.is_valid():
@@ -2687,11 +2911,15 @@ def createBaseCustomerSite(request):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เพิ่ม',
+        active :"active",
     }
 
     return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
 
 def editBaseCustomerSite(request, id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
     data = BaseCustomerSite.objects.get(id = id)
     
     form = BaseCustomerSiteForm(instance=data)
@@ -2711,6 +2939,7 @@ def editBaseCustomerSite(request, id):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เปลี่ยน',
+        active :"active",
     }
 
     return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
@@ -3525,6 +3754,9 @@ def searchDetailMcType(request):
     return JsonResponse(data)
 
 def exportWeightToExpress(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
 
@@ -3540,6 +3772,8 @@ def exportWeightToExpress(request):
         my_q &= Q(date__gte = start_created)
     if end_created is not None:
         my_q &=Q(date__lte = end_created)
+
+    my_q &=Q(bws__company__code__in = company_in)
 
     queryset = Weight.objects.filter(my_q)
     if not queryset.exists():
@@ -3578,7 +3812,7 @@ def exportWeightToExpress(request):
     df = pd.DataFrame(data)
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename=weight_express '+ start_created + " to "+ end_created +'.xlsx'
+    response['Content-Disposition'] = f'attachment; filename=weight_express({active}) '+ start_created + " to "+ end_created +'.xlsx'
 
     df.to_excel(response, index=False, engine='openpyxl')
 
@@ -3587,7 +3821,6 @@ def exportWeightToExpress(request):
 def setSessionCompany(request):
     name = request.GET.get('title', None)
     request.session['company_code'] = name
-    
     try:
         company = BaseCompany.objects.get(code=request.session['company_code'])
         request.session['company'] = company.name

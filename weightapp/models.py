@@ -58,6 +58,8 @@ class BaseMill(models.Model):
     mill_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อต้นทาง")
     weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True , verbose_name="ประเภทเครื่องชั่ง")
     v_stamp = models.DateTimeField(auto_now=True)
+    m_comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True , verbose_name="โรงโม่ของบริษัท (ต้นทาง)")
+    step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ต้นทาง)")
 
     class Meta:
         db_table = 'base_mill'
@@ -220,12 +222,14 @@ class BaseDriver(models.Model):
 
     def __str__(self):
         return self.driver_name
-    
+
 class BaseSite(models.Model):
     base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสปลายทาง")
     base_site_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อปลายทาง")
     weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True , verbose_name="ประเภทเครื่องชั่ง")
     v_stamp = models.DateTimeField(auto_now=True)
+    s_comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True , verbose_name="โรงโม่ของบริษัท (ปลายทาง)")
+    step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ปลายทาง)")
     
     class Meta:
         db_table = 'base_site'
@@ -264,6 +268,31 @@ class BaseCustomerSite(models.Model):
     def __str__(self):
         return str(self.customer)
     
+#ผูกผู้รับเหมากับบริษัท (ออกรายงานการผลิตหินเท่านั้น)    
+class BaseSEC(models.Model):
+    customer = models.ForeignKey(
+        BaseCustomer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name="ผู้รับเหมา"
+    )
+    company = models.ManyToManyField(
+        BaseCompany,
+        null=True,
+        blank=True,
+        verbose_name="บริษัท"
+    )
+
+    class Meta:
+        db_table = 'base_SEC'
+        ordering=('id',)
+        verbose_name = 'ผู้รับเหมาและบริษัท'
+        verbose_name_plural = 'ข้อมูลผู้รับเหมาและบริษัท'
+
+    def __str__(self):
+        return str(self.customer)
+                        
 class BaseCarryType(models.Model):
     base_carry_type_id = models.CharField(primary_key = True, max_length=120)
     base_carry_type_name = models.CharField(blank=True, null=True, max_length=255)
@@ -633,6 +662,7 @@ class ProductionGoal(models.Model):
     accumulated_goal = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#เป้าสะสมของเดือนปีนั้นๆ
     line_type = models.ForeignKey(BaseLineType,on_delete=models.CASCADE, null = True, blank=True)
     site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True, verbose_name="ปลายทาง")
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
 
     class Meta:
         db_table = 'production_goal'
@@ -672,13 +702,15 @@ class Production(models.Model):
     note = models.TextField(blank=True, null=True)#หมายเหตุ
 
     pd_goal =  models.ForeignKey(ProductionGoal,on_delete=models.CASCADE, null = True, blank=True)
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    
     '''
     def clean(self):
         if self.plan_start_time > self.plan_end_time:
             raise forms.ValidationError(_('Start plan time should be before end'))
         if self.run_start_time > self.run_end_time:
             raise forms.ValidationError(_('Start run time should be before end'))
-        return super().clean()    
+        return super().clean()
     '''
     
     def save(self, *args, **kwargs):
@@ -728,6 +760,7 @@ class ProductionLossItem(models.Model):
 class StoneEstimate(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True)
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
     
     class Meta:
         db_table = 'stone_estimate'

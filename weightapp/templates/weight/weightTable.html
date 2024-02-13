@@ -84,8 +84,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           <div class="row mb-1">
             <div class="col">
               <a href="{% url 'exportWeightToExpress' %}?{{request.GET.urlencode}}" class="btn btn-info">Weight to Express</a>
-              <a href="{% url 'exportExcelProductionByStone' %}?{{request.GET.urlencode}}" class="btn btn-success">ยอดขายตามประเภทหินประจำเดือน</a>
-              <a href="{% url 'exportExcelProductionByStoneAndMonth' %}?{{request.GET.urlencode}}" class="btn btn-warning">ยอดขายตามประเภทหินประจำปี</a>
+              <a href="{% url 'exportExcelProductionByStone' %}?{{request.GET.urlencode}}" class="btn btn-success">ยอดขายตามประเภทหินรายวัน</a>
+              <a href="{% url 'exportExcelProductionByStoneAndMonth' %}?{{request.GET.urlencode}}" class="btn btn-warning">ยอดขายตามประเภทหินรายเดือน</a>
             </div>
           </div>
           <div class="table-responsive my-3">

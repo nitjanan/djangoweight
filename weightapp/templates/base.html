@@ -226,25 +226,25 @@
       <div id="main">
         <!-- Scrollable Tab CPT*เลือกตามบริษัท-->
         {% if request.user.is_authenticated %}
-          <!--div class="my-3">
+          <div class="my-3">
             <div class="scroller scroller-left float-start mt-2"><i class="bi bi-caret-left-fill"></i></div>
             <div class="scroller scroller-right float-end mt-2"><i class="bi bi-caret-right-fill"></i></div>
             <div class="wrapper-nav">
                 <nav class="nav nav-tabs list mt-2" id="myTab" role="tablist">
                   {% for tab in company_tab %}
                     {% if 'ALL' in tab.code %}
-                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{ALL}}" data-bs-toggle="tab" data-bs-target="#tab1" role="tab" aria-controls="public" aria-selected="true" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{ALL}} {{disabledTab}}" data-bs-toggle="tab" data-bs-target="#tab1" role="tab" aria-controls="public" aria-selected="true" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
                     {% if 'SLC' in tab.code %}
-                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{SLC}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{SLC}} {{disabledTab}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
-                    {% if 'CTM' in tab.code %}
-                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{CTM}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {% if 'JOB' in tab.code %}
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{JOB}} {{disabledTab}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
                   {%endfor%}
                 </nav>
             </div>
-          </div-->
+          </div>
         {%endif%}
         <!-- End Scrollable Tab-->
         {% block content %}
@@ -286,41 +286,11 @@
     <link href="{% static 'css/scrolling/scrollable-tabs.css' %}" rel="stylesheet" />
     <script src="{% static 'js/scrolling/scrollable-tabs.js' %}"></script>
 
+    <!-- tabSidebar -->
+    <script src="{% static 'js/tabSidebar/tab.js' %}"></script>
+
     {% block script %}
 
     {% endblock %}
-
-    <script>
-      $(document).ready(function () {
-        $('#nav-tabs').on('click', function () {
-          $('#nav-item').toggleClass('active');
-        });
-      });
-
-      function setCompany(name){
-        var titleInput = name;
-        if (titleInput) {
-            // Create Ajax Call
-            $.ajax({
-                url: '{% url "setSessionCompany" %}',
-                data: {
-                    'title': titleInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                if (data.instance) {
-                    location.reload();
-                    e.preventDefault();
-                }else{
-                }
-                }
-            });
-        } else {
-        
-        }
-        return false;
-      }
-  </script>
-
   </body>
 </html>

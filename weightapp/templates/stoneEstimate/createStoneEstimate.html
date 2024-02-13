@@ -65,6 +65,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
                       {{se_form.created | add_class:"form-control" |attr:"required:true"}}
+                      {{se_form.company}}
                       <div class="form-control-icon">
                         <i class="bi bi-calendar-week"></i>
                       </div>
@@ -271,6 +272,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var site = $("#id_site").val();
         var created = $("#id_created").val();
         var se_id = '';
+        var company = "{{ request.session.company_code }}";
+
         // Create Ajax Call
         if(site && created){
               $.ajax({
@@ -279,6 +282,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                         'site_id': site,
                         'created': created,
                         'se_id': se_id,
+                        'company': company,
                 },
                 dataType: 'json',
                 success: function (data) {

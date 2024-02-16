@@ -236,10 +236,13 @@
                       <a id="{{tab.code}}" class="nav-item nav-link pointer {{ALL}} {{disabledTab}}" data-bs-toggle="tab" data-bs-target="#tab1" role="tab" aria-controls="public" aria-selected="true" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
                     {% if 'SLC' in tab.code %}
-                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{SLC}} {{disabledTab}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{SLC}} {{disabledTab}}" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
                     {% if 'JOB' in tab.code %}
-                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{JOB}} {{disabledTab}}" data-bs-target="#tab2" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{JOB}} {{disabledTab}}" role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {%endif%}
+                    {% if 'CTM' in tab.code %}
+                    <a id="{{tab.code}}" class="nav-item nav-link pointer {{CTM}} {{disabledTab}}"  role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
                   {%endfor%}
                 </nav>

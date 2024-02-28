@@ -116,22 +116,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>ตัน</td>
                             </tr>
                             <tr>
-                              <td>กำลังการผลิต (Target)</td>
-                              <td id="id_target_{{forloop.counter0}}">{% for s in s_target %}{% if i.site__base_site_id == s.base_site_id %}{{s.target|floatformat:2|intcomma}}{%endif%}{% endfor %}</td>
-                              <td>ตัน/ชม.</td>
-                            </tr>
-                            <tr>
-                                <td>กำลังการผลิต (Performance)</td>
-                                <td id="id_working_time_de_{{forloop.counter0}}" class="d-none">{{i.working_time_de}}</td>
-                                <td id="id_capacity_{{forloop.counter0}}"></td>
-                                <td>ตัน/ชม.</td>
-                            </tr>
-                            <tr>
-                              <td>%A</td>
-                              <td id="id_a_percent_{{forloop.counter0}}"></td>
-                              <td></td>
-                            </tr>
-                            <tr>
                                 <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{% elif forloop.counter0  == 3%}table-info{%endif%}" colspan="3">สาเหตุการหยุดทำงานของเครื่องจักร จากตัวเครื่องโม่</td>
                             </tr>
                             {% for mc in mc_type %}
@@ -199,9 +183,25 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td></td>
                               </tr>
                               <tr class="table-danger">
-                                <td>%P</td>
+                                <td>%A</td>
                                 <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p|stringformat:".1f" }}%</td>
                                 <td></td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>%P</td>
+                                <td id="id_a_percent_{{forloop.counter0}}"></td>
+                                <td></td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>กำลังการผลิต (Target)</td>
+                                <td id="id_target_{{forloop.counter0}}">{% for s in s_target %}{% if i.site__base_site_id == s.base_site_id %}{{s.target|floatformat:2|intcomma}}{%endif%}{% endfor %}</td>
+                                <td>ตัน/ชม.</td>
+                              </tr>
+                              <tr class="table-danger">
+                                  <td>กำลังการผลิต (Performance)</td>
+                                  <td id="id_working_time_de_{{forloop.counter0}}" class="d-none">{{i.working_time_de}}</td>
+                                  <td id="id_capacity_{{forloop.counter0}}"></td>
+                                  <td>ตัน/ชม.</td>
                               </tr>
                               <tr class="table-danger">
                                 <td>%OEE</td>

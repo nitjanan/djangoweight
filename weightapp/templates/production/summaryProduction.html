@@ -111,7 +111,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td></td>
                             </tr>
                             <tr>
-                                <td>ยอดที่หายไป</td>
+                                <td>ยอดที่ขาด</td>
                                 <td id="id_loss_{{forloop.counter0}}"></td>
                                 <td>ตัน</td>
                             </tr>
@@ -195,12 +195,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               </tr>
                               <tr class="table-danger">
                                 <td>เปอร์เซ็นในการสูญเสีย</td>
-                                <td>{{i.percent_loss}}%</td>
+                                <td>{{i.percent_loss|stringformat:".1f" }}%</td>
                                 <td></td>
                               </tr>
                               <tr class="table-danger">
                                 <td>%P</td>
-                                <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p}}%</td>
+                                <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p|stringformat:".1f" }}%</td>
                                 <td></td>
                               </tr>
                               <tr class="table-danger">
@@ -291,16 +291,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         $('#id_loss_{{forloop.counter0}}').html(loss.toLocaleString(undefined, { maximumFractionDigits: 2 }));
 
         var percent = (parseFloat(real)/ parseFloat(goal)) * 100;
-        $('#id_percent_{{forloop.counter0}}').html(percent.toFixed(0)+'%');
+        $('#id_percent_{{forloop.counter0}}').html(percent.toFixed(1)+'%');
 
         var capacity = parseFloat(real) / (parseFloat(working_time_de)/1000000/3600);
         $('#id_capacity_{{forloop.counter0}}').html(capacity.toFixed(2));
 
         var a_percent = (parseFloat(capacity)/ parseFloat(target));
-        $('#id_a_percent_{{forloop.counter0}}').html(a_percent.toFixed(0)+'%');
+        $('#id_a_percent_{{forloop.counter0}}').html(a_percent.toFixed(1)+'%');
 
         var oee_percent = (parseFloat(a_percent) * parseFloat(percent_p));
-        $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(0)+'%');
+        $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(1)+'%');
 
       "{% endfor %}"
     });

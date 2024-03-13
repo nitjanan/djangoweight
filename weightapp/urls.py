@@ -29,6 +29,7 @@ urlpatterns = [
     path('production/edit/<int:pd_id>',views.editProduction,name="editProduction"),
     path('production/remove/<int:pd_id>',views.removeProduction,name="removeProduction"),
     path('production/summary', views.summaryProduction,name="summaryProduction"),
+    path('production/monthly', views.monthlyProduction,name="monthlyProduction"),
 
     path('stoneEstimate/view', views.viewStoneEstimate,name="viewStoneEstimate"),
     path('stoneEstimate/create', views.createStoneEstimate,name="createStoneEstimate"),

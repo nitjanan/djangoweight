@@ -8,6 +8,7 @@ from datetime import timedelta, datetime
 from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+import datetime
 
 class BaseVisible(models.Model):
     name = models.CharField(max_length=255,unique=True, verbose_name="ชื่อแท็บการใช้งาน")
@@ -786,3 +787,15 @@ class UserScale(models.Model):
     
     def __str__(self):
         return self.scale_name
+
+class SetWeightOY(models.Model):
+    comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True, verbose_name="บริษัท")
+    weight = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าน้ำหนัก")
+    prod_run = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าผลิต ชม.โม่")
+    prod_work = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าผลิต ตัน/ชม.")
+    prod_cap = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าผลิต วันทำงาน")
+    prod_hpd = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าผลิต ชม./วัน")
+
+    class Meta:
+        verbose_name = 'ตั้งค่าน้ำหนักหินปีก่อน'
+        verbose_name_plural = 'ข้อมูลตั้งค่าน้ำหนักหินปีก่อน'

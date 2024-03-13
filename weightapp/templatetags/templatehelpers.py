@@ -25,3 +25,7 @@ def format_duration(duration):
 @register.filter
 def format_duration_substring(tmpStr):
     return str(tmpStr)[:-3]
+
+@register.filter
+def dict_keys(input_dict):
+    return input_dict.keys()

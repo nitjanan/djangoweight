@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'weightapp',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
@@ -191,4 +192,9 @@ SIMPLE_JWT = {
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
     # "Bearer <Token>"
+}
+
+GRAPH_MODELS ={
+'all_applications': True,
+'graph_models': True,
 }

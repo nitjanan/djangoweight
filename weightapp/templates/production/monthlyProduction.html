@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+
+<style>
+    @media print {
+        body {
+            visibility: hidden;
+            font-size:10px;
+            font-family:"Times New Roman";
+        }
+        .section{
+            visibility: visible;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        @page { size: landscape; }
+	}
+
+  .doubleUnderline {
+    text-decoration-line: underline;
+    text-decoration-style: double;
+  }
+    
+  </style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Monthly Production</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item">
+                <a href="{% url 'viewProduction' %}">Production</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Monthly Production
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-body">
+            <div class="row">
+              <div class="col">
+                <h5>รายงานผลิต รายเดือน</h5>
+              </div>
+              <div class="col">                
+                <button type="button" class="btn btn-secondary float-end d-print-none ms-2" onclick="window.print();">
+                  <i class="fas fa-print"></i>
+                  ปริ้น รายงานผลิต รายเดือน
+                </button>
+                <div class="col">
+                  <button type="button" class="btn btn-success float-end d-print-none export-btn"><i class="fa fa-file-excel-o"></i> Export to Excel</button>
+              </div>
+              </div>
+            </div>
+            <div class="table-responsive my-3">
+                  <table class="table table-hover my-3 display" id="tableCompany">
+                    {% for site_name, site_data in aggregated_results.items %}
+                      <thead class="table-dark">
+                          <!--tr>
+                              <th scope="col">#</th>
+                              <th scope="col">{{ site_name }}</th>
+                              <th scope="col" colspan="2">ปี 2566</th>
+                              <th scope="col" colspan="13" class="text-center">2567</th>
+                          </tr-->
+                          <tr>
+                            <th scope="col"></th>
+                            <th scope="col">{{ site_name }}</th>
+                            <th scope="col">รวมปี {{current_year}}</th>
+                            <th scope="col">ปี {{current_year}} เฉลี่ย ตัน/เดือน</th>
+                            {% for month_year, sites in unique_month_years.items %}
+                              {% for s_name in sites %}
+                                {% if s_name == site_name %}
+                                  <th class="text-end" >{{ month_year }}</th>
+                                {% endif %}
+                              {%endfor%}
+                            {% endfor %}
+                            <th scope="col" class="text-end">รวม</th>
+                            <th scope="col" class="text-end">เฉลี่ย ตัน/เดือน</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {% for stone_type, stone_type_data in site_data.items %}
+                              <tr>
+                                  <th scope="row">{{forloop.counter}}</th>
+                                  <td>{{ stone_type }}</td>
+                                  {% for s_name, site_data in data_stone_old_year.items %}
+                                    {% for st_type, stone_type_data in site_data.items %}
+                                      {% for mon_year, est_weight in stone_type_data.items %}
+                                        {% if site_name == s_name and stone_type == st_type%}
+                                          <td class="text-end">{{est_weight}}</td>
+                                        {% endif %}
+                                      {% endfor %}
+                                    {% endfor %}
+                                  {% endfor %}
+
+                                  {% for month_year, est_weight in stone_type_data.items %}
+                                      <td id="id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">{{ est_weight |floatformat:2|intcomma }}</td>
+                                  {% endfor %}
+                                  <td id="id_sum_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">0</td>
+                                  <td id="id_avg_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">0</td>
+                              </tr>
+                          {% endfor %}
+                          <tr>
+                            <th scope="row"></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            {% for s, s_data in sum_aggregated.items %}
+                              {% for m_y, sum_aggr in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end" id="id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">{{sum_aggr |floatformat:2|intcomma}}</th>
+                                {%endif%}
+                              {%endfor%}
+                            {% endfor %}
+                            <th id="id_all_sum_est_{{ forloop.counter0 }}" scope="col" class="text-end"></th>
+                            <th id="id_all_avg_est_{{ forloop.counter0 }}" scope="col" class="text-end"></th>
+                          </tr>
+                          <tr style="height: 40px;">
+                          </tr>
+                          <tr>
+                            <th></th>
+                            <th>ชม.โม่</th>
+                            {% for s, s_data in data_run_old_year.items %}
+                              {% for m_y, result in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end">{{ result }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <td></td>
+                            {% for s, s_data in produc_run_results.items %}
+                              {% for m_y, sum_run in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end" id="id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" >{{ sum_run | format_duration }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <th class="text-end" id="id_sum_run_{{ forloop.counter0 }}"></th>
+                            <th class="text-end" id="id_avg_run_{{ forloop.counter0 }}"></th>
+                          </tr>
+                          <tr>
+                            <th></th>
+                            <th>ตัน / ชม.</th>
+                            {% for s, s_data in data_cap_old_year.items %}
+                              {% for m_y, result in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end">{{ result }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <td></td>
+                            {% for s, s_data in produc_capacity_results.items %}
+                              {% for m_y, capacity in s_data.items %}
+                                {% if s == site_name %}
+                                <th class="text-end" id="id_cap_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" >{{ capacity |floatformat:2|intcomma }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <th class="text-end" id="id_sum_cap_{{ forloop.counter0 }}"></th>
+                            <th class="text-end" id="id_avg_cap_{{ forloop.counter0 }}"></th>
+                          </tr>
+                          <tr>
+                            <th></th>
+                            <th>วันทำงาน</th>
+                            {% for s, s_data in data_work_old_year.items %}
+                              {% for m_y, result in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end">{{ result }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <td></td>
+                            {% for s, s_data in produc_work_results.items %}
+                              {% for m_y, working_time in s_data.items %}
+                                {% if s == site_name %}
+                                <th class="text-end" id="id_work_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">{{ working_time | format_duration}}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <th class="text-end" id="id_sum_work_{{ forloop.counter0 }}"></th>
+                            <th class="text-end" id="id_avg_work_{{ forloop.counter0 }}"></th>
+                          </tr>
+                          <tr>
+                            <th></th>
+                            <th>ชม. / วัน</th>
+                            {% for s, s_data in data_hpd_old_year.items %}
+                              {% for m_y, result in s_data.items %}
+                                {% if s == site_name %}
+                                  <th class="text-end">{{ result }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <td></td>
+                            {% for s, s_data in produc_hour_per_day_results.items %}
+                              {% for m_y, hour_per_day in s_data.items %}
+                                {% if s == site_name %}
+                                <th class="text-end" id="id_hour_per_day_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">{{ hour_per_day|floatformat:2|intcomma }}</th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <th class="text-end" id="id_sum_hour_per_day_{{ forloop.counter0 }}"></th>
+                            <th class="text-end" id="id_avg_hour_per_day_{{ forloop.counter0 }}"></th>
+                          </tr>
+                          <tr style="height: 40px;">
+                            <th scope="row"></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            {% for s, s_data in produc_work_results.items %}
+                              {% for m_y, working_time in s_data.items %}
+                                {% if s == site_name %}
+                                <th class="text-end"></th>
+                                {%endif%}
+                              {% endfor %}
+                            {% endfor %}
+                            <th scope="col" class="text-end"></th>
+                            <th scope="col" class="text-end"></th>
+                          </tr>
+                      </tbody>
+                    {% endfor %}
+                  </table>
+            </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <!-- p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p -->
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+<!-- Need: Apexcharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+
+<script src="https://rawcdn.githack.com/FuriosoJack/TableHTMLExport/v2.0.0/src/tableHTMLExport.js"></script>
+ 
+<!-- Table HTML Export Js -->
+<script src="{% static 'js/tableHTMLExport/tableHTMLExport.js' %}"></script>
+
+<script>
+  
+ //result
+"{% for site_name, site_data in aggregated_results.items %}"
+  "{% for stone_type, stone_type_data in site_data.items %}"
+      var sum = 0.0;
+      var avg = 0.0;
+      var count = 0;
+      "{% for month_year, est_weight in stone_type_data.items %}"
+        var tmp = $('#id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+        sum += parseFloat(tmp);
+        count++;
+      "{% endfor %}"
+      avg = sum / count;
+      
+      $('#id_sum_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      $('#id_avg_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+
+    "{% endfor %}"
+  "{% endfor %}"
+
+    //sum all result
+   "{% for s, s_data in sum_aggregated.items %}"
+      var sum = 0.0;
+      var avg = 0.0;
+      var count = 0;
+      "{% for m_y, sum_aggr in s_data.items %}"
+        var tmp = $('#id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+        sum += parseFloat(tmp);
+        count++;
+      "{% endfor %}"
+      avg = sum / count;
+      
+      $('#id_all_sum_est_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      $('#id_all_avg_est_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+    "{% endfor %}"
+
+
+    //run time
+    "{% for s, s_data in produc_run_results.items %}"
+        var sum = 0.00;
+        var avg = 0.00;
+        var count = 0;
+        "{% for m_y, sum_run in s_data.items %}"
+          var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+          sum += parseFloat(tmp);
+          count++;
+        "{% endfor %}"
+        avg = sum / count;
+        
+        $('#id_sum_run_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        $('#id_avg_run_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      "{% endfor %}"
+
+    //run time
+    "{% for s, s_data in produc_run_results.items %}"
+        var sum = 0.00;
+        var avg = 0.00;
+        var count = 0;
+        "{% for m_y, sum_run in s_data.items %}"
+          var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
+          sum += parseFloat(tmp);
+          count++;
+        "{% endfor %}"
+        avg = sum / count;
+        
+        $('#id_sum_run_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        $('#id_avg_run_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      "{% endfor %}"
+
+     //capacity
+    "{% for s, s_data in produc_capacity_results.items %}"
+        var sum = 0.00;
+        var avg = 0.00;
+        var count = 0;
+        "{% for m_y, capacity in s_data.items %}"
+          var tmp = $('#id_cap_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+          sum += parseFloat(tmp);
+          count++;
+        "{% endfor %}"
+        avg = sum / count;
+        
+        $('#id_sum_cap_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        $('#id_avg_cap_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      "{% endfor %}"
+
+      //working time
+      "{% for s, s_data in produc_work_results.items %}"
+        var sum = 0.00;
+        var avg = 0.00;
+        var count = 0;
+        "{% for m_y, working_time in s_data.items %}"
+          var tmp = $('#id_work_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
+          sum += parseFloat(tmp);
+          count++;
+        "{% endfor %}"
+        avg = sum / count;
+        
+        $('#id_sum_work_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        $('#id_avg_work_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      "{% endfor %}"
+
+      //hour per day
+      "{% for s, s_data in produc_hour_per_day_results.items %}"
+        var sum = 0.00;
+        var avg = 0.00;
+        var count = 0;
+        "{% for m_y, hour_per_day in s_data.items %}"
+          var tmp = $('#id_hour_per_day_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+          sum += parseFloat(tmp);
+          count++;
+        "{% endfor %}"
+        avg = sum / count;
+        
+        $('#id_sum_hour_per_day_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+        $('#id_avg_hour_per_day_{{ forloop.counter0 }}').html(avg.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      "{% endfor %}"
+
+  
+  $(document).ready(function(){
+    $(".export-btn").click(function(){  
+      $("#tableCompany").tableHTMLExport({
+        type:'csv',
+        filename:'Monthly Production {{request.session.company}}.csv',
+      });
+    });
+  });
+    
+</script>
+{% endblock %}

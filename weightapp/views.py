@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -52,6 +52,8 @@ from django.db import IntegrityError
 from .tokens import create_jwt_pair_for_user
 import csv
 from io import StringIO
+from decimal import Decimal
+import ast
 
 def findCompanyIn(request):
     code = request.session['company_code']
@@ -703,7 +705,7 @@ def excelProductionByStone(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=stone_by_day_({active}).xlsx'
+    response['Content-Disposition'] = f'attachment; filename=sales_daily_({active}).xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
@@ -971,7 +973,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=stone_by_month_({active}).xlsx'
+    response['Content-Disposition'] = f'attachment; filename=sales_monthly_({active}).xlsx'
 
     # Save the workbook to the response
     workbook.save(response)
@@ -1061,8 +1063,12 @@ def summaryProduction(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
+    #ดึงข้อมูลวันนี้
     date_object = datetime.today()
-    end_created = datetime.today().strftime('%Y-%m-%d')
+    #ดึงข้อมูลย้อนหลัง 1 วัน
+    previous_date_time = date_object - timedelta(days=1)
+
+    end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
 
     b_site = Production.objects.filter(company__code__in = company_in).values('site').distinct()
@@ -1070,11 +1076,11 @@ def summaryProduction(request):
     real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
 
     pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
-        , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.IntegerField())
+        , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.DecimalField())
         , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
         , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
-        , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.IntegerField()))
+        , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.DecimalField()))
 
     pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
@@ -1107,6 +1113,181 @@ def summaryProduction(request):
                active :"active",
     }
     return render(request, "production/summaryProduction.html",context)
+
+def extract_month_year(date):
+    return date.strftime("%Y-%m")
+
+def monthlyProduction(request):
+    #active : active คือแท็ปบริษัท active
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    #ดึงข้อมูล 2024 ขึ้นไป   
+    current_date_time = datetime.now()
+    current_year = current_date_time.year - 1
+
+    s_comp = BaseSite.objects.filter(s_comp__code = active).order_by('base_site_id')
+    #ดึงข้อมูล 2024 ขึ้นไป
+    date_data = StoneEstimate.objects.filter(site__in = s_comp, created__year__gt = current_year).values_list('created', 'site' , 'site__base_site_name').order_by('site', 'created')
+
+    stone_name = BaseStoneType.objects.filter(is_stone_estimate = True).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id')
+
+    results = {}
+    for dt in date_data:
+        created_date, site_id, site_name = dt
+        crush = Weight.objects.filter(bws__weight_type=2, date=created_date, site=site_id).order_by('date').aggregate(s_weight=Sum("weight_total"), c_weight=Count('weight_total'))
+
+        stone_types = StoneEstimateItem.objects.filter(se__site__in = s_comp).order_by('stone_type').values_list('stone_type', 'stone_type__base_stone_type_name').distinct()
+        for st in stone_types:
+            stone_type , stone_type_name = st
+            percent = StoneEstimateItem.objects.filter(se__created = created_date, se__site = site_id, stone_type = stone_type).order_by(
+                'stone_type').values_list('percent', flat=True).first()
+            
+            if crush['s_weight'] is not None and percent is not None:
+                result = Decimal(crush['s_weight']) * Decimal(percent) / 100
+            else:
+                result = Decimal(0)
+            
+            if site_name not in results:
+                results[site_name] = {}
+            if stone_type_name not in results[site_name]:
+                results[site_name][stone_type_name] = {}
+            
+            results[site_name][stone_type_name][created_date] = result
+
+    '''
+    #only print
+    for site_name, site_data in results.items():
+        #print(f"Site: {site_name}")
+        for stone_type, stone_type_data in site_data.items():
+            for date, result in stone_type_data.items():
+                print(f"  Date: {date}, stone ID: {stone_type}, Result: {result}")    
+    '''
+
+    aggregated_results = {}
+
+    for site_name, site_data in results.items():
+        for stone_type, stone_type_data in site_data.items():
+            for created_date, result in stone_type_data.items():
+
+                month_year = extract_month_year(created_date)
+                
+                if site_name not in aggregated_results:
+                    aggregated_results[site_name] = {}
+                if stone_type not in aggregated_results[site_name]:
+                    aggregated_results[site_name][stone_type] = {}
+                if month_year not in aggregated_results[site_name][stone_type]:
+                    aggregated_results[site_name][stone_type][month_year] = 0
+                
+                aggregated_results[site_name][stone_type][month_year] += result
+
+    '''
+    #only print
+    for site_name, site_data in aggregated_results.items():
+        for stone_type, stone_type_data in site_data.items():
+            for month_year, result in stone_type_data.items():
+                print(f"  Month-Year: {month_year}, stone ID: {stone_type}, Result: {result}")    
+    '''
+
+    sum_aggregated = {}
+    for site_name, site_data in aggregated_results.items():
+        for stone_type, stone_type_data in site_data.items():
+            for month_year, result in stone_type_data.items():
+                if site_name not in sum_aggregated:
+                    sum_aggregated[site_name] = {}
+                if month_year not in sum_aggregated[site_name]:
+                    sum_aggregated[site_name][month_year] = 0
+                    
+                sum_aggregated[site_name][month_year] += result
+
+    unique_month_years = {}
+    for site_name, site_data in aggregated_results.items():
+        for stone_type_data in site_data.values():
+            for month_year in stone_type_data.keys():
+                if month_year not in unique_month_years:
+                    unique_month_years[month_year] = set()
+                unique_month_years[month_year].add(site_name)
+
+    tmp_date_data = StoneEstimate.objects.filter(
+        site__in=s_comp, created__year__gt = current_year
+    ).annotate(
+        month_year=TruncMonth('created')
+    ).values('site', 'site__base_site_name', 'month_year').annotate(
+        count=Count('id')
+    ).order_by('site', 'month_year')
+
+    produc_run_results = {}
+    produc_work_results = {}
+    produc_capacity_results = {}
+    produc_hour_per_day_results = {}
+
+    for tmp in tmp_date_data:
+        month = tmp['month_year'].month
+        year = tmp['month_year'].year
+
+        produc = Production.objects.filter(site=tmp['site'], created__year=year, created__month=month).annotate(
+            working_time=ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field=models.DurationField()),
+            working_time_de=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DecimalField())
+        ).aggregate(
+            sum_run=Sum("run_time"),
+            total_working_time=Sum('working_time'),
+            total_working_time_de=Sum('working_time_de')
+        )
+
+        crush = Weight.objects.filter(bws__weight_type=2, date__year=year, date__month=month, site=tmp['site']).order_by(
+            'date').aggregate(
+            s_weight=Sum("weight_total"),
+            c_weight=Count('weight_total')
+        )
+        
+        capacity = crush['s_weight'] / (produc['total_working_time_de']/1000000/3600)
+        hourPerDay = produc['sum_run']/(produc['total_working_time']/24)
+
+        update_results(produc_run_results, tmp['site__base_site_name'], tmp['month_year'], produc['sum_run'])
+        update_results(produc_work_results, tmp['site__base_site_name'], tmp['month_year'], produc['total_working_time'])
+        update_results(produc_capacity_results, tmp['site__base_site_name'], tmp['month_year'], capacity)
+        update_results(produc_hour_per_day_results, tmp['site__base_site_name'], tmp['month_year'], hourPerDay)
+
+    data_stone_old_year = strToArrList(active, 'weight')
+    data_run_old_year = strToArrList(active, 'prod_run')
+    data_work_old_year = strToArrList(active, 'prod_work')
+    data_cap_old_year = strToArrList(active, 'prod_cap')
+    data_hpd_old_year = strToArrList(active, 'prod_hpd')
+
+    context = {'stone_name': stone_name,
+               'aggregated_results':aggregated_results,
+               'unique_month_years': unique_month_years,
+               'produc_run_results': produc_run_results,
+               'produc_work_results': produc_work_results,
+               'produc_capacity_results': produc_capacity_results,
+               'produc_hour_per_day_results': produc_hour_per_day_results,
+               'sum_aggregated': sum_aggregated,
+               'data_stone_old_year': data_stone_old_year,
+               'data_run_old_year': data_run_old_year,
+               'data_work_old_year': data_work_old_year,
+               'data_cap_old_year': data_cap_old_year,
+               'data_hpd_old_year': data_hpd_old_year,
+               'current_year': current_year,
+                active :"active",
+              }
+    return render(request, "production/monthlyProduction.html",context)
+
+def strToArrList(active, field):
+    try:
+        queryset_string = SetWeightOY.objects.filter(comp__code = active).values_list(field)
+        data = list(queryset_string[0])
+        data_old_year = ast.literal_eval(data[0])
+    except IndexError:
+        data_old_year = None
+
+    return data_old_year
+
+def update_results(dictionary, key1, key2, value):
+    if key1 not in dictionary:
+        dictionary[key1] = {}
+    if key2 not in dictionary[key1]:
+        dictionary[key1][key2] = {}
+    dictionary[key1][key2] = value
 
 def getLossNameByMill(company_in, site, start_created, end_created, mode):
     list_loss = []
@@ -1508,7 +1689,7 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="production_data_({active}).xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="production_record_({active}).xlsx"'
 
     workbook.save(response)
     return response
@@ -2043,7 +2224,7 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานการผลิตหินดือนนี้')
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="stone_estimate_({active}).xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="Prod_daily_({active}).xlsx"'
 
     workbook.save(response)
     return response

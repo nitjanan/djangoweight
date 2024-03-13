@@ -1058,6 +1058,7 @@ def viewProduction(request):
     context = {'production_page':'active', 'product': product,'filter':myFilter, active :"active",}
     return render(request, "production/viewProduction.html",context)
 
+@login_required(login_url='login')
 def summaryProduction(request):
     #active : active คือแท็ปบริษัท active
     active = request.session['company_code']
@@ -1117,6 +1118,7 @@ def summaryProduction(request):
 def extract_month_year(date):
     return date.strftime("%Y-%m")
 
+@login_required(login_url='login')
 def monthlyProduction(request):
     #active : active คือแท็ปบริษัท active
     active = request.session['company_code']
@@ -1155,14 +1157,34 @@ def monthlyProduction(request):
             
             results[site_name][stone_type_name][created_date] = result
 
+    totals = {}  # Initialize a dictionary to hold totals for each stone type
+    for site_name, stone_data in results.items():
+        for stone_type_name, date_data in stone_data.items():
+            for created_date, value in date_data.items():
+                if stone_type_name not in totals:
+                    totals[stone_type_name] = {}
+                if created_date not in totals[stone_type_name]:
+                    totals[stone_type_name][created_date] = Decimal(0)
+                totals[stone_type_name][created_date] += value
+
+    # Add totals to results under a special key like "Total"
+    total_values = {}
+    for stone_type_name, date_data in totals.items():
+        total_values[stone_type_name] = {}
+        for created_date, total_value in date_data.items():
+            total_values[stone_type_name][created_date] = total_value
+
+    results["Total"] = total_values
+
     '''
     #only print
     for site_name, site_data in results.items():
-        #print(f"Site: {site_name}")
+        print(f"Site: {site_name}")
         for stone_type, stone_type_data in site_data.items():
             for date, result in stone_type_data.items():
-                print(f"  Date: {date}, stone ID: {stone_type}, Result: {result}")    
+                print(f"  Date: {date}, stone ID: {stone_type}, Result: {result}")        
     '''
+    
 
     aggregated_results = {}
 

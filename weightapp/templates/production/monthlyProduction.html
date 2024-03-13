@@ -78,10 +78,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <h5>รายงานผลิต รายเดือน</h5>
               </div>
               <div class="col">                
-                <button type="button" class="btn btn-secondary float-end d-print-none ms-2" onclick="window.print();">
+                <!-- button type="button" class="btn btn-secondary float-end d-print-none ms-2" onclick="window.print();">
                   <i class="fas fa-print"></i>
                   ปริ้น รายงานผลิต รายเดือน
-                </button>
+                </!-->
                 <div class="col">
                   <button type="button" class="btn btn-success float-end d-print-none export-btn"><i class="fa fa-file-excel-o"></i> Export to Excel</button>
               </div>
@@ -152,6 +152,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           </tr>
                           <tr style="height: 40px;">
                           </tr>
+                          {% if site_name != 'Total' %}
                           <tr>
                             <th></th>
                             <th>ชม.โม่</th>
@@ -251,6 +252,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <th scope="col" class="text-end"></th>
                             <th scope="col" class="text-end"></th>
                           </tr>
+                          {%endif%}
                       </tbody>
                     {% endfor %}
                   </table>

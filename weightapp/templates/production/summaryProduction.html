@@ -182,6 +182,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>{{i.percent_loss|stringformat:".1f" }}%</td>
                                 <td></td>
                               </tr>
+                              <!-- สลับการคำนวน %A และ %P-->
                               <tr class="table-danger">
                                 <td>%A</td>
                                 <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p|stringformat:".1f" }}%</td>

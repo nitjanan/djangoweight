@@ -1262,8 +1262,17 @@ def monthlyProduction(request):
             c_weight=Count('weight_total')
         )
         
-        capacity = crush['s_weight'] / (produc['total_working_time_de']/1000000/3600)
-        hourPerDay = produc['sum_run']/(produc['total_working_time']/24)
+        #capacity 
+        try:
+            capacity = crush['s_weight'] / (produc['total_working_time_de']/1000000/3600)
+        except:
+            capacity = Decimal(0)
+
+        #hourPerDay 
+        try:
+            hourPerDay = produc['sum_run']/(produc['total_working_time']/24)
+        except:
+            hourPerDay = Decimal(0)
 
         update_results(produc_run_results, tmp['site__base_site_name'], tmp['month_year'], produc['sum_run'])
         update_results(produc_work_results, tmp['site__base_site_name'], tmp['month_year'], produc['total_working_time'])

@@ -1185,7 +1185,6 @@ def monthlyProduction(request):
                 print(f"  Date: {date}, stone ID: {stone_type}, Result: {result}")        
     '''
     
-
     aggregated_results = {}
 
     for site_name, site_data in results.items():

@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -268,6 +268,31 @@ class SetWeightOYAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['comp',] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+class ProductionGoalAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['date', 'site', 'line_type', 'accumulated_goal', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['date', 'site__base_site_name', 'line_type__name',]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class ProductionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['created', 'site', 'line_type', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['created', 'site__base_site_name', 'line_type__name',]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class ProductionLossItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['production', 'loss_type', 'mc_type', 'loss_time'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['production__created', 'production__site__base_site_name']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class StoneEstimateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['created', 'site', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['created', 'site__base_site_name']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class StoneEstimateItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['se', 'stone_type', 'percent'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['se__created', 'se__site__base_site_name', 'stone_type__base_stone_type_name']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -298,6 +323,11 @@ admin.site.register(UserScale, UserScaleAdmin)
 admin.site.register(UserProfile, UserProfileAdmin)
 admin.site.register(BaseSEC, BaseSECAdmin)
 admin.site.register(SetWeightOY, SetWeightOYAdmin)
+admin.site.register(Production, ProductionAdmin)
+admin.site.register(ProductionGoal, ProductionGoalAdmin)
+admin.site.register(ProductionLossItem, ProductionLossItemAdmin)
+admin.site.register(StoneEstimate, StoneEstimateAdmin)
+admin.site.register(StoneEstimateItem, StoneEstimateItemAdmin)
 
 
 

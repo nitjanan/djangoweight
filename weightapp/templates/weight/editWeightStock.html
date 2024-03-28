@@ -255,7 +255,19 @@ input.del[type=checkbox] {
     }else{
         $('#id_is_cancel').prop( "checked", false );
     }
+
+		setDataEmptyName("#id_customer", "#id_customer_name");
+    setDataEmptyName("#id_driver", "#id_driver_name");
+    setDataEmptyName("#id_scoop", "#id_scoop_name");
   });
+
+  function setDataEmptyName(fk, name){
+		if($(fk+" option:selected").index() > 0) {
+		  $(name).val($(fk).find(":selected").text());
+		}else{
+		  $(name).val("");
+		}
+	}
 
   $("#id_weight_total").blur(function(){
     calculateAll();

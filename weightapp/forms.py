@@ -237,7 +237,7 @@ class WeightForm(forms.ModelForm):
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
 
-    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 1) | Q(weight_type = 3)))
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 1) | Q(weight_type = 3)), required=False)
 
     class Meta:
        model = Weight
@@ -281,9 +281,9 @@ class WeightStockForm(forms.ModelForm):
            self.fields['driver'] = forms.ModelChoiceField(label='ผู้ขับ', queryset = BaseDriver.objects.filter(company = self.instance.bws.company), required=False)
            self.fields['car_registration'] = forms.ModelChoiceField(label='ทะเบียนรถ', queryset = BaseCarRegistration.objects.filter(company = self.instance.bws.company), required=False)
 
-    customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
-    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
-    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)))
+    customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
+    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
 
     class Meta:
        model = Weight

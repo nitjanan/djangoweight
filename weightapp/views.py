@@ -3280,6 +3280,7 @@ def weightVStampAll(request, dt):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightDetailBetween(request, start_date, end_date , weight_type):
+    #ยังไม่แน่ใจ queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
     queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
 
     serializer = WeightSerializer(queryset, many = True)
@@ -3988,6 +3989,7 @@ def exportWeightToExpress(request):
 
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
+    weight_type = request.GET.get('weight_type') or None
 
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -4001,6 +4003,8 @@ def exportWeightToExpress(request):
         my_q &= Q(date__gte = start_created)
     if end_created is not None:
         my_q &=Q(date__lte = end_created)
+    if weight_type is not None:
+        my_q &=Q(bws__weight_type = weight_type)
 
     my_q &=Q(bws__company__code__in = company_in)
 

@@ -247,6 +247,9 @@
                     {% if 'KT' in tab.code %}
                       <a id="{{tab.code}}" class="nav-item nav-link pointer {{KT}} {{disabledTab}}"  role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
                     {%endif%}
+                    {% if 'UNI' in tab.code %}
+                      <a id="{{tab.code}}" class="nav-item nav-link pointer {{UNI}} {{disabledTab}}"  role="tab" data-bs-toggle="tab" onClick="setCompany('{{tab.code}}')">{{tab.code}}-{{tab.name}}</a>
+                    {%endif%}
                   {%endfor%}
                 </nav>
             </div>

@@ -201,4 +201,5 @@ urlpatterns = [
      path('baseCustomerSite/api/vStamp/<str:dt>/',views.baseCustomerSiteVStamp,name="baseCustomerSiteVStamp"),
 
      path('setSessionCompany', views.setSessionCompany, name="setSessionCompany"),
+     path('setDateInDashbord', views.setDateInDashbord, name="setDateInDashbord"),
 ]

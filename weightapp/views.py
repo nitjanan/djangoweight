@@ -93,12 +93,18 @@ def set_border(ws, side=None, blank=True):
         wb._borders.append(Border(top=white, bottom=white, left=white, right=white))
         wb._cell_styles[0].borderId = len(wb._borders) - 1
 
-def getSumByStone(mode, stoneType, type, company_in):
+def getSumByStone(request, mode, stoneType, type, company_in):
+
+    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
     start_date = datetime.strptime(startDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
     end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    '''
+
+    start_date = request.session['db_start_date']
+    end_date = request.session['db_end_date']
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
@@ -113,12 +119,17 @@ def getSumByStone(mode, stoneType, type, company_in):
             w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
-def getSumOther(mode, list_sum_stone, type, company_in):
+def getSumOther(request, mode, list_sum_stone, type, company_in):
+    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
     start_date = datetime.strptime(startDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")    
+    '''
+
+    start_date = request.session['db_start_date']
+    end_date = request.session['db_end_date']
 
     query_filters = Q()
     for item_number_prefix in list_sum_stone:
@@ -137,32 +148,52 @@ def getSumOther(mode, list_sum_stone, type, company_in):
             w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
-def getNumListStoneWeightChart(mode, stone_list_id, type, company_in):
+def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
     #sell
     list_sum_stone = []
     for stone_id in stone_list_id:
-        list_sum_stone.append(getSumByStone(mode, stone_id, type, company_in))
+        list_sum_stone.append(getSumByStone(request, mode, stone_id, type, company_in))
 
-    list_sum_stone.append(getSumOther(mode, stone_list_id, type, company_in))
+    list_sum_stone.append(getSumOther(request, mode, stone_list_id, type, company_in))
     return list_sum_stone
 
 # Create your views here.
 @login_required(login_url='login')
 def index(request):
-    #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        #active : active คือแท็ปบริษัท active
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+
+        start_date = request.session['db_start_date']
+        end_date = request.session['db_end_date']
+        now_date = datetime.strptime(start_date, "%Y-%m-%d")
+
+        start_day = datetime.strptime(start_date, "%Y-%m-%d")
+        end_day = datetime.strptime(end_date, "%Y-%m-%d")
+    except:
+        return redirect('logoutUser')
 
     # today date
     current_date = datetime.now()
     previous_day = current_date - timedelta(days=1)
 
+    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
+    #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
+    start_date = datetime.strptime(startDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    end_date = datetime.strptime(endDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+    now_date = datetime.strptime(str(previous_day.strftime('%Y-%m-%d')), "%Y-%m-%d")
+    '''
+
     ####################################
     ###### list customer weight ########
     ####################################
-
+    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
     weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
     sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+    '''
+    weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
+    sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
     ####################################
     ######## data weight stock #########
@@ -173,18 +204,28 @@ def index(request):
     s_comp_name = BaseSite.objects.filter(s_comp__code = active).values('base_site_name').order_by('base_site_id')
 
     s_comp = BaseSite.objects.filter(s_comp__code = active).values('base_site_id', 'base_site_name').order_by('base_site_id')
-    data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date__range=(start_date, end_date), bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
 
     data_sum_produc = []
     data_sum_produc.append(('Total', data_sum_produc_all))
 
     for site in s_comp:
+        ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
         aggregated_value = Weight.objects.filter(
             bws__company__code__in=company_in,
             site=site['base_site_id'],
             date=previous_day,
             bws__weight_type=2
-        ).aggregate(s=Sum("weight_total"))["s"]
+        ).aggregate(s=Sum("weight_total"))["s"]        
+        '''
+        aggregated_value = Weight.objects.filter(
+            bws__company__code__in=company_in,
+            site=site['base_site_id'],
+            date__range=(start_date, end_date),
+            bws__weight_type=2
+        ).aggregate(s=Sum("weight_total"))["s"] 
+
         
         # Append a tuple (site_id, aggregated_value) to the list
         data_sum_produc.append((site['base_site_name'], aggregated_value))
@@ -195,21 +236,17 @@ def index(request):
     
     #'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
     sell_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    sell_list = getNumListStoneWeightChart(1, sell_list_name, 1, company_in)
+    sell_list = getNumListStoneWeightChart(request, 1, sell_list_name, 1, company_in)
 
     stock_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    stock_list = getNumListStoneWeightChart(2, stock_list_name, 2, company_in)
+    stock_list = getNumListStoneWeightChart(request, 2, stock_list_name, 2, company_in)
 
     produce_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    produce_list = getNumListStoneWeightChart(2, produce_list_name, 3, company_in)
+    produce_list = getNumListStoneWeightChart(request, 2, produce_list_name, 3, company_in)
 
     ####################################
     ########### chart mill #############
     ####################################
-    #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
-    start_date = datetime.strptime(startDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    now_date = datetime.strptime(str(previous_day.strftime('%Y-%m-%d')), "%Y-%m-%d")
 
     #สร้าง list ระหว่าง start_date และ end_date
     list_date_between = pd.date_range(start_date, end_date).tolist()
@@ -293,6 +330,8 @@ def index(request):
 
     context = { 'weight': weight,
                 'previous_day':previous_day,
+                'start_day':start_day,
+                'end_day':end_day,
                 'actual_working_time_all':actual_working_time_all,
                 'sum_all_weight': sum_all_weight,
                 'sell_list':sell_list,
@@ -346,6 +385,17 @@ def loginPage(request):
                     company = None
                 request.session['company_code'] = company.code
                 request.session['company'] = company.name
+
+                #set session date in dashbord
+                current_date_time = datetime.today()
+                previous_date_time = current_date_time - timedelta(days=1)
+
+                start_date = datetime.strptime(startDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+                end_date = datetime.strptime(endDateInMonth(str(previous_date_time.strftime('%Y-%m-%d'))), "%Y-%m-%d")
+
+                request.session['db_start_date'] = f'{start_date.strftime("%Y-%m-%d")}'
+                request.session['db_end_date'] = f'{end_date.strftime("%Y-%m-%d")}'
+
                 return redirect('home')
             else:
                 return redirect('signUp')
@@ -374,8 +424,12 @@ def weightTable(request):
     '''
 
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
+
 
     #CPT*เลือกตามบริษัท
     if is_scale(request.user):
@@ -1041,8 +1095,11 @@ def exportExcelProductionByStoneAndMonth(request):
 @login_required(login_url='login')
 def viewProduction(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = Production.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
@@ -1782,8 +1839,11 @@ def exportExcelProductionAndLossDashboard(request):
 
 @login_required(login_url='login')
 def viewStoneEstimate(request):
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = StoneEstimate.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
@@ -2263,8 +2323,11 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
 @login_required(login_url='login')
 def settingBaseMill(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseMill.objects.all().order_by('-mill_id')
 
@@ -2348,8 +2411,11 @@ def editBaseMill(request, id):
 @login_required(login_url='login')
 def settingBaseJobType(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseJobType.objects.all().order_by('base_job_type_id')
 
@@ -2427,8 +2493,11 @@ def editBaseJobType(request, id):
 @login_required(login_url='login')
 def settingBaseStoneType(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
 
@@ -2511,8 +2580,11 @@ def editBaseStoneType(request, id):
 @login_required(login_url='login')
 def settingBaseScoop(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseScoop.objects.all().order_by('-scoop_id')
 
@@ -2595,8 +2667,11 @@ def editBaseScoop(request, id):
 @login_required(login_url='login')
 def settingBaseCarTeam(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseCarTeam.objects.all().order_by('-car_team_id')
 
@@ -2679,8 +2754,11 @@ def editBaseCarTeam(request, id):
 @login_required(login_url='login')
 def settingBaseCar(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseCar.objects.all().order_by('-car_id')
 
@@ -2765,8 +2843,11 @@ def editBaseCar(request, id):
 @login_required(login_url='login')
 def settingBaseSite(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseSite.objects.all().order_by('-base_site_id')
 
@@ -2849,8 +2930,11 @@ def editBaseSite(request, id):
 @login_required(login_url='login')
 def settingBaseCustomer(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseCustomer.objects.filter(is_disable = False).order_by('-weight_type_id','-customer_id')
 
@@ -2933,8 +3017,11 @@ def editBaseCustomer(request, id):
 @login_required(login_url='login')
 def settingBaseDriver(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseDriver.objects.all().order_by('-driver_id')
 
@@ -3017,8 +3104,11 @@ def editBaseDriver(request, id):
 @login_required(login_url='login')
 def settingBaseCarRegistration(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseCarRegistration.objects.all().order_by('-car_registration_id')
 
@@ -3101,8 +3191,11 @@ def editBaseCarRegistration(request, id):
 @login_required(login_url='login')
 def settingBaseCustomerSite(request):
     #active : active คือแท็ปบริษัท active
-    active = request.session['company_code']
-    company_in = findCompanyIn(request)
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logoutUser')
 
     data = BaseCustomerSite.objects.all().order_by('id')
 
@@ -4065,4 +4158,17 @@ def setSessionCompany(request):
         'instance': request.session['company_code'],
     }
 
+    return JsonResponse(data)
+
+def setDateInDashbord(request):
+    db_start_date = request.GET.get('db_start_date', None)
+    db_end_date = request.GET.get('db_end_date', None)
+
+    request.session['db_start_date'] = db_start_date
+    request.session['db_end_date'] = db_end_date
+
+    data = {
+        'db_start_date' : db_start_date,
+        'db_end_date' : db_end_date,
+    }
     return JsonResponse(data)

@@ -17,10 +17,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
+from django_select2 import urls as select2_urls
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('',include("weightapp.urls"))
+    path('',include("weightapp.urls")),
+    path("select2/", include("django_select2.urls")),
 ]
 
 if settings.DEBUG:

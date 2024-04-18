@@ -17,6 +17,8 @@ from django.forms.models import BaseInlineFormSet
 from django.forms.widgets import TextInput
 from django.utils.dateparse import parse_duration
 import re
+from django_select2 import forms as s2forms
+from django_select2.forms import ModelSelect2Widget
 
 #new check error id 
 def has_only_en(name):
@@ -273,13 +275,14 @@ class WeightForm(forms.ModelForm):
        }
 
 class WeightStockForm(forms.ModelForm):
-
+    '''
     def __init__(self, *args, **kwargs):
        super().__init__(*args, **kwargs)
        if self.instance.bws.company is not None:
            self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)
            self.fields['driver'] = forms.ModelChoiceField(label='ผู้ขับ', queryset = BaseDriver.objects.filter(company = self.instance.bws.company), required=False)
-           self.fields['car_registration'] = forms.ModelChoiceField(label='ทะเบียนรถ', queryset = BaseCarRegistration.objects.filter(company = self.instance.bws.company), required=False)
+           self.fields['car_registration'] = forms.ModelChoiceField(label='ทะเบียนรถ', queryset = BaseCarRegistration.objects.filter(company = self.instance.bws.company), required=False)    
+    '''
 
     customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
     mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)

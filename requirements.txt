@@ -1,5 +1,6 @@
 altgraph==0.17.4
 asgiref==3.5.2
+async-timeout==4.0.3
 Babel==2.12.1
 backports.entry-points-selectable==1.1.1
 certifi==2021.5.30
@@ -15,6 +16,7 @@ diff-match-patch==20200713
 distlib==0.3.4
 dj-database-url==0.5.0
 Django==4.1.4
+django-appconf==1.0.6
 django-crispy-forms==2.0
 django-extensions==3.2.3
 django-filter==2.4.0
@@ -22,8 +24,10 @@ django-floppyforms==1.9.0
 django-import-export==2.6.1
 django-multiselectfield==0.1.12
 django-pandas==0.6.6
+django-redis==5.4.0
 django-related-admin==1.0.1
 django-rest-swagger==2.2.0
+django-select2==8.1.2
 django-widget-tweaks==1.4.8
 djangorestframework==3.14.0
 djangorestframework-simplejwt==5.3.0
@@ -67,6 +71,7 @@ pytz-deprecation-shim==0.1.0.post0
 pywin32-ctypes==0.2.2
 PyYAML==6.0
 qrcode==7.4.2
+redis==5.0.3
 requests==2.25.1
 segno==1.6.1
 simplejson==3.19.1

@@ -172,7 +172,7 @@ def index(request):
         start_day = datetime.strptime(start_date, "%Y-%m-%d")
         end_day = datetime.strptime(end_date, "%Y-%m-%d")
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     # today date
     current_date = datetime.now()
@@ -428,7 +428,7 @@ def weightTable(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
 
     #CPT*เลือกตามบริษัท
@@ -1099,7 +1099,7 @@ def viewProduction(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = Production.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
@@ -1843,7 +1843,7 @@ def viewStoneEstimate(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = StoneEstimate.objects.filter(company__code__in = company_in).order_by('-created', 'site')
 
@@ -2327,7 +2327,7 @@ def settingBaseMill(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseMill.objects.all().order_by('-mill_id')
 
@@ -2415,7 +2415,7 @@ def settingBaseJobType(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseJobType.objects.all().order_by('base_job_type_id')
 
@@ -2497,7 +2497,7 @@ def settingBaseStoneType(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
 
@@ -2584,7 +2584,7 @@ def settingBaseScoop(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseScoop.objects.all().order_by('-scoop_id')
 
@@ -2671,7 +2671,7 @@ def settingBaseCarTeam(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseCarTeam.objects.all().order_by('-car_team_id')
 
@@ -2758,7 +2758,7 @@ def settingBaseCar(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseCar.objects.all().order_by('-car_id')
 
@@ -2847,7 +2847,7 @@ def settingBaseSite(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseSite.objects.all().order_by('-base_site_id')
 
@@ -2934,7 +2934,7 @@ def settingBaseCustomer(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseCustomer.objects.filter(is_disable = False).order_by('-weight_type_id','-customer_id')
 
@@ -3021,7 +3021,7 @@ def settingBaseDriver(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseDriver.objects.all().order_by('-driver_id')
 
@@ -3108,7 +3108,7 @@ def settingBaseCarRegistration(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseCarRegistration.objects.all().order_by('-car_registration_id')
 
@@ -3195,7 +3195,7 @@ def settingBaseCustomerSite(request):
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
-        return redirect('logoutUser')
+        return redirect('logout')
 
     data = BaseCustomerSite.objects.all().order_by('id')
 

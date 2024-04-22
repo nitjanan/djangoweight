@@ -253,6 +253,8 @@ class UserProfileAdmin(ImportExportModelAdmin):
     formfield_overrides = {
         models.ManyToManyField: {'widget': CheckboxSelectMultiple},
     }
+    autocomplete_fields = ['user']
+    
     list_display = ['user'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ['user__first_name', 'user__last_name']

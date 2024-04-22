@@ -115,6 +115,8 @@ class BaseLineTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseTimeEstimateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    autocomplete_fields = ['site']
+
     list_display = ['site','time_name', 'time_from', 'time_to'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 

@@ -245,6 +245,8 @@ class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    autocomplete_fields = ['user']
+    
     list_display = ['user', 'scale_id', 'scale_name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 

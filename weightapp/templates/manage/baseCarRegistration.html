@@ -58,6 +58,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               {{ filter.form.car_registration_name|as_crispy_field }}
             </div>
             <div class="form-group col-md-2 mb-0">
+              {{ filter.form.car_type|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.company|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
               <div>
                 <label for=""></label>
                 <div class="my-2">
@@ -72,6 +78,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th>รหัสทะเบียนรถ</th>
                     <th>ชื่อทะเบียนรถ</th>
+                    <th>ประเภทรถ</th>
                     <th>บริษัท</th>
                   </tr>
                 </thead>
@@ -80,6 +87,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseCarRegistration' i.car_registration_id %}">{{i.car_registration_id}}</a>{% else %}{{i.car_registration_id}}{%endif%}</b></td>
                     <td>{{i.car_registration_name}}</td>
+                    <td>{{i.car_type}}</td>
                     <td>{{i.company}}</td>
                   </tr>
                   {% empty %}

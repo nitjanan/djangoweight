@@ -115,10 +115,11 @@ class BaseScoopFilter(django_filters.FilterSet):
 
     class Meta:
         model = BaseScoop
-        fields = ('scoop_id', 'scoop_name',)
+        fields = ('scoop_id', 'scoop_name','company')
 
 BaseScoopFilter.base_filters['scoop_id'].label = 'รหัสผู้ตัก'
 BaseScoopFilter.base_filters['scoop_name'].label = 'ชื่อผู้ตัก'
+BaseScoopFilter.base_filters['company'].label = 'บริษัท'
 
 
 class BaseCarTeamFilter(django_filters.FilterSet):
@@ -188,22 +189,32 @@ class BaseDriverFilter(django_filters.FilterSet):
 
     class Meta:
         model = BaseDriver
-        fields = ('driver_id',  'driver_name', )
+        fields = ('driver_id',  'driver_name', 'company')
 
 BaseDriverFilter.base_filters['driver_id'].label = 'รหัสผู้ขับ'
 BaseDriverFilter.base_filters['driver_name'].label = 'ชื่อผู้ขับ'
+BaseDriverFilter.base_filters['company'].label = 'บริษัท'
 
 class BaseCarRegistrationFilter(django_filters.FilterSet):
+    จีน = 'จีน'
+    สิบล้อ = 'สิบล้อ'
+
+    CAR_TYPE_CHOICES = [
+        (จีน, 'จีน'),
+        (สิบล้อ, 'สิบล้อ'),
+    ]
+        
     car_registration_id = django_filters.CharFilter(field_name="car_registration_id", lookup_expr='icontains')
     car_registration_name = django_filters.CharFilter(field_name="car_registration_name", lookup_expr='icontains')
-    car_type = django_filters.CharFilter(field_name="car_type", lookup_expr='icontains')
+    car_type = django_filters.ChoiceFilter(field_name='car_type', choices=CAR_TYPE_CHOICES)
 
     class Meta:
         model = BaseDriver
-        fields = ('car_registration_id',  'car_registration_name', 'car_type')
+        fields = ('car_registration_id',  'car_registration_name', 'car_type', 'company')
 
 BaseCarRegistrationFilter.base_filters['car_registration_id'].label = 'รหัสทะเบียนรถ'
 BaseCarRegistrationFilter.base_filters['car_registration_name'].label = 'ชื่อทะเบียนรถ'
 BaseCarRegistrationFilter.base_filters['car_type'].label = 'ประเภทรถ'
+BaseCarRegistrationFilter.base_filters['company'].label = 'บริษัท'
 
 

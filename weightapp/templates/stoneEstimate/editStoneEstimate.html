@@ -114,7 +114,7 @@ input.del[type=checkbox] {
                     </div>
                     <div class="col-md-6 col-12">
                       <div class="form-group">
-                        {{form.percent | add_class:"form-control"}}
+                        {{form.percent | add_class:"form-control percent"}}
                       </div>
                     </div>
                     <div class="col-md-1 col-12">
@@ -182,20 +182,24 @@ input.del[type=checkbox] {
 
   function hideDiv(id){
     var inputId = $("#div-"+id+" div.col-md-5 div.form-group input[value='"+id+"']").attr("id").match(/\d+/);
+    // check ช่อง DELETE
     $("#id_stoneestimateitem_set-"+inputId+"-DELETE").prop('checked', true);
+    // ลบ class percent เพื่อไม่ต้องนำไปคำนวน checkOverPercent
+    $("#id_stoneestimateitem_set-"+inputId+"-percent").removeClass("percent");
+    // ซ่อนรายการหิน
     $("#div-"+id).hide();
   }
 
   //before save
   $('form').submit(function() {
+    if(checkOverPercent()){
+      alert('ค่าคำนวนเปอร์เซ็นต์เกิน 100% กรุณาเปลี่ยนเปอร์เซ็นต์ใหม่');
+      return false;
+    }
     //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
     if(have_estimate){
       $("#id_site").trigger( "focus" );
       alert('มีข้อมูลการประมาณการณ์ของวันนี้ ปลายทางนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง');
-      return false;
-    }
-    if(checkOverPercent()){
-      alert('ค่าคำนวนเปอร์เซ็นต์เกิน 100% กรุณาเปลี่ยนเปอร์เซ็นต์ใหม่');
       return false;
     }
 

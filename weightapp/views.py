@@ -1899,7 +1899,9 @@ def editStoneEstimate(request, se_id):
             # save StoneEstimateItem
             instances = formset.save(commit=False)
             for instance in instances:
-                instance.save()
+                #ให้ save ถ้ามีชนิดหิน
+                if instance.stone_type:
+                    instance.save()
             for obj in formset.deleted_objects:
                 obj.delete()
             formset.save_m2m()

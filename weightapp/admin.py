@@ -261,7 +261,7 @@ class UserProfileAdmin(ImportExportModelAdmin):
     
     list_display = ['user'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ['user__first_name', 'user__last_name']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name']
 
 class BaseSECAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     formfield_overrides = {

@@ -3325,7 +3325,8 @@ def apiWeightOverview(request):
         'Create':'/weight/api/create/',
         'Update':'/weight/api/update/<str:pk>/',
         'VStamp':'/weight/api/vStamp/<str:dt>/<str:str_lc>/',
-        'Detail By Date Between and Weight Type':'/weight/api/between/<str:start_date>/<str:end_date>/<str:weight_type/',
+        'Detail By Date Between and Weight Type':'/weight/api/between/<str:start_date>/<str:end_date>/<str:weight_type>/',
+        'Detail By BWS':'/weight/api/between/<str:start_date>/<str:end_date>/<str:bws>/',
     }
     return Response(api_urls)
 
@@ -3377,6 +3378,15 @@ def weightVStampAll(request, dt):
 def weightDetailBetween(request, start_date, end_date , weight_type):
     #ยังไม่แน่ใจ queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
     queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
+
+    serializer = WeightSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+# For get between date by bws
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightDetailBetweenByBWS(request, start_date, end_date , bws):
+    queryset = Weight.objects.filter(date__range=[start_date, end_date], bws = bws)
 
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)

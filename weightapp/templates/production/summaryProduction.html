@@ -74,7 +74,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <div class="card-body">
             <div class="row">
               <div class="col">
-                <h5>สรุปรายงาน วันที่ 1-{{date_object|date:"j F Y" }}</h5>
+                <!-- h5>สรุปรายงาน วันที่ 1-{{date_object|date:"j F Y" }}</!-->
+                <h5>สรุปรายงาน วันที่ {{ start_day |date:"j F Y" }} - {{ end_day |date:"j F Y" }}</h5>
               </div>
               <div class="col">                
                 <button type="button" class="btn btn-secondary float-end d-print-none" onclick="window.print();">

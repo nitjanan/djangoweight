@@ -806,12 +806,16 @@ def exportExcelProductionByStoneInDashboard(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
+    ''' แบบเก่าดึง รายงานผลิตหิน ตามเดือนนั้นๆ 09/05/2024
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
     end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
+    '''
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
 
     my_q = Q()
     if start_created is not None:
@@ -1042,13 +1046,9 @@ def exportExcelProductionByStoneAndMonthInDashboard(request):
     start_created = startDateInMonth(end_created)
 
     my_q = Q()
-    if start_created is not None:
-        my_q &= Q(date__gte = start_created)
-    if end_created is not None:
-        my_q &=Q(date__lte = end_created)
     my_q &= ~Q(customer_name ='ยกเลิก')
 
-    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    #ดึงรายงานของปีนั้นๆทั้งหมด
     startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
     endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
 
@@ -1120,14 +1120,22 @@ def summaryProduction(request):
     #active : active คือแท็ปบริษัท active
     active = request.session['company_code']
     company_in = findCompanyIn(request)
-
-    #ดึงข้อมูลวันนี้
-    date_object = datetime.today()
+    
+    ''' แบบเก่าดึง weekly report ตามเดือนนั้นๆ 09/05/2024
     #ดึงข้อมูลย้อนหลัง 1 วัน
     previous_date_time = date_object - timedelta(days=1)
 
     end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
+    '''
+    #ดึงข้อมูลวันนี้
+    date_object = datetime.today()
+
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    start_day = datetime.strptime(start_created, "%Y-%m-%d")
+    end_day = datetime.strptime(end_created, "%Y-%m-%d")
 
     b_site = Production.objects.filter(company__code__in = company_in).values('site').distinct()
 
@@ -1168,6 +1176,8 @@ def summaryProduction(request):
                'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
                'real_pd':real_pd,
                's_target':s_target,
+               'start_day':start_day,
+               'end_day': end_day,
                active :"active",
     }
     return render(request, "production/summaryProduction.html",context)
@@ -1812,6 +1822,7 @@ def exportExcelProductionAndLossDashboard(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
+    '''แบบเก่าดึง บันทึกปฏิบัติการงานโรงโม่ ตามเดือนนั้นๆ 09/05/2024
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -1819,6 +1830,9 @@ def exportExcelProductionAndLossDashboard(request):
 
     end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
+    '''
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
 
     my_q = Q()
     if start_created is not None:
@@ -2015,12 +2029,17 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
+    ''' แบบเก่าดึง รายงานการผลิตหิน ตามเดือนนั้นๆ 09/05/2024
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
     end_created = previous_date_time.strftime('%Y-%m-%d')
     start_created = startDateInMonth(end_created)
+    '''
+    
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
 
     my_q = Q()
     if start_created is not None:
@@ -4146,6 +4165,7 @@ def exportWeightToExpress(request):
             'vattyp': queryset.values_list('vat_type', flat=True),
             'pay': queryset.values_list('pay', flat=True),
             'company': queryset.values_list('bws__company__code', flat=True),
+            'bws': queryset.values_list('bws', flat=True),
             }
 
     df = pd.DataFrame(data)

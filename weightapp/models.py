@@ -788,6 +788,7 @@ class UserScale(models.Model):
     def __str__(self):
         return self.scale_name
 
+#set weight old year
 class SetWeightOY(models.Model):
     comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True, verbose_name="บริษัท")
     weight = models.TextField(blank=True, null=True, verbose_name="ตั้งค่าน้ำหนัก")
@@ -799,3 +800,16 @@ class SetWeightOY(models.Model):
     class Meta:
         verbose_name = 'ตั้งค่าน้ำหนักหินปีก่อน'
         verbose_name_plural = 'ข้อมูลตั้งค่าน้ำหนักหินปีก่อน'
+
+#ตั้งค่าบริษัทและชนิดหินหน้า dashbord
+class SetCompStone(models.Model):
+    comp = models.OneToOneField(BaseCompany, on_delete=models.CASCADE,null=True, blank=True, verbose_name="บริษัท")
+    stone = models.TextField(blank=True, null=True, verbose_name="list หินหน้า dashbord ***เรียงตาม id")
+
+    class Meta:
+        db_table = 'set_company_stone'
+        verbose_name = 'ตั้งค่าบริษัทและชนิดหินหน้า dashbord'
+        verbose_name_plural = 'ข้อมูลตั้งค่าบริษัทและชนิดหินหน้า dashbord'
+        
+    def __str__(self):
+        return str(self.comp)

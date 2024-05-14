@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -233,16 +233,24 @@ def index(request):
     ####################################
     ########### chart stone ############
     ####################################
+    #ดึงชนิดหินตามบริษัท ถ้าไม่มีดึงตามนี้ 'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
+    try:
+        set_stone = SetCompStone.objects.filter(comp__code = active)
+        result_list = list(set_stone.values_list('stone', flat=True))
+
+        text_value = result_list[0]
+        stone_list = text_value.replace("'", "").split(',')
+    except:
+        stone_list = ['01ST', '07ST', '09ST', '10ST', '16ST']
+
+    #หาชื่อหินจาก stone_list
+    stone_name_list = list(BaseStoneType.objects.filter(base_stone_type_id__in = stone_list).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id'))
+    stone_name_list.append('อื่นๆ')
     
-    #'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
-    sell_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    sell_list = getNumListStoneWeightChart(request, 1, sell_list_name, 1, company_in)
-
-    stock_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    stock_list = getNumListStoneWeightChart(request, 2, stock_list_name, 2, company_in)
-
-    produce_list_name = ['01ST','16ST','07ST','09ST','10ST']
-    produce_list = getNumListStoneWeightChart(request, 2, produce_list_name, 3, company_in)
+    #หาจำนวนตันจาก stone_list
+    sell_list = getNumListStoneWeightChart(request, 1, stone_list, 1, company_in)
+    stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
+    produce_list = getNumListStoneWeightChart(request, 2, stone_list, 3, company_in)
 
     ####################################
     ########### chart mill #############
@@ -342,6 +350,7 @@ def index(request):
                 'list_date': list_date,
                 'list_goal_mill' : list_goal_mill,
                 'list_persent_loss_weight':list_persent_loss_weight,
+                'stone_name_list':stone_name_list,
                 'dashboard_page':'active',
                 active :"active",}
     return render(request, "index.html",context)

@@ -4089,11 +4089,16 @@ def baseCustomerSiteVStamp(request, dt):
 
 def searchDetailMcType(request):
     #ดึงรายงานของเดือนนั้นๆ
+    '''ดึงวันที่ตามหน้า dashbord
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
     end_created = previous_date_time.strftime('%Y-%m-%d')
-    start_created = startDateInMonth(end_created)
+    start_created = startDateInMonth(end_created)    
+    '''
+
+    start_created = request.session['db_start_date']
+    end_created = request.session['db_end_date']
 
     site_id = request.GET.get('site_id', None)
     mc_id = request.GET.get('mc_id', None)

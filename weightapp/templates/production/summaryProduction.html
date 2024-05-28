@@ -159,11 +159,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               {% endfor %}
                             {% endwith %}
                               <tr class="table-danger">
-                                <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>{{i.sum_loss| format_duration}}</td>
-                                <td>ชม./เดือน</td>
-                              </tr>
-                              <tr class="table-danger">
                                 <td>เวลาทำงานที่กำหนด</td>
                                 <td>{{i.sum_actual| format_duration}}</td>
                                 <td>ชม./เดือน</td>
@@ -176,6 +171,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               <tr class="table-danger">
                                 <td>รวมความพร้อมของเครื่องจักร</td>
                                 <td>{{i.working_time| format_duration}}</td>
+                                <td>ชม./เดือน</td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>รวมเวลาสูญเสียทั้งหมด</td>
+                                <td>{{i.sum_loss| format_duration}}</td>
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">

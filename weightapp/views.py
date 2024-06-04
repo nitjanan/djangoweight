@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -376,6 +376,9 @@ def is_edit_setting(user):
 def is_view_weight(user):
     return user.groups.filter(name='view_weight').exists()
 
+def is_edit_base_id(user):
+    return user.groups.filter(name='edit_base_id').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -544,6 +547,97 @@ def setDataCarryType(request):
         'val': val,
     }
     return JsonResponse(data)
+
+def createCustomerId(request):
+    if 'job_type_id' in request.GET:
+        job_type_id = request.GET.get('job_type_id')
+        weight_type_id = request.GET.get('weight_type_id')
+
+        if weight_type_id == '1' and job_type_id:
+            missing_customer_id  = generateCustomerSell(job_type_id)
+        elif weight_type_id == '2':
+            missing_customer_id  = generateCustomerStock()
+        else:
+            missing_customer_id  = None
+
+        val = missing_customer_id
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
+
+def generateCustomerSell(job_type_id):
+    missing_customer_id = None
+
+    # Example usage
+    spc = SetPatternCode.objects.get(m_name = 'BaseCustomer', wt_id = '1')
+
+    sell_id_pt = job_type_id + spc.pattern
+    start_id = sell_id_pt + spc.start
+    end_id = sell_id_pt + spc.end
+
+    model_class = spc.get_model()
+    if model_class:
+        pk_field = model_class._meta.pk.name
+
+        customer_ids_in_range = model_class.objects.filter(
+            Q(**{f"{pk_field}__gte": start_id}) & Q(**{f"{pk_field}__lte": end_id})
+        ).values_list(pk_field, flat=True)
+    else:
+        print("Model not found")
+        #show aler error
+
+    # Convert to a set for faster lookup
+    customer_ids_set = set(customer_ids_in_range)
+
+    # Helper function to generate IDs in the given format
+    def generate_customer_id(number):
+        return f"{sell_id_pt + str(number).zfill(3)}"
+
+    # Iterate from 1 to 999 to find the missing ID
+    for i in range(1, 1000):
+        candidate_id = generate_customer_id(i)
+        if candidate_id not in customer_ids_set:
+            missing_customer_id = candidate_id
+            break
+
+    return missing_customer_id
+
+def generateCustomerStock():
+    missing_customer_id = None
+
+    spc = SetPatternCode.objects.get(m_name = 'BaseCustomer', wt_id = '2')
+
+    stock_id_pt = spc.pattern
+    start_id = spc.start + stock_id_pt
+    end_id = spc.end + stock_id_pt
+
+    model_class = spc.get_model()
+    if model_class:
+        pk_field = model_class._meta.pk.name
+
+        customer_ids_in_range = model_class.objects.filter(
+            Q(**{f"{pk_field}__gte": start_id}) & Q(**{f"{pk_field}__lte": end_id})
+        ).values_list(pk_field, flat=True)
+    else:
+        print("Model not found")
+        #show aler error
+
+    # Convert to a set for faster lookup
+    customer_ids_set = set(customer_ids_in_range)
+
+    # Helper function to generate IDs in the given format
+    def generate_customer_id(number):
+        return f"{str(number).zfill(2) + stock_id_pt}"
+
+    # Iterate from 1 to 99 to find the missing ID
+    for i in range(1, 100):
+        candidate_id = generate_customer_id(i)
+        if candidate_id not in customer_ids_set:
+            missing_customer_id = candidate_id
+            break
+
+    return missing_customer_id
 
 def searchNumCalQ(request):
     if 'stone_type_id' in request.GET:
@@ -3005,6 +3099,7 @@ def createBaseCustomer(request):
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เพิ่ม',
         'id_name' : '#id_customer_id',
+        'is_edit_base_id': is_edit_base_id(request.user),
         'mode' : 0,
         active :"active",
     }
@@ -3037,6 +3132,7 @@ def editBaseCustomer(request, id):
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เปลี่ยน',
         'id_name' : '#id_customer_id',
+        'is_edit_base_id': is_edit_base_id(request.user),
         'mode' : 1,
         active :"active",
     }
@@ -4175,6 +4271,7 @@ def exportWeightToExpress(request):
             'scalenam': queryset.values_list('scale_name', flat=True),
             'scoopnam': queryset.values_list('scoop_name', flat=True),
             'siteid': queryset.values_list('site_id', flat=True),
+            'sitenam': queryset.values_list('site_name', flat=True),
             'isvat': queryset.values_list('is_s', flat=True),
             'vattyp': queryset.values_list('vat_type', flat=True),
             'pay': queryset.values_list('pay', flat=True),

@@ -9,6 +9,7 @@ from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 import datetime
+from django.apps import apps
 
 class BaseVisible(models.Model):
     name = models.CharField(max_length=255,unique=True, verbose_name="ชื่อแท็บการใช้งาน")
@@ -813,3 +814,29 @@ class SetCompStone(models.Model):
         
     def __str__(self):
         return str(self.comp)
+
+class SetPatternCode(models.Model):
+    m_name = models.CharField(blank=True, null=True, max_length=120, verbose_name="Models Name")
+    start = models.CharField(blank=True, null=True, max_length=120, verbose_name="เริ่มจาก")
+    end = models.CharField(blank=True, null=True, max_length=120, verbose_name="ถึง")
+    pattern = models.CharField(blank=True, null=True, max_length=120, verbose_name="แพทเทิร์นรหัส")
+    wt_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="Weight Type Id")
+
+    class Meta:
+        db_table = 'set_pattern_code'
+        verbose_name = 'ตั้งค่าแพทเทิร์นรหัส Base'
+        verbose_name_plural = 'ข้อมูลตั้งค่าแพทเทิร์นรหัส Base'
+
+    def __str__(self):
+        return self.m_name
+    
+    def get_model(self):
+        if self.m_name:
+            try:
+                # Get the model class from the app registry
+                model = apps.get_model(app_label='weightapp', model_name=self.m_name)
+                return model
+            except LookupError:
+                # Handle the case where the model does not exist
+                return None
+        return None

@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -554,6 +554,9 @@ class BaseSiteForm(forms.ModelForm):
         return instance
 
 class BaseCustomerForm(forms.ModelForm):
+    weight_type = forms.ModelChoiceField(label='ชนิดเครื่องชั่ง', queryset = BaseWeightType.objects.filter(Q(id = 1) | Q(id = 2)))
+    base_job_type = forms.ModelChoiceField(label='ประเภทงานของลูกค้า', queryset = BaseJobType.objects.filter(~Q(base_job_type_id = '10')), required = False)
+    
     class Meta:
        model = BaseCustomer
        fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to',)

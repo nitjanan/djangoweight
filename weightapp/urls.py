@@ -87,6 +87,7 @@ urlpatterns = [
     path('baseCustomer/setting',views.settingBaseCustomer,name="settingBaseCustomer"),
     path('baseCustomer/create',views.createBaseCustomer,name="createBaseCustomer"),
     path('baseCustomer/edit/<str:id>',views.editBaseCustomer,name="editBaseCustomer"),
+    path('createCustomerId/',views.createCustomerId,name="createCustomerId"),
 
     path('baseCustomerSite/setting',views.settingBaseCustomerSite,name="settingBaseCustomerSite"),
     path('baseCustomerSite/create',views.createBaseCustomerSite,name="createBaseCustomerSite"),

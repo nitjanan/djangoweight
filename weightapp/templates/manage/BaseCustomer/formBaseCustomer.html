@@ -52,7 +52,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       <div class="card">
         <div class="card-content">
           <div class="card-body">
-            <form class="form" method="post">
+            <form class="form" method="post" enctype="multipart/form-data">
               <div class="row">
                 {% csrf_token %}
                 {{form | crispy}}
@@ -106,8 +106,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script type="text/javascript">
 
   id_name = "{{id_name}}";
-    if("{{mode}}" == 1){
-      $(id_name).prop('readonly', true);
+
+  '{% if not is_edit_base_id %}'
+    $(id_name).prop('readonly', true);
+  '{% else %}'
+    $(id_name).prop('readonly', false);
+  '{% endif %}'
+
+  if("{{mode}}" == 1){
+      $('#id_weight_type option:not(:selected)').prop('disabled', true);
+      $('#id_base_vat_type option:not(:selected)').prop('disabled', true);
+      $('#id_base_job_type option:not(:selected)').prop('disabled', true);
   }
 
   //After load
@@ -130,7 +139,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       $("#id_base_vat_type").prop('disabled', false);
       $("#id_base_job_type").prop('disabled', false);
 
-    }else{
+      //เลือกชนิด vat = V auto
+      $("#id_base_vat_type").val("01");
+
+    }else if(weight_type == 2){
       $("#id_base_vat_type").prop('required',false);
       $("#id_base_job_type").prop('required',false);
 
@@ -139,6 +151,41 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
       $("#id_base_vat_type").prop('disabled', true);
       $("#id_base_job_type").prop('disabled', true);
+    }
+  }
+
+  $("#id_base_job_type, #id_weight_type").change(function(){
+    if ("{{mode}}" == 0)
+      createCustomerId();
+  });
+
+  function createCustomerId(){
+    if($('#id_base_job_type').val() != "" || $('#id_weight_type').val() != ""){
+        var id_job_type = $('#id_base_job_type').val();
+        var id_weight_type = $('#id_weight_type').val();
+        // Create Ajax Call
+        if(id_job_type || id_weight_type){
+            $.ajax({
+                url: '{% url "createCustomerId" %}',
+                data: {
+                    'job_type_id': id_job_type,
+                    'weight_type_id': id_weight_type,
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.val) {
+                        $('#id_customer_id').val(data.val);
+                    }else{
+                        $('#id_customer_id').val("");
+                        if (id_weight_type == "1" && id_job_type != "")
+                          alert('ประเภทงานลูกค้านี้ ล่าสุดถึง ' + id_job_type+ "-V-999 แล้ว กรุณาเพิ่มประเภทงานของลูกค้า")
+                    }
+                }
+            });
+        }
+        return false;
+    }else{
+      $('#id_customer_id').val("");
     }
   }
 

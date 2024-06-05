@@ -79,6 +79,7 @@ urlpatterns = [
     path('baseCar/setting',views.settingBaseCar,name="settingBaseCar"),
     path('baseCar/create',views.createBaseCar,name="createBaseCar"),
     path('baseCar/edit/<str:id>',views.editBaseCar,name="editBaseCar"),
+    path('createCarId/',views.createCarId,name="createCarId"),
 
     path('baseSite/setting',views.settingBaseSite,name="settingBaseSite"),
     path('baseSite/create',views.createBaseSite,name="createBaseSite"),

@@ -55,6 +55,65 @@ from io import StringIO
 from decimal import Decimal
 import ast
 
+#generate Code Base
+def generateCodeId(model_name, type, wt, middle):
+    missing_id = None
+
+    try:
+        if wt:
+            spc = SetPatternCode.objects.get(m_name = model_name, wt_id = wt)
+        else:
+            spc = SetPatternCode.objects.get(m_name = model_name)
+
+        if type == 1:
+            id_pt = spc.pattern
+            start_id = spc.start + id_pt
+            end_id = spc.end + id_pt
+        elif type == 2:
+            id_pt = spc.pattern
+            start_id = id_pt + spc.start
+            end_id = id_pt + spc.end
+        elif type == 3:
+            id_pt = middle + spc.pattern
+            start_id = id_pt + spc.start
+            end_id = id_pt + spc.end
+
+        number_start = int(spc.start)
+        number_end = int(spc.end)
+
+        model_class = spc.get_model()
+        if model_class:
+            pk_field = model_class._meta.pk.name
+
+            ids_in_range = model_class.objects.filter(
+                Q(**{f"{pk_field}__gte": start_id}) & Q(**{f"{pk_field}__lte": end_id})
+            ).values_list(pk_field, flat=True)
+
+        # Convert to a set for faster lookup
+        ids_set = set(ids_in_range)
+
+        # Helper function to generate IDs in the given format
+        def generate_id(number):
+            tmp_id = None
+            if type == 1:
+                tmp_id = f"{str(number).zfill(len(spc.start)) + id_pt}"
+            elif type == 2:
+                tmp_id = f"{id_pt + str(number).zfill(len(spc.start))}"
+            elif type == 3:
+                tmp_id = f"{id_pt + str(number).zfill(len(spc.start))}"
+            return tmp_id
+
+        # Iterate from number_start to number_end to find the missing ID
+        for i in range(number_start, number_end + 1):
+            candidate_id = generate_id(i)
+            if candidate_id not in ids_set:
+                missing_id = candidate_id
+                break
+    except:
+        pass
+
+    return missing_id
+
 def findCompanyIn(request):
     code = request.session['company_code']
 
@@ -554,9 +613,9 @@ def createCustomerId(request):
         weight_type_id = request.GET.get('weight_type_id')
 
         if weight_type_id == '1' and job_type_id:
-            missing_customer_id  = generateCustomerSell(job_type_id)
+            missing_customer_id  = generateCodeId('BaseCustomer', 3, 1, job_type_id)
         elif weight_type_id == '2':
-            missing_customer_id  = generateCustomerStock()
+            missing_customer_id  = generateCodeId('BaseCustomer', 1, 2, None)
         else:
             missing_customer_id  = None
 
@@ -566,78 +625,15 @@ def createCustomerId(request):
     }
     return JsonResponse(data)
 
-def generateCustomerSell(job_type_id):
-    missing_customer_id = None
-
-    # Example usage
-    spc = SetPatternCode.objects.get(m_name = 'BaseCustomer', wt_id = '1')
-
-    sell_id_pt = job_type_id + spc.pattern
-    start_id = sell_id_pt + spc.start
-    end_id = sell_id_pt + spc.end
-
-    model_class = spc.get_model()
-    if model_class:
-        pk_field = model_class._meta.pk.name
-
-        customer_ids_in_range = model_class.objects.filter(
-            Q(**{f"{pk_field}__gte": start_id}) & Q(**{f"{pk_field}__lte": end_id})
-        ).values_list(pk_field, flat=True)
-    else:
-        print("Model not found")
-        #show aler error
-
-    # Convert to a set for faster lookup
-    customer_ids_set = set(customer_ids_in_range)
-
-    # Helper function to generate IDs in the given format
-    def generate_customer_id(number):
-        return f"{sell_id_pt + str(number).zfill(3)}"
-
-    # Iterate from 1 to 999 to find the missing ID
-    for i in range(1, 1000):
-        candidate_id = generate_customer_id(i)
-        if candidate_id not in customer_ids_set:
-            missing_customer_id = candidate_id
-            break
-
-    return missing_customer_id
-
-def generateCustomerStock():
-    missing_customer_id = None
-
-    spc = SetPatternCode.objects.get(m_name = 'BaseCustomer', wt_id = '2')
-
-    stock_id_pt = spc.pattern
-    start_id = spc.start + stock_id_pt
-    end_id = spc.end + stock_id_pt
-
-    model_class = spc.get_model()
-    if model_class:
-        pk_field = model_class._meta.pk.name
-
-        customer_ids_in_range = model_class.objects.filter(
-            Q(**{f"{pk_field}__gte": start_id}) & Q(**{f"{pk_field}__lte": end_id})
-        ).values_list(pk_field, flat=True)
-    else:
-        print("Model not found")
-        #show aler error
-
-    # Convert to a set for faster lookup
-    customer_ids_set = set(customer_ids_in_range)
-
-    # Helper function to generate IDs in the given format
-    def generate_customer_id(number):
-        return f"{str(number).zfill(2) + stock_id_pt}"
-
-    # Iterate from 1 to 99 to find the missing ID
-    for i in range(1, 100):
-        candidate_id = generate_customer_id(i)
-        if candidate_id not in customer_ids_set:
-            missing_customer_id = candidate_id
-            break
-
-    return missing_customer_id
+def createCarId(request):
+    if 'car_team_id' in request.GET:
+        car_team_id = request.GET.get('car_team_id')
+        missing_customer_id  = generateCodeId('BaseCar', 3, None, car_team_id)
+        val = missing_customer_id
+    data = {
+        'val': val,
+    }
+    return JsonResponse(data)
 
 def searchNumCalQ(request):
     if 'stone_type_id' in request.GET:
@@ -2472,7 +2468,7 @@ def createBaseMill(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    form = BaseMillForm(request.POST or None) 
+    form = BaseMillForm(request.POST or None, initial={'mill_id': generateCodeId('BaseMill', 1, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseMill.objects.filter(mill_id = new_contact.pk).exists()
@@ -2641,7 +2637,7 @@ def createBaseStoneType(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseStoneTypeForm(request.POST or None) 
+    form = BaseStoneTypeForm(request.POST or None, initial={'base_stone_type_id': generateCodeId('BaseStoneType', 1, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseStoneType.objects.filter(base_stone_type_id = new_contact.pk).exists()
@@ -2728,7 +2724,7 @@ def createBaseScoop(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
         
-    form = BaseScoopForm(request.POST or None) 
+    form = BaseScoopForm(request.POST or None, initial={'scoop_id': generateCodeId('BaseScoop', 1, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseScoop.objects.filter(scoop_id = new_contact.pk).exists()
@@ -2815,7 +2811,7 @@ def createBaseCarTeam(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCarTeamForm(request.POST or None) 
+    form = BaseCarTeamForm(request.POST or None, initial={'car_team_id': generateCodeId('BaseCarTeam', 2, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCarTeam.objects.filter(car_team_id = new_contact.pk).exists()
@@ -2896,7 +2892,7 @@ def settingBaseCar(request):
     base_car = p.get_page(page)
 
     context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
-    return render(request, "manage/baseCar.html",context)
+    return render(request, "manage/BaseCar/baseCar.html",context)
 
 def createBaseCar(request):
     active = request.session['company_code']
@@ -2927,7 +2923,7 @@ def createBaseCar(request):
         active :"active",
     }
 
-    return render(request, "manage/formBase.html", context)
+    return render(request, "manage/BaseCar/formBaseCar.html", context)
 
 def editBaseCar(request, id):
     active = request.session['company_code']
@@ -2961,7 +2957,7 @@ def editBaseCar(request, id):
         active :"active",
     }
 
-    return render(request, "manage/formBase.html", context)
+    return render(request, "manage/BaseCar/formBaseCar.html", context)
 
 ################### BaesSite ####################
 @login_required(login_url='login')
@@ -2991,7 +2987,7 @@ def createBaseSite(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseSiteForm(request.POST or None) 
+    form = BaseSiteForm(request.POST or None, initial={'base_site_id': generateCodeId('BaseSite', 1, None, None)})
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseSite.objects.filter(base_site_id = new_contact.pk).exists()
@@ -3167,7 +3163,7 @@ def createBaseDriver(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseDriverForm(request.POST or None) 
+    form = BaseDriverForm(request.POST or None, initial={'driver_id': generateCodeId('BaseDriver', 1, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseDriver.objects.filter(driver_id = new_contact.pk).exists()
@@ -3254,7 +3250,7 @@ def createBaseCarRegistration(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCarRegistrationForm(request.POST or None) 
+    form = BaseCarRegistrationForm(request.POST or None, initial={'car_registration_id': generateCodeId('BaseCarRegistration', 1, None, None)}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCarRegistration.objects.filter(car_registration_id = new_contact.pk).exists()

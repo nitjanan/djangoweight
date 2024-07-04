@@ -554,6 +554,7 @@ class BaseSiteForm(forms.ModelForm):
         return instance
 
 class BaseCustomerForm(forms.ModelForm):
+    customer_name = forms.CharField(label='ชื่อลูกค้า', required=True)
     weight_type = forms.ModelChoiceField(label='ชนิดเครื่องชั่ง', queryset = BaseWeightType.objects.filter(Q(id = 1) | Q(id = 2)))
     base_job_type = forms.ModelChoiceField(label='ประเภทงานของลูกค้า', queryset = BaseJobType.objects.filter(~Q(base_job_type_id = '10')), required = False)
     

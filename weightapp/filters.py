@@ -16,6 +16,8 @@ class WeightFilter(django_filters.FilterSet):
     weight_type =  django_filters.ModelChoiceFilter(field_name="bws__weight_type", queryset= BaseWeightType.objects.all())
     vat_type =  django_filters.ModelChoiceFilter(field_name="bws__vat_type", queryset= BaseVatType.objects.all())
     lc = django_filters.CharFilter(field_name="base_weight_station_name", lookup_expr='icontains')
+    mill_name = django_filters.CharFilter(field_name="mill_name", lookup_expr='icontains')
+    site_name = django_filters.CharFilter(field_name="site_name", lookup_expr='icontains')
 
     class Meta:
         model = Weight
@@ -32,6 +34,8 @@ WeightFilter.base_filters['stone_type_name'].label = 'ชนิดหิน'
 WeightFilter.base_filters['weight_type'].label = 'ประเภทชั่ง'
 WeightFilter.base_filters['vat_type'].label = 'vat'
 WeightFilter.base_filters['lc'].label = 'lc.'
+WeightFilter.base_filters['mill_name'].label = 'ต้นทาง'
+WeightFilter.base_filters['site_name'].label = 'ปลายทาง'
 
 
 class ProductionFilter(django_filters.FilterSet):

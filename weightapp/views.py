@@ -169,7 +169,7 @@ def getSumByStone(request, mode, stoneType, type, company_in):
     if type == 1:
         w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = Weight.objects.filter(Q(site__base_site_name__contains ='สต็อค') | Q(site__base_site_name__contains ='สต๊อก'), bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
@@ -678,7 +678,11 @@ def excelProductionByStone(request, my_q, list_date):
     company_in = findCompanyIn(request)
 
     # Query ข้อมูลขาย
-    m_comp_id = BaseMill.objects.filter(m_comp__code = active).values_list('mill_id').order_by('mill_id')
+    #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
+    stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+
+    #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
+    m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
     data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     
     # Query ข้อมูลผลิตรวม
@@ -705,7 +709,7 @@ def excelProductionByStone(request, my_q, list_date):
         # Create a list of colors for each line_type
         mill_colors = [generate_pastel_color() for i  in range(len(mills) + 1)]
 
-        column_index = 2 + len(mills)
+        column_index = 2 + len(s_comp_id)
         for mill in mills:
             worksheet.cell(row=1, column=column_index, value=f'ยอดขาย{mill}')
             worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
@@ -728,13 +732,13 @@ def excelProductionByStone(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - ( len(mills) + 2 )) // (len(stones))
+                line_index = (cell.column - ( len(s_comp_id) + 2 )) // (len(stones))
                 fill_color = mill_colors[line_index % len(mill_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
 
         # Write headers row 2 to the worksheet
-        column_index = 2 + len(mills)
+        column_index = 2 + len(s_comp_id)
         for mill in mills:
             for stone in stones:
                 worksheet.cell(row=2, column=column_index, value=stone).alignment = Alignment(horizontal='center')
@@ -767,7 +771,7 @@ def excelProductionByStone(request, my_q, list_date):
             for date, mill_data in date_data.items():
                 #เขียน weight total ของแต่ละหินใน worksheet
                 if worksheet.cell(row=idl+3, column = 1).value == date:
-                    column_index = 2 + len(mills)
+                    column_index = 2 + len(s_comp_id)
                     for mill in mills:
                         stone_data = mill_data.get(mill, {})
                         for stone in stones:
@@ -802,7 +806,6 @@ def excelProductionByStone(request, my_q, list_date):
                 info['col'] = col_num
                 mill_produc_list.append(info)
 
-
         # Fill in the data ยืด วันที่ จาก วันที่ขายทั้งหมด set(row[0] for row in data หากยึด วันที่ตามวันที่ผลิต set(row[0] for row in sorted_queryset
         for row_num, date in enumerate(sorted(set(row for row in list_date)), 2):
             #worksheet.cell(row=row_num, column=4, value=date)
@@ -825,6 +828,7 @@ def excelProductionByStone(request, my_q, list_date):
             worksheet.cell(row=row_index, column=col).font = Font(bold=True)
             sum_by_col = Decimal('0.00')
 
+        '''
         #คิดเป็นเปอร์เซ็น
         worksheet.cell(row=row_index+1, column=1, value="เปอร์เซ็นต์เฉลี่ย")
         for col, produc in zip(mill_col_list, mill_produc_list):
@@ -835,7 +839,8 @@ def excelProductionByStone(request, my_q, list_date):
                     percent = int(val/sum_produc_val * 100)
 
                     worksheet.cell(row=row_index+1, column=i, value = " " if val == Decimal('1.00') else f'{percent}%').alignment = Alignment(horizontal='right')
-                    worksheet.cell(row=row_index+1, column=i).font = Font(color="FF0000")
+                    worksheet.cell(row=row_index+1, column=i).font = Font(color="FF0000")        
+        '''
 
         # Set the column widths
         for column_cells in worksheet.columns:
@@ -940,7 +945,11 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     company_in = findCompanyIn(request)
 
     # Query ข้อมูลขาย
-    m_comp_id = BaseMill.objects.filter(m_comp__code = active).values_list('mill_id').order_by('mill_id')
+    #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
+    stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+    
+    #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
+    m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
     data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).annotate(
         month=ExtractMonth('date'),
         year=ExtractYear('date')
@@ -977,7 +986,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
         # Create a list of colors for each line_type
         mill_colors = [generate_pastel_color() for i  in range(len(mills) + 1)]
 
-        column_index = 2 + len(mills)
+        column_index = 2 + len(s_comp_id)
         for mill in mills:
             worksheet.cell(row=1, column=column_index, value=f'ยอดขาย{mill}')
             worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
@@ -1000,13 +1009,13 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - (len(mills) + 2)) // (len(stones))
+                line_index = (cell.column - (len(s_comp_id) + 2)) // (len(stones))
                 fill_color = mill_colors[line_index % len(mill_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
 
         # Write headers row 2 to the worksheet
-        column_index = 2 + len(mills)
+        column_index = 2 + len(s_comp_id)
         for mill in mills:
             for stone in stones:
                 worksheet.cell(row=2, column=column_index, value=stone).alignment = Alignment(horizontal='center')
@@ -1039,7 +1048,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
                 for date, mill_data in date_data.items():
                     #เขียน weight total ของแต่ละหินใน worksheet
                     if str(worksheet.cell(row=idl+3, column = 1).value) == str(date):
-                        column_index = 2 + len(mills)
+                        column_index = 2 + len(s_comp_id)
                         for mill in mills:
                             stone_data = mill_data.get(mill, {})
                             for stone in stones:
@@ -1097,6 +1106,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
             worksheet.cell(row=row_index, column=col).font = Font(bold=True)
             sum_by_col = Decimal('0.00')
 
+        '''
         #คิดเป็นเปอร์เซ็น
         worksheet.cell(row=row_index+1, column=1, value="เปอร์เซ็นต์เฉลี่ย")
         for col, produc in zip(mill_col_list, mill_produc_list):
@@ -1107,7 +1117,9 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
                     percent = int(val/sum_produc_val * 100)
 
                     worksheet.cell(row=row_index+1, column=i, value = " " if val == Decimal('1.00') else f'{percent}%').alignment = Alignment(horizontal='right')
-                    worksheet.cell(row=row_index+1, column=i).font = Font(color="FF0000")
+                    worksheet.cell(row=row_index+1, column=i).font = Font(color="FF0000")       
+        '''
+
 
         # Set the column widths
         for column_cells in worksheet.columns:
@@ -1137,6 +1149,9 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     return response
 
 def exportExcelProductionByStoneAndMonthInDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -1145,6 +1160,7 @@ def exportExcelProductionByStoneAndMonthInDashboard(request):
     start_created = startDateInMonth(end_created)
 
     my_q = Q()
+    my_q &= Q(bws__company__code__in = company_in)
     my_q &= ~Q(customer_name ='ยกเลิก')
 
     #ดึงรายงานของปีนั้นๆทั้งหมด
@@ -1158,6 +1174,8 @@ def exportExcelProductionByStoneAndMonthInDashboard(request):
     return response
 
 def exportExcelProductionByStoneAndMonth(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
 
     doc_id = request.GET.get('doc_id') or None
     start_created = request.GET.get('start_created') or None
@@ -1177,6 +1195,7 @@ def exportExcelProductionByStoneAndMonth(request):
     if stone_type is not None :
         my_q &=Q(stone_type_name__icontains = stone_type)
 
+    my_q &= Q(bws__company__code__in = company_in)
     my_q &= ~Q(customer_name ='ยกเลิก')
    
     current_date_time = datetime.today()

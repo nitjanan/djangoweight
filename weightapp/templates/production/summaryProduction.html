@@ -164,34 +164,33 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">
-                                <td>เวลาโม่หินจริง</td>
-                                <td>{{i.sum_run| format_duration}}</td>
-                                <td>ชม./เดือน</td>
-                              </tr>
-                              <tr class="table-danger">
                                 <td>รวมความพร้อมของเครื่องจักร</td>
                                 <td>{{i.working_time| format_duration}}</td>
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">
                                 <td>รวมเวลาสูญเสียทั้งหมด</td>
-                                <td>{{i.sum_loss| format_duration}}</td>
+                                <td>{{i.sum_loss_n_un| format_duration}}</td>
                                 <td>ชม./เดือน</td>
                               </tr>
                               <tr class="table-danger">
-                                <td>เปอร์เซ็นในการสูญเสีย</td>
-                                <td>{{i.percent_loss|stringformat:".1f" }}%</td>
+                                <td>เวลาโม่หินจริง</td>
+                                <td>{{i.stone_time| format_duration}}</td>
+                                <td>ชม./เดือน</td>
+                              </tr>
+                              <tr class="table-danger">
+                                <td>%ในการสูญเสีย</td>
+                                <td>{{i.percent_loss|stringformat:".2f" }}%</td>
                                 <td></td>
                               </tr>
-                              <!-- สลับการคำนวน %A และ %P-->
                               <tr class="table-danger">
                                 <td>%A</td>
-                                <td id="id_percent_p_{{forloop.counter0}}">{{i.percent_p|stringformat:".1f" }}%</td>
+                                <td id="id_percent_a_{{forloop.counter0}}">{{i.percent_a|stringformat:".2f" }}%</td>
                                 <td></td>
                               </tr>
                               <tr class="table-danger">
                                 <td>%P</td>
-                                <td id="id_a_percent_{{forloop.counter0}}"></td>
+                                <td id="id_p_percent_{{forloop.counter0}}"></td>
                                 <td></td>
                               </tr>
                               <tr class="table-danger">
@@ -201,7 +200,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               </tr>
                               <tr class="table-danger">
                                   <td>กำลังการผลิต (Performance)</td>
-                                  <td id="id_working_time_de_{{forloop.counter0}}" class="d-none">{{i.working_time_de}}</td>
+                                  <td id="id_stone_time_de_{{forloop.counter0}}" class="d-none">{{i.stone_time_de}}</td>
                                   <td id="id_capacity_{{forloop.counter0}}"></td>
                                   <td>ตัน/ชม.</td>
                               </tr>
@@ -286,8 +285,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var goal = $('#id_goal_{{forloop.counter0}}').text().replace(',', '');
         var real = $('#id_real_{{forloop.counter0}}').text().replace(',', '');
         var target = $('#id_target_{{forloop.counter0}}').text().replace(',', '');
-        var working_time_de = $('#id_working_time_de_{{forloop.counter0}}').text();
-        var percent_p = $('#id_percent_p_{{forloop.counter0}}').text().replace(',', '');
+        var stone_time_de = $('#id_stone_time_de_{{forloop.counter0}}').text();
+
+        var percent_a = $('#id_percent_a_{{forloop.counter0}}').text().replace(',', '');
 
         var loss = parseFloat(goal) - parseFloat(real);
         $('#id_loss_{{forloop.counter0}}').html(loss.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -295,14 +295,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var percent = (parseFloat(real)/ parseFloat(goal)) * 100;
         $('#id_percent_{{forloop.counter0}}').html(percent.toFixed(1)+'%');
 
-        var capacity = parseFloat(real) / (parseFloat(working_time_de)/1000000/3600);
+        var capacity = parseFloat(real) / (parseFloat(stone_time_de)/1000000/3600);
         $('#id_capacity_{{forloop.counter0}}').html(capacity.toFixed(2));
 
-        var a_percent = (parseFloat(capacity)/ parseFloat(target));
-        $('#id_a_percent_{{forloop.counter0}}').html(a_percent.toFixed(1)+'%');
+        var p_percent = (parseFloat(capacity)/ parseFloat(target));
+        $('#id_p_percent_{{forloop.counter0}}').html(p_percent.toFixed(2)+'%');
 
-        var oee_percent = (parseFloat(a_percent) * parseFloat(percent_p));
-        $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(1)+'%');
+        var oee_percent = (parseFloat(p_percent) * parseFloat(percent_a));
+        $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(2)+'%');
 
       "{% endfor %}"
     });

@@ -25,7 +25,7 @@ from django import forms
 from django.db.models import Sum, Subquery
 import random
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
-from django.db.models import F, ExpressionWrapper
+from django.db.models import F, ExpressionWrapper, Case, When
 from django.db import models
 import pandas as pd
 import calendar
@@ -1242,10 +1242,14 @@ def summaryProduction(request):
 
     pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
         , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.DecimalField())
+        , sum_uncontrol=Sum(Case(When(uncontrol_time__isnull=True, then=Value(timedelta(0))), default='uncontrol_time', output_field = models.DurationField()))
+        , sum_loss_n_un = ExpressionWrapper(F('sum_loss') - F('sum_uncontrol'), output_field= models.DurationField())
+        , working_time = ExpressionWrapper(F('sum_actual') - F('sum_uncontrol') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_uncontrol') , output_field= models.IntegerField())
+        , stone_time = ExpressionWrapper(F('working_time') - F('sum_loss_n_un') , output_field= models.DurationField()), stone_time_de = ExpressionWrapper(F('working_time') - F('sum_loss_n_un') , output_field= models.IntegerField())
+        , percent_a = ExpressionWrapper(F('stone_time') / F('working_time') * 100, output_field= models.DecimalField())
         , percent_goal = ExpressionWrapper(F('sum_goal') / F('pd_goal__accumulated_goal') * 100, output_field= models.IntegerField()), loss_weight = ExpressionWrapper(F('pd_goal__accumulated_goal') - F('sum_goal'), output_field= models.FloatField())
-        , working_time = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.DurationField()), working_time_de = ExpressionWrapper(F('sum_actual') - F('sum_loss') , output_field= models.IntegerField()) 
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
-        , percent_loss = ExpressionWrapper(F('sum_loss') / F('working_time') * 100, output_field= models.DecimalField()))
+        , percent_loss = ExpressionWrapper(F('sum_loss_n_un') / F('working_time') * 100, output_field= models.DecimalField()))
 
     pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
@@ -1272,7 +1276,8 @@ def summaryProduction(request):
                'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
                'date_object':date_object, 'mc_type':mc_type,
                'list_ls': list_ls,
-               'pd_loss_all'  :pd_loss_all  , 'mc_loos_type':mc_loos_type,
+               'pd_loss_all':pd_loss_all,
+               'mc_loos_type':mc_loos_type,
                'real_pd':real_pd,
                's_target':s_target,
                'start_day':start_day,
@@ -1592,6 +1597,10 @@ def createProduction(request):
             #คำนวนเวลารวมในการสูญเสีย
             total_loss_time = ProductionLossItem.objects.filter(production = production).aggregate(s=Sum("loss_time"))["s"]
             production.total_loss_time = total_loss_time if total_loss_time else timedelta(hours=0, minutes=0)
+            #คำนวนเวลารวมในการสูญเสีย uncontrol
+            total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
+            production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
+
             production.save()
 
             return redirect('viewProduction')
@@ -1636,6 +1645,10 @@ def editProduction(request, pd_id):
             #คำนวนเวลารวมในการสูญเสีย
             total_loss_time = ProductionLossItem.objects.filter(production = production).aggregate(s=Sum("loss_time"))["s"]
             production.total_loss_time = total_loss_time if total_loss_time else timedelta(hours=0, minutes=0)
+            #คำนวนเวลารวมในการสูญเสีย uncontrol
+            total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
+            production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
+
             production.save()
             return redirect('viewProduction')
     else:

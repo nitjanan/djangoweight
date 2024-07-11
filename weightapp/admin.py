@@ -287,7 +287,7 @@ class ProductionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 class ProductionLossItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['production', 'loss_type', 'mc_type', 'loss_time'] #แสดงรายการสินค้าในรูปแบบตาราง
-    search_fields = ['production__created', 'production__site__base_site_name']
+    search_fields = ['production__created', 'production__site__base_site_name', 'mc_type__name', 'loss_type__name']
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class StoneEstimateAdmin(ImportExportModelAdmin, admin.ModelAdmin):

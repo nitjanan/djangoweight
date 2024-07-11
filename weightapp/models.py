@@ -698,6 +698,8 @@ class Production(models.Model):
     total_loss_time = models.DurationField(null = True, blank=True)#รวมเวลาในการสูญเสีย
     actual_working_time = models.DurationField(null = True, blank=True)#ชั่วโมงการทำงานจริง
 
+    uncontrol_time = models.DurationField(null = True, blank=True)#รวมเวลาในการสูญเสีย only uncontrol
+
     production_volume = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#ยอดผลิต
     accumulated_production_volume = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)#ยอดผลิตสะสม
     

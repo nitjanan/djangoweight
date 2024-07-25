@@ -1272,7 +1272,7 @@ def summaryProduction(request):
 
     pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
-    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).values('mc_type__name', 'loss_type__name').distinct()
+    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('mc_type__id').values('mc_type__name', 'loss_type__name').distinct()
     pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
     mc_type  = BaseMachineType.objects.filter(id__lt = 5)
 
@@ -1649,9 +1649,9 @@ def editProduction(request, pd_id):
             # save production
             production = form.save()
 
-            pd_goal = ProductionGoal.objects.get(id = pd_data.pd_goal.id)
-            pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
-            pd_goal.save()
+            #หา id production Goal ใหม่
+            find_pd_goal = ProductionGoal.objects.get(company__code = company, date__year = f'{production.created.year}', date__month = f'{production.created.month}', site = production.site)
+            production.pd_goal = find_pd_goal
 
             # save ProductionLossItem
             instances = formset.save(commit=False)
@@ -1669,6 +1669,12 @@ def editProduction(request, pd_id):
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
 
             production.save()
+
+            #update เป้าผลิตสะสม production Goal ใหม่
+            pd_goal = ProductionGoal.objects.get(id = find_pd_goal.id)
+            pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
+            pd_goal.save()
+
             return redirect('viewProduction')
     else:
         formset = ProductionLossItemInlineFormset(instance=pd_data)

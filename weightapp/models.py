@@ -645,6 +645,7 @@ def setDurationTime(duration):
 
     return result
 
+''' อันเก่าคำนวนเวลาผิด
 def decimalToTime(deci):
     result = None
     if deci is not None:
@@ -652,6 +653,14 @@ def decimalToTime(deci):
         minutes = minutes * 6
         result = timedelta(hours=hours, minutes=minutes)
     return result
+'''
+
+def decimal_to_time(decimal_hours):
+    if decimal_hours is not None:
+        total_seconds = float(decimal_hours) * 3600
+        
+        time_delta = timedelta(seconds = total_seconds)
+    return time_delta
 
 def calculatorDiffTime(start_time, end_time):
     difference = None
@@ -734,7 +743,7 @@ class Production(models.Model):
         if self.run_start_time and self.run_end_time:
             self.run_time = calculatorDiffTime(self.run_start_time, self.run_end_time)#ชั่วโมงเดินเครื่อง
         elif self.mile_run_start_time and self.mile_run_end_time:
-            self.run_time = decimalToTime(calculatorDiffTime(self.mile_run_start_time, self.mile_run_end_time))
+            self.run_time = decimal_to_time(calculatorDiffTime(self.mile_run_start_time, self.mile_run_end_time))
         super().save(*args, **kwargs)
 
     class Meta:

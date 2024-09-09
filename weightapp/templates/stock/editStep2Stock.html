@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+{% load widget_tweaks %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<style>
+  .div-shadow{
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  }
+
+</style>
+  
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Create Stock</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item">
+                <a href="{% url 'viewStock' %}">Stone Stock</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Create Stock
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <hr class="my-3">
+      <form class="form" method="post">
+        {% csrf_token %}
+        <div class="row my-3">
+          <div class="col-md-1">
+            <p class="fw-bolder">{{form.created.label}}</p>
+          </div>
+          <div class="col-md-11">
+            <div class="form-group has-icon-left">
+              <div class="position-relative">
+                {{form.created | add_class:"form-control" |attr:"required:true"}}
+                {{form.company}}
+                <div class="form-control-icon">
+                  <i class="bi bi-calendar-week"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% for ssn in ssn_data %}
+        <div class="card">
+          <div class="card-header">
+            <h3 class="float-start">{{forloop.counter}}. {{ssn.stone}}</h3>
+            <a href="{% url 'editStockStoneItem' ssn.stk.id ssn.id %}" class="btn btn-warning float-end"><i class="fas fa-pen"></i> แก้ไข</a>
+            <a onclick="return confirm('คุณต้องการลบ {{ssn.stone}} นี้หรือไม่ ?')" href="{% url 'removeStockStone' ssn.id %}" class="btn btn-danger float-end"><i class="fas fa-trash-alt"></i> ลบ</a>
+          </div>
+          <div class="card-body">
+            <table class="table">
+              <thead>
+                <tr class="table-primary">
+                  <th scope="col">เครื่องหมาย</th>
+                  <th scope="col">ที่มาของ stock</th>
+                  <th scope="col" class="text-end">จำนวนตัน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in ssn.stockstoneitem_set.all %}
+                  <tr>
+                    <th scope="row">
+                      <b class="{% if item.source.symbol == '+'%}text-success{%elif item.source.symbol == '-'%}text-danger{%endif%}">{{item.source.symbol}}</b>
+                    </th>
+                    <td>{{item.source}}</td>
+                    <td class="text-end">{{item.quantity| intcomma}}</td>
+                  </tr>
+                {% endfor %}
+                <tr>
+                  <th scope="row" colspan="2">
+                    Total Stock
+                  </th>
+                  <th scope="row" class="text-end">
+                    {{ssn.total | intcomma}} ตัน
+                  </th>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {%endfor%}
+
+        <h4><span class="my-3 badge rounded-pill bg-primary">เพิ่มชนิดหินใน stock</span></h4>
+        <div class="card div-shadow border border-primary border-4">
+          <div class="card-content">
+            <div class="card-body">
+              <form class="form" method="post">
+                <div class="row">
+                  <div class="col-md-2">
+                    <p class="fw-bolder">{{ss_form.stone.label}}</p>
+                  </div>
+                  <div class="col-md-9">
+                    <div class="form-group">
+                      {{ss_form.stone| add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
+                    <!-- -->
+                  </div>
+                </div>
+                <hr class="my-3">
+                <div class="row">
+                  <div class="col-md-6 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">ที่มาของ stock</p>
+                    </div>
+                  </div>
+                  <div class="col-md-6 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">จำนวนตัน</p>
+                    </div>
+                  </div>
+                  {{ formset.management_form }}
+                  {% for form in formset %}
+                    <div class="row form-row spacer">
+                      <div class="col-md-6 col-12">
+                        <div class="form-group">
+                          {{form.source | add_class:"form-control source"}}
+                        </div>
+                      </div>
+                      <div class="col-md-6 col-12">
+                        <div class="form-group">
+                          {{form.quantity | add_class:"form-control quantity"}}
+                        </div>
+                      </div>
+                      <div class="col-md-1 col-12">
+                        <!--div class="input-group-append text-right">
+                          <button class="btn btn-success add-form-row hidden-print">+</button>
+                        </div-->
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="col-6">
+                      <ul class="text-success" style="line-height:95%">
+                        <li>ผลิต : ดึงข้อมูลหินเบอร์จากการประมาณการณ์หิน</li>
+                        <li>อนุเคราะห์ : ดึงข้อมูลจากปลายทาง อนุเคราะห์</li>
+                      </ul>
+                    </div>
+                    <div class="col-6 d-flex justify-content-end">
+                      <button type="submit" class="btn btn-primary me-1 mb-1">
+                        บันทึก
+                      </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <!-- p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p -->
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+ <!-- select2 Styles -->
+ <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+ <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+ <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+
+<script type="text/javascript">
+  $('#id_created').val('{{stock_data.created|date:"Y-m-d"}}');
+
+  //after load
+  $(window).on('load', function() {
+    //select2
+    $('#id_stone').select2({width: "100%" ,  theme: 'bootstrap-5'});
+
+    "{% for it in base_stock_source %}"
+        $("#id_form-{{forloop.counter0}}-source").val("{{it.id}}");
+    "{% endfor %}"
+  });
+
+  $(".quantity") .blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+//ก่อน save
+$('form').submit(function() {
+    //id ร้านค้าทั้งหมด py to java
+    var list_stone_id = [];
+    "{% for ssn in ssn_data %}"
+      list_stone_id.push('{{ssn.stone.base_stone_type_id}}');
+    "{% endfor %}"
+
+    //หา id ของร้านที่เราจะ save
+    var id_stone = $("#id_stone").val();
+
+    var haveStone = false
+    $.each(list_stone_id, function(index, value) {
+        if(value == id_stone){
+            haveStone = true;
+            alert('มีหินชนิดนี้ใน stock แล้ว กรุณาเพิ่มหินชนิดอื่น');
+        }
+    });
+
+    if(haveStone){
+        return false;
+    }
+});
+
+  var have_stock = false;
+  //ก่อน save
+  $('form').submit(function() {
+    //เช็คว่าวันนี้มี save stock หรือยัง
+    if(have_stock){
+      $("#id_created").trigger( "focus" );
+      alert('มีข้อมูล stock ของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่ stock');
+      return false;
+    }
+
+  });
+
+  ////// start หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////
+  $('#id_created').change(function() {
+      searchStockInDay();
+	});
+
+  function searchStockInDay(){
+    var created = $("#id_created").val();
+    var company = $("#id_company").val();
+    var stock_id = '{{stock_data.id}}';
+    // Create Ajax Call
+    if(created){
+      //set id_distributor
+      $.ajax({
+        url: '{% url "searchStockInDay" %}',
+        data: {
+          'created': created,
+          'company':company,
+          'stock_id':stock_id,
+        },
+        dataType: 'json',
+        success: function (data) {
+          have_stock = data.have_stock;
+        }
+      });
+    }
+    return false;
+  }
+  ////// end หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////
+
+  ////// start ดึงข้อมูลหินและจำนวนตัน //////
+  $('#id_stone, #id_created').change(function() {
+      searchDataWeightToStock();
+	});
+
+  function searchDataWeightToStock(){
+    var created = $("#id_created").val();
+    var company = $("#id_company").val();
+    var stone = $("#id_stone").val();
+
+    // Create Ajax Call
+    if(created){
+      //set id_distributor
+      $.ajax({
+        url: '{% url "searchDataWeightToStock" %}',
+        data: {
+          'created': created,
+          'company':company,
+          'stone':stone,
+        },
+        dataType: 'json',
+        success: function (data) {
+
+          setQuantity(data.quot, '0');
+          setQuantity(data.prod, '1');
+          setQuantity(data.sell, '2');
+          setQuantity(data.aid, '9');
+        }
+      });
+    }
+    return false;
+  }
+
+  function setQuantity(data, num){
+    if(data != parseFloat(0)){
+      $("#id_form-"+ num +"-quantity").val(parseFloat(data).toFixed(2));
+      //ถ้าไม่มีสิทธิแก้ให้ล็อกช่อง
+      "{% if not is_edit_stock %}"
+        $("#id_form-"+ num +"-quantity").attr('readonly', true);
+      "{% endif %}"
+    }else{
+      $("#id_form-"+ num +"-quantity").val(parseFloat(0).toFixed(2));
+      $("#id_form-"+ num +"-quantity").attr('readonly', false);
+    }
+  }
+  ////// end ดึงข้อมูลหินและจำนวนตัน //////
+
+</script>
+
+{% endblock %}

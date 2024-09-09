@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -699,3 +699,50 @@ class BaseCarRegistrationForm(forms.ModelForm):
             instance.save()
 
         return instance
+
+#stock    
+class StockForm(forms.ModelForm):
+
+    class Meta:
+       model = Stock
+       fields = ('created', 'company')
+       widgets = {
+        'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'company': forms.HiddenInput(),
+        }
+       labels = {
+            'created': _('วันที่ stock'),
+       }
+
+#ชนิดหินและจำนวนหินทั้งหมดใน stock
+class StockStoneForm(forms.ModelForm):
+    #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
+    class Meta:
+       model = StockStone
+       fields = ('stone', 'total', 'stk')
+       widgets = {
+
+        }
+       labels = {
+            'stone': _('ชนิดหิน'),
+            'total': _('total stock'),
+       }
+
+#ที่มาของ stock และจำนวนหินใน stock
+class StockStoneItemForm(forms.ModelForm):
+    class Meta:
+       model = StockStoneItem
+       fields=('source', 'quantity')
+       widgets = {
+        }
+
+#ที่มาของ stock และจำนวนหินใน stock
+StockStoneItemInlineFormset = inlineformset_factory(
+    StockStone,
+    StockStoneItem,
+    form=StockStoneItemForm,
+    fields=('source', 'quantity'),
+    widgets = { 
+    },
+    extra=0,
+)

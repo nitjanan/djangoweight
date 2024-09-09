@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -169,7 +169,9 @@ def getSumByStone(request, mode, stoneType, type, company_in):
     if type == 1:
         w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(Q(site__base_site_name__contains ='สต็อค') | Q(site__base_site_name__contains ='สต๊อก'), bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
+        #w = Weight.objects.filter(Q(site__base_site_name__contains ='สต็อค') | Q(site__base_site_name__contains ='สต๊อก'), bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
@@ -191,14 +193,18 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
     end_date = request.session['db_end_date']
 
     query_filters = Q()
+    ss_query_filters = Q()
     for item_number_prefix in list_sum_stone:
         query_filters |= Q(stone_type = item_number_prefix)
+        ss_query_filters |= Q(stone = item_number_prefix)
 
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
         w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
+        #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
+        #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
     elif type == 3:
         w = Decimal('0.0')
         se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
@@ -437,6 +443,9 @@ def is_view_weight(user):
 
 def is_edit_base_id(user):
     return user.groups.filter(name='edit_base_id').exists()
+
+def is_edit_stock(user):
+    return user.groups.filter(name='edit_stock').exists()
 
 def loginPage(request):
     if request.method == 'POST':
@@ -3535,6 +3544,13 @@ def weightVStampAll(request, dt):
 @permission_classes([IsAuthenticated])
 def weightDetailBetween(request, start_date, end_date , weight_type):
     #ยังไม่แน่ใจ queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
+    ''' อันนี้ถ้าเป็นเครื่องขายให้รวมข้อมูล ในโปรแกรมตาชั่งรวม เฉพาะเครื่องขาย
+    if weight_type == 1:
+        queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
+    elif weight_type == 2:
+       queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')    
+    '''
+ 
     queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
 
     serializer = WeightSerializer(queryset, many = True)
@@ -4311,6 +4327,7 @@ def exportWeightToExpress(request):
             'pay': queryset.values_list('pay', flat=True),
             'company': queryset.values_list('bws__company__code', flat=True),
             'bws': queryset.values_list('bws', flat=True),
+            'note': queryset.values_list('note', flat=True),
             }
 
     df = pd.DataFrame(data)
@@ -4348,4 +4365,254 @@ def setDateInDashbord(request):
         'db_start_date' : db_start_date,
         'db_end_date' : db_end_date,
     }
+    return JsonResponse(data)
+
+@login_required(login_url='login')
+def viewStock(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+
+    data = Stock.objects.filter(company__code__in = company_in).order_by('-created')
+
+    #กรองข้อมูล
+    myFilter = StockFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    stock = p.get_page(page)
+
+    context = {'stock_page':'active', 'stock': stock,'filter':myFilter, active :"active",}
+    return render(request, "stock/viewStock.html",context)
+
+@login_required(login_url='login')
+def removeStock(request, stock_id):
+    stk = Stock.objects.get(id = stock_id)
+    #ลบ ProductionLossItem ใน Production ด้วย
+    ssn = StockStone.objects.filter(stk = stk)
+    for sn in ssn:
+        items = StockStoneItem.objects.filter(ssn = sn)
+        items.delete()
+
+    ssn.delete()
+    stk.delete()
+    return redirect('viewStock')
+
+@login_required(login_url='login')
+def removeStockStone(request, ssn_id):
+
+    #ลบ ProductionLossItem ใน Production ด้วย
+    ssn = StockStone.objects.get(id = ssn_id)
+    stock_id = ssn.stk
+
+    items = StockStoneItem.objects.filter(ssn = ssn)
+    items.delete()
+
+    ssn.delete()
+    return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
+
+@login_required(login_url='login')
+def createStock(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_stock_source = BaseStockSource.objects.all().order_by('step')
+    StockStoneItemFormSet = modelformset_factory(StockStoneItem, fields=('source', 'quantity'), extra=len(base_stock_source), widgets={})
+    
+    if request.method == 'POST':
+        form = StockForm(request.POST)
+        ss_form = StockStoneForm(request.POST)
+        formset = StockStoneItemFormSet(request.POST)
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            ssn = ss_form.save()
+            ssn.stk = form
+            ssn.save()
+
+            total = 0
+            formset_instances = formset.save(commit=False)
+            for instance in formset_instances:
+                instance.ssn = ssn
+
+                if instance.quantity:
+                    if instance.source.symbol == "+":
+                        total += instance.quantity
+                    elif instance.source.symbol == "-":
+                        total -= instance.quantity
+                else:
+                    instance.quantity = 0
+                instance.save()
+
+            ssn.total = total
+            ssn.save()
+
+            return HttpResponseRedirect(reverse('editStep2Stock', args=(ssn.stk,)))
+    else:
+        form = StockForm(initial={'company': company})
+        ss_form = StockStoneForm()
+        formset = StockStoneItemFormSet(queryset=StockStoneItem.objects.none())
+
+    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': base_stock_source, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "stock/createStock.html",context)
+
+@login_required(login_url='login')
+def editStep2Stock(request, stock_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_stock_source = BaseStockSource.objects.all().order_by('step')
+    StockStoneItemFormSet = modelformset_factory(StockStoneItem, fields=('source', 'quantity'), extra=len(base_stock_source), widgets={})
+    
+    try:
+        stock_data = Stock.objects.get(id=stock_id)
+    except Stock.DoesNotExist:
+        return redirect('viewProduction')
+
+    ssn_data = StockStone.objects.filter(stk=stock_data)
+
+    if request.method == 'POST':
+        form = StockForm(request.POST, instance=stock_data)
+        ss_form = StockStoneForm(request.POST)
+        formset = StockStoneItemFormSet(request.POST)
+        
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            ssn = ss_form.save(commit=False)
+            if  ss_form.cleaned_data.get('stone'):
+                ssn.stk = form
+                ssn.save()
+
+                total = 0
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances:
+                    instance.ssn = ssn
+
+                    if instance.quantity:
+                        if instance.source.symbol == "+":
+                            total += instance.quantity
+                        elif instance.source.symbol == "-":
+                            total -= instance.quantity
+                    else:
+                        instance.quantity = 0
+                    instance.save()
+
+                ssn.total = total
+                ssn.save()
+
+            return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
+    else:
+        form = StockForm(instance=stock_data)
+        ss_form = StockStoneForm()
+        formset = StockStoneItemFormSet(queryset=StockStoneItem.objects.none())
+
+    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': base_stock_source, 'ssn_data': ssn_data,'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "stock/editStep2Stock.html",context)
+
+@login_required(login_url='login')
+def editStockStoneItem(request, stock_id, ssn_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_stock_source = BaseStockSource.objects.all().order_by('step')
+    
+    try:
+        stock_data = Stock.objects.get(id=stock_id)
+    except Stock.DoesNotExist:
+        return redirect('viewProduction')
+
+    ssn_data = StockStone.objects.filter(stk = stock_id)#ssn all in stock id
+    data = StockStone.objects.get(id = ssn_id)#id edit
+
+    if request.method == 'POST':
+        form = StockForm(request.POST, instance=stock_data)
+        ss_form = StockStoneForm(request.POST, instance=data)
+        formset = StockStoneItemInlineFormset(request.POST, instance=data)
+        
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            ssn = ss_form.save(commit=False)
+            if  ss_form.cleaned_data.get('stone'):
+                ssn.stk = form
+                ssn.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances: #อันนี้ไม่มี deleted_objects นะ
+                    if instance.quantity is None:
+                        instance.quantity = 0
+                    instance.save()
+
+                # add function calculate total stock
+                ssn.total = calculateTotalStock(ssn_id)
+                ssn.save()
+
+            return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
+    else:
+        form = StockForm(instance=stock_data)
+        ss_form = StockStoneForm(instance=data)
+        formset = StockStoneItemInlineFormset(instance=data)
+
+    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': base_stock_source, 'ssn_data': ssn_data, 'ss_id': data.id, 'ss_stone_id': data.stone.base_stone_type_id, 'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "stock/editStockStoneItem.html",context)
+
+def calculateTotalStock(ssn_id):
+    total = 0
+    items = StockStoneItem.objects.filter(ssn = ssn_id)
+    for i in items:
+        if i.quantity:
+            if i.source.symbol == "+":
+                total += i.quantity
+            elif i.source.symbol == "-":
+                total -= i.quantity
+    return total
+
+def searchStockInDay(request):
+    if 'created' in request.GET and 'company' in request.GET and 'stock_id' in request.GET:
+        created =  request.GET.get('created')
+        company =  request.GET.get('company')
+        stock_id =  request.GET.get('stock_id')
+
+        if stock_id == '':
+            have_stock = Stock.objects.filter(company = company, created = created).exists()
+        else:
+            have_stock = Stock.objects.filter(~Q(id = stock_id), company = company, created = created).exists()
+    data = {
+        'have_stock' :have_stock,
+    }
+    return JsonResponse(data)
+
+def searchDataWeightToStock(request):
+    if 'created' in request.GET and 'company' in request.GET and 'stone' in request.GET:
+        created =  request.GET.get('created')
+        company =  request.GET.get('company')
+        stone =  request.GET.get('stone')
+
+        sell = 0
+        prod = 0
+        #ยกมา
+        try:
+            quot = StockStone.objects.filter(~Q(stk__created = created), stk__company = company, stone = stone).order_by('-stk__created').values('total').first()['total'] or Decimal('0.0')
+        except TypeError:
+            quot = Decimal('0.0')
+
+        #ผลิต
+        se_item = StoneEstimateItem.objects.filter(se__created = created, stone_type = stone).values('se__created','percent','se__site')
+        for i in se_item:
+            crush = Weight.objects.filter(bws__company = company, site = i['se__site'], bws__weight_type = 2 , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+            prod += calculateEstimate(i['percent'], crush)
+
+        #ขาย
+        sell = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+
+        #อนุเคราะห์ (ปลายทาง 300PL)
+        aid = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created, site = '300PL').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+
+    data = {'sell' : sell, 'prod' : prod, 'aid' : aid, 'quot': quot,}
     return JsonResponse(data)

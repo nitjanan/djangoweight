@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -61,6 +61,17 @@ ProductionFilter.base_filters['start_created'].label = 'วันที่'
 ProductionFilter.base_filters['end_created'].label = 'ถึง'
 ProductionFilter.base_filters['site'].label = 'ปลายทาง'
 ProductionFilter.base_filters['line_type'].label = 'Line'
+
+class StockFilter(django_filters.FilterSet):
+    start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
+    end_created = django_filters.DateFilter(field_name = "created", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
+
+    class Meta:
+        model = Production
+        fields = ('created',)
+
+StockFilter.base_filters['start_created'].label = 'วันที่'
+StockFilter.base_filters['end_created'].label = 'ถึง'
 
 class StoneEstimateFilter(django_filters.FilterSet):
     start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))

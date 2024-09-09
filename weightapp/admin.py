@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -310,6 +310,26 @@ class SetPatternCodeAdmin(ImportExportModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ['m_name', 'pattern', 'start', 'end']
 
+class BaseStockSourceAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['name', 'symbol', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['name', 'step']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class StockAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'created', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'created', 'company']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class StockStoneAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'stone', 'total', 'stk'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'stone', 'total', 'stk']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class StockStoneItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'source', 'quantity', 'ssn'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'source', 'quantity', 'ssn']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -347,6 +367,10 @@ admin.site.register(StoneEstimate, StoneEstimateAdmin)
 admin.site.register(StoneEstimateItem, StoneEstimateItemAdmin)
 admin.site.register(SetCompStone, SetCompStoneAdmin)
 admin.site.register(SetPatternCode, SetPatternCodeAdmin)
+admin.site.register(BaseStockSource, BaseStockSourceAdmin)
+admin.site.register(Stock, StockAdmin)
+admin.site.register(StockStone, StockStoneAdmin)
+admin.site.register(StockStoneItem, StockStoneItemAdmin)
 
 
 

@@ -13,6 +13,7 @@ from django.apps import apps
 
 class BaseVisible(models.Model):
     name = models.CharField(max_length=255,unique=True, verbose_name="ชื่อแท็บการใช้งาน")
+    step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับแท็ปการใช้งาน")
 
     class Meta:
         db_table = 'base_visible'
@@ -33,6 +34,24 @@ class BaseCompany(models.Model):
 
     def __str__(self):
         return self.code
+
+SYMBOL_CHOICES = (
+    ('+','+'),
+    ('-','-'),
+)
+
+class BaseStockSource(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อที่มาของ stock")
+    symbol = models.CharField(choices = SYMBOL_CHOICES, blank=True, null=True, max_length=120, verbose_name="เครื่องหมาย (+ หรือ -)")
+    step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับ")
+
+    class Meta:
+        db_table = 'base_stock_source'
+        verbose_name = 'ที่มาของ stock'
+        verbose_name_plural = 'ข้อมูลที่มาของ stock'
+
+    def __str__(self):
+        return self.name
 
 #USER PROFILE
 class UserProfile(models.Model):
@@ -770,6 +789,41 @@ class ProductionLossItem(models.Model):
     class Meta:
         db_table = 'production_loss_item'
 
+#stock
+class Stock(models.Model):
+    created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ stock
+    update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+
+    class Meta:
+        db_table = 'stock'
+    
+    def __str__(self):
+        return str(self.id)
+
+#ชนิดหินและจำนวนหินทั้งหมดใน stock
+class StockStone(models.Model):
+    stone = models.ForeignKey(BaseStoneType, on_delete=models.CASCADE, null=True, blank=True, max_length=120, verbose_name="ชนิดหิน", to_field='base_stone_type_id')
+    total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="รวมทั้งหมด")
+    stk = models.ForeignKey(Stock, on_delete=models.CASCADE,null=True, blank=True, verbose_name="stock")
+
+    class Meta:
+        db_table = 'stock_stone'
+    
+    def __str__(self):
+        return str(self.id)
+
+#ที่มาของ stock และจำนวนหินใน stock
+class StockStoneItem(models.Model):
+    source = models.ForeignKey(BaseStockSource, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ที่มาของ stock")
+    quantity = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="จำนวน stock", default=0.00)
+    ssn = models.ForeignKey(StockStone, on_delete=models.CASCADE,null=True, blank=True, verbose_name="stock stone")
+
+    class Meta:
+        db_table = 'stock_stone_item'
+        
+    def __str__(self):
+        return str(self.id)
 
 class StoneEstimate(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง

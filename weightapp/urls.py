@@ -36,6 +36,15 @@ urlpatterns = [
     path('stoneEstimate/edit/<int:se_id>', views.editStoneEstimate,name="editStoneEstimate"),
     path('stoneEstimate/remove/<int:se_id>', views.removeStoneEstimate,name="removeStoneEstimate"),
 
+    path('stock/view', views.viewStock, name="viewStock"),
+    path('stock/create', views.createStock, name="createStock"),
+    path('stock/step2/edit/<int:stock_id>', views.editStep2Stock, name="editStep2Stock"),
+    path('stock/remove/<int:stock_id>', views.removeStock, name="removeStock"),
+    path('stockStone/remove/<int:ssn_id>', views.removeStockStone, name="removeStockStone"),
+    path('stockStoneItem/edit/<int:stock_id>/<int:ssn_id>', views.editStockStoneItem, name="editStockStoneItem"),
+    path('searchStockInDay', views.searchStockInDay, name="searchStockInDay"),
+    path('searchDataWeightToStock', views.searchDataWeightToStock, name="searchDataWeightToStock"),
+
     path('exportExcelProductionByStone/', views.exportExcelProductionByStone,name="exportExcelProductionByStone"),
     path('exportExcelProductionByStone/dashboard', views.exportExcelProductionByStoneInDashboard,name="exportExcelProductionByStoneInDashboard"),
 

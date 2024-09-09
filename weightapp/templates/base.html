@@ -140,6 +140,14 @@
                       </a>
                     </li>
                   {% endif %}
+                  {% if 'Stock' in tab.name %}
+                  <li class="sidebar-item {{stock_page}}">
+                    <a href="{% url 'viewStock' %}" class="sidebar-link">
+                      <i class="fas fa-cubes"></i>
+                      <span>Stock</span>
+                    </a>
+                  </li>
+                  {% endif %}
 
                   {% if 'Setting' in tab.name %}
                   <li class="sidebar-title">Manage</li>
@@ -215,8 +223,8 @@
                           >
                         </li>
                       </ul>
-                      {% endif %}
-                  </li>
+                    </li>
+                    {% endif %}
                 {% endfor %}
               </ul>
             {% endif %}

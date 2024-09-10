@@ -3543,15 +3543,14 @@ def weightVStampAll(request, dt):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightDetailBetween(request, start_date, end_date , weight_type):
-    #ยังไม่แน่ใจ queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
-    ''' อันนี้ถ้าเป็นเครื่องขายให้รวมข้อมูล ในโปรแกรมตาชั่งรวม เฉพาะเครื่องขาย
+    #อันนี้ถ้าเป็นเครื่องขายให้รวมข้อมูลของ uni ด้วย ในโปรแกรมตาชั่งรวม (Report Center) เฉพาะเครื่องขาย
     if weight_type == 1:
         queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code__in = ['SLC', 'UNI'])
     elif weight_type == 2:
-       queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')    
-    '''
- 
-    queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
+       queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
+    
+    #09-09-2024 อันเก่าไม่ครอบคลุมเคส
+    #queryset = Weight.objects.filter(date__range=[start_date, end_date], bws__weight_type__id = weight_type, bws__company__code = 'SLC')
 
     serializer = WeightSerializer(queryset, many = True)
     return Response(serializer.data)

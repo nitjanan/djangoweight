@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -225,15 +225,17 @@ StoneEstimateItemInlineFormset = inlineformset_factory(
 
 class WeightForm(forms.ModelForm):
 
+    ''' เอาออกเพราะ UNI ใช้ข้อมูลร่วมกับ SLC
     def __init__(self, *args, **kwargs):
        super().__init__(*args, **kwargs)
        if self.instance.bws.company is not None:
-           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)
+           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)    
+    '''
 
     ''' hidden
     mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
     stone_type_name = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all())
-    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())    
+    scoop_name = forms.ModelChoiceField(label='ชื่อผู้ตัก', queryset = BaseScoop.objects.all())
     '''
 
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
@@ -336,10 +338,13 @@ class BaseMillForm(forms.ModelForm):
         id = cleaned_data.get('mill_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseMill')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสต้นทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 5 or not id.endswith("MA"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxxMA' (e.g., 012MA) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -409,10 +414,13 @@ class BaseStoneTypeForm(forms.ModelForm):
         id = cleaned_data.get('base_stone_type_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseStoneType')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 4 or not id.endswith("ST"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxST' (e.g., 23ST) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -447,10 +455,13 @@ class BaseScoopForm(forms.ModelForm):
         id = cleaned_data.get('scoop_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseScoop')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 4 or not id.endswith("TK"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxTK' (e.g., 23TK) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -538,10 +549,13 @@ class BaseSiteForm(forms.ModelForm):
         id = cleaned_data.get('base_site_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseSite')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสปลายทางผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 5 or not id.endswith("PL"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxxPL' (e.g., 123PL) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -639,10 +653,13 @@ class BaseDriverForm(forms.ModelForm):
         id = cleaned_data.get('driver_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseDriver')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 4 or not id.endswith("KB"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxKB' (e.g., 23KB) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -685,10 +702,13 @@ class BaseCarRegistrationForm(forms.ModelForm):
         id = cleaned_data.get('car_registration_id')
         hoen = has_only_en(id)
 
+        spc = SetPatternCode.objects.get(m_name = 'BaseCarRegistration')
+        fm = str(spc.end) + spc.pattern
+
         if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
             raise forms.ValidationError(u"รหัสทะเบียนรถผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != 5 or not id.endswith("CR"):
-            raise forms.ValidationError(u"รหัสควรมี  format 'xxxCR' (e.g., 012CR) กรุณาเปลี่ยนรหัสใหม่.")
+        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):

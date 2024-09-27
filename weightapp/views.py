@@ -1279,11 +1279,12 @@ def summaryProduction(request):
         , capacity = ExpressionWrapper(F('sum_goal') / (F('working_time_de')/1000000/3600), output_field= models.DecimalField())
         , percent_loss = ExpressionWrapper(F('sum_loss_n_un') / F('working_time') * 100, output_field= models.DecimalField()))
 
-    pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__in = [1,2,3,4]).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
+    # M = เครื่องจักรหลัก, S = เครื่องจักรรอง ไว้แสดงข้อมูลเท่านั้น
+    pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'M').order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
-    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('mc_type__id').values('mc_type__name', 'loss_type__name').distinct()
-    pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__gte = 5).order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
-    mc_type  = BaseMachineType.objects.filter(id__lt = 5)
+    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'S').order_by('mc_type__id').values('mc_type__name', 'loss_type__name').distinct()
+    pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'S').order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+    mc_type  = BaseMachineType.objects.filter(kind = 'M')
 
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
 

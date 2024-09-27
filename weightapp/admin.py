@@ -95,7 +95,7 @@ class BaseLossTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseMachineTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['id','name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['id','name','kind'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseMillResource(resources.ModelResource):

@@ -624,7 +624,15 @@ class BaseLossType(models.Model):
         return self.name
     
 class BaseMachineType(models.Model):
-    name = models.CharField(unique=True, blank=True, null=True, max_length=255)
+    # M = เครื่องจักรหลัก, S = เครื่องจักรรอง ไว้แสดงข้อมูลเท่านั้น
+    KIND_CHOICES = [
+        ('M', 'main'),
+        ('S', 'second'),
+    ]
+        
+    name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อ")
+    kind = models.CharField(blank=True, null=True, max_length=1, choices=KIND_CHOICES, verbose_name="ประเภทเครื่องจักร")
+
     class Meta:
         db_table = 'base_machine_type'
         ordering = ["id"]

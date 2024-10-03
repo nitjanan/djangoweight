@@ -298,7 +298,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var capacity = parseFloat(real) / (parseFloat(stone_time_de)/1000000/3600);
         $('#id_capacity_{{forloop.counter0}}').html(capacity.toFixed(2));
 
-        var p_percent = (parseFloat(capacity)/ parseFloat(target));
+        var p_percent = (parseFloat(capacity)/ parseFloat(target)) * 100;
         $('#id_p_percent_{{forloop.counter0}}').html(p_percent.toFixed(2)+'%');
 
         var oee_percent = (parseFloat(p_percent) * parseFloat(percent_a));

@@ -1539,6 +1539,17 @@ def calculatorDiffTime(request, start_time, end_time):
     difference = end_time - start_time
     return difference
 
+def calculatorDiffWorkRealTime(plan, uncontrol, loss):
+    difference = None
+    if plan is None:
+        plan = timedelta(hours=0, minutes=0) 
+    if uncontrol is None:
+        uncontrol = timedelta(hours=0, minutes=0)
+    if loss is None:
+        loss = timedelta(hours=0, minutes=0)
+    difference = plan - uncontrol - loss
+    return difference
+
 def calculatorDiff(request, val1, val2):
     difference = None
     if val1 is None:
@@ -1839,8 +1850,9 @@ def excelProductionAndLoss(request, my_q, sc_q):
                     else:
                         row.extend(['' for i in range(len(count_loss))])
 
+                    #รวม, ชั่วโมงการทำงานจริง, ยอดผลิต (ตัน), ยอดผลิตสะสม, กำลังการผลิต (ตัน/ชั่วโมง), หมายเหตุ
                     if  production:
-                        row.extend([formatHourMinute(production.total_loss_time), formatHourMinute(calculatorDiffTime(request, production.total_loss_time, production.run_time)), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
+                        row.extend([formatHourMinute(production.total_loss_time), formatHourMinute(calculatorDiffWorkRealTime(production.plan_time, production.uncontrol_time, production.total_loss_time)), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
                         sum_capacity_per_hour += capacity_per_hour
 
                     ''' 1) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด

@@ -11,6 +11,10 @@ from django.dispatch import receiver
 import datetime
 from django.apps import apps
 
+def get_first_name(self):
+    return self.first_name
+User.add_to_class("__str__", get_first_name)
+
 class BaseVisible(models.Model):
     name = models.CharField(max_length=255,unique=True, verbose_name="ชื่อแท็บการใช้งาน")
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับแท็ปการใช้งาน")
@@ -34,6 +38,18 @@ class BaseCompany(models.Model):
 
     def __str__(self):
         return self.code
+    
+#เก็บสถานะตรวจสอบแล้ว weight by date
+class ApproveWeight(models.Model):
+    company = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True, verbose_name="บริษัท")
+    date = models.DateField(default = timezone.now, verbose_name="รายการชั่งวันที่") #เก็บรายการชั่งวันที่
+    update = models.DateTimeField(default=timezone.now)#เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
+    is_approve = models.BooleanField(default=False, verbose_name="สถานะการตวจสอบ") #เก็บสถานะการตวจสอบ
+
+    class Meta:
+        db_table = 'approve_weight'
+        verbose_name = 'ยืนยันการตรวจสอบรายการชั่ง'
+        verbose_name_plural = 'ข้อมูลยืนยันการตรวจสอบรายการชั่ง'
 
 SYMBOL_CHOICES = (
     ('+','+'),
@@ -434,6 +450,7 @@ class Weight(models.Model):
     exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
     is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+    apw = models.ForeignKey(ApproveWeight, on_delete=models.CASCADE, blank=True, null = True) #เก็บ ApproveWeight
 
     class Meta:
         db_table = 'weight'

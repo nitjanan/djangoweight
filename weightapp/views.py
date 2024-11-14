@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -54,6 +54,7 @@ import csv
 from io import StringIO
 from decimal import Decimal
 import ast
+import json
 
 #generate Code Base
 def generateCodeId(model_name, type, wt, middle):
@@ -257,7 +258,8 @@ def index(request):
     weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
     sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
     '''
-    weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
+    #แสดงชื่อลูกค้าแค่ 10 อันดับแรกที่มีน้ำหนักสูงสุด
+    weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')[:10]
     sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
     ####################################
@@ -447,6 +449,9 @@ def is_edit_base_id(user):
 def is_edit_stock(user):
     return user.groups.filter(name='edit_stock').exists()
 
+def is_approve_weight(user):
+    return user.groups.filter(name='approve_weight').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -512,11 +517,14 @@ def weightTable(request):
 
 
     #CPT*เลือกตามบริษัท
+    '''
     if is_scale(request.user):
         us = UserScale.objects.filter(user = request.user).values_list('scale_id')
         data = Weight.objects.filter(scale_id__in = us).order_by('-date','weight_id')
     elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
-        data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')
+        data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
+    '''
+    data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -527,8 +535,59 @@ def weightTable(request):
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), active :"active",}
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), active :"active",}
     return render(request, "weight/weightTable.html",context)
+
+@login_required(login_url='login')
+def approveWeight(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+
+    data = Weight.objects.filter(bws__company__code__in = company_in).values_list('date', flat=True).order_by('-date').distinct()
+    ap_data = ApproveWeight.objects.filter(company__code = active)
+
+    #กรองข้อมูล
+    myFilter = WeightFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    weight = p.get_page(page)
+
+    if request.method=='POST':
+        checkbox_data = request.POST.get('checkboxData')
+
+        if checkbox_data:
+            checkbox_data = json.loads(checkbox_data)
+            
+            for item in checkbox_data:
+                formatted_date = item['date']
+                is_checked = item['isChecked']
+                try:
+                    ap = ApproveWeight.objects.get(company__code = active, date = formatted_date)
+                    ap.is_approve = is_checked
+                    ap.save()
+                except ApproveWeight.DoesNotExist:
+                    company = BaseCompany.objects.get(code = active)
+                    ap = ApproveWeight.objects.create(
+                        company = company,
+                        date = formatted_date,
+                        is_approve = is_checked,
+                        update = datetime.now()
+                    )
+                
+                w = Weight.objects.filter(bws__company__code = active, date = formatted_date)
+                w.update(apw = ap)
+
+        return redirect('weightTable')
+
+    context = {'weight':weight, 'ap_data': ap_data, 'filter':myFilter, 'weightTable_page':'active', active :"active",}
+    return render(request, "weight/approveWeight.html",context)
 
 @login_required(login_url='login')
 def editWeight(request, mode, weight_id):

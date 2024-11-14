@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock, User, UserScale
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -18,6 +18,7 @@ class WeightFilter(django_filters.FilterSet):
     lc = django_filters.CharFilter(field_name="base_weight_station_name", lookup_expr='icontains')
     mill_name = django_filters.CharFilter(field_name="mill_name", lookup_expr='icontains')
     site_name = django_filters.CharFilter(field_name="site_name", lookup_expr='icontains')
+    scale_name =  django_filters.ModelChoiceFilter(field_name="scale_name", queryset = User.objects.filter(groups__name='scale'))
 
     class Meta:
         model = Weight
@@ -36,7 +37,7 @@ WeightFilter.base_filters['vat_type'].label = 'vat'
 WeightFilter.base_filters['lc'].label = 'lc.'
 WeightFilter.base_filters['mill_name'].label = 'ต้นทาง'
 WeightFilter.base_filters['site_name'].label = 'ปลายทาง'
-
+WeightFilter.base_filters['scale_name'].label = 'ผู้ชั่ง'
 
 class ProductionFilter(django_filters.FilterSet):
     start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))

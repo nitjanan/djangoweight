@@ -23,6 +23,7 @@ urlpatterns = [
     path('weight/edit/<int:mode>/<int:weight_id>', views.editWeight,name="editWeight"),
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
     path('autocompalteSite/',views.autocompalteSite,name="autocompalteSite"),
+    path('weight/approve', views.approveWeight,name="approveWeight"),
 
     path('production/view', views.viewProduction,name="viewProduction"),
     path('production/create', views.createProduction,name="createProduction"),

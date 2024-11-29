@@ -516,6 +516,18 @@ class BaseCarForm(forms.ModelForm):
         if name_field:
             name_field = name_field.strip()  # Remove spaces from the beginning and end
         return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        bct = cleaned_data.get('base_car_team')
+        id = cleaned_data.get('car_id')
+
+        spc = SetPatternCode.objects.get(m_name = 'BaseCar')
+        fm =  str(bct.car_team_id) + spc.pattern + str(spc.end)
+
+        if not id or len(id) != len(fm) or not id.startswith(bct.car_team_id):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)

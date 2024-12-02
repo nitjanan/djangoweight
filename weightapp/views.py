@@ -2587,7 +2587,7 @@ def createBaseMill(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    form = BaseMillForm(request.POST or None, initial={'mill_id': generateCodeId('BaseMill', 1, None, None)}) 
+    form = BaseMillForm(request.POST or None, initial={'mill_id': generateCodeId('BaseMill', 1, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseMill.objects.filter(mill_id = new_contact.pk).exists()
@@ -2674,7 +2674,7 @@ def createBaseJobType(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    form = BaseJobTypeForm(request.POST or None) 
+    form = BaseJobTypeForm(request.POST or None, initial={'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseJobType.objects.filter(base_job_type_id = new_contact.pk).exists()
@@ -2756,7 +2756,7 @@ def createBaseStoneType(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseStoneTypeForm(request.POST or None, initial={'base_stone_type_id': generateCodeId('BaseStoneType', 1, None, None)}) 
+    form = BaseStoneTypeForm(request.POST or None, initial={'base_stone_type_id': generateCodeId('BaseStoneType', 1, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseStoneType.objects.filter(base_stone_type_id = new_contact.pk).exists()
@@ -2843,7 +2843,7 @@ def createBaseScoop(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
         
-    form = BaseScoopForm(request.POST or None, initial={'scoop_id': generateCodeId('BaseScoop', 1, None, None)}) 
+    form = BaseScoopForm(request.POST or None, initial={'scoop_id': generateCodeId('BaseScoop', 1, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseScoop.objects.filter(scoop_id = new_contact.pk).exists()
@@ -2930,7 +2930,7 @@ def createBaseCarTeam(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCarTeamForm(request.POST or None, initial={'car_team_id': generateCodeId('BaseCarTeam', 2, None, None)}) 
+    form = BaseCarTeamForm(request.POST or None, initial={'car_team_id': generateCodeId('BaseCarTeam', 2, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCarTeam.objects.filter(car_team_id = new_contact.pk).exists()
@@ -3017,7 +3017,7 @@ def createBaseCar(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCarForm(request.POST or None) 
+    form = BaseCarForm(request.POST or None, initial={'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCar.objects.filter(car_id = new_contact.pk).exists()
@@ -3106,7 +3106,7 @@ def createBaseSite(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseSiteForm(request.POST or None, initial={'base_site_id': generateCodeId('BaseSite', 1, None, None)})
+    form = BaseSiteForm(request.POST or None, initial={'base_site_id': generateCodeId('BaseSite', 1, None, None), 'user_created': request.user})
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseSite.objects.filter(base_site_id = new_contact.pk).exists()
@@ -3193,7 +3193,7 @@ def createBaseCustomer(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCustomerForm(request.POST or None) 
+    form = BaseCustomerForm(request.POST or None, initial={'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCustomer.objects.filter(customer_id = new_contact.pk).exists()
@@ -3282,7 +3282,7 @@ def createBaseDriver(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseDriverForm(request.POST or None, initial={'driver_id': generateCodeId('BaseDriver', 1, None, None)}) 
+    form = BaseDriverForm(request.POST or None, initial={'driver_id': generateCodeId('BaseDriver', 1, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseDriver.objects.filter(driver_id = new_contact.pk).exists()
@@ -3369,7 +3369,7 @@ def createBaseCarRegistration(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    form = BaseCarRegistrationForm(request.POST or None, initial={'car_registration_id': generateCodeId('BaseCarRegistration', 1, None, None)}) 
+    form = BaseCarRegistrationForm(request.POST or None, initial={'car_registration_id': generateCodeId('BaseCarRegistration', 1, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
         duplicate = BaseCarRegistration.objects.filter(car_registration_id = new_contact.pk).exists()
@@ -3466,7 +3466,7 @@ def createBaseCustomerSite(request):
             else:
                 return redirect('settingBaseCustomerSite')
     else:
-        form = BaseCustomerSiteForm()
+        form = BaseCustomerSiteForm(initial={'user_created': request.user})
 
     context = {
         'form':form,

@@ -238,7 +238,7 @@ class BaseCustomerSiteResource(resources.ModelResource):
 class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseCustomerSiteResource
     list_display = ('id','customer', 'site',)
-    search_fields = ('id', 'customer', 'site',)
+    search_fields = ('id', 'customer__customer_name', 'site__base_site_name',)
 
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['name', 'code'] #แสดงรายการสินค้าในรูปแบบตาราง

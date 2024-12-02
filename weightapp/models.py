@@ -97,6 +97,8 @@ class BaseMill(models.Model):
     v_stamp = models.DateTimeField(auto_now=True)
     m_comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True , verbose_name="โรงโม่ของบริษัท (ต้นทาง)")
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ต้นทาง)")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
 
     class Meta:
         db_table = 'base_mill'
@@ -110,6 +112,8 @@ class BaseCarTeam(models.Model):
     car_team_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสทีม")
     car_team_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อทีม")
     v_stamp = models.DateTimeField(auto_now=True)
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_car_team'
@@ -124,6 +128,8 @@ class BaseCar(models.Model):
     car_name = models.CharField(blank=True, null=True, max_length=255, verbose_name="ชื่อรถร่วม")
     base_car_team = models.ForeignKey(BaseCarTeam,on_delete=models.CASCADE, null = True, verbose_name="ทีม")
     v_stamp = models.DateTimeField(auto_now=True)
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_car'
@@ -151,6 +157,8 @@ class BaseJobType(models.Model):
     base_job_type_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสประเภทงานของลูกค้า")
     base_job_type_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อประเภทงานของลูกค้า")
     v_stamp = models.DateTimeField(auto_now=True)
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_job_type'
@@ -175,6 +183,8 @@ class BaseStoneType(models.Model):
     cal_q = models.CharField(blank=True, null=True, max_length=120, verbose_name="ค่าคำนวณคิว")
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     v_stamp = models.DateTimeField(auto_now=True)
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_stone_type'
@@ -208,6 +218,8 @@ class BaseCustomer(models.Model):
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     v_stamp = models.DateTimeField(auto_now=True)
     is_disable = models.BooleanField(default=False, verbose_name="ปิดการใช้งาน")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_customer'
@@ -222,6 +234,8 @@ class BaseScoop(models.Model):
     scoop_name = models.CharField(unique=True, blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ตัก")
     v_stamp = models.DateTimeField(auto_now=True)
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_scoop'
@@ -237,6 +251,8 @@ class BaseCarRegistration(models.Model):
     car_type = models.CharField(blank=True, null=True, max_length=255, verbose_name="ประเภทรถ")
     v_stamp = models.DateTimeField(auto_now=True)
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_car_registration'
@@ -251,6 +267,8 @@ class BaseDriver(models.Model):
     driver_name = models.CharField(unique= True, blank=True, null=True, max_length=255, verbose_name="ชื่อผู้ขับ")
     v_stamp = models.DateTimeField(auto_now=True)
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
 
     class Meta:
         db_table = 'base_driver'
@@ -268,6 +286,8 @@ class BaseSite(models.Model):
     s_comp = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, blank = True, null = True , verbose_name="โรงโม่ของบริษัท (ปลายทาง)")
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ปลายทาง)")
     target = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="กำลังการผลิต (Target)")
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
     class Meta:
         db_table = 'base_site'
@@ -295,6 +315,8 @@ class BaseCustomerSite(models.Model):
         verbose_name="ปลายทาง"
     )
     v_stamp = models.DateTimeField(auto_now=True)
+    user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
+    created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
 
     class Meta:
         db_table = 'base_customer_site'

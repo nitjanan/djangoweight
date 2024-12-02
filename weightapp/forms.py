@@ -319,8 +319,9 @@ class WeightStockForm(forms.ModelForm):
 class BaseMillForm(forms.ModelForm):
     class Meta:
        model = BaseMill
-       fields = ('mill_id' , 'mill_name', 'weight_type')
+       fields = ('mill_id' , 'mill_name', 'weight_type', 'user_created')
        widgets = {
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'mill_id': _('รหัสต้นทาง'),
@@ -359,8 +360,9 @@ class BaseMillForm(forms.ModelForm):
 class BaseJobTypeForm(forms.ModelForm):
     class Meta:
        model = BaseJobType
-       fields = ('base_job_type_id' , 'base_job_type_name',)
+       fields = ('base_job_type_id' , 'base_job_type_name', 'user_created')
        widgets = {
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'base_job_type_id': _('รหัสประเภทงานของลูกค้า'),
@@ -395,8 +397,9 @@ class BaseJobTypeForm(forms.ModelForm):
 class BaseStoneTypeForm(forms.ModelForm):
     class Meta:
        model = BaseStoneType
-       fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q',)
+       fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q', 'user_created')
        widgets = {
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'base_stone_type_id': _('รหัสหิน'),
@@ -435,8 +438,9 @@ class BaseStoneTypeForm(forms.ModelForm):
 class BaseScoopForm(forms.ModelForm):
     class Meta:
        model = BaseScoop
-       fields = ('scoop_id' , 'scoop_name', 'company')
+       fields = ('scoop_id' , 'scoop_name', 'company', 'user_created')
        widgets = {
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'scoop_id': _('รหัสผู้ตัก'),
@@ -476,8 +480,9 @@ class BaseScoopForm(forms.ModelForm):
 class BaseCarTeamForm(forms.ModelForm):
     class Meta:
        model = BaseCarTeam
-       fields = ('car_team_id' , 'car_team_name',)
+       fields = ('car_team_id' , 'car_team_name', 'user_created')
        widgets = {
+            'user_created': forms.HiddenInput(),
         }
        labels = {
             'car_team_id': _('รหัสทีม'),
@@ -502,8 +507,9 @@ class BaseCarTeamForm(forms.ModelForm):
 class BaseCarForm(forms.ModelForm):
     class Meta:
        model = BaseCar
-       fields = ('base_car_team', 'car_id' , 'car_name', )
+       fields = ('base_car_team', 'car_id' , 'car_name', 'user_created')
        widgets = {
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'car_id': _('รหัสรถร่วม'),
@@ -541,9 +547,9 @@ class BaseCarForm(forms.ModelForm):
 class BaseSiteForm(forms.ModelForm):
     class Meta:
        model = BaseSite
-       fields = ('base_site_id' , 'base_site_name', 'weight_type')
+       fields = ('base_site_id' , 'base_site_name', 'weight_type', 'user_created')
        widgets = {
-
+            'user_created': forms.HiddenInput(),
         }
        labels = {
             'base_site_id': _('รหัสปลายทาง'),
@@ -586,9 +592,9 @@ class BaseCustomerForm(forms.ModelForm):
     
     class Meta:
        model = BaseCustomer
-       fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to',)
+       fields = ('weight_type', 'base_vat_type', 'base_job_type', 'customer_id', 'customer_name' , 'address', 'send_to', 'user_created')
        widgets = {
-           
+           'user_created': forms.HiddenInput(),
         }
        labels = {
             'customer_id': _('รหัสลูกค้า'),
@@ -633,10 +639,11 @@ class BaseCustomerForm(forms.ModelForm):
 class BaseCustomerSiteForm(forms.ModelForm):
     class Meta:
        model = BaseCustomerSite
-       fields = ('customer' , 'site', )
+       fields = ('customer' , 'site', 'user_created')
        widgets = {
             'customer': forms.HiddenInput(),
             'site': forms.HiddenInput(),
+            'user_created': forms.HiddenInput(),
         }
        labels = {
             'customer': _('ลูกค้า'),
@@ -646,13 +653,16 @@ class BaseCustomerSiteForm(forms.ModelForm):
 
 class BaseDriverForm(forms.ModelForm):
     class Meta:
-       model = BaseDriver
-       fields = ('driver_id', 'driver_name' ,'company')
-       labels = {
+        model = BaseDriver
+        fields = ('driver_id', 'driver_name' ,'company', 'user_created')
+        widgets = {
+            'user_created': forms.HiddenInput(),
+        }
+        labels = {
             'driver_id': _('รหัสผู้ขับ'),
             'driver_name': _('ชื่อผู้ขับ'),
             'company': _('บริษัท'),
-       }
+        }
 
     def clean_name_field(self):
         name_field = self.cleaned_data.get('driver_name')
@@ -694,14 +704,17 @@ class BaseCarRegistrationForm(forms.ModelForm):
     car_type = forms.ChoiceField(choices = CT_CHOICES)
 
     class Meta:
-       model = BaseCarRegistration
-       fields = ('car_registration_id', 'car_registration_name' ,'car_type','company')
-       labels = {
+        model = BaseCarRegistration
+        fields = ('car_registration_id', 'car_registration_name' ,'car_type','company', 'user_created')
+        widgets = {
+	        'user_created': forms.HiddenInput(),
+        }
+        labels = {
             'car_registration_id': _('รหัสทะเบียนรถ'),
             'car_registration_name': _('ชื่อทะเบียนรถ'),
             'car_type': _('ประเภทรถ'),
             'company': _('บริษัท'),
-       }
+        }
 
     def clean_name_field(self):
         name_field = self.cleaned_data.get('car_registration_name')

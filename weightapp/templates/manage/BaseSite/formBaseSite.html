@@ -69,6 +69,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="mb-3">
                   {{form.weight_type.label}} {{form.weight_type | add_class:"form-control"}}
                 </div>
+                <div class="mb-3">
+                  {{form.user_created | add_class:"form-control"}}
+                </div>
                 <div class="col-12 d-flex justify-content-end">
                   {% if text_mode == 'เปลี่ยน' %}
                     <h6 class="text-warning me-3">* หากแก้ไขข้อมูล จะข้อมูลจะไปแก้ไขที่ตาชั่งด้วย</h6>

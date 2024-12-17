@@ -26,6 +26,7 @@ SECRET_KEY = 'django-insecure-sk2o0=^@9k=t$6c76#@#f-t^ckqj$-bwer7%6tmhg%cl(z*3&e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+#ALLOWED_HOSTS = ['61fc-2403-6200-8878-3cf-ecc8-9893-9f2a-9cce.ngrok-free.app'] #open Use webhook in TOP > Chat BOT > Prod.> Messaging API (in view callback)
 ALLOWED_HOSTS = []
 
 
@@ -199,3 +200,7 @@ GRAPH_MODELS ={
 'all_applications': True,
 'graph_models': True,
 }
+
+# Your LINE credentials
+LINE_CHANNEL_ACCESS_TOKEN = '+5nwfSwjvljTT5SobpYhacoTfRjbl+s/AcvunpB2jqfCcZszpyl0quTtzlO2EQzY6Jyq93gW0HIOGogTMT6PHsoWQiN4nftRjt2/MeNfgSdoXFxFpc04W70ju2HLrLK8yUG5jYRPjbPw+B0kBNMJjgdB04t89/1O/w1cDnyilFU='
+LINE_CHANNEL_SECRET = 'bf5a3c8bbb505bf3882e6ab7fcd6d1d5'

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseBadRequest
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -55,6 +55,149 @@ from io import StringIO
 from decimal import Decimal
 import ast
 import json
+from django.conf import settings # calls the object written in settings.py
+from django.views.decorators.csrf import csrf_exempt
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from apscheduler.schedulers.background import BackgroundScheduler
+from zoneinfo import ZoneInfo
+from apscheduler.triggers.cron import CronTrigger
+import requests
+
+line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
+
+''' สำหรับเช็ค UserId, groupId, roomId โดยส่งข้อความไปทาง line ที่มี BOT อยู่
+@csrf_exempt
+def callback(request):
+    if request.method == 'POST':
+        body = request.body.decode('utf-8')
+        req = json.loads(body)
+        print('Full Payload:', json.dumps(req, indent=2))
+
+        intent = req["queryResult"]["intent"]["displayName"]
+        # Extract common data
+        source = req['originalDetectIntentRequest']['payload']['data']['source']
+        source_type = source.get('type')
+        user_id = source.get('userId')
+        group_id = source.get('groupId') if source_type == 'group' else None
+        room_id = source.get('roomId') if source_type == 'room' else None
+
+        # Log context
+        print('Source Type:', source_type)
+        print('User ID:', user_id)
+        print('Group ID:', group_id)
+        print('Room ID:', room_id)
+
+        # Handle display name if userId is present
+        display_name = None
+        if user_id:
+            profile = line_bot_api.get_profile(user_id)
+            display_name = profile.display_name
+            print('Display Name:', display_name)
+
+        # Call reply function
+        reply_token = req['originalDetectIntentRequest']['payload']['data']['replyToken']
+        text = req['originalDetectIntentRequest']['payload']['data']['message']['text']
+
+        # Call reply function
+        reply(intent, text, reply_token, user_id, display_name)
+
+        return JsonResponse({'status': 'OK'})
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def reply(intent, text, reply_token, user_id, display_name):
+        weight = (
+            Weight.objects.filter(bws__weight_type = 1)
+            .values('customer_name')
+            .annotate(sum_weight_total=Sum('weight_total'))
+            .order_by('-sum_weight_total')[:3]
+        )
+ 
+        # Prepare the message text
+        messages = []
+        for i in weight:
+            tmp_text = f"ลูกค้า {i['customer_name']} : {i['sum_weight_total']} ตัน"
+            messages.append(tmp_text)
+
+        # Combine messages into a single text
+        final_message = "\n".join(messages)
+
+        text_message = TextSendMessage(text = final_message)
+        line_bot_api.reply_message(reply_token, text_message)
+'''
+
+def send_weight_edit(start_time, end_time, target_user_id):
+    today = datetime.today().strftime("วันที่ %d/%m/%Y")
+    
+    # Query weight data within the specified time range
+    weight = (
+        Weight.objects.filter(
+            bws__weight_type=1,
+            v_stamp__gte=start_time,
+            v_stamp__lt=end_time
+        )
+        .values('doc_id', 'bws__company__name', 'v_stamp', 'date')
+    )
+
+    # Group the data by company name
+    grouped_weights = defaultdict(list)
+    for i in weight:
+        grouped_weights[i['bws__company__name']].append(i)
+
+    # Prepare the message text
+    messages = []
+    for company_name, weights in grouped_weights.items():
+        company_message = f"============ {company_name} ============"
+        messages.append(company_message)
+        
+        for idx, i in enumerate(weights, start=1):
+            tmp_time = i['date'].strftime("วันที่ %d/%m/%Y")
+            tmp_text = f"{idx}) เลขที่ชั่ง {i['doc_id']} {tmp_time}"
+            messages.append(tmp_text)
+
+        messages.append("\n")
+
+    # Combine messages into a single text
+    if messages:
+        final_message = "🚨 "+ today + " มีการแก้ไขรายการชั่ง"+ "\n" + "\n".join(messages)
+    else:
+        final_message = "✅ ไม่มีข้อมูลการแก้ไขรายการชั่งของ " + today
+
+    # Send the message
+    text_message = TextSendMessage(text=final_message)
+    line_bot_api.push_message(target_user_id, text_message)
+
+def send_11am_summary():
+    # Time range: previous day 3:00 PM to today 11:00 AM
+    end_time = datetime.now().replace(hour=11, minute=0, second=0, microsecond=0)
+    start_time = end_time - timedelta(hours=20)
+    target_user_id = 'Cdcdb5eba3889c5a60da15702136b8726'  #user/group ID (Line id)
+    send_weight_edit(start_time, end_time, target_user_id)
+
+def send_3pm_summary():
+    # Time range: today 11:00 AM to today 3:00 PM
+    end_time = datetime.now().replace(hour=15, minute=0, second=0, microsecond=0)
+    start_time = end_time - timedelta(hours=4)
+    target_user_id = 'Cdcdb5eba3889c5a60da15702136b8726'  #user/group ID (Line id)
+    send_weight_edit(start_time, end_time, target_user_id)
+
+# Schedule the tasks
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    send_11am_summary,
+    trigger=CronTrigger(hour=11, minute=0),
+    id="11am_summary",
+    replace_existing=True,
+)
+scheduler.add_job(
+    send_3pm_summary,
+    trigger=CronTrigger(hour=15, minute=0),
+    id="3pm_summary",
+    replace_existing=True,
+)
+scheduler.start()
 
 #generate Code Base
 def generateCodeId(model_name, type, wt, middle):

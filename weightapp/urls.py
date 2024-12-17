@@ -215,4 +215,6 @@ urlpatterns = [
 
      path('setSessionCompany', views.setSessionCompany, name="setSessionCompany"),
      path('setDateInDashbord', views.setDateInDashbord, name="setDateInDashbord"),
+
+     #path('callback', views.callback, name='callback'), #line api messaging callback
 ]

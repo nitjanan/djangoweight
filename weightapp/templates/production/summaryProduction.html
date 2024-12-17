@@ -301,7 +301,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         var p_percent = (parseFloat(capacity)/ parseFloat(target)) * 100;
         $('#id_p_percent_{{forloop.counter0}}').html(p_percent.toFixed(2)+'%');
 
-        var oee_percent = (parseFloat(p_percent) * parseFloat(percent_a));
+        var oee_percent = (parseFloat(p_percent) * parseFloat(percent_a))/100;
         $('#id_oee_percent_{{forloop.counter0}}').html(oee_percent.toFixed(2)+'%');
 
       "{% endfor %}"

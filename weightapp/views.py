@@ -309,6 +309,8 @@ def getSumByStone(request, mode, stoneType, type, company_in):
     start_date = request.session['db_start_date']
     end_date = request.session['db_end_date']
 
+    start_year = datetime.strptime(start_date, '%Y-%m-%d').year
+
     #type 1 = sell, 2 = stock, 3 = produce
     if type == 1:
         w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
@@ -317,11 +319,14 @@ def getSumByStone(request, mode, stoneType, type, company_in):
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(Q(site__base_site_name__contains ='สต็อค') | Q(site__base_site_name__contains ='สต๊อก'), bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
-        w = Decimal('0.0')
-        se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
-        for i in se_item:
-            crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
-            w += calculateEstimate(i['percent'], crush)
+        if start_year > 2024:#แบบใหม่ 19-12-2024
+            w = StoneEstimateItem.objects.filter(se__company__code__in = company_in, se__created__range = (start_date, end_date), stone_type = stoneType).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        else:#แบบเก่าไม่มีข้อมูล total เลยต้องคำนวณ
+            w = Decimal('0.0')
+            se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date), stone_type = stoneType).values('se__created','percent','se__site')
+            for i in se_item:
+                crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+                w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
 def getSumOther(request, mode, list_sum_stone, type, company_in):
@@ -335,6 +340,8 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
 
     start_date = request.session['db_start_date']
     end_date = request.session['db_end_date']
+
+    start_year = datetime.strptime(start_date, '%Y-%m-%d').year
 
     query_filters = Q()
     ss_query_filters = Q()
@@ -350,11 +357,14 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
         #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
         w = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
     elif type == 3:
-        w = Decimal('0.0')
-        se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
-        for i in se_item:
-            crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
-            w += calculateEstimate(i['percent'], crush)
+        if start_year > 2024:#แบบใหม่ 19-12-2024
+            w = StoneEstimateItem.objects.filter(se__company__code__in = company_in, se__created__range = (start_date, end_date)).exclude(query_filters).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        else:#แบบเก่าไม่มีข้อมูล total เลยต้องคำนวณ
+            w = Decimal('0.0')
+            se_item = StoneEstimateItem.objects.filter(se__created__range = (start_date, end_date)).exclude(query_filters).values('se__created','percent','se__site')
+            for i in se_item:
+                crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+                w += calculateEstimate(i['percent'], crush)
     return  float(w)
 
 def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
@@ -758,12 +768,23 @@ def editWeight(request, mode, weight_id):
             weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
             weight_history.user_update = request.user
             weight_history.save()
+
+            #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย
+            if mode == 2:
+                updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+
             return redirect('weightTable')
     else:
         form = tmp_form
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user), active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
+
+def updateSumEstimateItem(company_id, created, site_id):
+    se_item = StoneEstimateItem.objects.filter(se__company = company_id, se__created = created, se__site__base_site_id = site_id)
+    for i in se_item:
+        i.total = calculateSumEstimateByCompany(created, company_id, site_id, i.stone_type.base_stone_type_id)
+        i.save()
 
 def searchDataCustomer(request):
     if 'customer_id' in request.GET and 'weight_id' in request.GET:
@@ -2234,6 +2255,14 @@ def viewStoneEstimate(request):
     context = {'stone_estimate_page':'active', 'stone_estimate': stone_estimate,'filter':myFilter, active :"active",}
     return render(request, "stoneEstimate/viewStoneEstimate.html",context)
 
+def calculateSumEstimateByCompany(created, company, site_id, stone_type_id):
+    w = Decimal('0.0')
+    se_item = StoneEstimateItem.objects.filter(se__company = company, se__created = created, se__site__base_site_id = site_id, stone_type = stone_type_id).values('se__created','percent')
+    for i in se_item:
+        crush = Weight.objects.filter(bws__company = company, site = site_id, bws__weight_type = 2 , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
+        w += calculateEstimate(i['percent'], crush)
+    return w
+
 def createStoneEstimate(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -2250,6 +2279,10 @@ def createStoneEstimate(request):
             for instance in formset_instances:
                 instance.se = se
                 instance.save()
+
+                instance.total = calculateSumEstimateByCompany(se.created, se.company.id, se.site.base_site_id, instance.stone_type.base_stone_type_id)#calculate sum stone estimate
+                instance.save()
+
             return redirect('viewStoneEstimate')
     else:
         se_form = StoneEstimateForm(request, initial={'company': company})
@@ -2277,6 +2310,10 @@ def editStoneEstimate(request, se_id):
                 #ให้ save ถ้ามีชนิดหิน
                 if instance.stone_type:
                     instance.save()
+
+                    instance.total = calculateSumEstimateByCompany(se.created, se.company.id, se.site.base_site_id, instance.stone_type.base_stone_type_id)#calculate sum stone estimate
+                    instance.save()
+
             for obj in formset.deleted_objects:
                 obj.delete()
             formset.save_m2m()

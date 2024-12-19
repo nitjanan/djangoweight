@@ -883,10 +883,23 @@ class StoneEstimate(models.Model):
 class StoneEstimateItem(models.Model):
     stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
     percent = models.IntegerField(blank=True, null=True, default=0)
+    total = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="sum estimate by stone")
     se = models.ForeignKey(StoneEstimate,on_delete=models.CASCADE, null = True, blank=True)
     
     class Meta:
         db_table = 'stone_estimate_item'
+
+#เก็บค่าคำนวน % จากตาชั่งผลิตและ estimate
+class SumStoneEstimate(models.Model):
+    created = models.DateField(default = timezone.now, verbose_name="วันที่")
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    site_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="id ปลายทาง") #ปลายทาง
+    stone_type_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="id ชนิดหิน") #ชนิดหิน
+    total = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="sum estimate by stone")
+    se_item = models.OneToOneField(StoneEstimateItem,on_delete=models.CASCADE, null = True, blank=True, verbose_name="StoneEstimateItem")#อ้างอิง item กรณีลบข้อมูล
+    
+    class Meta:
+        db_table = 'sum_stone_estimate'
 
 #USER PROFILE
 class UserScale(models.Model):

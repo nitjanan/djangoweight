@@ -1547,129 +1547,55 @@ def monthlyProduction(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    #ดึงข้อมูล 2024 ขึ้นไป   
+    #ดึงข้อมูล 2025 ขึ้นไป   
     current_date_time = datetime.now()
     current_year = current_date_time.year - 1
 
     s_comp = BaseSite.objects.filter(s_comp__code = active).order_by('base_site_id')
-    #ดึงข้อมูล 2024 ขึ้นไป
-    date_data = StoneEstimate.objects.filter(site__in = s_comp, created__year__gt = current_year).values_list('created', 'site' , 'site__base_site_name').order_by('site', 'created')
-
+    #ดึงข้อมูล 2025 ขึ้นไป
+    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year).annotate(
+        year=ExtractYear('se__created'),
+        month=ExtractMonth('se__created'),
+    ).values_list('year', 'month', 'se__created', 'se__site__base_site_id', 'se__site__base_site_name', 'stone_type', 'stone_type__base_stone_type_name').order_by('se__site', 'se__created', 'stone_type').distinct()
+    
+    #ดึงชนิดหินทั้งหมดที่ estimate
     stone_name = BaseStoneType.objects.filter(is_stone_estimate = True).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id')
-
-    results = {}
-    for dt in date_data:
-        created_date, site_id, site_name = dt
-        crush = Weight.objects.filter(bws__weight_type=2, date=created_date, site=site_id).order_by('date').aggregate(s_weight=Sum("weight_total"), c_weight=Count('weight_total'))
-
-        stone_types = StoneEstimateItem.objects.filter(se__site__in = s_comp).order_by('stone_type').values_list('stone_type', 'stone_type__base_stone_type_name').distinct()
-        for st in stone_types:
-            stone_type , stone_type_name = st
-            percent = StoneEstimateItem.objects.filter(se__created = created_date, se__site = site_id, stone_type = stone_type).order_by(
-                'stone_type').values_list('percent', flat=True).first()
-            
-            if crush['s_weight'] is not None and percent is not None:
-                result = Decimal(crush['s_weight']) * Decimal(percent) / 100
-            else:
-                result = Decimal(0)
-            
-            if site_name not in results:
-                results[site_name] = {}
-            if stone_type_name not in results[site_name]:
-                results[site_name][stone_type_name] = {}
-            
-            results[site_name][stone_type_name][created_date] = result
-
-    totals = {}  # Initialize a dictionary to hold totals for each stone type
-    for site_name, stone_data in results.items():
-        for stone_type_name, date_data in stone_data.items():
-            for created_date, value in date_data.items():
-                if stone_type_name not in totals:
-                    totals[stone_type_name] = {}
-                if created_date not in totals[stone_type_name]:
-                    totals[stone_type_name][created_date] = Decimal(0)
-                totals[stone_type_name][created_date] += value
-
-    # Add totals to results under a special key like "Total"
-    total_values = {}
-    for stone_type_name, date_data in totals.items():
-        total_values[stone_type_name] = {}
-        for created_date, total_value in date_data.items():
-            total_values[stone_type_name][created_date] = total_value
-
-    results["Total"] = total_values
-
-    '''
-    #only print
-    for site_name, site_data in results.items():
-        print(f"Site: {site_name}")
-        for stone_type, stone_type_data in site_data.items():
-            for date, result in stone_type_data.items():
-                print(f"  Date: {date}, stone ID: {stone_type}, Result: {result}")        
-    '''
     
     aggregated_results = {}
-
-    for site_name, site_data in results.items():
-        for stone_type, stone_type_data in site_data.items():
-            for created_date, result in stone_type_data.items():
-
-                month_year = extract_month_year(created_date)
-                
-                if site_name not in aggregated_results:
-                    aggregated_results[site_name] = {}
-                if stone_type not in aggregated_results[site_name]:
-                    aggregated_results[site_name][stone_type] = {}
-                if month_year not in aggregated_results[site_name][stone_type]:
-                    aggregated_results[site_name][stone_type][month_year] = 0
-                
-                aggregated_results[site_name][stone_type][month_year] += result
-
-    '''
-    #only print
-    for site_name, site_data in aggregated_results.items():
-        for stone_type, stone_type_data in site_data.items():
-            for month_year, result in stone_type_data.items():
-                print(f"  Month-Year: {month_year}, stone ID: {stone_type}, Result: {result}")    
-    '''
-
-    sum_aggregated = {}
-    for site_name, site_data in aggregated_results.items():
-        for stone_type, stone_type_data in site_data.items():
-            for month_year, result in stone_type_data.items():
-                if site_name not in sum_aggregated:
-                    sum_aggregated[site_name] = {}
-                if month_year not in sum_aggregated[site_name]:
-                    sum_aggregated[site_name][month_year] = 0
-                    
-                sum_aggregated[site_name][month_year] += result
-
-    unique_month_years = {}
-    for site_name, site_data in aggregated_results.items():
-        for stone_type_data in site_data.values():
-            for month_year in stone_type_data.keys():
-                if month_year not in unique_month_years:
-                    unique_month_years[month_year] = set()
-                unique_month_years[month_year].add(site_name)
-
-    tmp_date_data = StoneEstimate.objects.filter(
-        site__in=s_comp, created__year__gt = current_year
-    ).annotate(
-        month_year=TruncMonth('created')
-    ).values('site', 'site__base_site_name', 'month_year').annotate(
-        count=Count('id')
-    ).order_by('site', 'month_year')
-
     produc_run_results = {}
     produc_work_results = {}
     produc_capacity_results = {}
     produc_hour_per_day_results = {}
 
-    for tmp in tmp_date_data:
-        month = tmp['month_year'].month
-        year = tmp['month_year'].year
+    all_month_years = [f"{current_date_time.year}-{str(month).zfill(2)}" for month in range(1, 13)]
+    thai_months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
-        produc = Production.objects.filter(site=tmp['site'], created__year=year, created__month=month).annotate(
+    for dt in date_data:
+        year, month, created_date, site_id, site_name, stone_type, stone_type_name = dt
+
+        total_es = StoneEstimateItem.objects.filter(
+            se__created__year=year,
+            se__created__month=month,
+            se__site=site_id,
+            stone_type=stone_type
+        ).order_by('stone_type').aggregate(s=Sum('total'))["s"] or Decimal(0) #ดึง sum ประจำเดือนของแต่ละชนิดหิน
+
+        #print print(f'year = {year}, month = {month}, site_name = {site_name}, 'f'stone_type_name = {stone_type_name}, **** total_es = {total_es}')
+        month_year = extract_month_year(created_date)
+
+        if site_name not in aggregated_results:
+            aggregated_results[site_name] = {}
+        if stone_type_name not in aggregated_results[site_name]:
+            aggregated_results[site_name][stone_type_name] = {}
+
+        for my in all_month_years:
+            if my not in aggregated_results[site_name][stone_type_name]:
+                aggregated_results[site_name][stone_type_name][my] = Decimal(0)
+
+        aggregated_results[site_name][stone_type_name][month_year] = total_es
+
+        ###################### start สรุปข้อมูลผลิต #####################################
+        produc = Production.objects.filter(site = site_id, created__year=year, created__month=month).annotate(
             working_time=ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field=models.DurationField()),
             working_time_de=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DecimalField())
         ).aggregate(
@@ -1678,7 +1604,7 @@ def monthlyProduction(request):
             total_working_time_de=Sum('working_time_de')
         )
 
-        crush = Weight.objects.filter(bws__weight_type=2, date__year=year, date__month=month, site=tmp['site']).order_by(
+        crush = Weight.objects.filter(bws__weight_type=2, date__year=year, date__month=month, site = site_id).order_by(
             'date').aggregate(
             s_weight=Sum("weight_total"),
             c_weight=Count('weight_total')
@@ -1696,10 +1622,46 @@ def monthlyProduction(request):
         except:
             hourPerDay = Decimal(0)
 
-        update_results(produc_run_results, tmp['site__base_site_name'], tmp['month_year'], produc['sum_run'])
-        update_results(produc_work_results, tmp['site__base_site_name'], tmp['month_year'], produc['total_working_time'])
-        update_results(produc_capacity_results, tmp['site__base_site_name'], tmp['month_year'], capacity)
-        update_results(produc_hour_per_day_results, tmp['site__base_site_name'], tmp['month_year'], hourPerDay)
+        update_results(all_month_years, 1, produc_run_results, site_name, month_year, produc['sum_run'])
+        update_results(all_month_years, 1, produc_work_results, site_name, month_year, produc['total_working_time'])
+        update_results(all_month_years, 2, produc_capacity_results, site_name, month_year, capacity)
+        update_results(all_month_years, 2, produc_hour_per_day_results, site_name, month_year, hourPerDay)
+        ###################### end สรุปข้อมูลผลิต #####################################
+    
+
+    ################ start รวมทุกชนิดหินในเดือนนั้นๆ ####################
+    sum_aggregated = {}
+    for site_name, site_data in aggregated_results.items():
+        for stone_type, stone_type_data in site_data.items():
+            for month_year, result in stone_type_data.items():
+                if site_name not in sum_aggregated:
+                    sum_aggregated[site_name] = {}
+                if month_year not in sum_aggregated[site_name]:
+                    sum_aggregated[site_name][month_year] = 0
+                    
+                sum_aggregated[site_name][month_year] += result
+    ################ end รวมทุกชนิดหินในเดือนนั้นๆ ####################
+
+    ################ start รวมทุกๆโรงโม่ ###########################
+    totals = {}  # Initialize a dictionary to hold totals for each stone type
+    for site_name, stone_data in aggregated_results.items():
+        for stone_type_name, date_data in stone_data.items():
+            for created_date, value in date_data.items():
+                if stone_type_name not in totals:
+                    totals[stone_type_name] = {}
+                if created_date not in totals[stone_type_name]:
+                    totals[stone_type_name][created_date] = Decimal(0)
+                totals[stone_type_name][created_date] += value
+
+    # Add totals to results under a special key like "Total"
+    total_values = {}
+    for stone_type_name, date_data in totals.items():
+        total_values[stone_type_name] = {}
+        for created_date, total_value in date_data.items():
+            total_values[stone_type_name][created_date] = total_value
+
+    aggregated_results["Total"] = total_values
+    ################ end รวมทุกๆโรงโม่ ###########################
 
     data_stone_old_year = strToArrList(active, 'weight')
     data_run_old_year = strToArrList(active, 'prod_run')
@@ -1709,7 +1671,6 @@ def monthlyProduction(request):
 
     context = {'stone_name': stone_name,
                'aggregated_results':aggregated_results,
-               'unique_month_years': unique_month_years,
                'produc_run_results': produc_run_results,
                'produc_work_results': produc_work_results,
                'produc_capacity_results': produc_capacity_results,
@@ -1720,7 +1681,9 @@ def monthlyProduction(request):
                'data_work_old_year': data_work_old_year,
                'data_cap_old_year': data_cap_old_year,
                'data_hpd_old_year': data_hpd_old_year,
+               'now_year': current_date_time.year,
                'current_year': current_year,
+               'thai_months': thai_months,
                 active :"active",
               }
     return render(request, "production/monthlyProduction.html",context)
@@ -1735,11 +1698,15 @@ def strToArrList(active, field):
 
     return data_old_year
 
-def update_results(dictionary, key1, key2, value):
+def update_results(all_month_years, format,  dictionary, key1, key2, value):
     if key1 not in dictionary:
         dictionary[key1] = {}
-    if key2 not in dictionary[key1]:
-        dictionary[key1][key2] = {}
+    for my in all_month_years:
+        if my not in dictionary[key1]:
+            if format == 1:
+                dictionary[key1][my] = timedelta(hours=0, minutes=0)
+            elif format == 2:
+                dictionary[key1][my] = Decimal(0)
     dictionary[key1][key2] = value
 
 def getLossNameByMill(company_in, site, start_created, end_created, mode):

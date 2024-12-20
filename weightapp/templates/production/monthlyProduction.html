@@ -75,7 +75,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <div class="card-body">
             <div class="row">
               <div class="col">
-                <h5>รายงานผลิต รายเดือน</h5>
+                <h5>รายงานผลิตรายเดือนประจำปี {{now_year}}</h5>
               </div>
               <div class="col">                
                 <!-- button type="button" class="btn btn-secondary float-end d-print-none ms-2" onclick="window.print();">
@@ -88,7 +88,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </div>
             </div>
             <div class="table-responsive my-3">
-                  <table class="table table-hover my-3 display" id="tableCompany">
+                  <table class="table table-bordered my-3 display" id="tableCompany">
                     {% for site_name, site_data in aggregated_results.items %}
                       <thead class="table-dark">
                           <!--tr>
@@ -102,12 +102,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <th scope="col">{{ site_name }}</th>
                             <th scope="col">รวมปี {{current_year}}</th>
                             <th scope="col">ปี {{current_year}} เฉลี่ย ตัน/เดือน</th>
-                            {% for month_year, sites in unique_month_years.items %}
-                              {% for s_name in sites %}
-                                {% if s_name == site_name %}
-                                  <th class="text-end" >{{ month_year }}</th>
-                                {% endif %}
-                              {%endfor%}
+                            {% for month in thai_months %}
+                              <th scope="col" class="text-center">{{ month }}</th>
                             {% endfor %}
                             <th scope="col" class="text-end">รวม</th>
                             <th scope="col" class="text-end">เฉลี่ย ตัน/เดือน</th>
@@ -117,22 +113,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           {% for stone_type, stone_type_data in site_data.items %}
                               <tr>
                                   <th scope="row">{{forloop.counter}}</th>
-                                  <td>{{ stone_type }}</td>
+                                  <td class="text-primary"><b>{{ stone_type }}</b></td>
                                   {% for s_name, site_data in data_stone_old_year.items %}
                                     {% for st_type, stone_type_data in site_data.items %}
                                       {% for mon_year, est_weight in stone_type_data.items %}
                                         {% if site_name == s_name and stone_type == st_type%}
-                                          <td class="text-end">{{est_weight}}</td>
+                                          <td class="text-end text-success"><b>{{est_weight}}</b></td>
                                         {% endif %}
                                       {% endfor %}
                                     {% endfor %}
                                   {% endfor %}
-
                                   {% for month_year, est_weight in stone_type_data.items %}
-                                      <td id="id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">{{ est_weight |floatformat:2|intcomma }}</td>
+                                      <td id="id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">{{ est_weight |intcomma }}</td>
                                   {% endfor %}
-                                  <td id="id_sum_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">0</td>
-                                  <td id="id_avg_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">0</td>
+                                  <td id="id_sum_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end text-danger">0</td>
+                                  <td id="id_avg_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end text-danger">0</td>
                               </tr>
                           {% endfor %}
                           <tr>
@@ -143,12 +138,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             {% for s, s_data in sum_aggregated.items %}
                               {% for m_y, sum_aggr in s_data.items %}
                                 {% if s == site_name %}
-                                  <th class="text-end" id="id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">{{sum_aggr |floatformat:2|intcomma}}</th>
+                                  <th class="text-end text-danger" id="id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}">{{sum_aggr |intcomma}}</th>
                                 {%endif%}
                               {%endfor%}
                             {% endfor %}
-                            <th id="id_all_sum_est_{{ forloop.counter0 }}" scope="col" class="text-end"></th>
-                            <th id="id_all_avg_est_{{ forloop.counter0 }}" scope="col" class="text-end"></th>
+                            <th id="id_all_sum_est_{{ forloop.counter0 }}" scope="col" class="text-end text-danger"></th>
+                            <th id="id_all_avg_est_{{ forloop.counter0 }}" scope="col" class="text-end text-danger"></th>
                           </tr>
                           <tr style="height: 40px;">
                           </tr>
@@ -237,7 +232,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <th class="text-end" id="id_sum_hour_per_day_{{ forloop.counter0 }}"></th>
                             <th class="text-end" id="id_avg_hour_per_day_{{ forloop.counter0 }}"></th>
                           </tr>
-                          <tr style="height: 40px;">
+                          <tr style="height: 40px; background-color: gainsboro; border-right-color:gainsboro; border-left-color:gainsboro; border-bottom-color:gainsboro; border-top-color:gainsboro">
                             <th scope="row"></th>
                             <th></th>
                             <th></th>

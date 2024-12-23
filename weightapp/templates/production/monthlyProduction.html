@@ -307,8 +307,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       "{% for month_year, est_weight in stone_type_data.items %}"
         var tmp = $('#id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
         sum += parseFloat(tmp);
-        count++;
+
+        if(parseFloat(tmp) > 0)
+          count++;
       "{% endfor %}"
+      if(count == 0)
+        count = 1;
+
       avg = sum / count;
       
       $('#id_sum_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -325,8 +330,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       "{% for m_y, sum_aggr in s_data.items %}"
         var tmp = $('#id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
         sum += parseFloat(tmp);
-        count++;
+
+        if(parseFloat(tmp) > 0)
+          count++;
       "{% endfor %}"
+      if(count == 0)
+        count = 1;
+      
       avg = sum / count;
       
       $('#id_all_sum_est_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));

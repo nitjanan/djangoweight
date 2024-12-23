@@ -1594,7 +1594,7 @@ def monthlyProduction(request):
 
         aggregated_results[site_name][stone_type_name][month_year] = total_es
 
-        ###################### start สรุปข้อมูลผลิต #####################################
+        ###################### start สรุปข้อมูลผลิต #####################
         produc = Production.objects.filter(site = site_id, created__year=year, created__month=month).annotate(
             working_time=ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field=models.DurationField()),
             working_time_de=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DecimalField())
@@ -1626,23 +1626,9 @@ def monthlyProduction(request):
         update_results(all_month_years, 1, produc_work_results, site_name, month_year, produc['total_working_time'])
         update_results(all_month_years, 2, produc_capacity_results, site_name, month_year, capacity)
         update_results(all_month_years, 2, produc_hour_per_day_results, site_name, month_year, hourPerDay)
-        ###################### end สรุปข้อมูลผลิต #####################################
-    
+        ###################### end สรุปข้อมูลผลิต ####################
 
-    ################ start รวมทุกชนิดหินในเดือนนั้นๆ ####################
-    sum_aggregated = {}
-    for site_name, site_data in aggregated_results.items():
-        for stone_type, stone_type_data in site_data.items():
-            for month_year, result in stone_type_data.items():
-                if site_name not in sum_aggregated:
-                    sum_aggregated[site_name] = {}
-                if month_year not in sum_aggregated[site_name]:
-                    sum_aggregated[site_name][month_year] = 0
-                    
-                sum_aggregated[site_name][month_year] += result
-    ################ end รวมทุกชนิดหินในเดือนนั้นๆ ####################
-
-    ################ start รวมทุกๆโรงโม่ ###########################
+    ################ start รวมทุกๆโรงโม่ ############################
     totals = {}  # Initialize a dictionary to hold totals for each stone type
     for site_name, stone_data in aggregated_results.items():
         for stone_type_name, date_data in stone_data.items():
@@ -1661,7 +1647,20 @@ def monthlyProduction(request):
             total_values[stone_type_name][created_date] = total_value
 
     aggregated_results["Total"] = total_values
-    ################ end รวมทุกๆโรงโม่ ###########################
+    ################ end รวมทุกๆโรงโม่ ###############################
+
+    ################ start รวมทุกชนิดหินในเดือนนั้นๆ ####################
+    sum_aggregated = {}
+    for site_name, site_data in aggregated_results.items():
+        for stone_type, stone_type_data in site_data.items():
+            for month_year, result in stone_type_data.items():
+                if site_name not in sum_aggregated:
+                    sum_aggregated[site_name] = {}
+                if month_year not in sum_aggregated[site_name]:
+                    sum_aggregated[site_name][month_year] = 0
+                    
+                sum_aggregated[site_name][month_year] += result
+    ################ end รวมทุกชนิดหินในเดือนนั้นๆ ######################
 
     data_stone_old_year = strToArrList(active, 'weight')
     data_run_old_year = strToArrList(active, 'prod_run')

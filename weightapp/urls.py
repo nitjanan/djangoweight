@@ -45,6 +45,9 @@ urlpatterns = [
     path('stockStoneItem/edit/<int:stock_id>/<int:ssn_id>', views.editStockStoneItem, name="editStockStoneItem"),
     path('searchStockInDay', views.searchStockInDay, name="searchStockInDay"),
     path('searchDataWeightToStock', views.searchDataWeightToStock, name="searchDataWeightToStock"),
+    
+    path('exportExcelStockStone/', views.exportExcelStockStone,name="exportExcelStockStone"),
+    path('exportExcelStockStoneInDashboard/', views.exportExcelStockStoneInDashboard,name="exportExcelStockStoneInDashboard"),
 
     path('exportExcelProductionByStone/', views.exportExcelProductionByStone,name="exportExcelProductionByStone"),
     path('exportExcelProductionByStone/dashboard', views.exportExcelProductionByStoneInDashboard,name="exportExcelProductionByStoneInDashboard"),

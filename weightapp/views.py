@@ -769,9 +769,10 @@ def editWeight(request, mode, weight_id):
             weight_history.user_update = request.user
             weight_history.save()
 
-            #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย
+            #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
             if mode == 2:
                 updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
 
             return redirect('weightTable')
     else:
@@ -784,6 +785,12 @@ def updateSumEstimateItem(company_id, created, site_id):
     se_item = StoneEstimateItem.objects.filter(se__company = company_id, se__created = created, se__site__base_site_id = site_id)
     for i in se_item:
         i.total = calculateSumEstimateByCompany(created, company_id, site_id, i.stone_type.base_stone_type_id)
+        i.save()
+
+def updateProductionCapacity(company_id, date, site_id):
+    pd_item = Production.objects.filter(company = company_id, created = date, site = site_id)
+    for i in pd_item:
+        i.capacity_per_hour = calculatProductionCapacity(company_id, date, i.site, i.line_type)
         i.save()
 
 def searchDataCustomer(request):
@@ -1551,13 +1558,17 @@ def monthlyProduction(request):
     current_date_time = datetime.now()
     current_year = current_date_time.year - 1
 
-    s_comp = BaseSite.objects.filter(s_comp__code = active).order_by('base_site_id')
+    s_comp = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id', flat=True).order_by('base_site_id')
     #ดึงข้อมูล 2025 ขึ้นไป
-    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year).annotate(
+    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year
+    ).annotate(
         year=ExtractYear('se__created'),
         month=ExtractMonth('se__created'),
-    ).values_list('year', 'month', 'se__created', 'se__site__base_site_id', 'se__site__base_site_name', 'stone_type', 'stone_type__base_stone_type_name').order_by('se__site', 'se__created', 'stone_type').distinct()
-    
+    ).values_list('year', 'month', 'se__site__base_site_name', 'stone_type__base_stone_type_name'
+    ).annotate(
+        sum=Sum('total'),
+    ).order_by('se__site', 'se__created', 'stone_type')
+
     #ดึงชนิดหินทั้งหมดที่ estimate
     stone_name = BaseStoneType.objects.filter(is_stone_estimate = True).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id')
     
@@ -1571,17 +1582,9 @@ def monthlyProduction(request):
     thai_months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
     for dt in date_data:
-        year, month, created_date, site_id, site_name, stone_type, stone_type_name = dt
+        year, month, site_name, stone_type_name, sum_total = dt
 
-        total_es = StoneEstimateItem.objects.filter(
-            se__created__year=year,
-            se__created__month=month,
-            se__site=site_id,
-            stone_type=stone_type
-        ).order_by('stone_type').aggregate(s=Sum('total'))["s"] or Decimal(0) #ดึง sum ประจำเดือนของแต่ละชนิดหิน
-
-        #print print(f'year = {year}, month = {month}, site_name = {site_name}, 'f'stone_type_name = {stone_type_name}, **** total_es = {total_es}')
-        month_year = extract_month_year(created_date)
+        month_year = f"{year}-{str(month).zfill(2)}"
 
         if site_name not in aggregated_results:
             aggregated_results[site_name] = {}
@@ -1592,40 +1595,34 @@ def monthlyProduction(request):
             if my not in aggregated_results[site_name][stone_type_name]:
                 aggregated_results[site_name][stone_type_name][my] = Decimal(0)
 
-        aggregated_results[site_name][stone_type_name][month_year] = total_es
+        aggregated_results[site_name][stone_type_name][month_year] += sum_total
 
-        ###################### start สรุปข้อมูลผลิต #####################
-        produc = Production.objects.filter(site = site_id, created__year=year, created__month=month).annotate(
-            working_time=ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field=models.DurationField()),
-            working_time_de=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DecimalField())
-        ).aggregate(
-            sum_run=Sum("run_time"),
-            total_working_time=Sum('working_time'),
-            total_working_time_de=Sum('working_time_de')
-        )
+    ###################### start สรุปข้อมูลผลิต #####################
+    product_data = Production.objects.filter(
+        site__in=s_comp,
+        created__year__gt=current_year
+    ).annotate(
+        year=ExtractYear('created'),
+        month=ExtractMonth('created'),
+        working_time=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DurationField()),
+        hour_per_day = ExpressionWrapper(F('actual_time') / (F('actual_time') - F('total_loss_time')) , output_field=models.DecimalField()),
 
-        crush = Weight.objects.filter(bws__weight_type=2, date__year=year, date__month=month, site = site_id).order_by(
-            'date').aggregate(
-            s_weight=Sum("weight_total"),
-            c_weight=Count('weight_total')
-        )
+    ).values_list('year', 'month', 'site__base_site_name'
+    ).annotate(
+        sum_run=Sum('run_time'),
+        sum_total_working_time=Sum('working_time'),
+        sum_hour_per_day = Sum('hour_per_day'),
+        sum_capacity_per_hour=Sum('capacity_per_hour'),
+    )
+    
+    for pd in product_data:
+        year, month, site_name, sum_run, sum_total_working_time, sum_hour_per_day, sum_capacity_per_hour  = pd
+        month_year = f"{year}-{str(month).zfill(2)}"
         
-        #capacity 
-        try:
-            capacity = crush['s_weight'] / (produc['total_working_time_de']/1000000/3600)
-        except:
-            capacity = Decimal(0)
-
-        #hourPerDay 
-        try:
-            hourPerDay = produc['sum_run']/(produc['total_working_time']/24)
-        except:
-            hourPerDay = Decimal(0)
-
-        update_results(all_month_years, 1, produc_run_results, site_name, month_year, produc['sum_run'])
-        update_results(all_month_years, 1, produc_work_results, site_name, month_year, produc['total_working_time'])
-        update_results(all_month_years, 2, produc_capacity_results, site_name, month_year, capacity)
-        update_results(all_month_years, 2, produc_hour_per_day_results, site_name, month_year, hourPerDay)
+        update_results(all_month_years, 1, produc_run_results, site_name, month_year, sum_run)
+        update_results(all_month_years, 1, produc_work_results, site_name, month_year, sum_total_working_time)
+        update_results(all_month_years, 2, produc_capacity_results, site_name, month_year, sum_capacity_per_hour)
+        update_results(all_month_years, 2, produc_hour_per_day_results, site_name, month_year, sum_hour_per_day)
         ###################### end สรุปข้อมูลผลิต ####################
 
     ################ start รวมทุกๆโรงโม่ ############################
@@ -1698,6 +1695,9 @@ def strToArrList(active, field):
     return data_old_year
 
 def update_results(all_month_years, format,  dictionary, key1, key2, value):
+    if value is None:
+        value = Decimal(0)
+
     if key1 not in dictionary:
         dictionary[key1] = {}
     for my in all_month_years:
@@ -1829,6 +1829,9 @@ def createProduction(request):
             #คำนวนเวลารวมในการสูญเสีย uncontrol
             total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
+            #คำนวน capacity per hour
+            production.capacity_per_hour = calculatProductionCapacity(production.created, production.site, production.line_type)
+            production.save()
 
             production.save()
 
@@ -1877,7 +1880,9 @@ def editProduction(request, pd_id):
             #คำนวนเวลารวมในการสูญเสีย uncontrol
             total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
-
+            production.save()
+            #คำนวน capacity per hour
+            production.capacity_per_hour = calculatProductionCapacity(production.created, production.site, production.line_type)
             production.save()
 
             #update เป้าผลิตสะสม production Goal ใหม่
@@ -1893,6 +1898,15 @@ def editProduction(request, pd_id):
 
     context = {'production_page':'active', 'pd_goal_form': pd_goal_form, 'form': form, 'formset': formset, 'pd': pd_data, 'production_on_day': production_on_day, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "production/editProduction.html",context)
+
+def calculatProductionCapacity(company_id, date, site_id, line_type_id):
+    result = Decimal('0.0')
+    data_sum_produc = Weight.objects.filter(bws__company = company_id, site=site_id, date = date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+    wk_time = Production.objects.filter(company = company_id, site=site_id, line_type = line_type_id, created = date).annotate(working_time_de = ExpressionWrapper(F('actual_time') - F('total_loss_time') , output_field= models.DecimalField())).aggregate(total_working_time=Sum('working_time_de'))['total_working_time']
+    
+    if data_sum_produc and wk_time:
+        result = data_sum_produc/(wk_time/1000000/3600)
+    return result
 
 def removeProduction(request, pd_id):
     pd = Production.objects.get(id = pd_id)
@@ -4833,3 +4847,193 @@ def searchDataWeightToStock(request):
 
     data = {'sell' : sell, 'prod' : prod, 'aid' : aid, 'quot': quot,}
     return JsonResponse(data)
+
+def exportExcelStockStoneInDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(ssn__stk__created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(ssn__stk__created__lte = end_created)
+
+    my_q &= Q(ssn__stk__company__code__in = company_in)
+
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
+
+    response = excelStockStone(request, my_q, list_date)
+    return response
+
+def exportExcelStockStone(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(ssn__stk__created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(ssn__stk__created__lte = end_created)
+
+    my_q &= Q(ssn__stk__company__code__in = company_in)
+   
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    startDate = datetime.strptime(start_created or startDateInMonth(previous_date_time.strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or previous_date_time.strftime('%Y-%m-%d'), "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
+
+    response = excelStockStone(request, my_q, list_date)
+    return response
+
+
+def excelStockStone(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    data = StockStoneItem.objects.filter(my_q).order_by('ssn__stk__created', 'source__id', 'ssn__stone__base_stone_type_id').values_list('ssn__stk__created', 'ssn__stone__base_stone_type_name', 'source__name', 'quantity')
+
+    # Create a new workbook and get the active worksheet
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+
+    if data:
+        worksheet.cell(row=1, column=1, value='Date')
+        worksheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
+
+        date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+        
+        # Create a set of all unique mill and stone values
+        stones = set()
+        sources = set()
+        for item in data:
+            stones.add(item[1])
+            sources.add(item[2]) 
+
+        stone_col_list = []
+        
+        # Create a list of colors for each line_type
+        stone_colors = [generate_pastel_color() for i  in range(len(stones) + 1)]
+
+        column_index = 2
+        for st in stones:
+            worksheet.cell(row=1, column=column_index, value=f'Stock {st}')
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources)) -1 )
+            
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.alignment = Alignment(horizontal='center')
+
+            info = {}
+            info['st'] = st
+            info['strat_col'] = column_index
+            info['end_col'] = column_index + len(sources)
+            stone_col_list.append(info)
+
+            #อัพเดทจำนวน col ตามที่มา
+            column_index += len(sources)
+
+        #set color in header in row 1-2
+        for row in worksheet.iter_rows(min_row=1, max_row=2):
+            # Set the background color for each cell in the column
+            for cell in row:
+                #cell.border = Border(top=side, bottom=side, left=side, right=side)
+                cell.alignment = Alignment(horizontal='center')
+                line_index = (cell.column - 2) // (len(sources))
+                fill_color = stone_colors[line_index % len(stone_colors)]
+                fill = PatternFill(start_color=fill_color, fill_type="solid")
+                cell.fill = fill
+
+        # Write headers row 2 to the worksheet
+        column_index = 2
+        for st in stones:
+            for sou in sources:
+                worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
+                column_index += 1
+
+        # Create a dictionary to store data by date, mill, and stone
+        date_data = {}
+
+        # Loop through the data and populate the dictionary  
+        for item in data:
+            date = item[0]
+            stone = item[1]
+            source = item[2]
+            value = item[3]
+
+            if date not in date_data:
+                date_data[date] = {}
+
+            if stone not in date_data[date]:
+                date_data[date][stone] = {}
+
+            date_data[date][stone][source] = value
+
+        row_index = 3
+        for idl, ldate in enumerate(list_date):
+            #เขียนวันที่ใน worksheet column 1
+            worksheet.cell(row=idl+3, column=1, value=ldate).style = date_style
+            worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
+
+            for date, stone_data in date_data.items():
+                #เขียน weight total ของแต่ละหินใน worksheet
+                if worksheet.cell(row=idl+3, column = 1).value == date:
+                    column_index = 2
+                    for st in stones:
+                        source_data = stone_data.get(st, {})
+                        for sou in sources:
+                            value = source_data.get(sou, '')
+                            worksheet.cell(row=idl+3, column=column_index, value=value).number_format = '#,##0.00'
+                            column_index += 1
+                    #row_index += 1
+            row_index += 1
+
+        worksheet.cell(row=row_index, column=1, value='รวมทั้งสิ้น')
+        sum_by_col = Decimal('0.00')
+        for col in range(2, column_index):
+            for row in range(3, row_index):
+                sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
+            worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+            worksheet.cell(row=row_index, column=col).font = Font(bold=True)
+            sum_by_col = Decimal('0.00')
+
+        # Set the column widths
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column = column_cells[2].column_letter
+            for cell in column_cells:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            worksheet.column_dimensions[column].width = adjusted_width
+            worksheet.column_dimensions[column].height = 20
+
+        side = Side(border_style='thin', color='000000')
+        set_border(worksheet, side)
+
+    else:
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูล Stock หินของเดือนนี้')
+
+    # Set the response headers for the Excel file
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+
+    # Save the workbook to the response
+    workbook.save(response)
+    return response

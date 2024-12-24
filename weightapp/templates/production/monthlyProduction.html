@@ -171,7 +171,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           </tr>
                           <tr>
                             <th></th>
-                            <th>ตัน / ชม.</th>
+                            <th>ตัน</th><!-- old ตัน / ชม. -->
                             {% for s, s_data in data_cap_old_year.items %}
                               {% for m_y, result in s_data.items %}
                                 {% if s == site_name %}
@@ -213,7 +213,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           </tr>
                           <tr>
                             <th></th>
-                            <th>ชม. / วัน</th>
+                            <th>ชม.</th><!-- old ชม. -->
                             {% for s, s_data in data_hpd_old_year.items %}
                               {% for m_y, result in s_data.items %}
                                 {% if s == site_name %}
@@ -352,8 +352,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         "{% for m_y, sum_run in s_data.items %}"
           var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
           sum += parseFloat(tmp);
-          count++;
+
+          if(parseFloat(tmp) > 0)
+            count++;
         "{% endfor %}"
+        if(count == 0)
+          count = 1;
         avg = sum / count;
         
         $('#id_sum_run_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -368,8 +372,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         "{% for m_y, sum_run in s_data.items %}"
           var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
           sum += parseFloat(tmp);
-          count++;
+          if(parseFloat(tmp) > 0)
+            count++;
         "{% endfor %}"
+        if(count == 0)
+          count = 1;
         avg = sum / count;
         
         $('#id_sum_run_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -384,8 +391,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         "{% for m_y, capacity in s_data.items %}"
           var tmp = $('#id_cap_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
           sum += parseFloat(tmp);
-          count++;
+
+          if(parseFloat(tmp) > 0)
+            count++;
         "{% endfor %}"
+        if(count == 0)
+          count = 1;
         avg = sum / count;
         
         $('#id_sum_cap_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -400,8 +411,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         "{% for m_y, working_time in s_data.items %}"
           var tmp = $('#id_work_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
           sum += parseFloat(tmp);
-          count++;
+          if(parseFloat(tmp) > 0)
+            count++;
         "{% endfor %}"
+        if(count == 0)
+          count = 1;
         avg = sum / count;
         
         $('#id_sum_work_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -416,8 +430,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         "{% for m_y, hour_per_day in s_data.items %}"
           var tmp = $('#id_hour_per_day_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
           sum += parseFloat(tmp);
-          count++;
+
+          if(parseFloat(tmp) > 0)
+            count++;
         "{% endfor %}"
+        if(count == 0)
+          count = 1;
         avg = sum / count;
         
         $('#id_sum_hour_per_day_{{ forloop.counter0 }}').html(sum.toLocaleString(undefined, { maximumFractionDigits: 2 }));

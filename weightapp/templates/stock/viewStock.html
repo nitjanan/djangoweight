@@ -65,7 +65,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col">
-                <!-- a href="{% url 'exportExcelProductionAndLoss' %}?{{request.GET.urlencode}}" class="btn btn-success">รายงาน stock</!-->
+                <a href="{% url 'exportExcelStockStone' %}?{{request.GET.urlencode}}" class="btn btn-success">รายงาน Stock หิน</a>
               </div>
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStock' %}">สร้างบันทึก stock <i class="fa-solid fa-circle-plus"></i></a>

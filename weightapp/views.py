@@ -130,34 +130,41 @@ def reply(intent, text, reply_token, user_id, display_name):
 
 def send_weight_edit(start_time, end_time, target_user_id):
     today = datetime.today().strftime("วันที่ %d/%m/%Y")
-    
-    # Query weight data within the specified time range
-    weight = (
-        Weight.objects.filter(
-            bws__weight_type=1,
-            v_stamp__gte=start_time,
-            v_stamp__lt=end_time
-        )
-        .values('doc_id', 'bws__company__name', 'v_stamp', 'date')
-    )
-
-    # Group the data by company name
-    grouped_weights = defaultdict(list)
-    for i in weight:
-        grouped_weights[i['bws__company__name']].append(i)
-
-    # Prepare the message text
     messages = []
-    for company_name, weights in grouped_weights.items():
-        company_message = f"============ {company_name} ============"
-        messages.append(company_message)
-        
-        for idx, i in enumerate(weights, start=1):
-            tmp_time = i['date'].strftime("วันที่ %d/%m/%Y")
-            tmp_text = f"{idx}) เลขที่ชั่ง {i['doc_id']} {tmp_time}"
-            messages.append(tmp_text)
+    final_message = ''
 
-        messages.append("\n")
+    try:
+        # Query weight data within the specified time range
+        weight = (
+            Weight.objects.filter(
+                bws__weight_type=1,
+                v_stamp__gte=start_time,
+                v_stamp__lt=end_time
+            )
+            .values('doc_id', 'bws__company__name', 'v_stamp', 'date')
+        )
+
+        if weight:
+            # Group the data by company name
+            grouped_weights = defaultdict(list)
+            for i in weight:
+                grouped_weights[i['bws__company__name']].append(i)
+
+            # Prepare the message text
+            messages = []
+            for company_name, weights in grouped_weights.items():
+                company_message = f"============ {company_name} ============"
+                messages.append(company_message)
+                
+                for idx, i in enumerate(weights, start=1):
+                    tmp_time = i['date'].strftime("วันที่ %d/%m/%Y")
+                    tmp_text = f"{idx}) เลขที่ชั่ง {i['doc_id']} {tmp_time}"
+                    messages.append(tmp_text)
+
+                messages.append("\n")
+
+    except Exception as e:
+        final_message = "error " + e
 
     # Combine messages into a single text
     if messages:

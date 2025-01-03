@@ -127,9 +127,9 @@ class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     search_fields = ('weight_id', 'doc_id', 'date','customer_name', 'stone_type_name', 'base_weight_station_name', 'mill_name', 'site_name')
 
 class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['id' , 'weight_id', 'user_update', 'doc_id', 'customer_name', 'stone_type_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['id', 'date', 'weight_id', 'user_update', 'doc_id', 'customer_name', 'stone_type_name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ('weight_id', 'doc_id','customer_name', 'stone_type_name', 'base_weight_station_name')
+    search_fields = ('weight_id', 'date', 'doc_id','customer_name', 'stone_type_name', 'base_weight_station_name')
 
 class BaseCarRegistrationResource(resources.ModelResource):
     company_code = fields.Field(

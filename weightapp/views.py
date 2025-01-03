@@ -127,6 +127,8 @@ def reply(intent, text, reply_token, user_id, display_name):
         text_message = TextSendMessage(text = final_message)
         line_bot_api.reply_message(reply_token, text_message)
 '''
+def split_message(message, max_length=4999):
+    return [message[i:i+max_length] for i in range(0, len(message), max_length)]
 
 def send_weight_edit(start_time, end_time, target_user_id):
     today = datetime.today().strftime("วันที่ %d/%m/%Y")
@@ -136,8 +138,9 @@ def send_weight_edit(start_time, end_time, target_user_id):
     try:
         # Query weight data within the specified time range
         weight = (
-            Weight.objects.filter(
+            WeightHistory.objects.filter(
                 bws__weight_type=1,
+                user_update__isnull=False,
                 v_stamp__gte=start_time,
                 v_stamp__lt=end_time
             )
@@ -153,28 +156,32 @@ def send_weight_edit(start_time, end_time, target_user_id):
             # Prepare the message text
             messages = []
             for company_name, weights in grouped_weights.items():
-                company_message = f"============ {company_name} ============"
+                company_message = f"========== {company_name} =========="
                 messages.append(company_message)
                 
                 for idx, i in enumerate(weights, start=1):
-                    tmp_time = i['date'].strftime("วันที่ %d/%m/%Y")
-                    tmp_text = f"{idx}) เลขที่ชั่ง {i['doc_id']} {tmp_time}"
+                    tmp_time = i['date'].strftime("@%d/%m/%Y")
+                    tmp_text = f"{idx}) เลขที่ {i['doc_id']} {tmp_time}"
                     messages.append(tmp_text)
 
                 messages.append("\n")
 
     except Exception as e:
-        final_message = "error " + e
+        pass
 
     # Combine messages into a single text
     if messages:
         final_message = "🚨 "+ today + " มีการแก้ไขรายการชั่ง"+ "\n" + "\n".join(messages)
+        split_messages = split_message(final_message)
+        for msg in split_messages:
+            # Send the message
+            text_message = TextSendMessage(text=msg)
+            line_bot_api.push_message(target_user_id, text_message)
     else:
         final_message = "✅ ไม่มีข้อมูลการแก้ไขรายการชั่งของ " + today
-
-    # Send the message
-    text_message = TextSendMessage(text=final_message)
-    line_bot_api.push_message(target_user_id, text_message)
+        # Send the message
+        text_message = TextSendMessage(text=final_message)
+        line_bot_api.push_message(target_user_id, text_message)
 
 def send_11am_summary():
     # Time range: previous day 3:00 PM to today 11:00 AM

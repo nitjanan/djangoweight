@@ -1778,7 +1778,7 @@ def searchProductionGoal(request):
         date_object = datetime.strptime(created, "%Y-%m-%d")
 
         #เอาออก line_type__id = line_type_id เพราะโรงโม่เดียวกันใช้เป้าผลิตเท่ากัน
-        pd_goal = ProductionGoal.objects.filter(company__code = company, date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , site = site_id).values('site', 'line_type', 'date' , 'accumulated_goal', 'id')
+        pd_goal = ProductionGoal.objects.filter(company__code = company, date__year = f'{date_object.year}' , date__month = f'{date_object.month}' , site = site_id).order_by('-id')[:1].values('site', 'line_type', 'date' , 'accumulated_goal', 'id')
         #if pd_id == '' create mode , else edit mode
         if pd_id == '':
             have_production = Production.objects.filter(company__code = company, created = created, site = site_id, line_type__id = line_type_id ).exists()
@@ -1837,7 +1837,7 @@ def createProduction(request):
             total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
             #คำนวน capacity per hour
-            production.capacity_per_hour = calculatProductionCapacity(production.created, production.site, production.line_type)
+            production.capacity_per_hour = calculatProductionCapacity(production.company, production.created, production.site, production.line_type)
             production.save()
 
             production.save()
@@ -1870,7 +1870,7 @@ def editProduction(request, pd_id):
             production = form.save()
 
             #หา id production Goal ใหม่
-            find_pd_goal = ProductionGoal.objects.get(company__code = company, date__year = f'{production.created.year}', date__month = f'{production.created.month}', site = production.site)
+            find_pd_goal = ProductionGoal.objects.filter(company__code = company, date__year = f'{production.created.year}', date__month = f'{production.created.month}', site = production.site).last()
             production.pd_goal = find_pd_goal
 
             # save ProductionLossItem
@@ -1889,7 +1889,7 @@ def editProduction(request, pd_id):
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
             production.save()
             #คำนวน capacity per hour
-            production.capacity_per_hour = calculatProductionCapacity(production.created, production.site, production.line_type)
+            production.capacity_per_hour = calculatProductionCapacity(production.company, production.created, production.site, production.line_type)
             production.save()
 
             #update เป้าผลิตสะสม production Goal ใหม่

@@ -183,32 +183,19 @@ def send_weight_edit(start_time, end_time, target_user_id):
         text_message = TextSendMessage(text=final_message)
         line_bot_api.push_message(target_user_id, text_message)
 
-def send_11am_summary():
+def send_1pm_summary():
     # Time range: previous day 3:00 PM to today 11:00 AM
-    end_time = datetime.now().replace(hour=11, minute=0, second=0, microsecond=0)
-    start_time = end_time - timedelta(hours=20)
-    target_user_id = 'Cdcdb5eba3889c5a60da15702136b8726'  #user/group ID (Line id)
-    send_weight_edit(start_time, end_time, target_user_id)
-
-def send_3pm_summary():
-    # Time range: today 11:00 AM to today 3:00 PM
-    end_time = datetime.now().replace(hour=15, minute=0, second=0, microsecond=0)
-    start_time = end_time - timedelta(hours=4)
+    end_time = datetime.now().replace(hour=13, minute=0, second=0, microsecond=0)
+    start_time = end_time - timedelta(hours=24)
     target_user_id = 'Cdcdb5eba3889c5a60da15702136b8726'  #user/group ID (Line id)
     send_weight_edit(start_time, end_time, target_user_id)
 
 # Schedule the tasks
 scheduler = BackgroundScheduler()
 scheduler.add_job(
-    send_11am_summary,
-    trigger=CronTrigger(hour=11, minute=0),
-    id="11am_summary",
-    replace_existing=True,
-)
-scheduler.add_job(
-    send_3pm_summary,
-    trigger=CronTrigger(hour=15, minute=0),
-    id="3pm_summary",
+    send_1pm_summary,
+    trigger=CronTrigger(hour=13, minute=0),
+    id="1pm_summary",
     replace_existing=True,
 )
 scheduler.start()

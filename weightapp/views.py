@@ -136,6 +136,7 @@ def send_weight_edit(start_time, end_time, target_user_id):
     today = datetime.today().strftime("วันที่ %d/%m/%Y")
     messages = []
     final_message = ''
+    error = ''
 
     try:
         # Query weight data within the specified time range
@@ -149,27 +150,24 @@ def send_weight_edit(start_time, end_time, target_user_id):
             .values('doc_id', 'bws__company__name', 'v_stamp', 'date')
         )
 
-        if weight:
-            # Group the data by company name
-            grouped_weights = defaultdict(list)
-            for i in weight:
-                grouped_weights[i['bws__company__name']].append(i)
+        # Group the data by company name
+        grouped_weights = defaultdict(list)
+        for i in weight:
+            grouped_weights[i['bws__company__name']].append(i)
 
-            # Prepare the message text
-            messages = []
-            for company_name, weights in grouped_weights.items():
-                company_message = f"========== {company_name} =========="
-                messages.append(company_message)
+        for company_name, weights in grouped_weights.items():
+            company_message = f"========== {company_name} =========="
+            messages.append(company_message)
                 
-                for idx, i in enumerate(weights, start=1):
-                    tmp_time = i['date'].strftime("@%d/%m/%Y")
-                    tmp_text = f"{idx}) เลขที่ {i['doc_id']} {tmp_time}"
-                    messages.append(tmp_text)
+            for idx, i in enumerate(weights, start=1):
+                tmp_time = i['date'].strftime("@%d/%m/%Y")
+                tmp_text = f"{idx}) เลขที่ {i['doc_id']} {tmp_time}"
+                messages.append(tmp_text)
 
-                messages.append("\n")
+            messages.append("\n")
 
     except Exception as e:
-        pass
+        error = 'start_time = ' + str(start_time) + ', end_time = ' + str(end_time) + ', error : ' + str(e)
 
     # Combine messages into a single text
     if messages:
@@ -179,6 +177,10 @@ def send_weight_edit(start_time, end_time, target_user_id):
             # Send the message
             text_message = TextSendMessage(text=msg)
             line_bot_api.push_message(target_user_id, text_message)
+    elif error:
+        # Send the message
+        text_message = TextSendMessage(text=error)
+        line_bot_api.push_message(target_user_id, text_message)
     else:
         final_message = "✅ ไม่มีข้อมูลการแก้ไขรายการชั่งของ " + today
         # Send the message

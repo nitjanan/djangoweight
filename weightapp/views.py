@@ -64,6 +64,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from zoneinfo import ZoneInfo
 from apscheduler.triggers.cron import CronTrigger
 import requests
+from itertools import groupby
+from operator import itemgetter
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -316,7 +318,7 @@ def getSumByStone(request, mode, stoneType, type, company_in):
     if type == 1:
         w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-stk__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(Q(site__base_site_name__contains ='สต็อค') | Q(site__base_site_name__contains ='สต๊อก'), bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0') 
     elif type == 3:
@@ -356,7 +358,16 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
     elif type == 2:
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
-        w = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        qr_list = list(qr)
+
+        # Group by 'stone', keeping the most recent 'stk__created'
+        filtered_results = [
+            max(group, key=itemgetter('stk__created'))
+            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+        ]
+        w = sum(item['total'] for item in filtered_results)
+
     elif type == 3:
         if start_year > 2024:#แบบใหม่ 19-12-2024
             w = StoneEstimateItem.objects.filter(se__company__code__in = company_in, se__created__range = (start_date, end_date)).exclude(query_filters).aggregate(s=Sum("total"))["s"] or Decimal('0.0')

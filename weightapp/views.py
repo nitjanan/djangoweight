@@ -139,17 +139,13 @@ def send_weight_edit(start_time, end_time, target_user_id):
     error = ''
 
     try:
-        # Query weight data within the specified time range
-        weight = (
-            WeightHistory.objects.filter(
+        weight = WeightHistory.objects.filter(
                 bws__weight_type=1,
                 user_update__isnull=False,
                 v_stamp__gte=start_time,
                 v_stamp__lt=end_time
-            )
-            .values('doc_id', 'bws__company__name', 'v_stamp', 'date')
-        )
-
+        ).values('weight_id', 'doc_id', 'bws__company__name', 'date').annotate(last_v_stamp=Max('v_stamp'))
+        
         # Group the data by company name
         grouped_weights = defaultdict(list)
         for i in weight:
@@ -4848,10 +4844,7 @@ def searchDataWeightToStock(request):
             quot = Decimal('0.0')
 
         #ผลิต
-        se_item = StoneEstimateItem.objects.filter(se__created = created, stone_type = stone).values('se__created','percent','se__site')
-        for i in se_item:
-            crush = Weight.objects.filter(bws__company = company, site = i['se__site'], bws__weight_type = 2 , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
-            prod += calculateEstimate(i['percent'], crush)
+        prod = StoneEstimateItem.objects.filter(se__created = created, stone_type = stone, se__company = company).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
 
         #ขาย
         sell = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')

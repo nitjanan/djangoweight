@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
@@ -184,11 +184,18 @@ def send_weight_edit(start_time, end_time, target_user_id):
         line_bot_api.push_message(target_user_id, text_message)
 
 def send_1pm_summary():
-    # Time range: previous day 3:00 PM to today 11:00 AM
-    end_time = datetime.now().replace(hour=13, minute=0, second=0, microsecond=0)
-    start_time = end_time - timedelta(hours=24)
-    target_user_id = 'Cdcdb5eba3889c5a60da15702136b8726'  #user/group ID (Line id)
-    send_weight_edit(start_time, end_time, target_user_id)
+    try:
+        lm = SetLineMessaging.objects.get(id = 1)
+        # Time range: previous day 3:00 PM to today 11:00 AM
+        end_time = datetime.now().replace(hour=13, minute=0, second=0, microsecond=0)
+        start_time = end_time - timedelta(hours=24)
+
+        if lm.target_id:
+            target_user_id = lm.target_id  #user/group ID (Line id)
+            send_weight_edit(start_time, end_time, target_user_id)
+
+    except SetLineMessaging.DoesNotExist:
+        pass
 
 # Schedule the tasks
 scheduler = BackgroundScheduler()

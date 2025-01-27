@@ -954,3 +954,15 @@ class SetPatternCode(models.Model):
                 # Handle the case where the model does not exist
                 return None
         return None
+
+class SetLineMessaging(models.Model):
+    target_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="user/group ID")
+    note = models.CharField(blank=True, null=True, max_length=120)
+
+    class Meta:
+        db_table = 'set_line_messaging'
+        verbose_name = 'ตั้งค่า Line Messaging'
+        verbose_name_plural = 'ข้อมูลตั้งค่า Line Messaging'
+
+    def __str__(self):
+        return str(self.id)

@@ -204,8 +204,8 @@ class BaseCarTeamResource(resources.ModelResource):
 
 class BaseCarTeamAdmin(ImportExportModelAdmin):
     resource_class = BaseCarTeamResource
-    list_display = ('car_team_id', 'car_team_name',)
-    search_fields = ('car_team_id', 'car_team_name',)
+    list_display = ('car_team_id', 'car_team_name', 'oil_customer_id',)
+    search_fields = ('car_team_id', 'car_team_name', 'oil_customer_id',)
 
 class BaseCarResource(resources.ModelResource):
     base_car_team_id = fields.Field(

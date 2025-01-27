@@ -480,9 +480,10 @@ class BaseScoopForm(forms.ModelForm):
 class BaseCarTeamForm(forms.ModelForm):
     class Meta:
        model = BaseCarTeam
-       fields = ('car_team_id' , 'car_team_name', 'user_created')
+       fields = ('car_team_id' , 'car_team_name', 'user_created', 'oil_customer_id')
        widgets = {
             'user_created': forms.HiddenInput(),
+            'oil_customer_id': forms.HiddenInput(),
         }
        labels = {
             'car_team_id': _('รหัสทีม'),
@@ -494,6 +495,17 @@ class BaseCarTeamForm(forms.ModelForm):
         if name_field:
             name_field = name_field.strip()  # Remove spaces from the beginning and end
         return name_field
+    
+    def clean(self):
+        cleaned_data = self.cleaned_data
+        id = cleaned_data.get('car_team_id')
+
+        spc = SetPatternCode.objects.get(m_name = 'BaseCarTeam')
+        fm =  spc.pattern + str(spc.end)
+
+        if not id or len(id) != len(fm) or not id.startswith(spc.pattern):
+            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        return cleaned_data
     
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -588,7 +600,7 @@ class BaseSiteForm(forms.ModelForm):
 class BaseCustomerForm(forms.ModelForm):
     customer_name = forms.CharField(label='ชื่อลูกค้า', required=True)
     weight_type = forms.ModelChoiceField(label='ชนิดเครื่องชั่ง', queryset = BaseWeightType.objects.filter(Q(id = 1) | Q(id = 2)))
-    base_job_type = forms.ModelChoiceField(label='ประเภทงานของลูกค้า', queryset = BaseJobType.objects.filter(~Q(base_job_type_id = '10')), required = False)
+    base_job_type = forms.ModelChoiceField(label='ประเภทงานของลูกค้า', queryset = BaseJobType.objects.filter(~Q(base_job_type_id = '10') & ~Q(base_job_type_id = '90')), required = False) # 10 = อนุเคราะห์, 90 = ลูกค้าน้ำมัน ใช้ตั้งรหัสลูกค้าน้ำมันในทีม
     
     class Meta:
        model = BaseCustomer

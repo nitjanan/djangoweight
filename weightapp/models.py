@@ -114,6 +114,7 @@ class BaseCarTeam(models.Model):
     v_stamp = models.DateTimeField(auto_now=True)
     user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
     created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
+    oil_customer_id = models.CharField(unique=True, blank=True, null=True, max_length=120, verbose_name="รหัสลูกค้าน้ำมัน") #รหัสลูกค้าน้ำมัน
     
     class Meta:
         db_table = 'base_car_team'

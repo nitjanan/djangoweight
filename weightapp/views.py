@@ -1583,7 +1583,9 @@ def monthlyProduction(request):
     s_comp = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id', flat=True).order_by('base_site_id')
     s_comp_name = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_name', flat=True).order_by('base_site_name')
     #ดึงข้อมูล 2025 ขึ้นไป
-    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year
+    stone_id = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year, percent__gt = 0).values_list('stone_type__base_stone_type_id', flat=True).order_by('stone_type__base_stone_type_id').distinct() #ดึงเฉพาะ stone_id ที่มีการคีย์ percent > 0
+
+    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year, stone_type__in = stone_id
     ).annotate(
         year=ExtractYear('se__created'),
         month=ExtractMonth('se__created'),
@@ -1591,9 +1593,6 @@ def monthlyProduction(request):
     ).annotate(
         sum=Sum('total'),
     ).order_by('se__site', 'se__created', 'stone_type')
-
-    #ดึงชนิดหินทั้งหมดที่ estimate
-    stone_name = BaseStoneType.objects.filter(is_stone_estimate = True).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id')
     
     aggregated_results = {}
     produc_run_results = {}
@@ -1710,7 +1709,7 @@ def monthlyProduction(request):
     data_cap_old_year = strToArrList(active, 'prod_cap')
     data_hpd_old_year = strToArrList(active, 'prod_hpd')
 
-    context = {'stone_name': stone_name,
+    context = {
                'aggregated_results':aggregated_results,
                'produc_run_results': produc_run_results,
                'produc_work_results': produc_work_results,

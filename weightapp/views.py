@@ -1256,6 +1256,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     workbook = openpyxl.Workbook()
     worksheet = workbook.active
 
+    thai_months = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
     if data or data_sum_produc:
         date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
@@ -1328,7 +1329,8 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
         row_index = 3
         for idl, ldate in enumerate(list_date):
                 #เขียนวันที่ใน worksheet column 1
-                worksheet.cell(row=idl+3, column=1, value=str(ldate))
+                formatted_date = f"{thai_months[ldate[1]]} {ldate[0]}"
+                worksheet.cell(row=idl+3, column=1, value = str(ldate))
                 worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
 
                 for date, mill_data in date_data.items():
@@ -1342,6 +1344,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
                                 worksheet.cell(row=idl+3, column=column_index, value=value).number_format = '#,##0.00'
                                 column_index += 1
                         #row_index += 1
+                worksheet.cell(row=idl+3, column=1, value = formatted_date)
                 row_index += 1
  
         #นำข้อมูลการผลิตมาเรียง

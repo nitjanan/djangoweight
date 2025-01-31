@@ -216,6 +216,13 @@ urlpatterns = [
      path('baseCustomerSite/api/update/<str:pk>/',views.baseCustomerSiteUpdate,name="baseCustomerSiteUpdate"),
      path('baseCustomerSite/api/vStamp/<str:dt>/',views.baseCustomerSiteVStamp,name="baseCustomerSiteVStamp"),
 
+     path('gasPrice/view', views.viewGasPrice, name="viewGasPrice"),
+     path('gasPrice/create', views.createGasPrice,name="createGasPrice"),
+     path('gasPrice/edit/<int:gp_id>', views.editGasPrice, name="editGasPrice"),
+     path('gasPrice/remove/<int:gp_id>', views.removeGasPrice, name="removeGasPrice"),
+     path('searchGasPrice', views.searchGasPrice, name="searchGasPrice"),
+     path('exportExcelGasPriceTransport', views.exportExcelGasPriceTransport, name="exportExcelGasPriceTransport"),
+
      path('setSessionCompany', views.setSessionCompany, name="setSessionCompany"),
      path('setDateInDashbord', views.setDateInDashbord, name="setDateInDashbord"),
 

@@ -148,6 +148,14 @@
                     </a>
                   </li>
                   {% endif %}
+                  {% if 'Transport' in tab.name %}
+                  <li class="sidebar-item {{ts_page}}">
+                    <a href="{% url 'viewGasPrice' %}" class="sidebar-link">
+                      <i class="fas fa-truck-moving"></i>
+                      <span>Transport</span>
+                    </a>
+                  </li>
+                  {% endif %}
 
                   {% if 'Setting' in tab.name %}
                   <li class="sidebar-title">Manage</li>

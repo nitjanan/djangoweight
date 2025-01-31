@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -251,7 +251,7 @@ class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class BaseVisibleAdmin(ImportExportModelAdmin):
-    list_display = ('name',)
+    list_display = ('name','step')
 	
 class UserProfileAdmin(ImportExportModelAdmin):
     formfield_overrides = {
@@ -335,6 +335,11 @@ class SetLineMessagingAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ['id', 'target_id', 'note']
 
+class GasPriceAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'created', 'cost', 'sell', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    search_fields = ['id', 'created', 'cost', 'sell', 'company']
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -377,7 +382,7 @@ admin.site.register(Stock, StockAdmin)
 admin.site.register(StockStone, StockStoneAdmin)
 admin.site.register(StockStoneItem, StockStoneItemAdmin)
 admin.site.register(SetLineMessaging, SetLineMessagingAdmin)
-
+admin.site.register(GasPrice, GasPriceAdmin)
 
 
 

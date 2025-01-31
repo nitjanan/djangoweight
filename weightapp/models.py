@@ -475,6 +475,10 @@ class Weight(models.Model):
     is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
     apw = models.ForeignKey(ApproveWeight, on_delete=models.CASCADE, blank=True, null = True) #เก็บ ApproveWeight
 
+    #คำนวณราคาน้ำมัน
+    oil_cost = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10)
+    oil_sell = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10)
+
     class Meta:
         db_table = 'weight'
         ordering = ["weight_id"]
@@ -963,6 +967,22 @@ class SetLineMessaging(models.Model):
         db_table = 'set_line_messaging'
         verbose_name = 'ตั้งค่า Line Messaging'
         verbose_name_plural = 'ข้อมูลตั้งค่า Line Messaging'
+
+    def __str__(self):
+        return str(self.id)
+    
+class GasPrice(models.Model):
+    created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
+    cost = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10 , verbose_name="ราคาต้นทุน")
+    sell = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10 , verbose_name="ราคาขาย")
+    total_cost = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10 , verbose_name="รวมต้นทุน * ปริมาณน้ำมัน")
+    total_sell = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10 , verbose_name="รวมราคาขาย * ปริมาณน้ำมัน")
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+
+    class Meta:
+        db_table = 'gas_price'
+        verbose_name = 'ราคาน้ำมัน'
+        verbose_name_plural = 'ข้อมูลราคาน้ำมัน'
 
     def __str__(self):
         return str(self.id)

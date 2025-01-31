@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
 import string
@@ -817,4 +817,21 @@ class ApproveWeightForm(forms.ModelForm):
             'company': _('บริษัท'),
             'date': _('รายการชั่งวันที่'),
             'is_approve': _('สถานะการตวจสอบ'),
+       }
+
+#ราคาน้ำมัน
+class GasPriceForm(forms.ModelForm):
+    #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
+    class Meta:
+       model = GasPrice
+       fields = ('created', 'cost', 'sell', 'company')
+       widgets = {
+        'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'company': forms.HiddenInput(),
+        }
+       labels = {
+            'created': _('ชนิดหิน'),
+            'cost': _('ราคาต้นทุน'),
+            'sell': _('ราคาขาย'),
+            'company': _('บริษัท'),
        }

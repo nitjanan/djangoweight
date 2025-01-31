@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -790,9 +790,13 @@ def editWeight(request, mode, weight_id):
             weight_history.user_update = request.user
             weight_history.save()
 
+            #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
+            if mode == 1 and weight_form.oil_content:
+                updateGasPrice(weight_form.bws.company.id, weight_form.date)
+                updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
             #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
             if mode == 2:
-                updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                updateSumEstimateItem(weight_form.bws.company.id, weight_form.date)
                 updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
 
             return redirect('weightTable')
@@ -801,6 +805,28 @@ def editWeight(request, mode, weight_id):
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user), active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
+
+def updateGasPrice(company_id, created):
+    try:
+        gp = GasPrice.objects.filter(created = created, company = company_id)
+        sum_oil = Weight.objects.filter(date = created, bws__weight_type = 1, bws__company = company_id, oil_content__gt = 0,).aggregate(s=Sum("oil_content"))["s"] or Decimal('0.0')
+        for i in gp:
+            i.total_cost = i.cost * sum_oil
+            i.total_sell = i.sell * sum_oil
+            i.save()
+    except GasPrice.DoesNotExist or Weight.DoesNotExist:
+        pass
+
+def updateOilCostAndSell(weight_id, company_id, created):
+    try:
+        weight = Weight.objects.get(weight_id = weight_id)
+        gp = GasPrice.objects.filter(created = created, company = company_id).first()
+        if gp:
+            weight.oil_cost = gp.cost * weight.oil_content
+            weight.oil_sell = gp.sell * weight.oil_content
+            weight.save()
+    except GasPrice.DoesNotExist or Weight.DoesNotExist:
+        pass
 
 def updateSumEstimateItem(company_id, created, site_id):
     se_item = StoneEstimateItem.objects.filter(se__company = company_id, se__created = created, se__site__base_site_id = site_id)
@@ -5090,4 +5116,204 @@ def excelStockStone(request, my_q, list_date):
 
     # Save the workbook to the response
     workbook.save(response)
+    return response
+
+@login_required(login_url='login')
+def viewGasPrice(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+    
+    data = GasPrice.objects.filter(company__code__in = company_in).order_by('-created')
+
+    #กรองข้อมูล
+    myFilter = GasPriceFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    gas_price = p.get_page(page)
+
+    context = {'ts_page':'active', 'gas_price': gas_price,'filter':myFilter, active :"active",}
+    return render(request, "transport/viewGasPrice.html", context)
+
+def createGasPrice(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    if request.method == 'POST':
+        form = GasPriceForm(request.POST)
+        if form.is_valid():
+            gp = form.save()
+
+            calculateTotalGasPriceById(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของวันนั้นๆ
+            calculateGasPriceInWeight(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของแต่ละ weight id
+            return redirect('viewGasPrice')
+    else:
+        form = GasPriceForm(initial={'company': company})
+
+    context = {'ts_page':'active', 'form': form, active :"active", 'disabledTab' : 'disabled'}
+    return render(request, "transport/createGasPrice.html",context)
+
+def editGasPrice(request, gp_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    data = GasPrice.objects.get(id = gp_id)#id edit
+    if request.method == 'POST':
+        form = GasPriceForm(request.POST, instance=data)
+        if form.is_valid():
+            gp = form.save()
+
+            calculateTotalGasPriceById(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของวันนั้นๆ
+            calculateGasPriceInWeight(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของแต่ละ weight id
+            return redirect('viewGasPrice')
+    else:
+        form = GasPriceForm(instance=data)
+
+    context = {'ts_page':'active', 'form': form, 'gp': data , active :"active", 'disabledTab' : 'disabled'}
+    return render(request, "transport/editGasPrice.html",context)
+
+def calculateTotalGasPriceById(gp_id):
+    try:
+        gp = GasPrice.objects.get(id = gp_id)
+        sum_oil = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company).aggregate(s=Sum("oil_content"))["s"] or Decimal('0.0')
+        gp.total_cost = gp.cost * sum_oil
+        gp.total_sell = gp.sell * sum_oil
+        gp.save()
+    except GasPrice.DoesNotExist or Weight.DoesNotExist:
+        pass
+
+def calculateGasPriceInWeight(gp_id):
+    try:
+        gp = GasPrice.objects.get(id = gp_id)
+        oil = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
+        for ol in oil:
+            ol.oil_cost = ol.oil_content * gp.cost
+            ol.oil_sell = ol.oil_content * gp.sell
+            ol.save()
+    except GasPrice.DoesNotExist or Weight.DoesNotExist:
+        pass
+
+def removeGasPrice(request, gp_id):
+    gp = GasPrice.objects.get(id = gp_id)
+
+    #set oil_cost และ oil_sell = 0 กรณีลบ GasPrice
+    try:
+        weight = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
+        weight.update(oil_cost = 0, oil_sell = 0)
+    except Weight.DoesNotExist:
+        pass
+
+    gp.delete()
+    return redirect('viewGasPrice')
+
+def searchGasPrice(request):
+    if 'created' in request.GET and 'gp_id' in request.GET and 'company' in request.GET:
+        created =  request.GET.get('created')
+        gp_id =  request.GET.get('gp_id')
+        company =  request.GET.get('company')
+
+        #if gp_id == '' create mode , else edit mode
+        if gp_id == '':
+            have_gas_price = GasPrice.objects.filter(company__code = company, created = created).exists()
+        else:
+            have_gas_price = GasPrice.objects.filter(~Q(id = gp_id),company__code = company, created = created).exists()
+        #ดึง cost และ sell
+        gp = GasPrice.objects.filter(company__code = company).order_by('-created').values('cost', 'sell').first()
+        
+    data = {
+        'have_gas_price' :have_gas_price,
+        'cost': gp['cost'],
+        'sell': gp['sell'],
+    }
+    
+    return JsonResponse(data)
+
+def exportExcelGasPriceTransport(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+
+    my_q &=Q(oil_content__gt = 0, bws__weight_type = 1, bws__company__code__in = company_in)
+
+    queryset = Weight.objects.filter(my_q).values_list(
+        'car_team__car_team_name', 'customer__customer_name', 'car_registration_name', 'mill__mill_name', 'site__base_site_name', 'stone_type__base_stone_type_name').annotate(
+            num_rows = Count('weight_id'), sum_weight = Sum('weight_total'), sum_oil = Sum('oil_content'), sum_oil_cost = Sum('oil_cost'), sum_oil_sell = Sum('oil_sell')
+        )
+    
+    if not queryset.exists():
+        return HttpResponse("No data to export.")
+    
+    queryset_list = list(queryset)
+    
+    df = pd.DataFrame(queryset_list)
+
+    df.columns = [
+        'car_team__car_team_name', 'customer__customer_name',
+        'car_registration_name', 'mill__mill_name',
+        'site__base_site_name', 'stone_type__base_stone_type_name', 
+        'num_rows', 'sum_weight', 'sum_oil',
+        'sum_oil_cost', 'sum_oil_sell'
+    ]
+
+    df.rename(columns={
+        'car_team__car_team_name': 'ทีม',
+        'customer__customer_name': 'ลูกค้า',
+        'car_registration_name': 'ทะเบียน',
+        'mill__mill_name': 'ต้นทาง',
+        'site__base_site_name': 'ปลายทาง',
+        'stone_type__base_stone_type_name': 'ชนิดหิน',
+        'num_rows': 'จำนวนเที่ยว',
+        'sum_weight': 'น้ำหนักรวม (ตัน)',
+        'sum_oil': 'น้ำมันรวม (ลิตร)',
+        'sum_oil_cost': 'ราคาต้นทุนรวม',
+        'sum_oil_sell': 'ราคาขายรวม',
+    }, inplace=True)
+
+    total_row = pd.DataFrame({
+        'ทีม': ['รวมทั้งหมด'],
+        'ลูกค้า': [''],
+        'ทะเบียน': [''],
+        'ต้นทาง': [''],
+        'ปลายทาง': [''],
+        'ชนิดหิน': [''],
+        'จำนวนเที่ยว': [df['จำนวนเที่ยว'].sum()],
+        'น้ำหนักรวม (ตัน)': [df['น้ำหนักรวม (ตัน)'].sum()],
+        'น้ำมันรวม (ลิตร)': [df['น้ำมันรวม (ลิตร)'].sum()],
+        'ราคาต้นทุนรวม': [df['ราคาต้นทุนรวม'].sum()],
+        'ราคาขายรวม': [df['ราคาขายรวม'].sum()],
+    })
+
+    df = pd.concat([df, total_row], ignore_index=True)
+
+    df['น้ำหนักรวม (ตัน)'] = df['น้ำหนักรวม (ตัน)'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+    df['น้ำมันรวม (ลิตร)'] = df['น้ำมันรวม (ลิตร)'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+    df['ราคาต้นทุนรวม'] = df['ราคาต้นทุนรวม'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+    df['ราคาขายรวม'] = df['ราคาขายรวม'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=GasPriceTransport({active}) '+ start_created + " to "+ end_created +'.xlsx'
+
+    df.to_excel(response, index=False, engine='openpyxl')    
+
     return response

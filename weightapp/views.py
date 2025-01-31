@@ -5164,6 +5164,8 @@ def editGasPrice(request, gp_id):
     company = BaseCompany.objects.get(code = active)
 
     data = GasPrice.objects.get(id = gp_id)#id edit
+    #เช็คข้อมูล หากเปลี่ยนวันที่
+    created_old = data.created
     if request.method == 'POST':
         form = GasPriceForm(request.POST, instance=data)
         if form.is_valid():
@@ -5171,12 +5173,23 @@ def editGasPrice(request, gp_id):
 
             calculateTotalGasPriceById(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของวันนั้นๆ
             calculateGasPriceInWeight(gp.pk) #คำนวณราคาต้นทุน และราคาขายรวมของแต่ละ weight id
+
+            checkDateChangeGasPrice(created_old, gp.pk)#ถ้าเปลี่ยนวันที่ oil_cost, oil_sell ของวันก่อนต้องเป็น 0
             return redirect('viewGasPrice')
     else:
         form = GasPriceForm(instance=data)
 
     context = {'ts_page':'active', 'form': form, 'gp': data , active :"active", 'disabledTab' : 'disabled'}
     return render(request, "transport/editGasPrice.html",context)
+
+def checkDateChangeGasPrice(created_old, gp_id):
+    gp = GasPrice.objects.get(id = gp_id)
+    if created_old != gp.created:
+        try:
+            weight = Weight.objects.filter(date = created_old, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
+            weight.update(oil_cost = 0, oil_sell = 0)
+        except Weight.DoesNotExist:
+            pass
 
 def calculateTotalGasPriceById(gp_id):
     try:

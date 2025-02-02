@@ -1578,8 +1578,10 @@ def monthlyProduction(request):
     #ดึงข้อมูล 2025 ขึ้นไป   
     current_date_time = datetime.now()
     current_year = current_date_time.year - 1
+    numeric_month = current_date_time.month
 
     s_comp = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id', flat=True).order_by('base_site_id')
+    s_comp_name = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_name', flat=True).order_by('base_site_name')
     #ดึงข้อมูล 2025 ขึ้นไป
     date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year
     ).annotate(
@@ -1599,8 +1601,14 @@ def monthlyProduction(request):
     produc_capacity_results = {}
     produc_hour_per_day_results = {}
 
-    all_month_years = [f"{current_date_time.year}-{str(month).zfill(2)}" for month in range(1, 13)]
-    thai_months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+    
+    all_month_years = [f"{current_date_time.year}-{str(month).zfill(2)}" for month in range(1, numeric_month + 1)]
+    default_month_years = [
+        (int(my.split('-')[0]), int(my.split('-')[1])) for my in all_month_years
+    ]
+    
+    all_thai_months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+    thai_months = all_thai_months[:numeric_month]
 
     for dt in date_data:
         year, month, site_name, stone_type_name, sum_total = dt
@@ -1619,23 +1627,39 @@ def monthlyProduction(request):
         aggregated_results[site_name][stone_type_name][month_year] += sum_total
 
     ###################### start สรุปข้อมูลผลิต #####################
-    product_data = Production.objects.filter(
-        site__in=s_comp,
-        created__year__gt=current_year
-    ).annotate(
-        year=ExtractYear('created'),
-        month=ExtractMonth('created'),
-        working_time=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DurationField()),
-        hour_per_day = ExpressionWrapper(F('actual_time') / (F('actual_time') - F('total_loss_time')) , output_field=models.DecimalField()),
-
-    ).values_list('year', 'month', 'site__base_site_name'
-    ).annotate(
-        sum_run=Sum('run_time'),
-        sum_total_working_time=Sum('working_time'),
-        sum_hour_per_day = Sum('hour_per_day'),
-        sum_capacity_per_hour=Sum('capacity_per_hour'),
+    product_data = list(
+        Production.objects.filter(
+            site__in=s_comp,
+            created__year__gt=current_year
+        ).annotate(
+            year=ExtractYear('created'),
+            month=ExtractMonth('created'),
+            working_time=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DurationField()),
+            hour_per_day=ExpressionWrapper(F('actual_time') / (F('actual_time') - F('total_loss_time')), output_field=models.DecimalField()),
+        ).values_list(
+            'year', 'month', 'site__base_site_name'
+        ).annotate(
+            sum_run=Sum('run_time'),
+            sum_total_working_time=Sum('working_time'),
+            sum_hour_per_day=Sum('hour_per_day'),
+            sum_capacity_per_hour=Sum('capacity_per_hour'),
+        )
     )
-    
+
+    #เพิ่ม ข้อมูล default product_data หากไม่มีข้อมูลผลิตของ โรงโม่ ในบริษัทนั้นๆ
+    existing_sites = {pd[2] for pd in product_data}
+    missing_sites = set(s_comp_name) - existing_sites
+
+    for site in missing_sites:
+        for year, month in default_month_years:
+            product_data.append((
+                year, month, site,
+                Decimal(0),      # sum_run
+                timedelta(0),    # sum_total_working_time
+                Decimal(0),      # sum_hour_per_day
+                Decimal(0),      # sum_capacity_per_hour
+            ))
+
     for pd in product_data:
         year, month, site_name, sum_run, sum_total_working_time, sum_hour_per_day, sum_capacity_per_hour  = pd
         month_year = f"{year}-{str(month).zfill(2)}"

@@ -1344,7 +1344,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
                                 worksheet.cell(row=idl+3, column=column_index, value=value).number_format = '#,##0.00'
                                 column_index += 1
                         #row_index += 1
-                worksheet.cell(row=idl+3, column=1, value = formatted_date)
+                worksheet.cell(row=idl+3, column=1, value = formatted_date) #เปลี่ยน วันที่เป็นเดือนไทย
                 row_index += 1
  
         #นำข้อมูลการผลิตมาเรียง
@@ -5266,70 +5266,73 @@ def exportExcelGasPriceTransport(request):
 
     my_q = Q()
     if start_created is not None:
-        my_q &= Q(date__gte = start_created)
+        my_q &= Q(date__gte=start_created)
     if end_created is not None:
-        my_q &=Q(date__lte = end_created)
+        my_q &= Q(date__lte=end_created)
 
-    my_q &=Q(oil_content__gt = 0, bws__weight_type = 1, bws__company__code__in = company_in)
+    my_q &= Q(oil_content__gt=0, bws__weight_type=1, bws__company__code__in=company_in)
 
-    queryset = Weight.objects.filter(my_q).values_list(
-        'car_team__car_team_name', 'customer__customer_name', 'car_registration_name', 'mill__mill_name', 'site__base_site_name', 'stone_type__base_stone_type_name').annotate(
-            num_rows = Count('weight_id'), sum_weight = Sum('weight_total'), sum_oil = Sum('oil_content'), sum_oil_cost = Sum('oil_cost'), sum_oil_sell = Sum('oil_sell')
-        )
+    queryset = Weight.objects.filter(my_q).values(
+        'car_team__car_team_name', 'customer__customer_name', 'car_registration_name',
+        'mill__mill_name', 'site__base_site_name', 'stone_type__base_stone_type_name'
+    ).annotate(
+        num_rows=Count('weight_id'), sum_weight=Sum('weight_total'),
+        sum_oil=Sum('oil_content'), sum_oil_cost=Sum('oil_cost'), sum_oil_sell=Sum('oil_sell')
+    ).order_by('car_team__car_team_name')
     
     if not queryset.exists():
         return HttpResponse("No data to export.")
     
-    queryset_list = list(queryset)
-    
-    df = pd.DataFrame(queryset_list)
+    df = pd.DataFrame(list(queryset))
 
     df.columns = [
-        'car_team__car_team_name', 'customer__customer_name',
-        'car_registration_name', 'mill__mill_name',
-        'site__base_site_name', 'stone_type__base_stone_type_name', 
-        'num_rows', 'sum_weight', 'sum_oil',
-        'sum_oil_cost', 'sum_oil_sell'
+        'ทีม', 'ลูกค้า', 'ทะเบียน', 'ต้นทาง', 'ปลายทาง', 'ชนิดหิน', 
+        'จำนวนเที่ยว', 'น้ำหนักรวม (ตัน)', 'น้ำมันรวม (ลิตร)',
+        'ราคาต้นทุนรวม', 'ราคาขายรวม'
     ]
+    
+    df.fillna({'ทีม': '(ไม่มีทีม)'}, inplace=True)
 
-    df.rename(columns={
-        'car_team__car_team_name': 'ทีม',
-        'customer__customer_name': 'ลูกค้า',
-        'car_registration_name': 'ทะเบียน',
-        'mill__mill_name': 'ต้นทาง',
-        'site__base_site_name': 'ปลายทาง',
-        'stone_type__base_stone_type_name': 'ชนิดหิน',
-        'num_rows': 'จำนวนเที่ยว',
-        'sum_weight': 'น้ำหนักรวม (ตัน)',
-        'sum_oil': 'น้ำมันรวม (ลิตร)',
-        'sum_oil_cost': 'ราคาต้นทุนรวม',
-        'sum_oil_sell': 'ราคาขายรวม',
-    }, inplace=True)
+    grouped = df.groupby('ทีม', dropna=False)
+    result = []
+
+    for name, group in grouped:
+        result.append(group)
+        subtotal = pd.DataFrame({
+            'ทีม': [f'รวมทีม {name}'],
+            'ลูกค้า': [''], 'ทะเบียน': [''], 'ต้นทาง': [''], 'ปลายทาง': [''], 'ชนิดหิน': [''],
+            'จำนวนเที่ยว': [group['จำนวนเที่ยว'].sum()],
+            'น้ำหนักรวม (ตัน)': [group['น้ำหนักรวม (ตัน)'].sum()],
+            'น้ำมันรวม (ลิตร)': [group['น้ำมันรวม (ลิตร)'].sum()],
+            'ราคาต้นทุนรวม': [group['ราคาต้นทุนรวม'].sum()],
+            'ราคาขายรวม': [group['ราคาขายรวม'].sum()],
+        })
+        result.append(subtotal)
+
+    df = pd.concat(result, ignore_index=True)
 
     total_row = pd.DataFrame({
-        'ทีม': ['รวมทั้งหมด'],
-        'ลูกค้า': [''],
-        'ทะเบียน': [''],
-        'ต้นทาง': [''],
-        'ปลายทาง': [''],
-        'ชนิดหิน': [''],
-        'จำนวนเที่ยว': [df['จำนวนเที่ยว'].sum()],
-        'น้ำหนักรวม (ตัน)': [df['น้ำหนักรวม (ตัน)'].sum()],
-        'น้ำมันรวม (ลิตร)': [df['น้ำมันรวม (ลิตร)'].sum()],
-        'ราคาต้นทุนรวม': [df['ราคาต้นทุนรวม'].sum()],
-        'ราคาขายรวม': [df['ราคาขายรวม'].sum()],
+        'ทีม': ['รวมทั้งหมด'], 'ลูกค้า': [''], 'ทะเบียน': [''], 'ต้นทาง': [''], 'ปลายทาง': [''], 'ชนิดหิน': [''],
+        'จำนวนเที่ยว': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'จำนวนเที่ยว'].sum()],
+        'น้ำหนักรวม (ตัน)': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'น้ำหนักรวม (ตัน)'].sum()],
+        'น้ำมันรวม (ลิตร)': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'น้ำมันรวม (ลิตร)'].sum()],
+        'ราคาต้นทุนรวม': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ราคาต้นทุนรวม'].sum()],
+        'ราคาขายรวม': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ราคาขายรวม'].sum()],
     })
 
     df = pd.concat([df, total_row], ignore_index=True)
 
-    df['น้ำหนักรวม (ตัน)'] = df['น้ำหนักรวม (ตัน)'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
-    df['น้ำมันรวม (ลิตร)'] = df['น้ำมันรวม (ลิตร)'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
-    df['ราคาต้นทุนรวม'] = df['ราคาต้นทุนรวม'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
-    df['ราคาขายรวม'] = df['ราคาขายรวม'].apply(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+    df[['น้ำหนักรวม (ตัน)']] = df[
+        ['น้ำหนักรวม (ตัน)']
+    ].applymap(lambda x: f"{x:,.3f}" if pd.notna(x) else "")
 
+    df[['น้ำมันรวม (ลิตร)', 'ราคาต้นทุนรวม', 'ราคาขายรวม']] = df[
+        ['น้ำมันรวม (ลิตร)', 'ราคาต้นทุนรวม', 'ราคาขายรวม']
+    ].applymap(lambda x: f"{x:,.2f}" if pd.notna(x) else "")
+    
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=GasPriceTransport({active}) '+ start_created + " to "+ end_created +'.xlsx'
+    response['Content-Disposition'] = f'attachment; filename=GasPriceTransport({active}) {start_created} to {end_created}.xlsx'
 
-    df.to_excel(response, index=False, engine='openpyxl')    
+    df.to_excel(response, index=False, engine='openpyxl')
 
     return response

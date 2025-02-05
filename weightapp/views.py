@@ -5279,8 +5279,13 @@ def exportExcelGasPriceTransport(request):
         'car_team__car_team_name', 'customer__customer_name', 'car_registration_name',
         'mill__mill_name', 'site__base_site_name', 'stone_type__base_stone_type_name'
     ).annotate(
-        num_rows=Count('weight_id'), sum_weight=Sum('weight_total'),
-        sum_oil=Sum('oil_content'), sum_oil_cost=Sum('oil_cost'), sum_oil_sell=Sum('oil_sell')
+        num_rows=Count('weight_id'), 
+        sum_weight=Sum('weight_total'),
+        sum_oil=Sum('oil_content'),
+        price_per_unit=ExpressionWrapper(
+            Sum('oil_sell') / Sum('oil_content'),
+            output_field = models.DecimalField()
+        ), sum_oil_sell=Sum('oil_sell')
     ).order_by('car_team__car_team_name')
     
     if not queryset.exists():
@@ -5291,7 +5296,7 @@ def exportExcelGasPriceTransport(request):
     df.columns = [
         'ทีม', 'ลูกค้า', 'ทะเบียน', 'ต้นทาง', 'ปลายทาง', 'ชนิดหิน', 
         'จำนวนเที่ยว', 'น้ำหนักรวม (ตัน)', 'น้ำมันรวม (ลิตร)',
-        'ราคาต้นทุนรวม', 'ราคาขายรวม'
+        'ราคาขายต่อหน่วย', 'ยอดขาย'
     ]
     
     df.fillna({'ทีม': '(ไม่มีทีม)'}, inplace=True)
@@ -5307,8 +5312,8 @@ def exportExcelGasPriceTransport(request):
             'จำนวนเที่ยว': [group['จำนวนเที่ยว'].sum()],
             'น้ำหนักรวม (ตัน)': [group['น้ำหนักรวม (ตัน)'].sum()],
             'น้ำมันรวม (ลิตร)': [group['น้ำมันรวม (ลิตร)'].sum()],
-            'ราคาต้นทุนรวม': [group['ราคาต้นทุนรวม'].sum()],
-            'ราคาขายรวม': [group['ราคาขายรวม'].sum()],
+            'ราคาขายต่อหน่วย': [group['ราคาขายต่อหน่วย'].sum()],
+            'ยอดขาย': [group['ยอดขาย'].sum()],
         })
         result.append(subtotal)
 
@@ -5319,23 +5324,52 @@ def exportExcelGasPriceTransport(request):
         'จำนวนเที่ยว': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'จำนวนเที่ยว'].sum()],
         'น้ำหนักรวม (ตัน)': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'น้ำหนักรวม (ตัน)'].sum()],
         'น้ำมันรวม (ลิตร)': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'น้ำมันรวม (ลิตร)'].sum()],
-        'ราคาต้นทุนรวม': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ราคาต้นทุนรวม'].sum()],
-        'ราคาขายรวม': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ราคาขายรวม'].sum()],
+        'ราคาขายต่อหน่วย': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ราคาขายต่อหน่วย'].sum()],
+        'ยอดขาย': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'ยอดขาย'].sum()],
     })
 
     df = pd.concat([df, total_row], ignore_index=True)
 
-    df[['น้ำหนักรวม (ตัน)']] = df[
-        ['น้ำหนักรวม (ตัน)']
-    ].applymap(lambda x: f"{x:,.3f}" if pd.notna(x) else "")
+    df[['น้ำหนักรวม (ตัน)']] = df[[
+        'น้ำหนักรวม (ตัน)'
+    ]].applymap(lambda x: f"{x:,.3f}" if pd.notna(x) else "")
 
-    df[['น้ำมันรวม (ลิตร)', 'ราคาต้นทุนรวม', 'ราคาขายรวม']] = df[
-        ['น้ำมันรวม (ลิตร)', 'ราคาต้นทุนรวม', 'ราคาขายรวม']
-    ].applymap(lambda x: f"{x:,.2f}" if pd.notna(x) else "")
-    
+    df[['น้ำมันรวม (ลิตร)', 'ยอดขาย']] = df[[
+        'น้ำมันรวม (ลิตร)', 'ยอดขาย'
+    ]].applymap(lambda x: f"{x:,.2f}" if pd.notna(x) else "")
+
+    df[['ราคาขายต่อหน่วย']] = df[[
+        'ราคาขายต่อหน่วย'
+    ]].applymap(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
+
+    # Create an Excel response with openpyxl
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename=GasPriceTransport({active}) {start_created} to {end_created}.xlsx'
 
-    df.to_excel(response, index=False, engine='openpyxl')
+    # Write to Excel with openpyxl engine
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+
+        # Get the workbook and sheet
+        workbook = writer.book
+        sheet = workbook.active
+
+        # Bold subtotal and total row
+        for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+            for cell in row:
+                if 'รวมทีม' in str(cell.value) or 'รวมทั้งหมด' in str(cell.value):
+                    row_number = cell.row  # Get the row number
+                    # Bold and red font
+                    bold_red_font = Font(bold=True, color="FF0000")
+
+                    # Apply to columns A, G, H, I, J, K in the same row
+                    for col in ['A', 'G', 'H', 'I', 'J', 'K']:
+                        sheet[f"{col}{row_number}"].font = bold_red_font
+
+
+        right_align = Alignment(horizontal="right")
+        for col in ['H', 'I', 'J', 'K']:  # Columns for numbers
+            for cell in sheet[col]:  # Iterate through all cells in that column
+                cell.alignment = right_align
 
     return response

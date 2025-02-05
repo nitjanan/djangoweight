@@ -199,8 +199,8 @@ class BaseCarTeamResource(resources.ModelResource):
     class Meta:
         model = BaseCarTeam
         import_id_fields = ('car_team_id',)
-        fields = ('car_team_id', 'car_team_name',)
-        export_order = ('car_team_id', 'car_team_name',)
+        fields = ('car_team_id', 'car_team_name','oil_customer_id',)
+        export_order = ('car_team_id', 'car_team_name','oil_customer_id',)
 
 class BaseCarTeamAdmin(ImportExportModelAdmin):
     resource_class = BaseCarTeamResource

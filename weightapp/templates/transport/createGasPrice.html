@@ -133,6 +133,15 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 
 <script type="text/javascript">
+  //ปิดปุ่ม submit หากมีการกดซ้ำ
+  document.addEventListener("DOMContentLoaded", function() {
+    const form = document.querySelector("form");
+      form.addEventListener("submit", function() {
+        const submitButton = form.querySelector("[type='submit']");
+        submitButton.disabled = true;
+    });
+  });
+
   var have_gas_price = false;
 
   var today = new Date();

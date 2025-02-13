@@ -811,7 +811,7 @@ def updateGasPrice(company_id, created):
         gp = GasPrice.objects.filter(created = created, company = company_id)
         sum_oil = Weight.objects.filter(date = created, bws__weight_type = 1, bws__company = company_id, oil_content__gt = 0,).aggregate(s=Sum("oil_content"))["s"] or Decimal('0.0')
         for i in gp:
-            i.total_cost = i.cost * sum_oil
+            #i.total_cost = i.cost * sum_oil เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
             i.total_sell = i.sell * sum_oil
             i.save()
     except GasPrice.DoesNotExist or Weight.DoesNotExist:
@@ -822,7 +822,7 @@ def updateOilCostAndSell(weight_id, company_id, created):
         weight = Weight.objects.get(weight_id = weight_id)
         gp = GasPrice.objects.filter(created = created, company = company_id).first()
         if gp:
-            weight.oil_cost = gp.cost * weight.oil_content
+            #weight.oil_cost = gp.cost * weight.oil_content เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
             weight.oil_sell = gp.sell * weight.oil_content
             weight.save()
     except GasPrice.DoesNotExist or Weight.DoesNotExist:
@@ -5193,7 +5193,8 @@ def checkDateChangeGasPrice(created_old, gp_id):
     if created_old != gp.created:
         try:
             weight = Weight.objects.filter(date = created_old, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
-            weight.update(oil_cost = 0, oil_sell = 0)
+            #weight.update(oil_cost = 0, oil_sell = 0) เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
+            weight.update(oil_sell = 0)
         except Weight.DoesNotExist:
             pass
 
@@ -5201,7 +5202,7 @@ def calculateTotalGasPriceById(gp_id):
     try:
         gp = GasPrice.objects.get(id = gp_id)
         sum_oil = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company).aggregate(s=Sum("oil_content"))["s"] or Decimal('0.0')
-        gp.total_cost = gp.cost * sum_oil
+        #gp.total_cost = gp.cost * sum_oil เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
         gp.total_sell = gp.sell * sum_oil
         gp.save()
     except GasPrice.DoesNotExist or Weight.DoesNotExist:
@@ -5212,7 +5213,7 @@ def calculateGasPriceInWeight(gp_id):
         gp = GasPrice.objects.get(id = gp_id)
         oil = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
         for ol in oil:
-            ol.oil_cost = ol.oil_content * gp.cost
+            #ol.oil_cost = ol.oil_content * gp.cost เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
             ol.oil_sell = ol.oil_content * gp.sell
             ol.save()
     except GasPrice.DoesNotExist or Weight.DoesNotExist:
@@ -5224,7 +5225,8 @@ def removeGasPrice(request, gp_id):
     #set oil_cost และ oil_sell = 0 กรณีลบ GasPrice
     try:
         weight = Weight.objects.filter(date = gp.created, bws__weight_type = 1, bws__company = gp.company, oil_content__gt = 0)
-        weight.update(oil_cost = 0, oil_sell = 0)
+        #weight.update(oil_cost = 0, oil_sell = 0) เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
+        weight.update(oil_sell = 0)
     except Weight.DoesNotExist:
         pass
 

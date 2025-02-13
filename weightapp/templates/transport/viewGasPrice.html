@@ -74,7 +74,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <thead class="table-dark">
                   <tr>
                     <th>วันที่</th>
-                    <th>ราคาต้นทุน</th>
+                    <!--th>ราคาต้นทุน</th-->
                     <th>ราคาขาย</th>
                     <th>แก้ไข</th>
                     <th>ลบ</th>
@@ -84,7 +84,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   {% for i in gas_price%}
                   <tr>
                     <td>{{i.created}}</td>
-                    <td>{{i.cost}}</td>
+                    <!--td>{{i.cost}}</td-->
                     <td>{{i.sell}}</td>
                     <td>
                       <a href="{% url 'editGasPrice' i.id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>

@@ -824,14 +824,13 @@ class GasPriceForm(forms.ModelForm):
     #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
     class Meta:
        model = GasPrice
-       fields = ('created', 'cost', 'sell', 'company')
+       fields = ('created', 'sell', 'company') #เอาราคาทุนน้ำมัน ออกก่อน 13/02/2025
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'company': forms.HiddenInput(),
         }
        labels = {
             'created': _('ชนิดหิน'),
-            'cost': _('ราคาต้นทุน'),
             'sell': _('ราคาขาย'),
             'company': _('บริษัท'),
        }

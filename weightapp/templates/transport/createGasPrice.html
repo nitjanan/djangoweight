@@ -59,33 +59,33 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <div class="row">
                 {% csrf_token %}
                 <hr class="my-2">
-                <div class="col-md-2 col-12">
+                <div class="col-md-3 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">วันที่</p>
                     </div>
                   </div>
-                <div class="col-md-5 col-12">
+                <!--div class="col-md-5 col-12">
                   <div class="form-group">
                     <p class="fw-bolder">ราคาทุน</p>
                   </div>
-                </div>
-                <div class="col-md-5 col-12">
+                </div-->
+                <div class="col-md-9 col-12">
                   <div class="form-group">
                     <p class="fw-bolder">ราคาขาย</p>
                   </div>
                 </div>
                 <div class="row form-row spacer">
-                    <div class="col-md-2 col-12">
+                    <div class="col-md-3 col-12">
                         <div class="form-group">
                             {{form.company}}{{form.created | add_class:"form-control"}}
                         </div>
                       </div>
-                    <div class="col-md-5 col-12">
+                    <!--div class="col-md-5 col-12">
                       <div class="form-group">
                         {{form.cost | add_class:"form-control" |attr:"required:true"}}
                       </div>
-                    </div>
-                    <div class="col-md-5 col-12">
+                    </div-->
+                    <div class="col-md-9 col-12">
                       <div class="form-group">
                         {{form.sell | add_class:"form-control" |attr:"required:true"}}
                       </div>

@@ -133,15 +133,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 
 <script type="text/javascript">
-  //ปิดปุ่ม submit หากมีการกดซ้ำ
-  document.addEventListener("DOMContentLoaded", function() {
-    const form = document.querySelector("form");
-      form.addEventListener("submit", function() {
-        const submitButton = form.querySelector("[type='submit']");
-        submitButton.disabled = true;
-    });
-  });
-
   var have_gas_price = false;
 
   var today = new Date();
@@ -154,13 +145,22 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     });
 
   //before save
-  $('form').submit(function() {
-    //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
-    if(have_gas_price){
-      $("#id_created").trigger( "focus" );
-      alert('มีข้อมูลราคาน้ำมันวันนี้แล้ว กรุณาเปลี่ยนวันที่');
-      return false;
-    }
+  $(document).ready(function() {
+    $("form").submit(function(event) {
+        const submitButton = $(this).find("[type='submit']");
+        submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
+
+        //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+        if (typeof have_gas_price !== "undefined" && have_gas_price) {
+            $("#id_created").trigger("focus");
+            alert("มีข้อมูลราคาน้ำมันวันนี้แล้ว กรุณาเปลี่ยนวันที่");
+            
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            
+            event.preventDefault(); // Prevent form submission
+            return false;
+        }
+    });
   });
 
   $('#id_created').change(function() {

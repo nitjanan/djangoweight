@@ -2094,6 +2094,8 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
             # Fetch distinct 'created' dates for the current mill
             created_dates = Production.objects.filter(my_q, site=site).values_list('created', flat=True).order_by('created').distinct()
+            first_date = created_dates.first()
+            pd_year = datetime.strptime(str(first_date), '%Y-%m-%d').year
 
             for created_date in created_dates:
                 row = [created_date]
@@ -2116,7 +2118,12 @@ def excelProductionAndLoss(request, my_q, sc_q):
                     #3) sum_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
                     #4) cal_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
 
-                    capacity_per_hour = calculatCapacityPerHour(request, data_sum_produc, wk_time)
+                    capacity_per_hour = (
+                        production.capacity_per_hour 
+                        if pd_year > 2024
+                        else calculatCapacityPerHour(request, data_sum_produc, wk_time)
+                    ) #if ปี capacity_per_hour > 2024 ดึงแบบใหม่
+                        
                     if production:
                         row.extend([production.goal, accumulated_goal , formatHourMinute(production.plan_start_time), formatHourMinute(production.plan_end_time), formatHourMinute(production.plan_time), formatHourMinute(production.actual_start_time), formatHourMinute(production.actual_end_time) , formatHourMinute(production.actual_time), formatHourMinute(production.run_start_time) if production.run_start_time else production.mile_run_start_time  , formatHourMinute(production.run_end_time) if production.run_end_time else production.mile_run_end_time, formatHourMinute(production.run_time)])
                     else:
@@ -2610,12 +2617,16 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
 
             # Fetch distinct 'created' dates for the current site
             created_dates = StoneEstimate.objects.filter(my_q, site = site).values_list('created', flat=True).order_by('created').distinct()
+            
+            first_date = created_dates.first()
+            es_year = datetime.strptime(str(first_date), '%Y-%m-%d').year
 
             row_index = 3
             for created_date in created_dates:
                 len_row_index = 0
                 total_working_time = None
                 production_note = None
+                production_cph = None
                 for i in range(len(list_customer_name)):
                     for j, time in enumerate(list_time):
                         len_row_index +=1
@@ -2624,6 +2635,8 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
                         total_working_time = Production.objects.filter(created = created_date, site = site).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
                         #หมายเหตุ
                         production_note = Production.objects.filter(site = site, created = created_date).values_list('note', flat=True).first()
+                        #capacity_per_hour
+                        production_cph = Production.objects.filter(site = site, created = created_date).values_list('capacity_per_hour', flat=True).first()
                         #หินเขา
                         mountain1  = Weight.objects.filter(Q(time_out__gte=time['time_from']) & Q(time_out__lte=time['time_to']), Q(mill = '001MA') | Q(mill = '002MA'), Q(site = site) | Q(site__base_site_name = stock_type_name), bws__weight_type = 2, date = created_date, customer_name = list_customer_name[i]).aggregate(s_weight = Sum("weight_total"))
 
@@ -2673,14 +2686,19 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
 
                 #หินเข้าโม่รวม(ตัน) ของวันนั้นๆ
                 sum_crush = sheet.cell(row=row_index-1, column=column_index).value
-                if total_working_time:
+                capacity_per_hour = 0
+                if es_year > 2024 and production_cph:#if ปี capacity_per_hour > 2024 ดึงแบบใหม่
+                    capacity_per_hour = production_cph
+                elif es_year <= 2024 and total_working_time:
                     (h, m) = str(format_duration(total_working_time)).split(':')
                     decimal_time = int(h) + (int(m) / 100)
                     decimal_time = Decimal(decimal_time)
                     #ผลิตตัน/ชม
                     capacity_per_hour = sum_crush/decimal_time
-                    sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+1, value = f"{capacity_per_hour:.2f}")
-                    sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+1, end_row = (row_index - 1 ), end_column=column_index+1)
+
+                sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+1, value = f"{capacity_per_hour:.2f}")
+                sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+1, end_row = (row_index - 1 ), end_column=column_index+1)
+
                 #หมายเหตุ
                 sheet.cell(row = (row_index - 1 ) - len_row_index, column=column_index+2, value = production_note)
                 sheet.merge_cells(start_row = (row_index - 1 ) - len_row_index, start_column = column_index+2, end_row = (row_index - 1 ), end_column=column_index+2)

@@ -432,9 +432,9 @@ def index(request):
     weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
     sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
     '''
-    #แสดงชื่อลูกค้าแค่ 10 อันดับแรกที่มีน้ำหนักสูงสุด
-    weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')[:10]
-    sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
+    #แสดงชื่อลูกค้าแค่ 10 อันดับแรกที่มีน้ำหนักสูงสุด ไม่ใช้แล้ว 17/02/2025
+    #weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')[:10]
+    #sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
 
     ####################################
     ######## data weight stock #########
@@ -577,12 +577,11 @@ def index(request):
     # Add list
     list_persent_loss_weight.append(persent_loss_weight_all)
 
-    context = { 'weight': weight,
+    context = { 
                 'previous_day':previous_day,
                 'start_day':start_day,
                 'end_day':end_day,
                 'actual_working_time_all':actual_working_time_all,
-                'sum_all_weight': sum_all_weight,
                 'sell_list':sell_list,
                 'stock_list':stock_list,
                 'produce_list':produce_list,

@@ -89,35 +89,10 @@
         <div class="col-12 col-xl-6">
           <div class="card">
             <div class="card-header">
+              <h4>ยอด Stock ประจำเดือน</h4>
             </div>
             <div class="card-body">
-              <div class="alert alert-light-info color-info">
-                วันที่ {{start_day |date:"d/m/Y"}} ถึง {{end_day |date:"d/m/Y"}} <p class="float-end"> รวม {{sum_all_weight |intcomma}} ตัน</p>
-              </div>
-              <div class="table-responsive">
-                <table class="table table-striped" id="table1"><!--เปลี่ยนจำนวนรายการที่แสดงต่อหน้า perPage:5 -->
-                  <thead>
-                    <tr>
-                      <th>Top 10 ชื่อลูกค้า</th>
-                      <th>รวมนน.สุทธิ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for i in weight%}
-                    <tr>
-                      <td>{{i.customer_name}}</td>
-                      <td>{{i.sum_weight_total |intcomma}}</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td>Footer 1</td>
-                      <td>Footer 2</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <div id="chart-stock"></div>
             </div>
           </div>
         </div>        
@@ -392,9 +367,6 @@
           name: 'sell',
           data: {{sell_list|safe}}
         }, {
-          name: 'stock',
-          data: {{stock_list|safe}}
-        }, {
           name: 'produce',
           data: {{produce_list|safe}}
         },
@@ -405,11 +377,63 @@
       },
         colors:[
           'rgba(255, 99, 132, 0.8)',
-          'rgba(54, 162, 235, 0.8)',
           'rgba(255, 206, 86, 0.8)',
           'rgba(75, 192, 192, 0.8)',
           'rgba(153, 102, 255, 0.8)',
           'rgba(255, 159, 64, 0.8)',
+        ],
+        plotOptions: {
+          bar: {
+            horizontal: false,
+            columnWidth: '55%',
+            endingShape: 'rounded'
+          },
+        },
+        dataLabels: {
+          enabled: false
+        },
+        stroke: {
+          show: true,
+          width: 2,
+          colors: ['transparent']
+        },
+        xaxis: {
+          categories: {{stone_name_list|safe}},
+        },
+        yaxis: {
+          title: {
+            text: 'stone weight total on mounth'
+          },
+          labels: {
+            formatter: function (value) {
+              return value.toLocaleString() + " ตัน";
+            }
+          }
+        },
+        fill: {
+          opacity: 1
+        },
+        tooltip: {
+          y: {
+            formatter: function (val) {
+              return  val.toLocaleString() + " ตัน"
+            }
+          }
+        }
+  };
+
+  var optionsStock = {
+      series: [ {
+          name: 'stock',
+          data: {{stock_list|safe}}
+        },
+      ],
+        chart: {
+        type: 'bar',
+        height: 350
+      },
+        colors:[
+          'rgba(54, 162, 235, 0.8)',
         ],
         plotOptions: {
           bar: {
@@ -538,6 +562,12 @@
     optionsStone
   );
   chartStone.render();
+
+  var chartStock = new ApexCharts(
+    document.querySelector("#chart-stock"), 
+    optionsStock
+  );
+  chartStock.render();
 
   var chartWeightLoss = new ApexCharts(
     document.querySelector("#chart-weight-loss"),

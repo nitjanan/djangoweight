@@ -68,6 +68,17 @@ class BaseStockSource(models.Model):
 
     def __str__(self):
         return self.name
+    
+class BaseMillSource(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อที่มาของต้นทาง")
+
+    class Meta:
+        db_table = 'base_mill_source'
+        verbose_name = 'ที่มาของต้นทาง'
+        verbose_name_plural = 'ข้อมูลที่มาของต้นทาง'
+
+    def __str__(self):
+        return self.name
 
 #USER PROFILE
 class UserProfile(models.Model):
@@ -99,6 +110,7 @@ class BaseMill(models.Model):
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับโรงโม่ของบริษัท (ต้นทาง)")
     user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
     created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
+    mill_source = models.ForeignKey(BaseMillSource, on_delete=models.CASCADE, blank = True, null = True , verbose_name="ที่มาของต้นทาง")
 
     class Meta:
         db_table = 'base_mill'

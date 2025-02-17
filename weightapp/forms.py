@@ -319,7 +319,7 @@ class WeightStockForm(forms.ModelForm):
 class BaseMillForm(forms.ModelForm):
     class Meta:
        model = BaseMill
-       fields = ('mill_id' , 'mill_name', 'weight_type', 'user_created')
+       fields = ('mill_id' , 'mill_name', 'weight_type', 'mill_source', 'user_created')
        widgets = {
            'user_created': forms.HiddenInput(),
         }

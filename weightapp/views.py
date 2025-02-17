@@ -323,9 +323,9 @@ def getSumByStone(request, mode, stoneType, type, company_in):
 
     start_year = datetime.strptime(start_date, '%Y-%m-%d').year
 
-    #type 1 = sell, 2 = stock, 3 = produce
+    #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
     if type == 1:
-        w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(mill__mill_source__isnull = True, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
         w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-stk__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
@@ -339,6 +339,8 @@ def getSumByStone(request, mode, stoneType, type, company_in):
             for i in se_item:
                 crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
                 w += calculateEstimate(i['percent'], crush)
+    if type == 4:#รายการซื้อติ๊กต้นทาง source เป็น 1
+        w = Weight.objects.filter(mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getSumOther(request, mode, list_sum_stone, type, company_in):
@@ -361,9 +363,9 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
         query_filters |= Q(stone_type = item_number_prefix)
         ss_query_filters |= Q(stone = item_number_prefix)
 
-    #type 1 = sell, 2 = stock, 3 = produce
+    #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
     if type == 1:
-        w = Weight.objects.filter(bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter( mill__mill_source__isnull = True, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
@@ -386,6 +388,9 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
             for i in se_item:
                 crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
                 w += calculateEstimate(i['percent'], crush)
+    elif type == 4:
+        w = Weight.objects.filter(mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+
     return  float(w)
 
 def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
@@ -492,6 +497,7 @@ def index(request):
     sell_list = getNumListStoneWeightChart(request, 1, stone_list, 1, company_in)
     stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
     produce_list = getNumListStoneWeightChart(request, 2, stone_list, 3, company_in)
+    purchase_list = getNumListStoneWeightChart(request, 1, stone_list, 4, company_in)
 
     ####################################
     ########### chart mill #############
@@ -585,6 +591,7 @@ def index(request):
                 'sell_list':sell_list,
                 'stock_list':stock_list,
                 'produce_list':produce_list,
+                'purchase_list': purchase_list,
                 'data_sum_produc_all':data_sum_produc_all,
                 'data_sum_produc':data_sum_produc,
                 'list_date': list_date,

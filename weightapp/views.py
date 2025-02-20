@@ -2813,6 +2813,175 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
     workbook.save(response)
     return response
 
+def exportExcelEstimate(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    site = request.GET.get('site') or None
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(se__created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(se__created__lte = end_created)
+    if site is not None:
+        my_q &=Q(se__site = site)
+
+    my_q &= Q(se__company__code__in = company_in)
+   
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    startDate = datetime.strptime(start_created or startDateInMonth(previous_date_time.strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or previous_date_time.strftime('%Y-%m-%d'), "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
+    print('A startDate = '+ str(start_created) + ", endDate = "+ str(end_created))
+    print('B startDate = '+ str(startDate) + ", endDate = "+ str(endDate))
+
+    response = excelEstimate(request, my_q, list_date)
+    return response
+
+def excelEstimate(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    data = StoneEstimateItem.objects.filter(my_q).order_by('se__created', 'se__site', 'stone_type').values_list('se__created', 'se__site__base_site_name', 'stone_type__base_stone_type_name', 'total')
+
+    # Create a new workbook and get the active worksheet
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+
+    if data:
+        worksheet.cell(row=1, column=1, value='Date')
+        worksheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
+
+        date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+        
+        # Create a set of all unique mill and stone values
+        sites = set()
+        stones = set()
+        for item in data:
+            sites.add(item[1])
+            stones.add(item[2]) 
+
+        site_col_list = []
+        
+        # Create a list of colors for each line_type
+        site_colors = [generate_pastel_color() for i  in range(len(sites) + 1)]
+
+        column_index = 2
+        for st in sites:
+            worksheet.cell(row=1, column=column_index, value=f'ประมาณการณ์หิน {st}')
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
+            
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.alignment = Alignment(horizontal='center')
+
+            info = {}
+            info['st'] = st
+            info['strat_col'] = column_index
+            info['end_col'] = column_index + len(stones)
+            site_col_list.append(info)
+
+            #อัพเดทจำนวน col ตามที่มา
+            column_index += len(stones)
+
+        #set color in header in row 1-2
+        for row in worksheet.iter_rows(min_row=1, max_row=2):
+            # Set the background color for each cell in the column
+            for cell in row:
+                #cell.border = Border(top=side, bottom=side, left=side, right=side)
+                cell.alignment = Alignment(horizontal='center')
+                line_index = (cell.column - 2) // (len(stones))
+                fill_color = site_colors[line_index % len(site_colors)]
+                fill = PatternFill(start_color=fill_color, fill_type="solid")
+                cell.fill = fill
+
+        # Write headers row 2 to the worksheet
+        column_index = 2
+        for st in sites:
+            for sou in stones:
+                worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
+                column_index += 1
+                
+        # Create a dictionary to store data by date, mill, and stone
+        date_data = {}
+
+        # Loop through the data and populate the dictionary  
+        for item in data:
+            date = item[0]
+            site = item[1]
+            stone = item[2]
+            value = item[3]
+
+            if date not in date_data:
+                date_data[date] = {}
+
+            if site not in date_data[date]:
+                date_data[date][site] = {}
+
+            date_data[date][site][stone] = value
+
+        row_index = 3
+        for idl, ldate in enumerate(list_date):
+            #เขียนวันที่ใน worksheet column 1
+            worksheet.cell(row=idl+3, column=1, value=ldate).style = date_style
+            worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
+
+            for date, site_data in date_data.items():
+                #เขียน weight total ของแต่ละหินใน worksheet
+                if worksheet.cell(row=idl+3, column = 1).value == date:
+                    column_index = 2
+                    for site in sites:
+                        stone_data = site_data.get(site, {})
+                        for stone in stones:
+                            value = stone_data.get(stone, '')
+                            worksheet.cell(row=idl+3, column=column_index, value=value).number_format = '#,##0.00'
+                            column_index += 1
+                    #row_index += 1
+            row_index += 1
+
+        worksheet.cell(row=row_index, column=1, value='รวมทั้งสิ้น')
+        sum_by_col = Decimal('0.00')
+        for col in range(2, column_index):
+            for row in range(3, row_index):
+                sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
+            worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+            worksheet.cell(row=row_index, column=col).font = Font(bold=True, color="FF0000")
+            sum_by_col = Decimal('0.00')
+
+        # Set the column widths
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column = column_cells[2].column_letter
+            for cell in column_cells:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            worksheet.column_dimensions[column].width = adjusted_width
+            worksheet.column_dimensions[column].height = 20
+
+        side = Side(border_style='thin', color='000000')
+        set_border(worksheet, side)
+
+    else:
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูล Stock หินของเดือนนี้')
+
+    # Set the response headers for the Excel file
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+
+    # Save the workbook to the response
+    workbook.save(response)
+    return response
+
 ################### BaesMill ####################
 @login_required(login_url='login')
 def settingBaseMill(request):

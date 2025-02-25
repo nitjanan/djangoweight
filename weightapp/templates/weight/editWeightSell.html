@@ -689,19 +689,33 @@ input.del[type=checkbox] {
     return Math.round(number * 100) / 100;
   }
 
+  function getAmount(){
+    var amount = 0;
+    var total = parseFloat($('#id_weight_total').val());
+    var price =  parseFloat($('#id_price_per_ton').val());
+    amount = total * price;
+    return amount;
+  }
+
   function calculateVatAndAmountVat(){
     vat_type = $('input[name="vat_type_group"]:checked').val();
 
-    var amount = $('#id_amount').val();
+    var amount = getAmount();
     if(amount){
-      var amount = parseFloat(amount);
-      var vat = (amount * 7)/100;
-      var amount_vat = vat + amount;
 
       if(vat_type == 'รวมภาษี'){
+        var vat = amount - (amount / 107) * 100;
+        var amount_vat = amount - vat;
+
+        $('#id_amount').val(twoDecimal(amount_vat).toFixed(2));
         $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
-        $('#id_vat').val('0.00');
+        $('#id_vat').val(twoDecimal(vat).toFixed(2));
+
       }else if(vat_type == 'ไม่รวมภาษี'){
+        var vat = (amount * 7) / 100;
+        var amount_vat = vat + amount;
+
+        $('#id_amount').val(twoDecimal(amount).toFixed(2));
         $('#id_amount_vat').val(twoDecimal(amount_vat).toFixed(2));
         $('#id_vat').val(twoDecimal(vat).toFixed(2));
       }
@@ -714,15 +728,19 @@ input.del[type=checkbox] {
     var weight_total = $('#id_weight_total').val();
     var price_per_ton = $('#id_price_per_ton').val();
     if(weight_total && price_per_ton){
-      var amount = parseFloat(weight_total) * parseFloat(price_per_ton) ;
-      var vat = (amount * 7)/100;
-      var amount_vat = vat + amount;
+      var amount = getAmount();
 
       if(vat_type == 'รวมภาษี'){
-        $('#id_amount').val(twoDecimal(amount).toFixed(2));
+        var vat = amount - (amount / 107) * 100;
+        var amount_vat = amount - vat;
+
+        $('#id_amount').val(twoDecimal(amount_vat).toFixed(2));
         $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
-        $('#id_vat').val('0.00');
+        $('#id_vat').val(twoDecimal(vat).toFixed(2));
       }else if(vat_type == 'ไม่รวมภาษี'){
+        var vat = (amount * 7)/100;
+        var amount_vat = vat + amount;
+
         $('#id_amount').val(twoDecimal(amount).toFixed(2));
         $('#id_amount_vat').val(twoDecimal(amount_vat).toFixed(2));
         $('#id_vat').val(twoDecimal(vat).toFixed(2));

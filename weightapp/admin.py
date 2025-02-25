@@ -102,13 +102,13 @@ class BaseMillResource(resources.ModelResource):
     class Meta:
         model = BaseMill
         import_id_fields = ('mill_id',)
-        fields = ('mill_id', 'mill_name', 'weight_type')
-        export_order = ('mill_id', 'mill_name', 'weight_type')
+        fields = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
+        export_order = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
 
 class BaseMillAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseMillResource
-    list_display = ('mill_id', 'mill_name',)
-    search_fields = ('mill_id', 'mill_name',)
+    list_display = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
+    search_fields = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
 
 class BaseLineTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id','name'] #แสดงรายการสินค้าในรูปแบบตาราง
@@ -126,7 +126,7 @@ class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     }
         
     resource_class = WeightResource
-    list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'stone_type_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ('weight_id', 'doc_id', 'date', 'customer__customer_id' ,'customer_name', 'stone_type__base_stone_type_id', 'stone_type_name', 'base_weight_station_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name')
 
@@ -135,7 +135,7 @@ class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         models.ManyToManyField: {'widget': CheckboxSelectMultiple},
     }
         
-    list_display = ['id', 'date', 'weight_id', 'user_update', 'doc_id', 'customer_name', 'stone_type_name', 'v_stamp', 'update'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['id', 'date', 'weight_id', 'user_update', 'doc_id', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'v_stamp'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ('weight_id', 'date', 'doc_id', 'customer__customer_id', 'customer_name', 'stone_type__base_stone_type_id',  'stone_type_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name', 'bws__id', 'v_stamp', 'update', 'user_update__first_name')
 

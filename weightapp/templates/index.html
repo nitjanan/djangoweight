@@ -318,50 +318,7 @@
 <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
 
 <script type="text/javascript">
-  /*2222222222222222222222
-  var optionsStone = {
-    series: [{
-      name: "stone type",
-      data: [{% for number in number_list %} '{{ number }}', {% endfor %}]
-    }],
-    chart: {
-      height: 400,
-      type: 'bar',
-    },
-    colors:[
-      'rgba(255, 99, 132, 0.8)',
-      'rgba(54, 162, 235, 0.8)',
-      'rgba(255, 206, 86, 0.8)',
-      'rgba(75, 192, 192, 0.8)',
-      'rgba(153, 102, 255, 0.8)',
-      'rgba(255, 159, 64, 0.8)',
-      'rgba(255, 51, 227, 0.8)',
-      'rgba(39, 16, 205, 0.8)',
-      'rgba(205, 45, 16, 0.8)',
-    ],
-    plotOptions: {
-      bar: {
-        columnWidth: '45%',
-        distributed: true,
-      }
-    },
-    dataLabels: {
-      enabled: false
-    },
-    legend: {
-      show: false
-    },
-    xaxis: {
-      categories: [{% for i in stone_type_list %} '{{ i }}', {% endfor %}],
-      labels: {
-        style: {
-          fontSize: '12px'
-        }
-      },
-    },
-  }
-  */
-
+  /* old basic colunm chart
   var optionsStone = {
       series: [{
           name: 'sell',
@@ -425,7 +382,132 @@
           }
         }
   };
+  */
 
+  var sell_mill = {{sell_mill_list|safe}};
+  var sell_stock = {{sell_stock_list|safe}};
+  var sell_purchase = {{sell_purchase_list|safe}};
+  var produce = {{produce_list|safe}};
+  var categories = {{stone_name_list|safe}};
+
+  // Calculate totals per category
+  var totalSellPerCategory = categories.map((_, index) => 
+    (sell_mill[index] || 0) + (sell_stock[index] || 0) + (sell_purchase[index] || 0)
+  );
+  var totalProducePerCategory = categories.map((_, index) => 
+    (produce[index] || 0)
+  );
+  var totalStackPerCategory = categories.map((_, index) => 
+    totalSellPerCategory[index] + totalProducePerCategory[index]
+  );
+
+
+  // Generate annotations dynamically
+  var annotations = categories.map((category, index) => {
+    let sellY = totalSellPerCategory[index]; // Midpoint of the sell group
+    let produceY = totalProducePerCategory[index];
+
+    /* เลื่อนแกน X
+    let produceY;
+    if (sellY - tmpProduceY < 400 && tmpProduceY > 600) {
+        produceY = totalProducePerCategory[index] - 600;
+    } else {
+        produceY = totalProducePerCategory[index];
+    }
+    */
+
+    return [
+      {
+        x: category,
+        y: sellY,  // Midpoint of sell group
+        seriesIndex: 1,
+        label: {
+          text: totalSellPerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          style: {
+            color: 'red',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            padding: 5
+          }
+        },
+        marker: {
+          size: -1 // Hides the dot
+        }
+      },
+      {
+        x: category,
+        seriesIndex: 2,
+        y: produceY,  // Above the full stack
+        label: {
+          text: totalProducePerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          style: {
+            color: '#e67e22',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            padding: 5
+          }
+        },
+        marker: {
+          size: -1 // Hides the dot
+        }
+      }
+    ];
+  }).flat(); // Flatten the array for ApexCharts
+
+  var optionsStone = {
+    series: [
+      { name: 'ขายจากโรงโม่', group: 'sell', data: sell_mill },
+      { name: 'ขายจากสต๊อก', group: 'sell', data: sell_stock },
+      { name: 'ขายจากซื้อ', group: 'sell', data: sell_purchase },
+      { name: 'ยอดผลิต', group: 'produce', data: produce },
+    ],
+    chart: {
+      type: 'bar',
+      height: 350,
+      stacked: true,
+    },
+    title: {
+            text: 'ยอดขายรวม: {{ sell_total|floatformat:2|intcomma }} ตัน | ยอดผลิตรวม: {{ produce_total|floatformat:2|intcomma }} ตัน',
+            align: 'center',
+            style: {
+                fontSize: '16px',
+                fontWeight: 'bold',
+                color : '#85929e'
+            }
+    },
+    stroke: {
+      width: 1,
+      colors: ['#fff']
+    },
+    dataLabels: {
+      formatter: (val) => (val / 1000).toFixed(2) + 'K',
+      enabled: false,
+      style: { colors: ['#34495e'] }
+    },
+    plotOptions: { bar: { horizontal: false } },
+    xaxis: { categories: categories },
+    fill: { opacity: 1 },
+    colors: [
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(255, 206, 86, 0.8)',
+    ],
+    yaxis: {
+      labels: {
+        formatter: (val) => val.toLocaleString() + ' ตัน'
+      }
+    },
+    legend: {
+      position: 'top',
+      horizontalAlign: 'left'
+    },
+    annotations: {
+      points: annotations
+    }
+  };
+
+  /////////////////////////////
   var optionsStock = {
       series: [ {
           name: 'stock',
@@ -434,7 +516,8 @@
       ],
         chart: {
         type: 'bar',
-        height: 350
+        height: 350,
+        stacked: true,
       },
         colors:[
           'rgba(54, 162, 235, 0.8)',
@@ -447,7 +530,12 @@
           },
         },
         dataLabels: {
-          enabled: false
+          formatter: (val) => {
+            return (val / 1000).toFixed(2) + 'K';
+          }, 
+          style: {
+            colors: ['#373d3f'] // Black color
+          }
         },
         stroke: {
           show: true,
@@ -479,6 +567,7 @@
         }
   };
   
+  /////////////////////////////
   var optionsWeightLoss = {
         series: {{list_persent_loss_weight|safe}},
           chart: {
@@ -521,6 +610,7 @@
 
   };
 
+  /////////////////////////////
   var optionsMill = {
         series: [           
             {% for item in list_goal_mill %}

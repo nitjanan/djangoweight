@@ -476,15 +476,15 @@
             }
     },
     stroke: {
-      width: 1,
+      width: 0.5,
       colors: ['#fff']
     },
     dataLabels: {
       formatter: (val) => (val / 1000).toFixed(2) + 'K',
       enabled: false,
-      style: { colors: ['#34495e'] }
+      style: { colors: ['#85929e'] }
     },
-    plotOptions: { bar: { horizontal: false } },
+    plotOptions: { bar: { borderRadius: 2, horizontal: false } },
     xaxis: { categories: categories },
     fill: { opacity: 1 },
     colors: [
@@ -509,41 +509,59 @@
 
   /////////////////////////////
   var optionsStock = {
-      series: [ {
+          series: [{
           name: 'stock',
-          data: {{stock_list|safe}}
+          data: {{stock_list|safe}},
         },
       ],
-        chart: {
-        type: 'bar',
-        height: 350,
-        stacked: true,
-      },
-        colors:[
-          'rgba(54, 162, 235, 0.8)',
-        ],
+          chart: {
+          height: 350,
+          type: 'bar',
+          stacked: true,
+        },
         plotOptions: {
           bar: {
-            horizontal: false,
-            columnWidth: '55%',
-            endingShape: 'rounded'
-          },
-        },
-        dataLabels: {
-          formatter: (val) => {
-            return (val / 1000).toFixed(2) + 'K';
-          }, 
-          style: {
-            colors: ['#373d3f'] // Black color
+            borderRadius: 2,
+            dataLabels: {
+              position: 'top', // top, center, bottom
+            },
           }
         },
-        stroke: {
-          show: true,
-          width: 2,
-          colors: ['transparent']
+        dataLabels: {
+          enabled: true,
+          formatter: function (val) {
+            return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          },
+          offsetY: -20,
+          style: {
+            fontSize: '12px',
+            colors: ["#85929e"]
+          }
         },
+        
         xaxis: {
           categories: {{stone_name_list|safe}},
+          axisBorder: {
+            show: false
+          },
+          axisTicks: {
+            show: false
+          },
+          crosshairs: {
+            fill: {
+              type: 'gradient',
+              gradient: {
+                colorFrom: '#D8E3F0',
+                colorTo: '#BED1E6',
+                stops: [0, 100],
+                opacityFrom: 0.4,
+                opacityTo: 0.5,
+              }
+            }
+          },
+          tooltip: {
+            enabled: true,
+          }
         },
         yaxis: {
           title: {
@@ -555,17 +573,7 @@
             }
           }
         },
-        fill: {
-          opacity: 1
-        },
-        tooltip: {
-          y: {
-            formatter: function (val) {
-              return  val.toLocaleString() + " ตัน"
-            }
-          }
-        }
-  };
+      };
   
   /////////////////////////////
   var optionsWeightLoss = {

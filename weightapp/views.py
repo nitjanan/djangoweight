@@ -800,6 +800,16 @@ def editWeight(request, mode, weight_id):
     if request.method == 'POST':
         form = tmp_form_post
         if form.is_valid():
+            #เก็บน้ำหนักและปลายทางก่อนแก้
+            try:
+                original_weight = Weight.objects.get(pk=form.instance.pk)
+                original_weight_total = original_weight.weight_total
+                if original_weight.site:
+                    original_weight_site = original_weight.site.base_site_id
+            except Weight.DoesNotExist:
+                original_weight_total = None
+                original_weight_site = None
+        
             # log history เก็บข้อมูลก่อนแก้
             weight_form = form.save()
 
@@ -808,13 +818,16 @@ def editWeight(request, mode, weight_id):
             weight_history.save()
 
             #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
-            if mode == 1 and weight_form.oil_content:
-                updateGasPrice(weight_form.bws.company.id, weight_form.date)
-                updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
+            if mode == 1:
+                if original_weight_total is not None and original_weight_total != weight_form.weight_total:
+                    if weight_form.oil_content:
+                        updateGasPrice(weight_form.bws.company.id, weight_form.date)
+                        updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
             #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
             if mode == 2:
-                updateSumEstimateItem(weight_form.bws.company.id, weight_form.date)
-                updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
+                    updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
 
             return redirect('weightTable')
     else:

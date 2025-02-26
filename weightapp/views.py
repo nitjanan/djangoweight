@@ -1985,6 +1985,10 @@ def editProduction(request, pd_id):
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
             production.save()
 
+            #คำนวน capacity per hour
+            production.capacity_per_hour = calculatProductionCapacity(production.company, production.created, production.site, production.line_type)
+            production.save()
+
             #update เป้าผลิตสะสม production Goal ใหม่
             pd_goal = ProductionGoal.objects.get(id = find_pd_goal.id)
             pd_goal.accumulated_goal = pd_goal_form.cleaned_data['accumulated_goal']
@@ -2144,7 +2148,7 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
                     capacity_per_hour = (
                         production.capacity_per_hour 
-                        if pd_year > 2024
+                        if pd_year > 2024 and production is not None 
                         else calculatCapacityPerHour(request, data_sum_produc, wk_time)
                     ) #if ปี capacity_per_hour > 2024 ดึงแบบใหม่
                         

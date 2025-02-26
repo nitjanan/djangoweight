@@ -367,6 +367,15 @@ input.del[type=checkbox] {
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
 
 <script type="text/javascript">
+  //ปิดปุ่ม submit หากมีการกดซ้ำ
+  document.addEventListener("DOMContentLoaded", function() {
+    const form = document.querySelector("form");
+      form.addEventListener("submit", function() {
+        const submitButton = form.querySelector("[type='submit']");
+        submitButton.disabled = true;
+    });
+  });
+
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
 
   if('{{weight.site}}' != 'None'){

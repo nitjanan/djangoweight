@@ -191,18 +191,28 @@ input.del[type=checkbox] {
   }
 
   //before save
-  $('form').submit(function() {
-    if(checkOverPercent()){
-      alert('ค่าคำนวนเปอร์เซ็นต์เกิน 100% กรุณาเปลี่ยนเปอร์เซ็นต์ใหม่');
-      return false;
-    }
-    //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
-    if(have_estimate){
-      $("#id_site").trigger( "focus" );
-      alert('มีข้อมูลการประมาณการณ์ของวันนี้ ปลายทางนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง');
-      return false;
-    }
+  $(document).ready(function() {
+    $("form").submit(function(event) {
+        const submitButton = $(this).find("[type='submit']");
+        submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
 
+        if (typeof checkOverPercent() !== "undefined" && checkOverPercent()) {
+            alert('ค่าคำนวนเปอร์เซ็นต์เกิน 100% กรุณาเปลี่ยนเปอร์เซ็นต์ใหม่');
+            
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            event.preventDefault(); // Prevent form submission
+            return false;
+        }
+        //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+        if(have_estimate){
+          $("#id_site").trigger( "focus" );
+          alert('มีข้อมูลการประมาณการณ์ของวันนี้ ปลายทางนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง');
+          
+          submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+          event.preventDefault(); // Prevent form submission
+          return false;
+        }
+    });
   });
 
   function checkOverPercent(){

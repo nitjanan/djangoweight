@@ -898,8 +898,8 @@ def updateProdStockStoneItem(company, date):
                     ssn = StockStone.objects.get(id = i.ssn.id)
                     ssn.total = calculateTotalStock(i.ssn.id)
                     ssn.save()
-
-                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+                    
+                    updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
     except StockStoneItem.DoesNotExist:
         pass
 
@@ -5214,8 +5214,12 @@ def searchDataWeightToStock(request):
         company =  request.GET.get('company')
         stone =  request.GET.get('stone')
 
+        if stone:
+            stone_name = BaseStoneType.objects.get(base_stone_type_id = stone).base_stone_type_name
+
         sell = 0
         prod = 0
+        alert = ""
         #ยกมา
         try:
             quot = StockStone.objects.filter(~Q(stk__created = created), stk__company = company, stone = stone).order_by('-stk__created').values('total').first()['total'] or Decimal('0.0')
@@ -5231,7 +5235,15 @@ def searchDataWeightToStock(request):
         #อนุเคราะห์ (ปลายทาง 300PL)
         aid = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created, site = '300PL').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
 
-    data = {'sell' : sell, 'prod' : prod, 'aid' : aid, 'quot': quot,}
+        if stone:
+            if quot == 0:
+                alert += "ยกมา : ไม่มียอดยกมาของ "+ str(stone_name) +" วันก่อนหน้านี้<br>"
+            if prod == 0:
+                alert += "ผลิต : ไม่มีการคีย์ประมาณการณ์หิน หรือไม่มีรายการชั่งผลิตของ "+ str(stone_name) +" ในวันนี้<br>"
+            if sell == 0:
+                alert += "ขาย : ไม่มีรายการชั่งขายของ "+ str(stone_name) +" ในวันนี้<br>"
+
+    data = {'sell' : sell, 'prod' : prod, 'aid' : aid, 'quot': quot, 'alert' : alert}
     return JsonResponse(data)
 
 def exportExcelStockStoneInDashboard(request):

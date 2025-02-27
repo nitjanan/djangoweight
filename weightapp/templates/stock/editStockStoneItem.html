@@ -119,6 +119,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <div class="card div-shadow border border-warning border-4">
           <div class="card-content">
             <div class="card-body">
+              <div id="alert" class="alert alert-warning d-none" role="alert"></div><!-- แจ้งเตือนหากมีการดึงข้อมูลมาไม่ครบ -->
               <form class="form" method="post">
                 <div class="row">
                   <div class="col-md-2">
@@ -313,6 +314,8 @@ $('form').submit(function() {
 	});
 
   function searchDataWeightToStock(){
+    $("#alert").addClass("d-none");
+
     var created = $("#id_created").val();
     var company = $("#id_company").val();
     var stone = $("#id_stone").val();
@@ -334,6 +337,11 @@ $('form').submit(function() {
           setQuantity(data.prod, '1');
           setQuantity(data.sell, '2');
           setQuantity(data.aid, '9');
+
+          if(data.alert && stone != ""){
+            $("#alert").removeClass("d-none");
+            $("#alert").html(data.alert.replace(/\n/g, "<br>"));
+          }
         }
       });
     }

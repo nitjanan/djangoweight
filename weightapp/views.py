@@ -820,6 +820,8 @@ def editWeight(request, mode, weight_id):
             #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
             if mode == 1:
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total:
+                    if  weight_form.stone_type:
+                        updateSellStockStoneItem(weight_form.pk)
                     if weight_form.oil_content:
                         updateGasPrice(weight_form.bws.company.id, weight_form.date)
                         updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
@@ -828,6 +830,8 @@ def editWeight(request, mode, weight_id):
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
                     updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
                     updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                    if  weight_form.stone_type:
+                        updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
 
             return redirect('weightTable')
     else:
@@ -835,6 +839,86 @@ def editWeight(request, mode, weight_id):
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user), active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
+
+def updateSellStockStoneItem(weight_id):
+    tmp_ssn_id = None
+    tmp_ss_item_id = None
+    weight = Weight.objects.get(weight_id = weight_id)
+    company = weight.bws.company
+    date = weight.date
+    stone = weight.stone_type.base_stone_type_id
+
+    #อนุเคราะห์ (ปลายทาง 300PL)
+    if weight.site and weight.site.base_site_id == '300PL':
+        try:
+            ss_aid = StockStoneItem.objects.filter(source__id = 10, ssn__stk__company = company, ssn__stk__created = date, ssn__stone = stone).last()
+            if ss_aid:
+                #อนุเคราะห์ (ปลายทาง 300PL)
+                aid = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = date, site = '300PL').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+                tmp_ssn_id = ss_aid.ssn.id
+                tmp_ss_item_id = ss_aid.id
+                ss_aid.quantity = aid #ดึงจำนวนรวมอนุเคราะห์
+                ss_aid.save()
+        except StockStoneItem.DoesNotExist:
+            pass
+    else: #รวมจำนวนขายทั้งหมด
+        try:
+            ss_sell = StockStoneItem.objects.filter(source__id = 3, ssn__stk__company = company, ssn__stk__created = date, ssn__stone = stone).last()
+            if ss_sell:
+                #ขาย
+                sell = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = date).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+                tmp_ssn_id = ss_sell.ssn.id
+                tmp_ss_item_id = ss_sell.id
+                ss_sell.quantity = sell #ดึงจำนวนรวมขายมา
+                ss_sell.save()
+        except StockStoneItem.DoesNotExist:
+            pass
+    
+    if tmp_ssn_id:
+        #update total stock ของชนิดหินนี้
+        ssn = StockStone.objects.get(id = tmp_ssn_id)
+        ssn.total = calculateTotalStock(tmp_ssn_id)
+        ssn.save()
+
+    if tmp_ss_item_id:
+        updateTotalStockInMonth(tmp_ss_item_id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+
+def updateProdStockStoneItem(company, date):
+    #ดึงชนิดหินทั้งหมดใน stock ของวันนั้นที่เป็น source ผลิต
+    try:
+        ss_prod = StockStoneItem.objects.filter(source__id = 2, ssn__stk__company = company, ssn__stk__created = date)
+        if ss_prod:
+            for i in ss_prod:
+                prod = StoneEstimateItem.objects.filter(se__created = date, stone_type = i.ssn.stone, se__company = company).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+                i.quantity = prod #ดึงจำนวนรวมผลิตมา (estimate)
+                i.save()
+
+                if i.ssn.id:
+                    #update total stock ของชนิดหินนี้
+                    ssn = StockStone.objects.get(id = i.ssn.id)
+                    ssn.total = calculateTotalStock(i.ssn.id)
+                    ssn.save()
+
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+    except StockStoneItem.DoesNotExist:
+        pass
+
+#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+def updateTotalStockInMonth(ss_id):
+    ss = StockStoneItem.objects.get(id = ss_id)
+    all_stone = StockStoneItem.objects.filter(source__id = 1, ssn__stk__created__gte = ss.ssn.stk.created, ssn__stone = ss.ssn.stone, ssn__stk__company = ss.ssn.stk.company)
+    old_quot = None
+
+    for i in all_stone:
+        if old_quot is not None:
+            i.quantity = old_quot
+            i.save()
+            #update total stock ของชนิดหินนี้
+            ssn = StockStone.objects.get(id = i.ssn.id)
+            ssn.total = calculateTotalStock(i.ssn.id)
+            ssn.save()
+
+        old_quot = i.ssn.total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
 
 def updateGasPrice(company_id, created):
     try:
@@ -2376,6 +2460,7 @@ def createStoneEstimate(request):
                 instance.total = calculateSumEstimateByCompany(se.created, se.company.id, se.site.base_site_id, instance.stone_type.base_stone_type_id)#calculate sum stone estimate
                 instance.save()
 
+            updateProdStockStoneItem(se.company.id, se.created)#คำนวณ stock
             return redirect('viewStoneEstimate')
     else:
         se_form = StoneEstimateForm(request, initial={'company': company})
@@ -2409,6 +2494,7 @@ def editStoneEstimate(request, se_id):
             formset.save_m2m()
 
             updateSumEstimateItem(se.company.id, se.created, se.site.base_site_id)#กรณีแก้ไข update total StoneEstimateItem
+            updateProdStockStoneItem(se.company.id, se.created)#คำนวณ stock
 
             return redirect('viewStoneEstimate')
     else:
@@ -2420,11 +2506,18 @@ def editStoneEstimate(request, se_id):
 
 def removeStoneEstimate(request, se_id):
     se = StoneEstimate.objects.get(id = se_id)
+    tmp_company = se.company.id
+    tmp_created = se.created
+    tmp_site = se.site.base_site_id
     #ลบ StoneEstimateItem ใน StoneEstimate ด้วย
     items = StoneEstimateItem.objects.filter(se = se)
     items.delete()
     #ลบ StoneEstimate ทีหลัง
     se.delete()
+
+    updateSumEstimateItem(tmp_company, tmp_created, tmp_site)#กรณีแก้ไข update total StoneEstimateItem
+    updateProdStockStoneItem(tmp_company, tmp_created)#คำนวณ stock
+    
     return redirect('viewStoneEstimate')
 
 def searchStoneEstimate(request):

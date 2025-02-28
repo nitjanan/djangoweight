@@ -66,6 +66,7 @@ from apscheduler.triggers.cron import CronTrigger
 import requests
 from itertools import groupby
 from operator import itemgetter
+from dateutil.relativedelta import relativedelta
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -906,7 +907,11 @@ def updateProdStockStoneItem(company, date):
 #คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 def updateTotalStockInMonth(ss_id):
     ss = StockStoneItem.objects.get(id = ss_id)
-    all_stone = StockStoneItem.objects.filter(source__id = 1, ssn__stk__created__gte = ss.ssn.stk.created, ssn__stone = ss.ssn.stone, ssn__stk__company = ss.ssn.stk.company)
+
+    created = ss.ssn.stk.created
+    last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
+
+    all_stone = StockStoneItem.objects.filter(source__id = 1, ssn__stk__created__range=(created, last_date), ssn__stone = ss.ssn.stone, ssn__stk__company = ss.ssn.stk.company).order_by('ssn__stk__created')
     old_quot = None
 
     for i in all_stone:

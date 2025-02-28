@@ -176,6 +176,8 @@ input.del[type=checkbox] {
 
 <script type="text/javascript">
   $('#id_created').val('{{se.created|date:"Y-m-d"}}');
+  //ห้ามเปลี่ยนวันที่ส่งผลต่อการคำนวณ stock
+  $("#id_created").prop('disabled', true);
 
   //ห้ามเปลี่ยน select option
   $('.stone_type').css('pointer-events','none');

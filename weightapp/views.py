@@ -921,9 +921,41 @@ def updateTotalStockInMonth(ss_id):
             #update total stock ของชนิดหินนี้
             ssn = StockStone.objects.get(id = i.ssn.id)
             ssn.total = calculateTotalStock(i.ssn.id)
+            old_total = ssn.total
             ssn.save()
 
-        old_quot = i.ssn.total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
+        if old_quot is not None:
+            old_quot = old_total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
+        elif i.ssn.total is not None:
+            old_quot = i.ssn.total
+
+#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+def updateTotalStockInMonthByDate(previous_day, company):
+
+    stock = Stock.objects.filter(created = previous_day, company = company).values_list('id', flat=True).first()
+    ss_items = StockStoneItem.objects.filter(ssn__stk = stock)
+
+    for ss in ss_items:
+        created = ss.ssn.stk.created
+        last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
+
+        all_stone = StockStoneItem.objects.filter(source__id = 1, ssn__stk__created__range=(created, last_date), ssn__stone = ss.ssn.stone, ssn__stk__company = ss.ssn.stk.company).order_by('ssn__stk__created')
+        old_quot = None
+
+        for i in all_stone:
+            if old_quot is not None:
+                i.quantity = old_quot
+                i.save()
+                #update total stock ของชนิดหินนี้
+                ssn = StockStone.objects.get(id = i.ssn.id)
+                ssn.total = calculateTotalStock(i.ssn.id)
+                old_total = ssn.total
+                ssn.save()
+
+            if old_quot is not None:
+                old_quot = old_total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
+            elif i.ssn.total is not None:
+                old_quot = i.ssn.total
 
 def updateGasPrice(company_id, created):
     try:
@@ -5018,7 +5050,14 @@ def viewStock(request):
 @login_required(login_url='login')
 def removeStock(request, stock_id):
     stk = Stock.objects.get(id = stock_id)
-    #ลบ ProductionLossItem ใน Production ด้วย
+
+    #ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    previous_day = Stock.objects.filter(
+        created__lt = stk.created, company = stk.company
+    ).aggregate(max_date=Max('created'))['max_date']
+    tmp_company = stk.company
+
+    #ลบ StockStone ใน Stock ด้วย
     ssn = StockStone.objects.filter(stk = stk)
     for sn in ssn:
         items = StockStoneItem.objects.filter(ssn = sn)
@@ -5026,6 +5065,9 @@ def removeStock(request, stock_id):
 
     ssn.delete()
     stk.delete()
+
+    updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+
     return redirect('viewStock')
 
 @login_required(login_url='login')
@@ -5035,10 +5077,18 @@ def removeStockStone(request, ssn_id):
     ssn = StockStone.objects.get(id = ssn_id)
     stock_id = ssn.stk
 
+    #ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    previous_day = Stock.objects.filter(
+        created__lt = ssn.stk.created, company = ssn.stk.company
+    ).aggregate(max_date=Max('created'))['max_date']
+    tmp_company = ssn.stk.company
+
     items = StockStoneItem.objects.filter(ssn = ssn)
     items.delete()
 
     ssn.delete()
+
+    updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
     return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
 
 @login_required(login_url='login')
@@ -5076,6 +5126,10 @@ def createStock(request):
 
             ssn.total = total
             ssn.save()
+
+            ss_item = StockStoneItem.objects.filter(ssn = ssn.pk)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
             return HttpResponseRedirect(reverse('editStep2Stock', args=(ssn.stk,)))
     else:
@@ -5131,6 +5185,10 @@ def editStep2Stock(request, stock_id):
                 ssn.total = total
                 ssn.save()
 
+            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+
             return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
     else:
         form = StockForm(instance=stock_data)
@@ -5177,6 +5235,11 @@ def editStockStoneItem(request, stock_id, ssn_id):
                 # add function calculate total stock
                 ssn.total = calculateTotalStock(ssn_id)
                 ssn.save()
+
+            
+            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
             return HttpResponseRedirect(reverse('editStep2Stock', args=(stock_id,)))
     else:
@@ -5227,8 +5290,16 @@ def searchDataWeightToStock(request):
         alert = ""
         #ยกมา
         try:
-            quot = StockStone.objects.filter(~Q(stk__created = created), stk__company = company, stone = stone).order_by('-stk__created').values('total').first()['total'] or Decimal('0.0')
-        except TypeError:
+            latest_date = StockStone.objects.filter(
+                stk__created__lt=created, stk__company=company, stone=stone
+            ).aggregate(max_date=Max('stk__created'))['max_date']
+
+            # Get the records with that latest date
+            quot = StockStone.objects.filter(
+                stk__created=latest_date, stk__company=company, stone=stone
+            ).values('total').first()['total'] or Decimal('0.0')
+
+        except TypeError or StockStone.DoesNotExist:
             quot = Decimal('0.0')
 
         #ผลิต

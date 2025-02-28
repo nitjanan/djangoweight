@@ -221,6 +221,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
 <script type="text/javascript">
   $('#id_created').val('{{stock_data.created|date:"Y-m-d"}}');
+  //ห้ามเปลี่ยนวันที่ส่งผลต่อการคำนวณ stock
+  $("#id_created").prop('disabled', true);
 
   //after load
   $(window).on('load', function() {

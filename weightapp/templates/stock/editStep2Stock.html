@@ -222,7 +222,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script type="text/javascript">
   $('#id_created').val('{{stock_data.created|date:"Y-m-d"}}');
   //ห้ามเปลี่ยนวันที่ส่งผลต่อการคำนวณ stock
-  $("#id_created").prop('disabled', true);
+  $('#id_created').prop('readonly', true);
 
   //after load
   $(window).on('load', function() {
@@ -238,40 +238,46 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     $(this).val(parseFloat($(this).val()).toFixed(2));
   });
 
-//ก่อน save
-$('form').submit(function() {
-    //id ร้านค้าทั้งหมด py to java
-    var list_stone_id = [];
-    "{% for ssn in ssn_data %}"
-      list_stone_id.push('{{ssn.stone.base_stone_type_id}}');
-    "{% endfor %}"
+  var have_stock = false;
+  //before save
+  $(document).ready(function() {
+    $("form").submit(function(event) {
+        const submitButton = $(this).find("[type='submit']");
+        submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
 
-    //หา id ของร้านที่เราจะ save
-    var id_stone = $("#id_stone").val();
+        //id ร้านค้าทั้งหมด py to java
+        var list_stone_id = [];
+        "{% for ssn in ssn_data %}"
+          list_stone_id.push('{{ssn.stone.base_stone_type_id}}');
+        "{% endfor %}"
 
-    var haveStone = false
-    $.each(list_stone_id, function(index, value) {
-        if(value == id_stone){
-            haveStone = true;
-            alert('มีหินชนิดนี้ใน stock แล้ว กรุณาเพิ่มหินชนิดอื่น');
+        //หา id ของร้านที่เราจะ save
+        var id_stone = $("#id_stone").val();
+
+        var haveStone = false
+        $.each(list_stone_id, function(index, value) {
+            if(value == id_stone){
+                haveStone = true;
+                alert('มีหินชนิดนี้ใน stock แล้ว กรุณาเพิ่มหินชนิดอื่น');
+            }
+        });
+
+        if (typeof haveStone !== "undefined" && haveStone) {
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            event.preventDefault(); // Prevent form submission
+            return false;
+        }
+
+        //เช็คว่าวันนี้มี save stock หรือยัง
+        if(typeof have_stock !== "undefined" &&  have_stock){
+          $("#id_created").trigger( "focus" );
+          alert('มีข้อมูล stock ของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่ stock');
+
+          submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+          event.preventDefault(); // Prevent form submission
+          return false;
         }
     });
-
-    if(haveStone){
-        return false;
-    }
-});
-
-  var have_stock = false;
-  //ก่อน save
-  $('form').submit(function() {
-    //เช็คว่าวันนี้มี save stock หรือยัง
-    if(have_stock){
-      $("#id_created").trigger( "focus" );
-      alert('มีข้อมูล stock ของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่ stock');
-      return false;
-    }
-
   });
 
   ////// start หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////

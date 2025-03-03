@@ -200,15 +200,23 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   });
 
   var have_stock = false;
-  //ก่อน save
-  $('form').submit(function() {
-    //เช็คว่าวันนี้มี save stock หรือยัง
-    if(have_stock){
-      $("#id_created").trigger( "focus" );
-      alert('มีข้อมูล stock ของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่ stock');
-      return false;
-    }
 
+  //before save
+  $(document).ready(function() {
+    $("form").submit(function(event) {
+        const submitButton = $(this).find("[type='submit']");
+        submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
+
+        //เช็คว่าวันนี้มี save stock หรือยัง
+        if(typeof have_stock !== "undefined" &&  have_stock){
+          $("#id_created").trigger( "focus" );
+          alert('มีข้อมูล stock ของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่ stock');
+
+          submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+          event.preventDefault(); // Prevent form submission
+          return false;
+        }
+    });
   });
 
   ////// start หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////

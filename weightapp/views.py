@@ -797,6 +797,13 @@ def editWeight(request, mode, weight_id):
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
 
+    #ถ้ารหัสกับชื่อ local และ center ไม่ตรงกันให้เลือกจากชื่อ 03/03/2025
+    is_not_match_mill = False
+    mill = BaseMill.objects.get(mill_id = weight_data.mill.mill_id)            
+    center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
+    local_mill = weight_data.mill.mill_id + weight_data.mill_name #รหัสและชื่อจากตาชั่ง    
+    if local_mill != center_mill:
+        is_not_match_mill = True
 
     if request.method == 'POST':
         form = tmp_form_post
@@ -838,7 +845,7 @@ def editWeight(request, mode, weight_id):
     else:
         form = tmp_form
 
-    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user), active :"active", 'disabledTab' : 'disabled'}
+    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
 
 def updateSellStockStoneItem(weight_id):
@@ -4179,7 +4186,7 @@ def weightDetailByDate(request, str_date , str_lc):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def weightVStamp(request, dt, str_lc):
-    latest_weights = WeightHistory.objects.filter(v_stamp__gte = dt, bws__id = str_lc).order_by('v_stamp').values('weight_id').distinct()
+    latest_weights = WeightHistory.objects.filter(user_update__isnull = False, v_stamp__gte = dt, bws__id = str_lc).order_by('v_stamp').values('weight_id').distinct()
     queryset = Weight.objects.filter(weight_id__in = latest_weights)
     
     serializer = WeightSerializer(queryset, many = True)

@@ -388,7 +388,13 @@ input.del[type=checkbox] {
     $('#select_team option:contains("{{weight.car_team.car_team_name}}")').prop('selected', true);
   }
 
-  $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
+  //ถ้ารหัสกับชื่อ local และ center ไม่ตรงกันให้เลือกจากชื่อ 03/03/2025
+  '{% if is_not_match_mill %}'
+    $('#id_mill option:contains("{{weight.mill_name}}")').prop('selected', true);
+  '{% else %}'
+    $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
+  '{% endif %}'
+
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
   $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);

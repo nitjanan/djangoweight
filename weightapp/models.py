@@ -595,6 +595,15 @@ def save_weight_history(sender, instance, **kwargs):
     if instance.pk:  # Only if the instance has already been saved (i.e., an update)
         try:
             old_weight = Weight.objects.get(pk=instance.pk)
+            tmp_note = None
+
+            #ถ้ารหัสกับชื่อ local และ center ให้เก็บ error 03/03/2025
+            mill = BaseMill.objects.get(mill_id = old_weight.mill.mill_id)
+            center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
+            local_mill = old_weight.mill.mill_id + old_weight.mill_name #รหัสและชื่อจากตาชั่ง
+            if local_mill != center_mill:
+                tmp_note = "error***" + str(old_weight.mill.mill_id) + str(old_weight.mill_name)
+
             WeightHistory.objects.create(
                     date = old_weight.date,
                     date_in = old_weight.date_in,
@@ -664,7 +673,7 @@ def save_weight_history(sender, instance, **kwargs):
                     exp_bill = old_weight.exp_bill,
                     exp_change = old_weight.exp_change,
                     exp_remission = old_weight.exp_remission,
-                    exp_note = old_weight.exp_note,
+                    exp_note = tmp_note, #ถ้ารหัสกับชื่อ local และ center ให้เก็บ error 03/03/2025
                     exp_type = old_weight.exp_type
             )
         except Weight.DoesNotExist:

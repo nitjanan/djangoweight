@@ -135,9 +135,9 @@ class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         models.ManyToManyField: {'widget': CheckboxSelectMultiple},
     }
         
-    list_display = ['id', 'date', 'weight_id', 'user_update', 'doc_id', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'v_stamp'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['id', 'date', 'weight_id', 'user_update', 'doc_id', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'v_stamp', 'exp_note'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ('weight_id', 'date', 'doc_id', 'customer__customer_id', 'customer_name', 'stone_type__base_stone_type_id',  'stone_type_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name', 'bws__id', 'v_stamp', 'update', 'user_update__first_name')
+    search_fields = ('weight_id', 'date', 'doc_id', 'customer__customer_id', 'customer_name', 'stone_type__base_stone_type_id',  'stone_type_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name', 'bws__id', 'v_stamp', 'update', 'user_update__first_name', 'exp_note')
 
 class BaseCarRegistrationResource(resources.ModelResource):
     company_code = fields.Field(

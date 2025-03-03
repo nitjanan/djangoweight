@@ -3014,7 +3014,8 @@ def excelEstimate(request, my_q, list_date):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    data = StoneEstimateItem.objects.filter(my_q).order_by('se__created', 'se__site', 'stone_type').values_list('se__created', 'se__site__base_site_name', 'stone_type__base_stone_type_name', 'total')
+    stone_id = StoneEstimateItem.objects.filter(Q(percent__gt = 0) & my_q).values_list('stone_type__base_stone_type_id', flat=True).order_by('stone_type__base_stone_type_id').distinct() #ดึงเฉพาะ stone_id ที่มีการคีย์ percent > 0
+    data = StoneEstimateItem.objects.filter(Q(stone_type__in = stone_id) & my_q).order_by('se__created', 'se__site', 'stone_type').values_list('se__created', 'se__site__base_site_name', 'stone_type__base_stone_type_name', 'total')
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()

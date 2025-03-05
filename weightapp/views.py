@@ -5785,3 +5785,100 @@ def exportExcelGasPriceTransport(request):
                 cell.alignment = right_align
 
     return response
+
+
+def exportWeightFixBug(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    weight_type = request.GET.get('weight_type') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+    if weight_type is not None:
+        my_q &=Q(bws__weight_type = weight_type)
+
+    my_q &=Q(bws__company__code__in = company_in)
+
+    queryset = Weight.objects.filter(Q(mill_id__isnull = False) & my_q).exclude(mill_name=F('mill__mill_name'))
+    if not queryset.exists():
+        return HttpResponse("No data to export.")
+
+    data = {'weight_id': queryset.values_list('weight_id', flat=True),
+            'docid': queryset.values_list('doc_id', flat=True),
+            'docdat': queryset.values_list('date', flat=True),
+            'local_mill_name': queryset.values_list('mill_name', flat=True),
+            'wrong_mill_id': queryset.values_list('mill_id', flat=True),
+            'center_mill_name': queryset.values_list('mill__mill_name', flat=True),
+            'bws': queryset.values_list('bws', flat=True),
+            }
+
+    df = pd.DataFrame(data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=weight_fix_bug({active}) '+ start_created + " to "+ end_created +'.xlsx'
+
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response
+
+
+def exportWeightHistoryFixBug(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    weight_type = request.GET.get('weight_type') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+    if weight_type is not None:
+        my_q &=Q(bws__weight_type = weight_type)
+
+    my_q &=Q(bws__company__code__in = company_in)
+
+    queryset = WeightHistory.objects.filter(Q(mill_id__isnull = False) & my_q).exclude(mill_name=F('mill__mill_name'))
+    if not queryset.exists():
+        return HttpResponse("No data to export.")
+
+    data = {'weight_id': queryset.values_list('weight_id', flat=True),
+            'docid': queryset.values_list('doc_id', flat=True),
+            'docdat': queryset.values_list('date', flat=True),
+            'local_mill_name': queryset.values_list('mill_name', flat=True),
+            'wrong_mill_id': queryset.values_list('mill_id', flat=True),
+            'center_mill_name': queryset.values_list('mill__mill_name', flat=True),
+            'bws': queryset.values_list('bws', flat=True),
+            }
+
+    df = pd.DataFrame(data)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=weight_history_fix_bug({active}) '+ start_created + " to "+ end_created +'.xlsx'
+
+    df.to_excel(response, index=False, engine='openpyxl')
+
+    return response
+

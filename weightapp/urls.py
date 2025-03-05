@@ -228,5 +228,8 @@ urlpatterns = [
      path('setSessionCompany', views.setSessionCompany, name="setSessionCompany"),
      path('setDateInDashbord', views.setDateInDashbord, name="setDateInDashbord"),
 
+     path('exportWeightFixBug/', views.exportWeightFixBug,name="exportWeightFixBug"),
+     path('exportWeightHistoryFixBug/', views.exportWeightHistoryFixBug, name="exportWeightHistoryFixBug"),
+
      #path('callback', views.callback, name='callback'), #line api messaging callback
 ]

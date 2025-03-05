@@ -2026,7 +2026,7 @@ def createProduction(request):
 
     base_loss_type = BaseLossType.objects.all()
 
-    ProductionLossItemFormSet = modelformset_factory(ProductionLossItem, fields=('mc_type', 'loss_type', 'loss_time'), extra=1, widgets={'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),})
+    ProductionLossItemFormSet = modelformset_factory(ProductionLossItem, fields=('mc_type', 'loss_type', 'loss_time'), extra=20, widgets={'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),})
     if request.method == 'POST':
         pd_goal_form = ProductionGoalForm(request.POST)
         production_form = ProductionForm(request, request.POST or None, initial={'company': company})

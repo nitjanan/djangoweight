@@ -62,7 +62,7 @@
                 <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
                   <h6 class="text-muted font-semibold">{{dt.0}}</h6>
                   <h6 class="font-extrabold mb-0">
-                    {% if dt.1 %}{{dt.1 |intcomma}}{% else %}0.000{% endif %} ตัน
+                    {% if dt.1 %}{{dt.1 |floatformat:2|intcomma}}{% else %}0{% endif %} ตัน
                   </h6>
                 </div>
               </div>
@@ -384,12 +384,18 @@
   };
   */
 
+  //ขาย
   var sell_mill = {{sell_mill_list|safe}};
   var sell_stock = {{sell_stock_list|safe}};
   var sell_purchase = {{sell_purchase_list|safe}};
+  var totalSellPerCategory = {{total_sell_list|safe}};
+  //ผลิต
   var produce = {{produce_list|safe}};
+  var totalProducePerCategory = {{produce_list|safe}};
+  //ชนิดหิน
   var categories = {{stone_name_list|safe}};
 
+  /*
   // Calculate totals per category
   var totalSellPerCategory = categories.map((_, index) => 
     (sell_mill[index] || 0) + (sell_stock[index] || 0) + (sell_purchase[index] || 0)
@@ -400,6 +406,7 @@
   var totalStackPerCategory = categories.map((_, index) => 
     totalSellPerCategory[index] + totalProducePerCategory[index]
   );
+  */
 
 
   // Generate annotations dynamically
@@ -422,7 +429,7 @@
         y: sellY,  // Midpoint of sell group
         seriesIndex: 1,
         label: {
-          text: totalSellPerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          text: (totalSellPerCategory[index] == '0') ? '' : totalSellPerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
           style: {
             color: 'red',
             fontWeight: 'bold',
@@ -439,7 +446,7 @@
         seriesIndex: 2,
         y: produceY,  // Above the full stack
         label: {
-          text: totalProducePerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          text: (totalProducePerCategory[index] == '0') ? '' : totalProducePerCategory[index].toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
           style: {
             color: '#e67e22',
             fontWeight: 'bold',

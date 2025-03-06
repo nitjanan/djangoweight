@@ -344,6 +344,8 @@ def getSumByStone(request, mode, stoneType, type, company_in):
         w = Weight.objects.filter(mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 5:#เครื่องขาย ต้นทางจากการซื้อจากที่อื่น
         w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 6:#รวม เครื่องขาย
+        w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getSumOther(request, mode, list_sum_stone, type, company_in):
@@ -395,6 +397,8 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
         w = Weight.objects.filter(mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 5:#เครื่องขาย ต้นทางจากการซื้อจากที่อื่น
         w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 6:#รวมเครื่องขาย
+        w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     return  float(w)
 
 def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
@@ -501,6 +505,7 @@ def index(request):
     sell_mill_list = getNumListStoneWeightChart(request, 1, stone_list, 1, company_in)
     sell_stock_list = getNumListStoneWeightChart(request, 1, stone_list, 4, company_in)
     sell_purchase_list = getNumListStoneWeightChart(request, 1, stone_list, 5, company_in)
+    total_sell_list = getNumListStoneWeightChart(request, 1, stone_list, 6, company_in)
 
     stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
     produce_list = getNumListStoneWeightChart(request, 2, stone_list, 3, company_in)
@@ -600,6 +605,7 @@ def index(request):
                 'sell_mill_list':sell_mill_list,
                 'sell_stock_list': sell_stock_list,
                 'sell_purchase_list': sell_purchase_list,
+                'total_sell_list': total_sell_list,
                 'stock_list':stock_list,
                 'produce_list':produce_list,
                 'data_sum_produc_all':data_sum_produc_all,

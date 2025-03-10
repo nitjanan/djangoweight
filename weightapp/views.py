@@ -2066,10 +2066,10 @@ def createProduction(request):
             #คำนวนเวลารวมในการสูญเสีย uncontrol
             total_uncontrol_time = ProductionLossItem.objects.filter(production = production, mc_type = 7).aggregate(s=Sum("loss_time"))["s"]
             production.uncontrol_time = total_uncontrol_time if total_uncontrol_time else timedelta(hours=0, minutes=0)
-            #คำนวน capacity per hour
-            production.capacity_per_hour = calculatProductionCapacity(production.company, production.created, production.site, production.line_type)
             production.save()
 
+            #คำนวน capacity per hour
+            production.capacity_per_hour = calculatProductionCapacity(production.company, production.created, production.site, production.line_type)
             production.save()
 
             return redirect('viewProduction')
@@ -5888,3 +5888,21 @@ def exportWeightHistoryFixBug(request):
 
     return response
 
+def searchDataWeightInDay(request):
+    alert = ""
+    if 'created' in request.GET and 'company' in request.GET:
+        created = request.GET.get('created')
+        company = request.GET.get('company')
+        mode = request.GET.get('mode')
+
+        if mode == '1':
+            have_weight = Weight.objects.filter(date = created, bws__weight_type = 1, bws__company__code = company).exists()
+            if not have_weight:
+                alert = "ไม่มีรายการชั่งขายของวันนี้ กรุณา uploade รายการชั่งของวันที่ "+ str(created) + " มาก่อน"
+        if mode == '2':
+            have_weight = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company__code = company).exists()
+            if not have_weight:
+                alert = "ไม่มีรายการชั่งขายผลิตวันนี้ กรุณา uploade รายการชั่งของวันที่ "+ str(created) + " มาก่อน"
+
+    data = {'alert' : alert, 'have_weight': have_weight,}
+    return JsonResponse(data)

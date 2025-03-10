@@ -409,6 +409,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   var have_production = false;
   var today = new Date();
+  today.setDate(today.getDate() - 1);
   var formattedDate = today.toISOString().split('T')[0];
   $('#id_created').val(formattedDate);
 

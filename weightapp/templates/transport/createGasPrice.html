@@ -55,6 +55,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         </div>
         <div class="card-content">
           <div class="card-body">
+            <div id="alert" class="alert alert-warning d-none" role="alert"></div><!-- แจ้งเตือนหากมีการดึงข้อมูลมาไม่ครบ -->
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
@@ -134,14 +135,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
 <script type="text/javascript">
   var have_gas_price = false;
+  var have_weight = false;
 
   var today = new Date();
+  today.setDate(today.getDate() - 1);
   var formattedDate = today.toISOString().split('T')[0];
   $('#id_created').val(formattedDate);
 
     //after load
     $(window).on('load', function() {
         searchGasPrice();
+        searchDataWeightInDay();
     });
 
   //before save
@@ -150,10 +154,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         const submitButton = $(this).find("[type='submit']");
         submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
 
-        //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+        //เช็คว่าวันนี้มี save ราคาน้ำมันแล้วหรือยัง ถ้ามีแล้วไม่ให้ save
         if (typeof have_gas_price !== "undefined" && have_gas_price) {
             $("#id_created").trigger("focus");
             alert("มีข้อมูลราคาน้ำมันวันนี้แล้ว กรุณาเปลี่ยนวันที่");
+            
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            
+            event.preventDefault(); // Prevent form submission
+            return false;
+        }
+
+        //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+        if (typeof have_weight !== "undefined" && !have_weight) {
+            $("#id_created").trigger("focus");
+            alert("ยังไม่มีการ uplode รายการชั่งของวันนี้ ไม่สามารถบันทึกข้อมูลได้");
             
             submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
             
@@ -165,6 +180,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   $('#id_created').change(function() {
     searchGasPrice();
+    searchDataWeightInDay();
   });
 
   function searchGasPrice(){
@@ -193,6 +209,36 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               });
         }
         return false;
+  }
+
+  function searchDataWeightInDay(){
+    $("#alert").addClass("d-none");
+
+    var created = $("#id_created").val();
+    var company =  "{{ request.session.company_code }}";
+
+    // Create Ajax Call
+    if(created){
+      //set id_distributor
+      $.ajax({
+        url: '{% url "searchDataWeightInDay" %}',
+        data: {
+          'created': created,
+          'company':company,
+          'mode': 1,
+        },
+        dataType: 'json',
+        success: function (data) {
+          have_weight = data.have_weight;
+
+          if(data.alert){
+            $("#alert").removeClass("d-none");
+            $("#alert").html(data.alert.replace(/\n/g, "<br>"));
+          }
+        }
+      });
+    }
+    return false;
   }
 
   $("#id_cost").blur(function(){

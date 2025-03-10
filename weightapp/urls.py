@@ -231,5 +231,6 @@ urlpatterns = [
      path('exportWeightFixBug/', views.exportWeightFixBug,name="exportWeightFixBug"),
      path('exportWeightHistoryFixBug/', views.exportWeightHistoryFixBug, name="exportWeightHistoryFixBug"),
 
+     path('searchDataWeightInDay/', views.searchDataWeightInDay, name="searchDataWeightInDay"),
      #path('callback', views.callback, name='callback'), #line api messaging callback
 ]

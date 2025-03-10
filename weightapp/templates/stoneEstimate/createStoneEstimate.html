@@ -55,6 +55,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         </div>
         <div class="card-content">
           <div class="card-body">
+            <div id="alert" class="alert alert-warning d-none" role="alert"></div><!-- แจ้งเตือนหากมีการดึงข้อมูลมาไม่ครบ -->
             <form class="form" method="post">
               <div class="row">
                 {% csrf_token %}
@@ -164,7 +165,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
 <script type="text/javascript">
   var have_estimate = false;
+  var have_weight = false;
+
   var today = new Date();
+  today.setDate(today.getDate() - 1);
   var formattedDate = today.toISOString().split('T')[0];
   $('#id_created').val(formattedDate);
 
@@ -199,6 +203,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
           event.preventDefault(); // Prevent form submission
           return false;
+        }
+        //เช็คว่าวันนี้มี save โรงโม่นี้หรือยัง ถ้ามีแล้วไม่ให้ save
+        if (typeof have_weight !== "undefined" && !have_weight) {
+            $("#id_created").trigger("focus");
+            alert("ยังไม่มีการ uplode รายการชั่งของวันนี้ ไม่สามารถบันทึกข้อมูลได้");
+            
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            
+            event.preventDefault(); // Prevent form submission
+            return false;
         }
     });
   });
@@ -276,6 +290,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   $('#id_site, #id_created').change(function() {
     searchStoneEstimate();
+    searchDataWeightInDay();
   });
   
 	function searchStoneEstimate(){
@@ -322,6 +337,36 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               });
         }
         return false;
+  }
+
+  function searchDataWeightInDay(){
+    $("#alert").addClass("d-none");
+
+    var created = $("#id_created").val();
+    var company =  "{{ request.session.company_code }}";
+
+    // Create Ajax Call
+    if(created){
+      //set id_distributor
+      $.ajax({
+        url: '{% url "searchDataWeightInDay" %}',
+        data: {
+          'created': created,
+          'company':company,
+          'mode': 2,
+        },
+        dataType: 'json',
+        success: function (data) {
+          have_weight = data.have_weight;
+
+          if(data.alert){
+            $("#alert").removeClass("d-none");
+            $("#alert").html(data.alert.replace(/\n/g, "<br>"));
+          }
+        }
+      });
+    }
+    return false;
   }
   
   </script>

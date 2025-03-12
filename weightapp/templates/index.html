@@ -521,66 +521,51 @@
           data: {{stock_list|safe}},
         },
       ],
-          chart: {
+    chart: {
           height: 350,
           type: 'bar',
-          stacked: true,
-        },
-        plotOptions: {
-          bar: {
-            borderRadius: 2,
-            dataLabels: {
-              position: 'top', // top, center, bottom
-            },
-          }
-        },
+          stacked: false,
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 2,
         dataLabels: {
-          enabled: true,
-          formatter: function (val) {
-            return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          },
-          offsetY: -20,
-          style: {
-            fontSize: '12px',
-            colors: ["#85929e"]
-          }
+          position: 'top',
         },
-        
-        xaxis: {
-          categories: {{stone_name_list|safe}},
-          axisBorder: {
-            show: false
-          },
-          axisTicks: {
-            show: false
-          },
-          crosshairs: {
-            fill: {
-              type: 'gradient',
-              gradient: {
-                colorFrom: '#D8E3F0',
-                colorTo: '#BED1E6',
-                stops: [0, 100],
-                opacityFrom: 0.4,
-                opacityTo: 0.5,
-              }
-            }
-          },
-          tooltip: {
-            enabled: true,
-          }
-        },
-        yaxis: {
-          title: {
-            text: 'stone weight total on mounth'
-          },
-          labels: {
-            formatter: function (value) {
-              return value.toLocaleString() + " ตัน";
-            }
-          }
-        },
-      };
+      }
+    },
+    dataLabels: {
+      enabled: true,
+      formatter: function (val) {
+        return (val == '0') ? '' : val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+      offsetY: -20,
+      style: {
+        fontSize: '12px',
+        colors: ["#85929e"]
+      },
+    },
+    xaxis: {
+      categories: {{stone_name_list|safe}},
+      axisBorder: {
+        show: false
+      },
+      axisTicks: {
+        show: false
+      }
+    },
+    yaxis: {
+      forceNiceScale: true,
+      title: {
+        text: 'stone weight total on mounth'
+      },
+      labels: {
+        formatter: function (value) {
+          return value.toLocaleString() + " ตัน";
+        }
+      }
+    }
+  };
   
   /////////////////////////////
   var optionsWeightLoss = {

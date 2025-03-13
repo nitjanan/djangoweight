@@ -5504,8 +5504,12 @@ def excelStockStone(request, my_q, list_date):
         for col in range(2, column_index):
             for row in range(3, row_index):
                 sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
-            worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
-            worksheet.cell(row=row_index, column=col).font = Font(bold=True, color="FF0000")
+            col_header = worksheet.cell(row=2, column=col).value
+            if col_header == 'ยกมา' or col_header == 'Total':#ยกมา และ Total ไม่ต้อง show ใน รวมทั้งสิ้น
+                worksheet.cell(row=row_index, column=col, value="")
+            else:
+                worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+                worksheet.cell(row=row_index, column=col).font = Font(bold=True, color="FF0000")
             sum_by_col = Decimal('0.00')
 
         # Set the column widths

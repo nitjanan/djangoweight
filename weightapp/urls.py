@@ -59,6 +59,7 @@ urlpatterns = [
     path('exportExcelProductionAndLoss/dashboard', views.exportExcelProductionAndLossDashboard,name="exportExcelProductionAndLossDashboard"),
 
     path('exportExcelEstimate/', views.exportExcelEstimate,name="exportExcelEstimate"),
+    path('exportExcelEstimateDashboard/', views.exportExcelEstimateDashboard,name="exportExcelEstimateDashboard"),
     
     path('searchProductionGoal', views.searchProductionGoal, name="searchProductionGoal"),
     path('searchStoneEstimate', views.searchStoneEstimate, name="searchStoneEstimate"),

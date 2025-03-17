@@ -2186,6 +2186,8 @@ def excelProductionAndLoss(request, my_q, sc_q):
     pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
 
+    sunday_fill = PatternFill(start_color="f59393", fill_type="solid") #ถ้าเป็นวันอาทิตย์ แถวเป็นสีแดง
+
     workbook = openpyxl.Workbook()
     if sites:
         for site in sites:
@@ -2325,6 +2327,11 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
 
                 sheet.append(row)
+
+                #ถ้าเป็นวันอาทิตย์ แถวเป็นสีแดง
+                if created_date.weekday() == 6:  #วันอาทิตย์
+                    for cell in sheet[sheet.max_row]:
+                        cell.fill = sunday_fill
 
             if len(created_dates) > 0:
                 sheet.append(row_sum)
@@ -2658,7 +2665,7 @@ def exportExcelStoneEstimateAndProductionDashboard(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    ''' แบบเก่าดึง รายงานการผลิตหิน ตามเดือนนั้นๆ 09/05/2024
+    ''' แบบเก่าดึง รายงานผลิตแยกผู้รับเหมาและชนิดหิน ตามเดือนนั้นๆ 09/05/2024
     #ดึงรายงานของเดือนนั้นๆ
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -2972,7 +2979,7 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
         workbook.remove(workbook['Sheet'])
     else:
         worksheet = workbook.active
-        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานการผลิตหินดือนนี้')
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานผลิตแยกผู้รับเหมาและชนิดหินดือนนี้')
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="Prod_daily_({active}).xlsx"'
@@ -3006,8 +3013,31 @@ def exportExcelEstimate(request):
 
     #สร้าง list ระหว่าง start_date และ end_date
     list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
-    print('A startDate = '+ str(start_created) + ", endDate = "+ str(end_created))
-    print('B startDate = '+ str(startDate) + ", endDate = "+ str(endDate))
+
+    response = excelEstimate(request, my_q, list_date)
+    return response
+
+def exportExcelEstimateDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+    
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(se__created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(se__created__lte = end_created)
+
+    my_q &= Q(se__company__code__in = company_in)
+    
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
 
     response = excelEstimate(request, my_q, list_date)
     return response
@@ -3043,7 +3073,7 @@ def excelEstimate(request, my_q, list_date):
 
         column_index = 2
         for st in sites:
-            worksheet.cell(row=1, column=column_index, value=f'ประมาณการณ์หิน {st}')
+            worksheet.cell(row=1, column=column_index, value=f'การผลิตหิน {st}')
             worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
             
             cell = worksheet.cell(row=1, column=column_index)
@@ -3140,7 +3170,7 @@ def excelEstimate(request, my_q, list_date):
         set_border(worksheet, side)
 
     else:
-        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูล Stock หินของเดือนนี้')
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
 
     # Set the response headers for the Excel file
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

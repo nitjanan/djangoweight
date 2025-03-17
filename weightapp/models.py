@@ -341,7 +341,7 @@ class BaseCustomerSite(models.Model):
     def __str__(self):
         return str(self.customer)
     
-#ผูกผู้รับเหมากับบริษัท (ออกรายงานการผลิตหินเท่านั้น)    
+#ผูกผู้รับเหมากับบริษัท (ออกรายงานผลิตแยกผู้รับเหมาและชนิดหินเท่านั้น)    
 class BaseSEC(models.Model):
     customer = models.ForeignKey(
         BaseCustomer,

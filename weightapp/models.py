@@ -598,11 +598,12 @@ def save_weight_history(sender, instance, **kwargs):
             tmp_note = None
 
             #ถ้ารหัสกับชื่อ local และ center ให้เก็บ error 03/03/2025
-            mill = BaseMill.objects.get(mill_id = old_weight.mill.mill_id)
-            center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
-            local_mill = old_weight.mill.mill_id + old_weight.mill_name #รหัสและชื่อจากตาชั่ง
-            if local_mill != center_mill:
-                tmp_note = "error***" + str(old_weight.mill.mill_id) + str(old_weight.mill_name)
+            if old_weight.mill:
+                mill = BaseMill.objects.get(mill_id = old_weight.mill.mill_id)
+                center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
+                local_mill = old_weight.mill.mill_id + old_weight.mill_name #รหัสและชื่อจากตาชั่ง
+                if local_mill != center_mill:
+                    tmp_note = "error***" + str(old_weight.mill.mill_id) + str(old_weight.mill_name)
 
             WeightHistory.objects.create(
                     date = old_weight.date,

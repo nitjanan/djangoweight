@@ -805,11 +805,12 @@ def editWeight(request, mode, weight_id):
 
     #ถ้ารหัสกับชื่อ local และ center ไม่ตรงกันให้เลือกจากชื่อ 03/03/2025
     is_not_match_mill = False
-    mill = BaseMill.objects.get(mill_id = weight_data.mill.mill_id)            
-    center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
-    local_mill = weight_data.mill.mill_id + weight_data.mill_name #รหัสและชื่อจากตาชั่ง    
-    if local_mill != center_mill:
-        is_not_match_mill = True
+    if weight_data.mill:
+        mill = BaseMill.objects.get(mill_id = weight_data.mill.mill_id)
+        center_mill = mill.mill_id + mill.mill_name #รหัสและชื่อบนหน้าเว็บ
+        local_mill = weight_data.mill.mill_id + weight_data.mill_name #รหัสและชื่อจากตาชั่ง    
+        if local_mill != center_mill:
+            is_not_match_mill = True
 
     if request.method == 'POST':
         form = tmp_form_post

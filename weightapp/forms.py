@@ -483,7 +483,6 @@ class BaseCarTeamForm(forms.ModelForm):
        fields = ('car_team_id' , 'car_team_name', 'user_created', 'oil_customer_id')
        widgets = {
             'user_created': forms.HiddenInput(),
-            'oil_customer_id': forms.HiddenInput(),
         }
        labels = {
             'car_team_id': _('รหัสทีม'),
@@ -498,13 +497,18 @@ class BaseCarTeamForm(forms.ModelForm):
     
     def clean(self):
         cleaned_data = self.cleaned_data
+        #id รxx
         id = cleaned_data.get('car_team_id')
-
         spc = SetPatternCode.objects.get(m_name = 'BaseCarTeam')
         fm =  spc.pattern + str(spc.end)
+        #oil_id 92-V-xxx
+        oil_id = cleaned_data.get('oil_customer_id')
+        pattern = re.compile(r'^92-V-\d{3}$')
 
         if not id or len(id) != len(fm) or not id.startswith(spc.pattern):
             raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        if not oil_id or not pattern.match(oil_id):
+            raise forms.ValidationError(u"รหัสลูกค้าน้ำมันควรมี  format '92-V-xxx' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):

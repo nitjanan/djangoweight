@@ -3560,7 +3560,7 @@ def createBaseCarTeam(request):
     form = BaseCarTeamForm(request.POST or None, initial={'car_team_id': generateCodeId('BaseCarTeam', 2, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
-        new_contact.oil_customer_id = generateOilCustomerId(new_contact.pk) #สร้างรหัสลูกค้าน้ำมัน auto
+        #new_contact.oil_customer_id = generateOilCustomerId(new_contact.pk) #สร้างรหัสลูกค้าน้ำมัน auto
         duplicate = BaseCarTeam.objects.filter(car_team_id = new_contact.pk).exists()
         if duplicate:
             form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
@@ -3568,7 +3568,7 @@ def createBaseCarTeam(request):
             try:
                 new_contact.save()
             except IntegrityError:
-                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+                form.add_error(None, 'มีรหัสลูกค้าน้ำมัน หรือมีชื่อทีมนี้อยู่แล้ว กรุณาเปลี่ยนรหัสลูกค้าน้ำมันหรือชื่อทีมใหม่.')
             else:
                 return redirect('settingBaseCarTeam')
 
@@ -3600,7 +3600,7 @@ def editBaseCarTeam(request, id):
             weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
             weights.update(car_team_name = car_team_form.car_team_name)
         except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            form.add_error(None, 'มีรหัสลูกค้าน้ำมัน หรือมีชื่อทีมนี้อยู่แล้ว กรุณาเปลี่ยนรหัสลูกค้าน้ำมันหรือชื่อทีมใหม่.')
         else:
             return redirect('settingBaseCarTeam')
 

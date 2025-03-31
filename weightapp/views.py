@@ -2268,7 +2268,11 @@ def excelProductionAndLoss(request, my_q, sc_q):
                 date_from_accumulated = startDateInMonth(created_date)
 
                 for line_type in BaseLineType.objects.filter(id__in=line_types):
-                    production = Production.objects.filter(site = site, line_type = line_type, created = created_date).first()
+                    production = Production.objects.filter(site = site, line_type = line_type, created = created_date).annotate( count=Count('site__base_site_id') 
+                        , sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_uncontrol=Sum(Case(When(uncontrol_time__isnull=True, then=Value(timedelta(0))), default='uncontrol_time', output_field = models.DurationField()))
+                        , sum_loss_n_un = ExpressionWrapper(F('sum_loss') - F('sum_uncontrol'), output_field= models.DurationField()) 
+                        , sum_work_real =  ExpressionWrapper(F('sum_actual') - F('sum_loss'), output_field= models.DurationField()) ).first()
+
                     accumulated_goal = Production.objects.filter(site = site, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
 
                     data_sum_produc = Weight.objects.filter(site=site, date = created_date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
@@ -2301,7 +2305,7 @@ def excelProductionAndLoss(request, my_q, sc_q):
 
                     #รวม, ชั่วโมงการทำงานจริง, ยอดผลิต (ตัน), ยอดผลิตสะสม, กำลังการผลิต (ตัน/ชั่วโมง), หมายเหตุ
                     if  production:
-                        row.extend([formatHourMinute(production.total_loss_time), formatHourMinute(calculatorDiffWorkRealTime(production.plan_time, production.uncontrol_time, production.total_loss_time)), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
+                        row.extend([formatHourMinute(production.sum_loss_n_un), formatHourMinute(production.sum_work_real), data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
                         sum_capacity_per_hour += capacity_per_hour
 
                     ''' 1) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด

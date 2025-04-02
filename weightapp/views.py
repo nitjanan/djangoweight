@@ -67,6 +67,10 @@ import requests
 from itertools import groupby
 from operator import itemgetter
 from dateutil.relativedelta import relativedelta
+from openpyxl import load_workbook
+from io import BytesIO
+from openpyxl.workbook.protection import WorkbookProtection
+from openpyxl.styles import Protection
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -5034,10 +5038,63 @@ def exportWeightToExpress(request):
 
     df = pd.DataFrame(data)
 
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=weight_express({active}) '+ start_created + " to "+ end_created +'.xlsx'
+    # Create an in-memory buffer
+    output = BytesIO()
 
-    df.to_excel(response, index=False, engine='openpyxl')
+    # Save DataFrame to Excel in the buffer
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+
+    # Load workbook from buffer (without saving to disk)
+    output.seek(0)
+    wb = load_workbook(output)
+    ws = wb.active
+
+    # **STEP 1: Lock All Cells & Hide Formulas**
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.protection = Protection(locked=True, hidden=True)  # Lock & Hide formula
+
+    # **STEP 2: Protect the Sheet (No Editing or Copying)**
+    ws.protection.sheet = True  # Enable protection
+
+    # **STEP 3: Protect Workbook Structure (No Adding/Deleting Sheets)**
+    wb.security = WorkbookProtection(workbookPassword="secure123", lockStructure=True)
+
+    column_widths = {
+        'A': 15,
+        'B': 15,
+        'C': 15,
+        'D': 15,
+        'G': 15,
+        'I': 40,
+        'L': 25,
+        'R': 15,
+        'T': 25,
+        'V': 25,
+        'Z': 15,
+        'AA': 15,
+        'AC': 20,
+        'AE': 15,
+        'AI': 25,
+    }
+
+    for col, width in column_widths.items():
+        ws.column_dimensions[col].width = width
+
+    # **STEP 4: Save changes to memory (NO DISK SAVING)**
+    output = BytesIO()  # Reset buffer
+    wb.save(output)
+    output.seek(0)
+
+    # **STEP 5: Prepare Response**
+    response = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="weight_express({active})_{start_created}_to_{end_created}.xlsx"'
+    )
 
     return response
 

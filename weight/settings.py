@@ -169,7 +169,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'southerngroup.stock@gmail.com'
 #EMAIL_HOST_PASSWORD = 'cqbrdkkwyiuzhthd'
-EMAIL_HOST_PASSWORD = 'sviqgnrvbfzggcjx'
+EMAIL_HOST_PASSWORD = 'vsrw uumm lqcj znwe'
 
 
 # set Time input

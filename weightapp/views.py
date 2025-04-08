@@ -71,6 +71,7 @@ from openpyxl import load_workbook
 from io import BytesIO
 from openpyxl.workbook.protection import WorkbookProtection
 from openpyxl.styles import Protection
+import time
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -417,6 +418,8 @@ def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
 # Create your views here.
 @login_required(login_url='login')
 def index(request):
+    loade_st = time.time()  # Start measuring time
+
     try:
         #active : active คือแท็ปบริษัท active
         active = request.session['company_code']
@@ -600,6 +603,10 @@ def index(request):
 
     # Add list
     list_persent_loss_weight.append(persent_loss_weight_all)
+
+    loade_en = time.time()# End measuring time
+    loade_t = int((loade_en - loade_st) * 1000 - 100)
+    request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds
 
     context = { 
                 'previous_day':previous_day,
@@ -793,6 +800,8 @@ def approveWeight(request):
 
 @login_required(login_url='login')
 def editWeight(request, mode, weight_id):
+    loade_st = time.time()  # Start measuring time
+
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
@@ -855,6 +864,10 @@ def editWeight(request, mode, weight_id):
             return redirect('weightTable')
     else:
         form = tmp_form
+
+    loade_en = time.time()# End measuring time
+    loade_t = int((loade_en - loade_st) * 1000 - 100)
+    request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
@@ -1713,11 +1726,14 @@ def summaryProduction(request):
     start_day = datetime.strptime(start_created, "%Y-%m-%d")
     end_day = datetime.strptime(end_created, "%Y-%m-%d")
 
+    #หาวันสุดท้ายที่คีย์ข้อมูลผลิต
+    date_last_pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values_list('created', flat=True).last()
+
     b_site = Production.objects.filter(company__code__in = company_in).values('site').distinct()
 
-    real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, end_created), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
+    real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, date_last_pd), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
 
-    pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
+    pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, date_last_pd)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
         , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.DecimalField())
         , sum_uncontrol=Sum(Case(When(uncontrol_time__isnull=True, then=Value(timedelta(0))), default='uncontrol_time', output_field = models.DurationField()))
         , sum_loss_n_un = ExpressionWrapper(F('sum_loss') - F('sum_uncontrol'), output_field= models.DurationField())
@@ -1729,10 +1745,10 @@ def summaryProduction(request):
         , percent_loss = ExpressionWrapper(F('sum_loss_n_un') / F('working_time') * 100, output_field= models.DecimalField()))
 
     # M = เครื่องจักรหลัก, S = เครื่องจักรรอง ไว้แสดงข้อมูลเท่านั้น
-    pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'M').order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
+    pd_loss_mc = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, date_last_pd), mc_type__kind = 'M').order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type').annotate(sum_time = Sum('loss_time'))
     
-    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'S').order_by('mc_type__id').values('mc_type__name', 'loss_type__name').distinct()
-    pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created), mc_type__kind = 'S').order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+    mc_loos_type = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, date_last_pd), mc_type__kind = 'S').order_by('mc_type__id').values('mc_type__name', 'loss_type__name').distinct()
+    pd_loss_pro = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, date_last_pd), mc_type__kind = 'S').order_by('production__site__base_site_id', 'mc_type__id').values('production__site__base_site_id', 'mc_type__id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
     mc_type  = BaseMachineType.objects.filter(kind = 'M')
 
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
@@ -1744,11 +1760,11 @@ def summaryProduction(request):
     list_ls = []
 
     for i, mill_id in enumerate(s_comp_id):
-        list_ls_name[i] = getLossNameByMill(company_in, mill_id, start_created, end_created, 1)
-        list_ls_val[i] = getLossNameByMill(company_in, mill_id, start_created, end_created, 2)
+        list_ls_name[i] = getLossNameByMill(company_in, mill_id, start_created, date_last_pd, 1)
+        list_ls_val[i] = getLossNameByMill(company_in, mill_id, start_created, date_last_pd, 2)
         list_ls.append((list_ls_name[i], list_ls_val[i]))
 
-    pd_loss_all = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, end_created)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
+    pd_loss_all = ProductionLossItem.objects.filter(production__company__code__in = company_in, production__created__range=(start_created, date_last_pd)).order_by('production__site__base_site_id').values('production__site__base_site_id', 'mc_type__name').annotate(sum_time = Sum('loss_time'))
 
     context = {'dashboard_page':'active','pd':pd,
                'pd_loss_mc':pd_loss_mc, 'pd_loss_pro':pd_loss_pro,
@@ -1760,6 +1776,7 @@ def summaryProduction(request):
                's_target':s_target,
                'start_day':start_day,
                'end_day': end_day,
+               'last_day': date_last_pd,
                active :"active",
     }
     return render(request, "production/summaryProduction.html",context)

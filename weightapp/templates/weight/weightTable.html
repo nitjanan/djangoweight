@@ -83,12 +83,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
           <div class="row mb-1">
             <div class="col-10">
-              <a href="{% url 'exportWeightToExpress' %}?{{request.GET.urlencode}}" class="btn btn-info">Weight to Express</a>
-              <a href="{% url 'exportExcelProductionByStone' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#5dade2 ;color: black;" >ยอดขายตามประเภทหินรายวัน</a>
-              <a href="{% url 'exportExcelProductionByStoneAndMonth' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#2e86c1;color: black;" >ยอดขายตามประเภทหินรายเดือน</a>
+              <a href="{% url 'exportWeightToExpress' %}?{{request.GET.urlencode}}" class="btn btn-info" download>Weight to Express</a>
+              <a href="{% url 'exportExcelProductionByStone' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#5dade2 ;color: black;" download>ยอดขายตามประเภทหินรายวัน</a>
+              <a href="{% url 'exportExcelProductionByStoneAndMonth' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#2e86c1;color: black;" download>ยอดขายตามประเภทหินรายเดือน</a>
               {% if request.user.is_superuser %}
-                <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger">Weight Fix Bug</a>
-                <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger">Weight History Fix Bug</a>
+                <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight Fix Bug</a>
+                <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight History Fix Bug</a>
               {% endif %}
             </div>
             {% if is_approve_weight %}

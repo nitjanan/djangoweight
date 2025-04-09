@@ -65,7 +65,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col">
-                <a href="{% url 'exportExcelGasPriceTransport' %}?{{request.GET.urlencode}}" class="btn btn-success">รายงานขนส่งจากตาชั่ง</a>
+                <a href="{% url 'exportExcelGasPriceTransport' %}?{{request.GET.urlencode}}" class="btn btn-success" download>รายงานขนส่งจากตาชั่ง</a>
               </div>
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createGasPrice' %}">สร้างบันทึก ราคาน้ำมัน <i class="fa-solid fa-circle-plus"></i></a>

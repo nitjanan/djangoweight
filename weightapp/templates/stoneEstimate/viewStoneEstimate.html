@@ -68,13 +68,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col-3">
-                <a href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#54a2d6 ;color: white;">รายงานผลิตแยกผู้รับเหมาและชนิดหิน</a>
+                <a href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#54a2d6 ;color: white;" download>รายงานผลิตแยกผู้รับเหมาและชนิดหิน</a>
               </div>
               <div class="col-2">
                 <a href="{% url 'monthlyProduction' %}" class="btn btn-block" style="background-color:#2e86c1 ;color: white;">รายงานผลิตรายเดือน</a>
               </div>
               <div class="col-2">
-                <a href="{% url 'exportExcelEstimate' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#236591 ;color: white;">รายงานผลิตหินประจำวัน</a>
+                <a href="{% url 'exportExcelEstimate' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#236591 ;color: white;" download>รายงานผลิตหินประจำวัน</a>
               </div>              
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStoneEstimate' %}">สร้างการประมาณการณ์หิน <i class="fa-solid fa-circle-plus"></i></a>

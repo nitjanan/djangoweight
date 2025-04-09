@@ -72,7 +72,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <div class="row">
               <div class="col">
                 <a href="{% url 'summaryProduction' %}" class="btn btn-primary">Weekly Report</a>
-                <a href="{% url 'exportExcelProductionAndLoss' %}?{{request.GET.urlencode}}" class="btn btn-success">รายงานบันทึกปฎิบัติการงานโรงโม่</a>
+                <a href="{% url 'exportExcelProductionAndLoss' %}?{{request.GET.urlencode}}" class="btn btn-success" download>รายงานบันทึกปฎิบัติการงานโรงโม่</a>
               </div>
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createProduction' %}">สร้างบันทึกปฎิบัติการงานโรงโม่ <i class="fa-solid fa-circle-plus"></i></a>

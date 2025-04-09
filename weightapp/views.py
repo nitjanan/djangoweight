@@ -5067,17 +5067,6 @@ def exportWeightToExpress(request):
     wb = load_workbook(output)
     ws = wb.active
 
-    # **STEP 1: Lock All Cells & Hide Formulas**
-    for row in ws.iter_rows():
-        for cell in row:
-            cell.protection = Protection(locked=True, hidden=True)  # Lock & Hide formula
-
-    # **STEP 2: Protect the Sheet (No Editing or Copying)**
-    ws.protection.sheet = True  # Enable protection
-
-    # **STEP 3: Protect Workbook Structure (No Adding/Deleting Sheets)**
-    wb.security = WorkbookProtection(workbookPassword="secure123", lockStructure=True)
-
     column_widths = {
         'A': 15,
         'B': 15,
@@ -5099,19 +5088,10 @@ def exportWeightToExpress(request):
     for col, width in column_widths.items():
         ws.column_dimensions[col].width = width
 
-    # **STEP 4: Save changes to memory (NO DISK SAVING)**
-    output = BytesIO()  # Reset buffer
-    wb.save(output)
-    output.seek(0)
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=weight_express({active}) '+ start_created + " to "+ end_created +'.xlsx'
 
-    # **STEP 5: Prepare Response**
-    response = HttpResponse(
-        output.read(),
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-    response["Content-Disposition"] = (
-        f'attachment; filename="weight_express({active})_{start_created}_to_{end_created}.xlsx"'
-    )
+    df.to_excel(response, index=False, engine='openpyxl')
 
     return response
 

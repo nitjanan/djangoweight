@@ -453,7 +453,7 @@ function hideDiv(id){
   
   $('form').submit(function() {
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
-    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL'){
+    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' || $("#id_site").val() == '019PL' || $("#id_site").val() == '020PL'  || $("#id_site").val() == '021PL' ){
       $('#id_run_start_time').val('');
       $('#id_run_end_time').val('');
     }
@@ -494,7 +494,7 @@ function hideDiv(id){
       $('.mc_type').select2({width: "100%",  theme: 'bootstrap-5'});
       $('.loss_type').select2({width: "100%",  theme: 'bootstrap-5'});
 
-      if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL'){
+    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' || $("#id_site").val() == '019PL' || $("#id_site").val() == '020PL'  || $("#id_site").val() == '021PL' ){
       $(".f-decimal").show();
       $(".f-time").hide();
 
@@ -512,7 +512,7 @@ function hideDiv(id){
   });
 
   $("#id_site").on( "change", function() {
-    if($(this).val() == '011PL' || $("#id_site").val() == '028PL'){
+    if($(this).val() == '011PL' || $(this).val() == '028PL' || $(this).val() == '019PL' || $(this).val() == '020PL'  || $(this).val() == '021PL' ){
       $(".f-decimal").show();
       $(".f-time").hide();
 

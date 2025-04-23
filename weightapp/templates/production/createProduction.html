@@ -449,7 +449,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   $('form').submit(function() {
 
     //ก่อน save ต้องเช็คก่อนว่าเป็นโรงโม่ไหน
-    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' ){
+    if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' || $("#id_site").val() == '019PL' || $("#id_site").val() == '020PL'  || $("#id_site").val() == '021PL' ){
       $('#id_run_start_time').val('');
       $('#id_run_end_time').val('');
     }
@@ -470,7 +470,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   $("#id_site").on( "change", function() {
     //โรงโม่ 3 เปลี่ยน input
-    if($(this).val() == '011PL' || $("#id_site").val() == '028PL'){
+    if($(this).val() == '011PL' || $(this).val() == '028PL' || $(this).val() == '019PL' || $(this).val() == '020PL'  || $(this).val() == '021PL' ){
       $(".f-decimal").show();
       $(".f-time").hide();
 

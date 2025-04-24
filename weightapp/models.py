@@ -592,6 +592,11 @@ class WeightHistory(models.Model):
 
 @receiver(pre_save, sender=Weight)
 def save_weight_history(sender, instance, **kwargs):
+    #24/04/2025 ถ้า weight มาจาก Import ให้ใส่ user_update = 1 (นิจนันท์)
+    tmp_user_update = None
+    if hasattr(instance, '_from_import') and instance._from_import:
+        tmp_user_update = 1
+
     if instance.pk:  # Only if the instance has already been saved (i.e., an update)
         try:
             old_weight = Weight.objects.get(pk=instance.pk)
@@ -675,7 +680,8 @@ def save_weight_history(sender, instance, **kwargs):
                     exp_change = old_weight.exp_change,
                     exp_remission = old_weight.exp_remission,
                     exp_note = tmp_note, #ถ้ารหัสกับชื่อ local และ center ให้เก็บ error 03/03/2025
-                    exp_type = old_weight.exp_type
+                    exp_type = old_weight.exp_type,
+                    user_update_id = tmp_user_update
             )
         except Weight.DoesNotExist:
             pass

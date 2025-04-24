@@ -14,7 +14,12 @@ class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class WeightResource(resources.ModelResource):
-
+    #24/04/2025 ถ้า weight มาจาก Import ให้ใส่ user_update = 1 (นิจนันท์)
+    def save_instance(self, instance, using_transactions=True, dry_run=False):
+        instance._from_import = True
+        instance.save()
+        return instance
+    
     class Meta:
         model =  Weight
         import_id_fields = ('weight_id',)
@@ -126,9 +131,9 @@ class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     }
         
     resource_class = WeightResource
-    list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'car_team_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ('weight_id', 'doc_id', 'date', 'customer__customer_id' ,'customer_name', 'stone_type__base_stone_type_id', 'stone_type_name', 'base_weight_station_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name')
+    search_fields = ('weight_id', 'doc_id', 'date', 'customer__customer_id' ,'customer_name', 'stone_type__base_stone_type_id', 'stone_type_name', 'base_weight_station_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name', 'car_team__car_team_id', 'car_team_name')
 
 class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     formfield_overrides = {

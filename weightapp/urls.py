@@ -234,4 +234,6 @@ urlpatterns = [
 
      path('searchDataWeightInDay/', views.searchDataWeightInDay, name="searchDataWeightInDay"),
      #path('callback', views.callback, name='callback'), #line api messaging callback
+
+     path('send_line_1pm/', views.send_line_1pm, name="send_line_1pm"),
 ]

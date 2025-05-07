@@ -189,20 +189,23 @@ def send_weight_edit(start_time, end_time, target_user_id):
         text_message = TextSendMessage(text=final_message)
         line_bot_api.push_message(target_user_id, text_message)
 
-def send_1pm_summary():
+#old send_1pm_summary อันใหม่เปลี่ยนเป็น url
+def send_line_1pm(request):
     try:
-        lm = SetLineMessaging.objects.get(id = 1)
-        # Time range: previous day 3:00 PM to today 11:00 AM
-        end_time = datetime.now().replace(hour=13, minute=0, second=0, microsecond=0)
+        lm = SetLineMessaging.objects.get(id=1)
+        end_time = datetime.now().replace(hour=13, minute=0, second=0, microsecond=0)# Time range: previous day 3:00 PM to today 11:00 AM
         start_time = end_time - timedelta(hours=24)
 
         if lm.target_id:
-            target_user_id = lm.target_id  #user/group ID (Line id)
+            target_user_id = lm.target_id #user/group ID (Line id)
             send_weight_edit(start_time, end_time, target_user_id)
 
     except SetLineMessaging.DoesNotExist:
         pass
 
+    return HttpResponse("1PM summary sent (or skipped).")
+
+'''
 # Schedule the tasks
 scheduler = BackgroundScheduler()
 scheduler.add_job(
@@ -212,6 +215,7 @@ scheduler.add_job(
     replace_existing=True,
 )
 scheduler.start()
+'''
 
 #generate Code Base
 def generateCodeId(model_name, type, wt, middle):
@@ -3274,8 +3278,8 @@ def editBaseMill(request, id):
             mill_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(mill_id = mill_form.pk) #iiiiiiiiiiiii
-            weights.update(mill_name = mill_form.mill_name)
+            weights = Weight.objects.filter(mill_id = mill_form.pk)
+            weights.update(mill_name = mill_form.mill_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -3443,8 +3447,8 @@ def editBaseStoneType(request, id):
             stone_type_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)# iiiiiiiiiii
-            weights.update(stone_type_name = stone_type_form.base_stone_type_name)
+            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)
+            weights.update(stone_type_name = stone_type_form.base_stone_type_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -3530,8 +3534,8 @@ def editBaseScoop(request, id):
             scoop_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(scoop_id = scoop_form.pk) # iiiiiiiiii
-            weights.update(scoop_name = scoop_form.scoop_name)
+            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+            weights.update(scoop_name = scoop_form.scoop_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -3618,8 +3622,8 @@ def editBaseCarTeam(request, id):
             car_team_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(car_team_id = car_team_form.pk)# iiiiiiiiiii
-            weights.update(car_team_name = car_team_form.car_team_name)
+            weights = Weight.objects.filter(car_team_id = car_team_form.pk)
+            weights.update(car_team_name = car_team_form.car_team_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีรหัสลูกค้าน้ำมัน หรือมีชื่อทีมนี้อยู่แล้ว กรุณาเปลี่ยนรหัสลูกค้าน้ำมันหรือชื่อทีมใหม่.')
         else:
@@ -3794,8 +3798,8 @@ def editBaseSite(request, id):
             site_form = form.save()
 
             # update weight ด้วย
-            weights = Weight.objects.filter(site_id = site_form.pk) # iiiiiiiiiiiiiii
-            weights.update(site_name = site_form.base_site_name)
+            weights = Weight.objects.filter(site_id = site_form.pk)
+            weights.update(site_name = site_form.base_site_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -3881,9 +3885,9 @@ def editBaseCustomer(request, id):
         try:
             customer_form = form.save()
 
-            # update weight ด้วย iiiiiiiiiiiiiii
+            # update weight ด้วย
             weights = Weight.objects.filter(customer_id = customer_form.pk)
-            weights.update(customer_name = customer_form.customer_name)
+            weights.update(customer_name = customer_form.customer_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -3971,7 +3975,7 @@ def editBaseDriver(request, id):
 
             # update weight ด้วย
             weights = Weight.objects.filter(driver_id = driver_form.pk)
-            weights.update(driver_name = driver_form.driver_name)
+            weights.update(driver_name = driver_form.driver_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -4058,7 +4062,7 @@ def editBaseCarRegistration(request, id):
 
             # update weight ด้วย
             weights = Weight.objects.filter(car_registration_id = car_registration_form.pk)
-            weights.update(car_registration_name = car_registration_form.car_registration_name)
+            weights.update(car_registration_name = car_registration_form.car_registration_name)#iiiiiiiiii
         except IntegrityError:
             form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
         else:
@@ -4468,7 +4472,7 @@ def baseCustomerCreate(request):
 def baseCustomerUpdate(request, pk):
     try:
         base_customer = BaseCustomer.objects.get(customer_id=pk)
-        weights = Weight.objects.filter(customer_id = pk) #iiiiiiiiii
+        weights = Weight.objects.filter(customer_id = pk)
 
         # Update BaseCustomer
         base_customer_serializer = BaseCustomerSerializer(instance=base_customer, data=request.data)
@@ -4477,7 +4481,7 @@ def baseCustomerUpdate(request, pk):
 
             customer_name = request.data.get("customer_name")
             # 1 Update Weight
-            weights.update(customer_name = customer_name)
+            weights.update(customer_name = customer_name)#iiiiiiiiii
             
             # 2 Update Weight ไม่ต้องแล้ว
             '''

@@ -10,6 +10,12 @@ rel="stylesheet"
 href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<style>
+  .col-md-1-5 {
+    flex: 0 0 12.5%;
+    max-width: 12.5%;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -54,11 +60,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <div class="form-group col-md-1 mb-0">
               {{ filter.form.scale_name|as_crispy_field }}
             </div>
-            <div class="form-group col-md-2 mb-0">
+            <div class="form-group col-md-1-5 mb-0">
               {{ filter.form.start_created|as_crispy_field }}
             </div>
-            <div class="form-group col-md-2 mb-0">
+            <div class="form-group col-md-1-5 mb-0">
               {{ filter.form.end_created|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-1 mb-0">
+              {{ filter.form.car_registration_name|as_crispy_field }}
             </div>
             <div class="form-group col-md-2 mb-0">
               {{ filter.form.customer_name|as_crispy_field }}
@@ -106,6 +115,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>วันที่</th>
                   <th>เวลาเข้า</th>
                   <th>เวลาออก</th>
+                  <th>ทะเบียนรถ</th>
                   <th>ลูกค้า</th>
                   <th>หิน</th>
                   <th>ต้นทาง</th>
@@ -132,6 +142,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.date |date:"d/m/Y"}}</td>
                   <td>{{i.time_in}}</td>
                   <td>{{i.time_out}}</td>
+                  <td>{{i.car_registration_name}}</td>
                   <td>{{i.customer.customer_name}}</td>
                   <td>{{i.stone_type.base_stone_type_name}}</td>
                   <td>{{i.mill.mill_name}}</td>

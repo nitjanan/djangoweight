@@ -54,6 +54,11 @@ class BaseCustomerResource(resources.ModelResource):
         fields = ('customer_id', 'customer_name', 'base_vat_type', 'base_job_type', 'weight_type')
         export_order = ('customer_id', 'customer_name', 'base_vat_type', 'base_job_type', 'weight_type')
 
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(customer_id=instance.pk).update(customer_name=instance.customer_name)
+
 class BaseCustomerAdmin(ImportExportModelAdmin):
     resource_class = BaseCustomerResource
     list_display = ('customer_id', 'customer_name',)
@@ -65,6 +70,11 @@ class BaseSiteResource(resources.ModelResource):
         import_id_fields = ('base_site_id',)
         fields = ('base_site_id', 'base_site_name', 'weight_type')
         export_order = ('base_site_id', 'base_site_name', 'weight_type')
+
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(site_id=instance.pk).update(site_name=instance.base_site_name)
 
 class BaseSiteAdmin(ImportExportModelAdmin):
     resource_class = BaseSiteResource
@@ -81,6 +91,11 @@ class BaseStoneTypeResource(resources.ModelResource):
         import_id_fields = ('base_stone_type_id',)
         fields = ('base_stone_type_id', 'base_stone_type_name', 'cal_q')
         export_order = ('base_stone_type_id', 'base_stone_type_name', 'cal_q')
+
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(stone_type_id=instance.pk).update(stone_type_name=instance.base_stone_type_name)
 
 class BaseStoneTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseStoneTypeResource
@@ -110,10 +125,15 @@ class BaseMillResource(resources.ModelResource):
         fields = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
         export_order = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
 
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(mill_id=instance.pk).update(mill_name=instance.mill_name)
+
 class BaseMillAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseMillResource
     list_display = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
-    search_fields = ('mill_id', 'mill_name', 'weight_type', 'mill_source')
+    search_fields = ('mill_id', 'mill_name')
 
 class BaseLineTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id','name'] #แสดงรายการสินค้าในรูปแบบตาราง
@@ -156,6 +176,11 @@ class BaseCarRegistrationResource(resources.ModelResource):
         fields = ('car_registration_id', 'car_registration_name', 'car_type', 'company_code')
         export_order = ('car_registration_id', 'car_registration_name', 'car_type', 'company_code')
 
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(car_registration_id=instance.pk).update(car_registration_name=instance.car_registration_name)
+
 class BaseCarRegistrationAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseCarRegistrationResource
     list_display = ('car_registration_id', 'car_registration_name',)
@@ -173,6 +198,11 @@ class BaseDriverResource(resources.ModelResource):
         fields = ('driver_id', 'driver_name', 'company_code')
         export_order = ('driver_id', 'driver_name', 'company_code')
 
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(driver_id=instance.pk).update(driver_name=instance.driver_name)
+
 class BaseDriverAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseDriverResource
     list_display = ('driver_id', 'driver_name',)
@@ -189,6 +219,11 @@ class BaseScoopResource(resources.ModelResource):
         import_id_fields = ('scoop_id',)
         fields = ('scoop_id', 'scoop_name', 'company_code')
         export_order = ('scoop_id', 'scoop_name', 'company_code')
+
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(scoop_id=instance.pk).update(scoop_name=instance.scoop_name)
 
 class BaseScoopAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseScoopResource
@@ -214,6 +249,11 @@ class BaseCarTeamResource(resources.ModelResource):
         import_id_fields = ('car_team_id',)
         fields = ('car_team_id', 'car_team_name','oil_customer_id',)
         export_order = ('car_team_id', 'car_team_name','oil_customer_id',)
+
+    #ถ้ามาจากการ Import ให้ update Weight ด้วย
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        if not dry_run:
+            Weight.objects.filter(car_team_id=instance.pk).update(car_team_name=instance.car_team_name)
 
 class BaseCarTeamAdmin(ImportExportModelAdmin):
     resource_class = BaseCarTeamResource

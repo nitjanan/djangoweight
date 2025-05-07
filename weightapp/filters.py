@@ -13,6 +13,7 @@ class WeightFilter(django_filters.FilterSet):
     doc_id = django_filters.CharFilter(field_name="doc_id", lookup_expr='icontains')
     customer_name = django_filters.CharFilter(field_name="customer_name", lookup_expr='icontains')
     stone_type_name = django_filters.CharFilter(field_name="stone_type_name", lookup_expr='icontains')
+    car_registration_name = django_filters.CharFilter(field_name="car_registration_name", lookup_expr='icontains')
     weight_type =  django_filters.ModelChoiceFilter(field_name="bws__weight_type", queryset= BaseWeightType.objects.all())
     vat_type =  django_filters.ModelChoiceFilter(field_name="bws__vat_type", queryset= BaseVatType.objects.all())
     lc = django_filters.CharFilter(field_name="base_weight_station_name", lookup_expr='icontains')
@@ -31,6 +32,7 @@ WeightFilter.base_filters['doc_id'].label = 'เลขที่ชั่ง'
 WeightFilter.base_filters['start_created'].label = 'วันที่'
 WeightFilter.base_filters['end_created'].label = 'ถึง'
 WeightFilter.base_filters['customer_name'].label = 'ชื่อลูกค้า'
+WeightFilter.base_filters['car_registration_name'].label = 'ทะเบียนรถ'
 WeightFilter.base_filters['stone_type_name'].label = 'ชนิดหิน'
 WeightFilter.base_filters['weight_type'].label = 'ประเภทชั่ง'
 WeightFilter.base_filters['vat_type'].label = 'vat'

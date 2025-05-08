@@ -132,7 +132,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 {% for i in weight%}
                 <tr>
                   <td>
-                    {% if i.apw.is_approve == True %}
+                    {% if i.is_apw == True %}
                     <span class="badge bg-success"><i class="fa-regular fa-circle-check"></i></span>
                     {% else %}
                     <span class="badge bg-danger"><i class="fa-regular fa-circle-xmark"></i></span>

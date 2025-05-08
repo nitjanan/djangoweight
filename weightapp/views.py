@@ -753,49 +753,87 @@ def weightTable(request):
 
 @login_required(login_url='login')
 def approveWeight(request):
-    #active : active คือแท็ปบริษัท active
     try:
         active = request.session['company_code']
         company_in = findCompanyIn(request)
     except:
         return redirect('logout')
 
-    data = Weight.objects.filter(bws__company__code__in = company_in).values_list('date', flat=True).order_by('-date').distinct()
+    # Get distinct weight dates
+    data = Weight.objects.filter(
+        bws__company__code__in=company_in
+    ).values_list('date', flat=True).order_by('-date').distinct()
+    
     ap_data = ApproveWeight.objects.filter(company__code = active)
 
-    #กรองข้อมูล
-    myFilter = WeightFilter(request.GET, queryset = data)
+    myFilter = WeightFilter(request.GET, queryset=data)
     data = myFilter.qs
 
-    #สร้าง page
+    # Pagination
     p = Paginator(data, 10)
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    if request.method=='POST':
+    if request.method == 'POST':
         checkbox_data = request.POST.get('checkboxData')
-
         if checkbox_data:
             checkbox_data = json.loads(checkbox_data)
-            
-            for item in checkbox_data:
-                formatted_date = item['date']
-                is_checked = item['isChecked']
-                try:
-                    ap = ApproveWeight.objects.get(company__code = active, date = formatted_date)
-                    ap.is_approve = is_checked
-                    ap.save()
-                except ApproveWeight.DoesNotExist:
-                    company = BaseCompany.objects.get(code = active)
-                    ap = ApproveWeight.objects.create(
-                        company = company,
-                        date = formatted_date,
-                        is_approve = is_checked,
-                        update = datetime.now()
+
+            # Prepare data
+            date_list = [item['date'] for item in checkbox_data]
+            approve_map = {item['date']: item['isChecked'] for item in checkbox_data}
+
+            # Fetch existing approvals
+            existing_apws = ApproveWeight.objects.filter(
+                company__code=active, date__in=date_list
+            )
+            existing_apws_map = {str(apw.date): apw for apw in existing_apws}
+
+            company = BaseCompany.objects.get(code=active)
+            to_create = []
+            to_update = []
+
+            for date_str in date_list:
+                is_checked = approve_map[date_str]
+
+                if date_str in existing_apws_map:
+                    apw = existing_apws_map[date_str]
+                    apw.is_approve = is_checked
+                    apw.update = datetime.now()
+                    to_update.append(apw)
+                else:
+                    apw = ApproveWeight(
+                        company=company,
+                        date=date_str,
+                        is_approve=is_checked,
+                        update=datetime.now()
                     )
-                
-                w = Weight.objects.filter(bws__company__code = active, date = formatted_date)
-                w.update(apw = ap)
+                    to_create.append(apw)
+
+            # Create new entries
+            if to_create:
+                ApproveWeight.objects.bulk_create(to_create)
+
+            # Update existing entries
+            if to_update:
+                ApproveWeight.objects.bulk_update(to_update, ['is_approve', 'update'])
+
+            # Re-fetch all relevant ApproveWeight entries (now all are saved with pk)
+            all_apws = ApproveWeight.objects.filter(
+                company__code=active, date__in=date_list
+            )
+            full_apw_map = {str(apw.date): apw.is_approve for apw in all_apws}
+
+            # Update related Weight.apw foreign keys
+            weights = Weight.objects.filter(
+                bws__company__code=active, date__in=date_list
+            )
+
+            for w in weights:
+                is_apw = full_apw_map.get(str(w.date))
+                w.is_apw = is_apw
+
+            Weight.objects.bulk_update(weights, ['is_apw'])
 
         return redirect('weightTable')
 

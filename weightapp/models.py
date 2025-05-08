@@ -485,7 +485,8 @@ class Weight(models.Model):
     exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
     is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
-    apw = models.ForeignKey(ApproveWeight, on_delete=models.CASCADE, blank=True, null = True) #เก็บ ApproveWeight
+    apw = models.ForeignKey(ApproveWeight, on_delete=models.CASCADE, blank=True, null = True) #ไม่ใช้แล้ว 08-05-2025 ใช้ is_apw แทน
+    is_apw = models.BooleanField(default=False, verbose_name="สถานะตรวจสอบรายการชั่งแล้ว")#สถานะตรวจสอบรายการชั่งแล้ว
 
     #คำนวณราคาน้ำมัน
     oil_cost = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10)

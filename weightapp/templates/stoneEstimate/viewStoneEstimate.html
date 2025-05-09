@@ -85,6 +85,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <th>วันที่</th>
                     <th>ปลายทาง</th>
                     <th>ชนิดหิน</th>
+                    <th>เปอร์เซ็นต์</th>
+                    <th>จำนวนตัน</th>
                     <th>แก้ไข</th>
                     <th>ลบ</th>
                   </tr>
@@ -96,7 +98,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <td>{{i.site}}</td>
                     <td>
                       {% for item in i.stoneestimateitem_set.all %}
-                        {% if item.percent %}<li>{{ item.stone_type }} : {{ item.percent }}%</li>{%endif%}
+                        {% if item.percent %}<li>{{ item.stone_type }}</li>{%endif%}
+                      {% endfor %}
+                    </td>
+                    <td>
+                      {% for item in i.stoneestimateitem_set.all %}
+                        {% if item.percent %}<li>{{ item.percent }}%</li>{%endif%}
+                      {% endfor %}
+                    </td>
+                    <td>
+                      {% for item in i.stoneestimateitem_set.all %}
+                        {% if item.percent %}<li>{{ item.total|floatformat:2|intcomma}}</li>{%endif%}
                       {% endfor %}
                     </td>
                     <td>

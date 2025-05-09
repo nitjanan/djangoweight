@@ -898,10 +898,15 @@ def editWeight(request, mode, weight_id):
             #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
             if mode == 2:
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
-                    updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
-                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
                     if  weight_form.stone_type:
                         updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
+                    if original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:#09-05-2025 ถ้ามีการเปลี่ยนแปลงโรงโม่ คำนวน โรงโม่เก่าด้วย
+                        # update old site 
+                        updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, original_weight_site)
+                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)
+                        # update new site
+                        updateSumEstimateItem(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
 
             return redirect('weightTable')
     else:
@@ -2595,6 +2600,7 @@ def editStoneEstimate(request, se_id):
     company = BaseCompany.objects.get(code = active)
 
     se_data = StoneEstimate.objects.get(id = se_id)
+    original_site = se_data.site.base_site_id
 
     if request.method == "POST":
         formset = StoneEstimateItemInlineFormset(request.POST, request.FILES, instance=se_data)
@@ -2613,6 +2619,9 @@ def editStoneEstimate(request, se_id):
             for obj in formset.deleted_objects:
                 obj.delete()
             formset.save_m2m()
+
+            if original_site != se.site.base_site_id:#09-05-2025 ถ้ามีการเปลี่ยนแปลงโรงโม่ คำนวน โรงโม่เก่าด้วย
+                updateSumEstimateItem(se.company.id, se.created, original_site)
 
             updateSumEstimateItem(se.company.id, se.created, se.site.base_site_id)#กรณีแก้ไข update total StoneEstimateItem
             updateProdStockStoneItem(se.company.id, se.created)#คำนวณ stock

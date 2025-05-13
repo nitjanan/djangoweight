@@ -422,7 +422,7 @@ def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
 # Create your views here.
 @login_required(login_url='login')
 def index(request):
-    loade_st = time.time()  # Start measuring time
+    #loade_st = time.time()  # Start loade time
 
     try:
         #active : active คือแท็ปบริษัท active
@@ -608,9 +608,11 @@ def index(request):
     # Add list
     list_persent_loss_weight.append(persent_loss_weight_all)
 
+    '''
     loade_en = time.time()# End measuring time
     loade_t = int((loade_en - loade_st) * 1000 - 100)
-    request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds
+    request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds    
+    '''
 
     context = { 
                 'previous_day':previous_day,
@@ -842,7 +844,7 @@ def approveWeight(request):
 
 @login_required(login_url='login')
 def editWeight(request, mode, weight_id):
-    loade_st = time.time()  # Start measuring time
+    #loade_st = time.time()  # Start loade time
 
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -912,9 +914,11 @@ def editWeight(request, mode, weight_id):
     else:
         form = tmp_form
 
+    '''
     loade_en = time.time()# End measuring time
     loade_t = int((loade_en - loade_st) * 1000 - 100)
     request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds
+    '''
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)

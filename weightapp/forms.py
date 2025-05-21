@@ -316,6 +316,46 @@ class WeightStockForm(forms.ModelForm):
             'stone_type_name': _('ชื่อหิน'),
        }
 
+class WeightPortForm(forms.ModelForm):
+    stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
+    transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
+
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 1) | Q(weight_type = 3)), required=False)
+    site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(weight_type = 4), required=False)
+
+    class Meta:
+       model = Weight
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel', 'origin_weight', 'origin_q', 'line_type')
+       widgets = {
+        'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'site_name': forms.HiddenInput(),
+        'carry_type_name': forms.HiddenInput(),
+        'pay': forms.HiddenInput(),
+        'line_type': forms.HiddenInput(),
+        'clean_type': forms.HiddenInput(),
+        'vat_type': forms.HiddenInput(),
+        'mill_name': forms.HiddenInput(),
+        'stone_type_name': forms.HiddenInput(),
+        'scoop_name': forms.HiddenInput(),
+        'car_team': forms.HiddenInput(),
+        'car_team_name': forms.HiddenInput(),
+        'is_s': forms.CheckboxInput(attrs={'style':'width:20px;height:20px;'}),
+        'is_cancel': forms.CheckboxInput(attrs={'style':'width:20px;height:20px;'})
+        }
+       labels = {
+            'date': _('วันที่ผลิต'),
+            'car_registration': _('รหัสทะเบียนรถ'),
+            'car_registration_name': _('ทะเบียนรถ'),
+            'province': _('ทะเบียน'),
+            'driver': _('รหัสคนขับ'),
+            'driver_name': _('ชื่อคนขับ'),
+            'customer_name': _('ชื่อลูกค้า'),
+            'mill': _('รหัสโรงโม่'),
+            'mill_name': _('ชื่อโรงโม่'),
+            'stone_type_name': _('ชื่อหิน'),
+            'transport': _('ขนส่ง'),
+       }
+
 class BaseMillForm(forms.ModelForm):
     class Meta:
        model = BaseMill

@@ -56,7 +56,7 @@ input.del[type=checkbox] {
     <section class="section">
       <div class="card">
         <div class="card-header">
-          <h4 class="card-title">แก้ไขบันทึกการชั่ง</h4>
+          <h4 class="card-title">แก้ไขบันทึกการชั่งผลิต</h4>
         </div>
         <div class="card-content">
           <div class="card-body">
@@ -165,7 +165,7 @@ input.del[type=checkbox] {
                     <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
                   </div>
                   <div class="col-md-9 form-group">
-                    {{form.weight_total | add_class:"form-control" }}
+                    {{form.weight_total |attr:"readonly"| add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -239,12 +239,10 @@ input.del[type=checkbox] {
     $('#id_car_registration option:not(:selected)').prop('disabled', false);
     $("#id_weight_in").attr('readonly', false);
     $("#id_weight_out").attr('readonly', false);
-    $("#id_weight_total").attr('readonly', false);
   "{% else %}"
     $('#id_car_registration option:not(:selected)').prop('disabled', true);
     $("#id_weight_in").attr('readonly', true);
     $("#id_weight_out").attr('readonly', true);
-    $("#id_weight_total").attr('readonly', true);
   "{% endif %}"
 
   //select2 (dropdown & search)

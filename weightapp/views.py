@@ -11,7 +11,7 @@ from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -859,6 +859,10 @@ def editWeight(request, mode, weight_id):
         template_name = "weight/editWeightStock.html"
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
+    elif mode == 4:
+        template_name = "weight/editWeightPort.html"
+        tmp_form_post = WeightPortForm(request.POST, request.FILES, instance=weight_data)
+        tmp_form = WeightPortForm(instance=weight_data)
 
     #ถ้ารหัสกับชื่อ local และ center ไม่ตรงกันให้เลือกจากชื่อ 03/03/2025
     is_not_match_mill = False
@@ -890,7 +894,7 @@ def editWeight(request, mode, weight_id):
             weight_history.save()
 
             #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
-            if mode == 1:
+            if mode == 1 or mode == 4:
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total:
                     if  weight_form.stone_type:
                         updateSellStockStoneItem(weight_form.pk)

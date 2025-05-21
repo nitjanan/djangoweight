@@ -13,7 +13,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
 <style>
 input.del[type=checkbox] {
- display: none;
+    display: none;
+}
+
+.inline-radio .radio-inline {
+    display: inline-block;
+    margin-right: 15px;
 }
 </style>
 {% endblock %}
@@ -56,7 +61,7 @@ input.del[type=checkbox] {
     <section class="section">
       <div class="card">
         <div class="card-header">
-          <h4 class="card-title">แก้ไขบันทึกการชั่งขาย</h4>
+          <h4 class="card-title">แก้ไขบันทึกการชั่งท่าเรือ</h4>
         </div>
         <div class="card-content">
           <div class="card-body">
@@ -107,12 +112,27 @@ input.del[type=checkbox] {
                       {{form.pay}}
                     </div>
                     <div class="col-md-1 form-group">
-                      <label for="first-name-horizontal">S.</label>
+                      <label for="first-name-horizontal">ประเภทสาย</label>
                     </div>
-                    <div class="col-md-5 form-group">
-                      {{form.is_s}}
-                      {{form.is_cancel| add_class:"d-none"}}
+                    <div class="col-md-4 form-group mt-2">
+                        <fieldset id="line_group">
+                            <div class="form-check form-check-primary form-check-inline me-4">
+                                <input class="form-check-input" type="radio" name="line_group" id="ln_1" checked="" value="สายสั้น" onclick="radiostateL1(this)">
+                                <label class="form-check-label" for="Primary">
+                                    สายสั้น
+                                </label>
+                            </div>
+                            <div class="form-check form-check-primary form-check-inline me-4">
+                                <input class="form-check-input" type="radio" name="line_group" id="ln_2" checked="" value="สายยาว" onclick="radiostateL2(this)">
+                                <label class="form-check-label" for="Primary">
+                                    สายยาว
+                                </label>
+                            </div>
+                            
+                        </fieldset>
+                        {{form.line_type}}
                     </div>
+                    {{form.is_cancel| add_class:"d-none"}}
 
                     <div class="col-md-2 form-group">
                         <label for="first-name-horizontal">ลูกค้า</label>
@@ -126,11 +146,8 @@ input.del[type=checkbox] {
                       <label for="first-name-horizontal">ปลายทาง</label>
                     </div>
                     <div class="col-md-8 form-group">
-                      <select id="select_site" name="select_site_list" class="form-control">
-                        <option value>---------</option>
-                      </select>
-                      {{form.site}}
-                      {{form.site_name}}
+                      {{form.site |attr:"readonly" | add_class:"form-control"}}
+                      {{form.site_name | add_class:"form-control"}}
                     </div>
                     <div class="col-md-2 form-group">
                       {{form.transport  | add_class:"form-control"}}
@@ -178,8 +195,8 @@ input.del[type=checkbox] {
                       {{form.stone_type |attr:"readonly" | add_class:"form-control"}}
                       {{form.stone_type_name | add_class:"form-control"}}
                     </div>
-
-                    <div class="col-md-2 form-group">
+                    <!-- 
+                   <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ประเภทหิน</label>
                     </div>
                     <div class="col-md-5 form-group">
@@ -214,15 +231,14 @@ input.del[type=checkbox] {
                       </fieldset>
                       {{form.clean_type}}
                     </div>
-
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ผู้ตัก</label>
                     </div>
                     <div class="col-md-10 form-group">
                       {{form.scoop |attr:"readonly" | add_class:"form-control" }}
                       {{form.scoop_name | add_class:"form-control" }}
-                    </div>
-
+                    </div>                                        
+                    -->
                     <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">หมายเหตุ</label>
                     </div>
@@ -252,13 +268,26 @@ input.del[type=checkbox] {
                   </div>
 
                   <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิ</label>
+                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิปลายทาง</label>
                   </div>
                   <div class="col-md-7 form-group">
                     {{form.weight_total |attr:"readonly"| add_class:"form-control" }}
                   </div>
                   <div class="col-md-2 form-group">
                     {{form.q |attr:"readonly"| add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-1">
+                    <label for="first-name-horizontal" class="text-success">ตัน</label>
+                  </div>
+
+                  <div class="col-md-2 form-group">
+                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิต้นทาง</label>
+                  </div>
+                  <div class="col-md-7 form-group">
+                    {{form.origin_weight | add_class:"form-control" }}
+                  </div>
+                  <div class="col-md-2 form-group">
+                    {{form.origin_q |attr:"readonly"| add_class:"form-control" }}
                   </div>
                   <div class="col-md-1">
                     <label for="first-name-horizontal" class="text-success">ตัน</label>
@@ -378,11 +407,6 @@ input.del[type=checkbox] {
 
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
 
-  if('{{weight.site}}' != 'None'){
-    $("#select_site").append(new Option('{{weight.site.base_site_name}}', '{{weight.site.base_site_id}}'));
-    $('#select_site option:contains("{{weight.site.base_site_name}}")').prop('selected', true);
-  }
-
   if('{{weight.car_team}}' != 'None'){
     $("#select_team").append(new Option('{{weight.car_team.car_team_name}}', '{{weight.car_team.car_team_id}}'));
     $('#select_team option:contains("{{weight.car_team.car_team_name}}")').prop('selected', true);
@@ -396,6 +420,7 @@ input.del[type=checkbox] {
   '{% endif %}'
 
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
+  $('#id_site_name option:contains("{{weight.site_name}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
   $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);
   if("{{weight.stone_color}}" != "")
@@ -420,6 +445,7 @@ input.del[type=checkbox] {
     $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_stone_type').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_scoop').select2({width: "100%",  theme: 'bootstrap-5'});
+    $('#id_site').select2({width: "100%",  theme: 'bootstrap-5'});
   });
 
   // BEFORE form submission
@@ -434,14 +460,13 @@ input.del[type=checkbox] {
         $('#id_is_cancel').prop( "checked", false );
     }
     //set data to id
-    $("#id_site").val($("#select_site").val());
     $("#id_car_team").val($("#select_team").val());
-    setDataEmptyName("#select_site", "#id_site_name");
     setDataEmptyName("#select_team", "#id_car_team_name");
 
     setDataEmptyName("#id_mill", "#id_mill_name");
     setDataEmptyName("#id_stone_type", "#id_stone_type_name");
     setDataEmptyName("#id_scoop", "#id_scoop_name");
+    setDataEmptyName("#id_site", "#id_site_name");
 
     //set data radio
     //pay
@@ -457,6 +482,13 @@ input.del[type=checkbox] {
       $("#id_clean_type").val("");
     else
       $("#id_clean_type").val(clean_val);
+
+    //clean
+    var line_val = $('input[name="line_group"]:checked').val();
+    if(line_val == undefined)
+      $("#id_line_type").val("");
+    else
+      $("#id_line_type").val(line_val);
 
     //vat 
     $("#id_vat_type").val($('input[name="vat_type_group"]:checked').val());
@@ -528,6 +560,28 @@ input.del[type=checkbox] {
     }
   }
 
+  var stateL1 = false;
+  function radiostateL1(element){
+    if(stateL1 == false) {
+      element.checked = true;
+      stateL1 = true;
+    }else{
+      element.checked = false;
+      stateL1 = false;
+    }
+  }
+
+  var stateL2 = false;
+  function radiostateL2(element){
+    if(stateL2 == false) {
+      element.checked = true;
+      stateL2 = true;
+    }else{
+      element.checked = false;
+      stateL2 = false;
+    }
+  }
+
   function setDataEmptyName(fk, name){
     if($(fk+" option:selected").index() > 0) {
       $(name).val($(fk).find(":selected").text());
@@ -540,6 +594,7 @@ input.del[type=checkbox] {
     $('input[name="pay_group"][value="{{weight.pay}}"]').prop("checked", true);
     $('input[name="clean_group"][value="{{weight.clean_type}}"]').prop("checked", true);
     $('input[name="vat_type_group"][value="{{weight.vat_type}}"]').prop("checked", true);
+    $('input[name="line_group"][value="{{weight.line_type}}"]').prop("checked", true);
   }
 
   $( function() {
@@ -569,6 +624,7 @@ input.del[type=checkbox] {
                     },
                 dataType: 'json',
                 success: function (data) {
+                  /*
                     if (data.site_list) {
                             $("#select_site").find('option').not(':first').remove();
                             //set option 
@@ -577,12 +633,13 @@ input.del[type=checkbox] {
                             }
                     }
                     $('#select_site option[value="'+tempSite +'"]').attr('selected','selected');
+                  */
                 }
                 });
             }
             return false;
         }else{
-            $("#select_site").find('option').not(':first').remove();
+            //$("#select_site").find('option').not(':first').remove();
         }
   }
 
@@ -601,8 +658,10 @@ input.del[type=checkbox] {
                 success: function (data) {
                     if (data.val) {
                       calculateQ(data.val);
+                      calculateOriginQ(data.val);
                     }else{
                       calculateQ(0.0);
+                      calculateOriginQ(0.0);
                     }
                 }
             });
@@ -657,10 +716,12 @@ input.del[type=checkbox] {
     }
   }
 
+  /*
   $("#select_site").change(function(){
     $("#id_site").val($(this).val());
     $("#id_site_name").val($(this).find(":selected").text());
   });
+  */
 
   $("#id_stone_type").change(function(){
     searchNumCalQ();
@@ -688,6 +749,13 @@ input.del[type=checkbox] {
     $(this).val(tmp.toFixed(3));
 
     calculateAll();
+  });
+
+  $("#id_origin_weight").blur(function(){
+    tmp = parseFloat($(this).val());
+    $(this).val(tmp.toFixed(3));
+
+    searchNumCalQ();
   });
 
   $("#id_weight_in, #id_weight_out").blur(function(){
@@ -784,6 +852,16 @@ input.del[type=checkbox] {
     }
   }
 
+  function calculateOriginQ(num_cal_q){
+    if (num_cal_q == 0.0){
+      $("#id_origin_q").val('0.00');
+    }else{
+      var weight_total =  parseFloat($("#id_origin_weight").val());
+      var num_q = weight_total / num_cal_q;
+      $("#id_origin_q").val(num_q.toFixed(2));
+    }
+  }
+
 
   $("#id_scoop").change(function(){
     $("#id_scoop_name").val($(this).find(":selected").text());
@@ -795,6 +873,10 @@ input.del[type=checkbox] {
 
   $("#id_stone_type").change(function(){
     $("#id_stone_type_name").val($(this).find(":selected").text());
+  });
+
+  $("#id_site").change(function(){
+    $("#id_site_name").val($(this).find(":selected").text());
   });
 
 

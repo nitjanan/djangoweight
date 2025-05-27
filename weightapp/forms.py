@@ -9,7 +9,7 @@ from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
 from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice
 from django.utils.translation import gettext_lazy as _
-from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet)
+from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet, Select)
 import string
 from django.forms.widgets import TimeInput
 from django.forms.models import BaseInlineFormSet
@@ -193,9 +193,13 @@ class StoneEstimateForm(forms.ModelForm):
         super (StoneEstimateForm,self).__init__(*args,**kwargs)
         self.fields['site'] = forms.ModelChoiceField(label='ปลายทาง', queryset =  BaseSite.objects.filter(weight_type = 2, s_comp__code =  request.session['company_code']))
 
+    is_pass = forms.BooleanField(
+        label="สถานะการส่งไปโม่ต่อ",
+        required=False
+    )
     class Meta:
        model = StoneEstimate
-       fields = ('created', 'site', 'company')
+       fields = ('created', 'site', 'company', 'topup', 'other', 'scale', 'total', 'is_pass')
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'company' : forms.HiddenInput(),
@@ -207,19 +211,25 @@ class StoneEstimateForm(forms.ModelForm):
 
 class StoneEstimateItemForm(forms.ModelForm):
     class Meta:
-       model = StoneEstimateItem
-       fields=('stone_type', 'percent')
-       widgets = {
-        }
+        model = StoneEstimateItem
+        fields = ('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'total')
+
+    def __init__(self, *args, **kwargs):
+        company_code = kwargs.pop('company_code', None)
+        super().__init__(*args, **kwargs)
+
+        if company_code:
+            site_qs = BaseSite.objects.filter(weight_type=2, s_comp__code=company_code)
+            self.fields['site_id'].widget = Select(
+                choices=[('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
+            )
 
 #เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
 StoneEstimateItemInlineFormset = inlineformset_factory(
     StoneEstimate,
     StoneEstimateItem,
     form=StoneEstimateItemForm,
-    fields=('stone_type', 'percent'),
-    widgets = {  
-    },
+    fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'total'),
     extra=1,
 )
 

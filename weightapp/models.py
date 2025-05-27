@@ -910,6 +910,11 @@ class StoneEstimate(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     site = models.ForeignKey(BaseSite,on_delete=models.CASCADE, null = True, blank=True)
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    topup = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="top up ไม่ผ่านตาชั่ง", default=0.000)
+    other = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="จากโรงโม่อื่น", default=0.000)
+    scale = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="จากตาชั่ง", default=0.000)
+    total =  models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="รวม", default=0.000)
+    is_pass = models.BooleanField(default=False, verbose_name="สถานะการส่งไปโม่ต่อ") #เก็บสถานะการส่งไปโม่ต่อ
     
     class Meta:
         db_table = 'stone_estimate'
@@ -917,6 +922,9 @@ class StoneEstimate(models.Model):
 class StoneEstimateItem(models.Model):
     stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
     percent = models.IntegerField(blank=True, null=True, default=0)
+    qty = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="จำนวนที่ได้ (ตัน)")
+    site_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="ส่งไปต่อ (รหัสปลายทาง)")
+    qty_site = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="ส่งไปต่อ (ตัน)")
     total = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="sum estimate by stone")
     se = models.ForeignKey(StoneEstimate,on_delete=models.CASCADE, null = True, blank=True)
     

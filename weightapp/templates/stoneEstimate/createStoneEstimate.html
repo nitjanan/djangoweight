@@ -11,6 +11,28 @@ rel="stylesheet"
 href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<style>
+  .col-md-2-5 {
+    flex: 0 0 20.8333% !important;
+    max-width: 20.8333% !important;
+  }
+
+  .col-md-1-5 {
+    flex: 0 0 12.5% !important;
+    max-width: 12.5% !important;
+  }
+
+  .big-checkbox {
+    width: 16px;
+    height: 16px;
+    transform: scale(1.5); /* You can increase the scale if needed */
+    margin-left: 5px;
+  }
+
+  label {
+    font-size: 1.2em;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -88,29 +110,136 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
 
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{se_form.topup.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                       {{se_form.topup | add_class:"form-control"}}
+                      <div class="form-control-icon">
+                        <i class="fas fa-weight-hanging"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{se_form.other.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{se_form.other | add_class:"form-control" |attr:"readonly:readonly"}}
+                      <div class="form-control-icon">
+                        <i class="fas fa-weight-hanging"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+				
+				
+				        <div class="col-md-2">
+                  <p class="fw-bolder">{{se_form.scale.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                       {{se_form.scale | add_class:"form-control" |attr:"readonly:readonly;required:required"}}
+                      <div class="form-control-icon">
+                        <i class="fas fa-weight-hanging"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{se_form.total.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group has-icon-left">
+                    <div class="position-relative">
+                      {{se_form.total | add_class:"form-control" |attr:"readonly:readonly;required:required"}}
+                      <div class="form-control-icon">
+                        <i class="fas fa-weight-hanging"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <p class="fw-bolder">{{se_form.is_pass.label}}</p>
+                </div>
+                <div class="col-md-4">
+                  {{se_form.is_pass | add_class:"big-checkbox"}}
+                </div>
+
                 <hr class="my-2">
                 <h6 class="card-title my-3">คำนวนเบอร์หินด้วยเปอร์เซ็นต์</h6>
-                <div class="col-md-5 col-12">
+                <div class="col-md-2-5 col-12 nps">
                   <div class="form-group">
                     <p class="fw-bolder">ชนิดหิน</p>
                   </div>
                 </div>
-                <div class="col-md-6 col-12">
+                <div class="col-md-1-5 col-12 npp">
                   <div class="form-group">
                     <p class="fw-bolder">เปอร์เซ็นต์</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">จำนวนที่ได้ (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">ส่งไปโม่ต่อ  (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">จำนวนที่ส่ง  (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12 npt">
+                  <div class="form-group">
+                    <p class="fw-bolder">รวมหินที่โม่ได้  (ตัน)</p>
                   </div>
                 </div>
                 {{ formset.management_form }}
                 {% for form in formset %}
                   <div class="row form-row spacer">
-                    <div class="col-md-5 col-12">
+                    <div class="col-md-2-5 col-12 nps">
                       <div class="form-group">
                         {{form.stone_type | add_class:"form-control stone_type"}}
                       </div>
                     </div>
-                    <div class="col-md-6 col-12">
+                    <div class="col-md-1-5 col-12 npp">
                       <div class="form-group">
-                        {{form.percent | add_class:"form-control percent"}}
+                        <div class="input-group">
+                          {{ form.percent|add_class:"form-control percent" }}
+                          <div class="input-group-append">
+                            <span class="input-group-text">%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-2 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.qty | add_class:"form-control qty border border-success" |attr:"readonly:readonly"}}
+                      </div>
+                    </div>
+                    <div class="col-md-2 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.site_id | add_class:"form-control site_id"}}
+                      </div>
+                    </div>
+                    <div class="col-md-2 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.qty_site | add_class:"form-control qty_site"}}
+                      </div>
+                    </div>
+                    <div class="col-md-2 col-12 npt">
+                      <div class="form-group">
+                        {{form.total | add_class:"form-control total border border-primary" |attr:"readonly:readonly"}}
                       </div>
                     </div>
                     <div class="col-md-1 col-12">
@@ -180,6 +309,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   "{% for it in base_stone_type %}"
       $("#id_form-{{forloop.counter0}}-stone_type").val("{{it.base_stone_type_id}}");
   "{% endfor %}"
+
+  visibleIsPass();
+
   });
 
   //before save
@@ -187,6 +319,38 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     $("form").submit(function(event) {
         const submitButton = $(this).find("[type='submit']");
         submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
+
+        //เช็คโรงโม่หลัก กับ ส่งต่อห้ามเหมือนกัน
+        var site_ids = $(".site_id");
+        var main_site = $("#id_site").val();
+        for(var i = 0; i < site_ids.length; i++){
+          if($(site_ids[i]).val()){
+            tmp_site_item = $(site_ids[i]).val();
+            if(tmp_site_item == main_site){
+              $(site_ids[i]).trigger( "focus" );
+              alert('ไม่สามารถส่งไปโรงโม่เดียวกับโรงโม่หลักได้ กรุณาเปลี่ยนโรงโม่ที่ส่งต่อ');
+
+              submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+              event.preventDefault(); // Prevent form submission
+              return false;
+            }
+
+          }
+        }
+
+        //รวมหินที่โม่ได้ (ตัน) ห้ามติดลบ
+        var totals = $(".total");
+        for(var i = 0; i < totals.length; i++){
+          var num_total = parseFloat($(totals[i]).val());
+          if(num_total < 0){
+            $(totals[i]).trigger( "focus" );
+            alert('รวมหินที่โม่ได้ติดลบ กรุณาเปลี่ยนจำนวนที่ส่งไปโรงโม่อื่น');
+
+            submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+            event.preventDefault(); // Prevent form submission
+            return false;
+          }
+        }
 
         if (typeof checkOverPercent() !== "undefined" && checkOverPercent()) {
             alert('ค่าคำนวนเปอร์เซ็นต์เกิน 100% กรุณาเปลี่ยนเปอร์เซ็นต์ใหม่');
@@ -291,6 +455,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   $('#id_site, #id_created').change(function() {
     searchStoneEstimate();
     searchDataWeightInDay();
+    searchWeightBySite();
   });
   
 	function searchStoneEstimate(){
@@ -365,6 +530,139 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           }
         }
       });
+    }
+    return false;
+  }
+
+  $(".qty_site").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(3));
+  });
+
+  //ค้นหา น้ำหนักจากตาชั่งเข้าโรงโม่ และ จากโรงโม่อืน เพื่อ Estimate
+  function searchWeightBySite(){
+    var created = $("#id_created").val();
+    var company =  "{{ request.session.company_code }}";
+    var site = $("#id_site").val();
+
+    // Create Ajax Call
+    if(created && site){
+      $.ajax({
+        url: '{% url "searchWeightBySite" %}',
+        data: {
+          'created': created,
+          'company':company,
+          'site':site,
+        },
+        dataType: 'json',
+        success: function (data) {
+          if(data.scale)
+            $("#id_scale").val(data.scale);
+          if(data.other)
+            $("#id_other").val(data.other);
+
+          sumTotalWeight();
+        }
+      });
+    }
+    return false;
+  }
+
+  //คำนวน รวมหินที่โม่ได้ (ตัน)
+  function sumTotalWeight(){
+    topup = parseFloat($("#id_topup").val());
+    scale = parseFloat($("#id_scale").val());
+    other = parseFloat($("#id_other").val());
+
+    total = topup + scale + other;
+    $("#id_total").val(total.toFixed(3));
+
+    calculateQty();
+  }
+
+  $('#id_topup, #id_scale, #id_other').blur(function() {
+    $('#id_topup').val(parseFloat($('#id_topup').val()).toFixed(3));
+    $('#id_scale').val(parseFloat($('#id_scale').val()).toFixed(3));
+    $('#id_other').val(parseFloat($('#id_other').val()).toFixed(3));
+
+    sumTotalWeight();
+  });
+
+  $('.percent, .qty_site').blur(function() {
+    calculateQty()
+  });
+
+  //คำนวน จำนวนที่ได้จาก น้ำหนักรวม และ เปอร์เซ็น
+  function calculateQty(){
+    var inputs = $(".percent");
+    var total = parseFloat($("#id_total").val());
+
+    for(var i = 0; i < inputs.length; i++){
+      if($(inputs[i]).val()){
+        percent = parseInt($(inputs[i]).val());
+        qty = total * percent / 100;
+
+        qty_site =  parseFloat($('#id_form-'+ i +'-qty_site').val());
+        result = qty - qty_site;
+
+        $('#id_form-'+ i +'-qty').val(qty.toFixed(3));
+        $('#id_form-'+ i +'-total').val(result.toFixed(3));
+      }
+    }
+
+  }
+
+  $('#id_is_pass').change(function() {
+    visibleIsPass();
+  });
+
+  //เปิด-ปิด form is_pass
+  function visibleIsPass(){
+    if ($('#id_is_pass').is(':checked')) {
+      $('.is_to_pass').show();
+      $('.nps').removeClass('col-md-4').addClass('col-md-2-5');
+      $('.npp').removeClass('col-md-4').addClass('col-md-1-5');
+      $('.npt').removeClass('col-md-4').addClass('col-md-2');
+    } else {
+      if (isQtySite() == true){
+        const confirmed = confirm("คุณต้องการยกเลิกสถานะการส่งไปโม่ต่อหรือไม่ ?\n*** หากยกเลิกจะรีเซ็ตจำนวนที่ส่งไปโม่ต่อทั้งหมด");
+        if (!confirmed) {
+          $('#id_is_pass').prop('checked', true);
+          e.preventDefault();
+        }else{
+          $('.is_to_pass').hide();
+          $('.nps').removeClass('col-md-2-5').addClass('col-md-4');
+          $('.npp').removeClass('col-md-1-5').addClass('col-md-4');
+          $('.npt').removeClass('col-md-2').addClass('col-md-4');
+          resetToPass();
+          calculateQty();
+        }
+      }else{
+          $('.is_to_pass').hide();
+          $('.nps').removeClass('col-md-2-5').addClass('col-md-4');
+          $('.npp').removeClass('col-md-1-5').addClass('col-md-4');
+          $('.npt').removeClass('col-md-2').addClass('col-md-4');
+          resetToPass();
+          calculateQty();
+      }
+    }
+  }
+
+  //รีเซ็ตข้อมูลส่งต่อหาก ปิด form is_pass
+  function resetToPass(){
+    var inputs = $(".stone_type");
+    for(var i = 0; i < inputs.length; i++){
+      $('#id_form-'+ i +'-site_id').val('');
+      $('#id_form-'+ i +'-qty_site').val(0);
+    }
+  }
+
+  function isQtySite() {
+    var inputs = $(".qty_site");
+    for (var i = 0; i < inputs.length; i++) {
+      var value = parseFloat($(inputs[i]).val());
+      if (!(value == 0.00 || isNaN(value))) {
+        return true;
+      }
     }
     return false;
   }

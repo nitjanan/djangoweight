@@ -233,6 +233,8 @@ urlpatterns = [
      path('exportWeightHistoryFixBug/', views.exportWeightHistoryFixBug, name="exportWeightHistoryFixBug"),
 
      path('searchDataWeightInDay/', views.searchDataWeightInDay, name="searchDataWeightInDay"),
+     path('searchWeightBySite/', views.searchWeightBySite, name="searchWeightBySite"),
+
      #path('callback', views.callback, name='callback'), #line api messaging callback
 
      path('send_line_1pm/', views.send_line_1pm, name="send_line_1pm"),

@@ -22,6 +22,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     max-width: 12.5% !important;
   }
 
+  .col-md-1-25 {
+    flex: 0 0 10.4167% !important;
+    max-width: 10.4167% !important;
+  }
+
   .big-checkbox {
     width: 16px;
     height: 16px;
@@ -174,7 +179,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
                 <hr class="my-2">
                 <h6 class="card-title my-3">คำนวนเบอร์หินด้วยเปอร์เซ็นต์</h6>
-                <div class="col-md-2-5 col-12 nps">
+                <div class="col-md-2 col-12 nps">
                   <div class="form-group">
                     <p class="fw-bolder">ชนิดหิน</p>
                   </div>
@@ -184,22 +189,32 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <p class="fw-bolder">เปอร์เซ็นต์</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 is_to_pass">
+                <div class="col-md-1-5 col-12 is_to_pass">
                   <div class="form-group">
                     <p class="fw-bolder">จำนวนที่ได้ (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 is_to_pass">
+                <div class="col-md-1-5 col-12 is_to_pass">
                   <div class="form-group">
-                    <p class="fw-bolder">ส่งไปโม่ต่อ  (ตัน)</p>
+                    <p class="fw-bolder">ส่งไปโม่ต่อที่แรก (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 is_to_pass">
+                <div class="col-md-1-25 col-12 is_to_pass">
                   <div class="form-group">
-                    <p class="fw-bolder">จำนวนที่ส่ง  (ตัน)</p>
+                    <p class="fw-bolder">จำนวนที่ส่งที่แรก (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 npt">
+                <div class="col-md-1-5 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">ส่งไปโม่ต่อที่สอง (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-1-25 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">จำนวนที่ส่งที่สอง (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-1-5 col-12 npt">
                   <div class="form-group">
                     <p class="fw-bolder">รวมหินที่โม่ได้  (ตัน)</p>
                   </div>
@@ -207,7 +222,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 {{ formset.management_form }}
                 {% for form in formset %}
                   <div class="row form-row spacer">
-                    <div class="col-md-2-5 col-12 nps">
+                    <div class="col-md-2 col-12 nps">
                       <div class="form-group">
                         {{form.stone_type | add_class:"form-control stone_type"}}
                       </div>
@@ -222,22 +237,32 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                         </div>
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 is_to_pass">
+                    <div class="col-md-1-5 col-12 is_to_pass">
                       <div class="form-group">
                         {{form.qty | add_class:"form-control qty border border-success" |attr:"readonly:readonly"}}
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 is_to_pass">
+                    <div class="col-md-1-5 col-12 is_to_pass">
                       <div class="form-group">
                         {{form.site_id | add_class:"form-control site_id"}}
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 is_to_pass">
+                    <div class="col-md-1-25 col-12 is_to_pass">
                       <div class="form-group">
                         {{form.qty_site | add_class:"form-control qty_site"}}
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 npt">
+                    <div class="col-md-1-5 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.nd_site_id | add_class:"form-control nd_site_id"}}
+                      </div>
+                    </div>
+                    <div class="col-md-1-25 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.nd_qty_site | add_class:"form-control nd_qty_site"}}
+                      </div>
+                    </div>
+                    <div class="col-md-1-5 col-12 npt">
                       <div class="form-group">
                         {{form.total | add_class:"form-control total border border-primary" |attr:"readonly:readonly"}}
                       </div>
@@ -321,13 +346,15 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
 
         //เช็คโรงโม่หลัก กับ ส่งต่อห้ามเหมือนกัน
-        var site_ids = $(".site_id");
+        var stone_types = $(".stone_type");
         var main_site = $("#id_site").val();
-        for(var i = 0; i < site_ids.length; i++){
-          if($(site_ids[i]).val()){
-            tmp_site_item = $(site_ids[i]).val();
-            if(tmp_site_item == main_site){
-              $(site_ids[i]).trigger( "focus" );
+        for(var i = 0; i < stone_types.length; i++){
+          if($(stone_types[i]).val()){
+            site_item =  $("#id_form-"+ i +"-site_id").val();
+            nd_site_item =  $("#id_form-"+ i +"-nd_site_id").val();
+
+            if(site_item != "" && site_item == main_site){
+              $("#id_form-"+ i +"-site_id").trigger( "focus" );
               alert('ไม่สามารถส่งไปโรงโม่เดียวกับโรงโม่หลักได้ กรุณาเปลี่ยนโรงโม่ที่ส่งต่อ');
 
               submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
@@ -335,6 +362,23 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               return false;
             }
 
+            if(nd_site_item != "" && nd_site_item == main_site){
+              $("#id_form-"+ i +"-nd_site_id").trigger( "focus" );
+              alert('ไม่สามารถส่งไปโรงโม่เดียวกับโรงโม่หลักได้ กรุณาเปลี่ยนโรงโม่ที่ส่งต่อ');
+
+              submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+              event.preventDefault(); // Prevent form submission
+              return false;
+            }
+
+            if(site_item != "" && nd_site_item != "" && site_item == nd_site_item){
+              $("#id_form-"+ i +"-nd_site_id").trigger( "focus" );
+              alert('ส่งไปโม่ต่อที่แรก และส่งไปโม่ต่อที่สองเป็นโรงโม่เดียวกันได้ กรุณาเปลี่ยนส่งไปโม่ต่อที่สอง');
+
+              submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+              event.preventDefault(); // Prevent form submission
+              return false;
+            }
           }
         }
 
@@ -538,6 +582,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     $(this).val(parseFloat($(this).val()).toFixed(3));
   });
 
+  $(".nd_qty_site").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(3));
+  });
+
   //ค้นหา น้ำหนักจากตาชั่งเข้าโรงโม่ และ จากโรงโม่อืน เพื่อ Estimate
   function searchWeightBySite(){
     var created = $("#id_created").val();
@@ -587,7 +635,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     sumTotalWeight();
   });
 
-  $('.percent, .qty_site').blur(function() {
+  $('.percent, .qty_site, .nd_qty_site').blur(function() {
     calculateQty()
   });
 
@@ -602,7 +650,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         qty = total * percent / 100;
 
         qty_site =  parseFloat($('#id_form-'+ i +'-qty_site').val());
-        result = qty - qty_site;
+        nd_qty_site =  parseFloat($('#id_form-'+ i +'-nd_qty_site').val());
+        result = qty - (qty_site + nd_qty_site);
 
         $('#id_form-'+ i +'-qty').val(qty.toFixed(3));
         $('#id_form-'+ i +'-total').val(result.toFixed(3));
@@ -619,9 +668,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   function visibleIsPass(){
     if ($('#id_is_pass').is(':checked')) {
       $('.is_to_pass').show();
-      $('.nps').removeClass('col-md-4').addClass('col-md-2-5');
+      $('.nps').removeClass('col-md-4').addClass('col-md-2');
       $('.npp').removeClass('col-md-4').addClass('col-md-1-5');
-      $('.npt').removeClass('col-md-4').addClass('col-md-2');
+      $('.npt').removeClass('col-md-4').addClass('col-md-1-5');
     } else {
       if (isQtySite() == true){
         const confirmed = confirm("คุณต้องการยกเลิกสถานะการส่งไปโม่ต่อหรือไม่ ?\n*** หากยกเลิกจะรีเซ็ตจำนวนที่ส่งไปโม่ต่อทั้งหมด");
@@ -630,17 +679,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           e.preventDefault();
         }else{
           $('.is_to_pass').hide();
-          $('.nps').removeClass('col-md-2-5').addClass('col-md-4');
+          $('.nps').removeClass('col-md-2').addClass('col-md-4');
           $('.npp').removeClass('col-md-1-5').addClass('col-md-4');
-          $('.npt').removeClass('col-md-2').addClass('col-md-4');
+          $('.npt').removeClass('col-md-1-5').addClass('col-md-4');
           resetToPass();
           calculateQty();
         }
       }else{
           $('.is_to_pass').hide();
-          $('.nps').removeClass('col-md-2-5').addClass('col-md-4');
+          $('.nps').removeClass('col-md-2').addClass('col-md-4');
           $('.npp').removeClass('col-md-1-5').addClass('col-md-4');
-          $('.npt').removeClass('col-md-2').addClass('col-md-4');
+          $('.npt').removeClass('col-md-1-5').addClass('col-md-4');
           resetToPass();
           calculateQty();
       }
@@ -653,6 +702,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     for(var i = 0; i < inputs.length; i++){
       $('#id_form-'+ i +'-site_id').val('');
       $('#id_form-'+ i +'-qty_site').val(0);
+
+      $('#id_form-'+ i +'-nd_site_id').val('');
+      $('#id_form-'+ i +'-nd_qty_site').val(0);
     }
   }
 
@@ -661,6 +713,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     for (var i = 0; i < inputs.length; i++) {
       var value = parseFloat($(inputs[i]).val());
       if (!(value == 0.00 || isNaN(value))) {
+        return true;
+      }
+    }
+
+    var nd_inputs = $(".qty_site");
+    for (var i = 0; i < nd_inputs.length; i++) {
+      var nd_value = parseFloat($(nd_inputs[i]).val());
+      if (!(nd_value == 0.00 || isNaN(nd_value))) {
         return true;
       }
     }

@@ -904,15 +904,16 @@ def editWeight(request, mode, weight_id):
             #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
             if mode == 2:
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
+                    # update new site
+                    updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                    
                     if  weight_form.stone_type:
                         updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
-                    if original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:#09-05-2025 ถ้ามีการเปลี่ยนแปลงโรงโม่ คำนวน โรงโม่เก่าด้วย
-                        # update old site 
+                    if original_weight_site is not None and original_weight_site != weight_form.site.base_site_id :#09-05-2025 ถ้ามีการเปลี่ยนแปลงโรงโม่ คำนวน โรงโม่เก่าด้วย
+                        # update old site
                         updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, original_weight_site)
                         updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)
-                        # update new site
-                        updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
-                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
 
             return redirect('weightTable')
     else:
@@ -2580,11 +2581,13 @@ def createStoneEstimate(request):
 
     site_qs = BaseSite.objects.filter(weight_type = 2, s_comp__code = active)
     SITE_CHOICES = [('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
+    ND_SITE_CHOICES = [('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
 
     base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True)
-    StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'total'), extra=len(base_stone_type), 
+    StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'nd_site_id', 'nd_qty_site', 'total'), extra=len(base_stone_type), 
         widgets={
-        'site_id': Select(choices=SITE_CHOICES)
+        'site_id': Select(choices=SITE_CHOICES),
+        'nd_site_id': Select(choices=ND_SITE_CHOICES)
     })
 
     if request.method == 'POST':
@@ -2602,7 +2605,10 @@ def createStoneEstimate(request):
             updateProdStockStoneItem(se.company.id, se.created)#คำนวณ stock
             return redirect('viewStoneEstimate')
     else:
-        initial_data = [{'qty_site': 0.0} for _ in range(len(base_stone_type))]
+        initial_data = (
+            [{'qty_site': 0.0} for _ in range(len(base_stone_type))] +
+            [{'nd_qty_site': 0.0} for _ in range(len(base_stone_type))]
+        )
 
         se_form = StoneEstimateForm(request, initial={'company': company})
         formset = StoneEstimateItemFormSet(queryset=StoneEstimateItem.objects.none(), initial=initial_data)
@@ -2670,10 +2676,11 @@ def updatePassScaleEstimate(company, created, site):
     try:
         sum_weight = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company = company, site__base_site_id = site).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
         es = StoneEstimate.objects.filter(site = site, created = created, company = company).first()
-        es.scale = sum_weight
-        es.total = es.topup + es.other + es.scale
-        es.save()
-        updateEstimate(company, site, created)
+        if es:
+            es.scale = sum_weight
+            es.total = es.topup + es.other + es.scale
+            es.save()
+            updateEstimate(company, site, created)
     except StoneEstimate.DoesNotExist:
         pass
 
@@ -2682,12 +2689,42 @@ def updatePassOtherEstimate(company, created):
     all_site =  StoneEstimateItem.objects.filter(se__company = company, se__created = created, site_id__isnull = False).values('site_id').distinct()
     for i in all_site:
         try:
+            #ดึงข้อมูล qty ทั้งหมด
             sum_qty_site = StoneEstimateItem.objects.filter(site_id = i['site_id'], se__created = created, se__company = company).aggregate(s=Sum("qty_site"))["s"] or Decimal('0.0')
+            sum_nd_qty_site = StoneEstimateItem.objects.filter(nd_site_id = i['site_id'], se__created = created, se__company = company).aggregate(s=Sum("nd_qty_site"))["s"] or Decimal('0.0')
+            sum_all = sum_qty_site + sum_nd_qty_site
+
+            #ดึงน้ำหนักจากตาชั่งผลิตทั้งหมด
+            sum_weight = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company = company, site__base_site_id = i['site_id']).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+            
             es = StoneEstimate.objects.filter(site = i['site_id'], created = created, company = company).first()
-            es.other = sum_qty_site
-            es.total = es.topup + es.other + es.scale
-            es.save()
-            updateEstimate(company, i['site_id'], created)
+            if es:
+                es.other = sum_all
+                es.scale = sum_weight
+                es.total = es.topup + es.other + es.scale
+                es.save()
+                updateEstimate(company, i['site_id'], created)
+        except StoneEstimate.DoesNotExist:
+            pass
+
+    nd_all_site =  StoneEstimateItem.objects.filter(se__company = company, se__created = created, nd_site_id__isnull = False).values('nd_site_id').distinct()
+    for i in nd_all_site:
+        try:
+            #ดึงข้อมูล qty ทั้งหมด
+            sum_qty_site = StoneEstimateItem.objects.filter(site_id = i['nd_site_id'], se__created = created, se__company = company).aggregate(s=Sum("qty_site"))["s"] or Decimal('0.0')
+            sum_nd_qty_site = StoneEstimateItem.objects.filter(nd_site_id = i['nd_site_id'], se__created = created, se__company = company).aggregate(s=Sum("nd_qty_site"))["s"] or Decimal('0.0')
+            sum_all = sum_qty_site + sum_nd_qty_site
+
+            #ดึงน้ำหนักจากตาชั่งผลิตทั้งหมด
+            sum_weight = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company = company, site__base_site_id = i['nd_site_id']).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+
+            es = StoneEstimate.objects.filter(site = i['nd_site_id'], created = created, company = company).first()
+            if es:
+                es.other = sum_all
+                es.scale = sum_weight
+                es.total = es.topup + es.other + es.scale
+                es.save()
+                updateEstimate(company, i['nd_site_id'], created)
         except StoneEstimate.DoesNotExist:
             pass
 
@@ -2705,7 +2742,10 @@ def updateEstimate(company, site, created):
 
     for i in se_item:
         qty = calculateEstimate(i['percent'], Decimal(all_total))
-        total = qty - i['qty_site']
+        if i['qty_site']:
+            total = qty - i['qty_site']
+        else:
+            total = qty
         StoneEstimateItem.objects.filter(id=i['id']).update(qty=qty, total=total)
 
 def searchStoneEstimate(request):
@@ -6119,6 +6159,8 @@ def searchWeightBySite(request):
         scale = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company__code = company, site = site).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
         #จากโรงโม่อืน
         other =  StoneEstimateItem.objects.filter(se__created = created, se__company__code = company, site_id = site).aggregate(s=Sum("qty_site"))["s"] or Decimal('0.0')
+        if other == 0.0:
+            other =  StoneEstimateItem.objects.filter(se__created = created, se__company__code = company, nd_site_id = site).aggregate(s=Sum("nd_qty_site"))["s"] or Decimal('0.0')
 
     data = {'scale': scale, 'other': other}
     return JsonResponse(data)

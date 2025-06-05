@@ -923,8 +923,10 @@ class StoneEstimateItem(models.Model):
     stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
     percent = models.IntegerField(blank=True, null=True, default=0)
     qty = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="จำนวนที่ได้ (ตัน)")
-    site_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="ส่งไปต่อ (รหัสปลายทาง)")
-    qty_site = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="ส่งไปต่อ (ตัน)")
+    site_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="ส่งไปต่อ (รหัสปลายทาง) ที่แรก")
+    qty_site = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="ส่งไปต่อ (ตัน) ที่แรก")
+    nd_site_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="ส่งไปต่อ (รหัสปลายทาง) ที่สอง")
+    nd_qty_site = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="ส่งไปต่อ (ตัน) ที่สอง")
     total = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="sum estimate by stone")
     se = models.ForeignKey(StoneEstimate,on_delete=models.CASCADE, null = True, blank=True)
     

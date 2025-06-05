@@ -26,6 +26,16 @@ input.del[type=checkbox] {
   max-width: 12.5% !important;
 }
 
+.col-md-1-25 {
+  flex: 0 0 10.4167% !important;
+  max-width: 10.4167% !important;
+}
+
+.col-md-0-25 {
+  flex: 0 0 2.0833% !important;
+  max-width: 2.0833% !important;
+}
+
 .big-checkbox {
   width: 16px;
   height: 16px;
@@ -177,12 +187,12 @@ label {
 
                 <hr class="my-2">
                 <h6 class="card-title my-3">คำนวนเบอร์หินด้วยเปอร์เซ็นต์</h6>
-                <div class="col-md-2-5 col-12 nps">
+                <div class="col-md-2 col-12 nps">
                   <div class="form-group">
                     <p class="fw-bolder">ชนิดหิน</p>
                   </div>
                 </div>
-                <div class="col-md-1-5 col-12 npp">
+                <div class="col-md-1-25 col-12 npp">
                   <div class="form-group">
                     <p class="fw-bolder">เปอร์เซ็นต์</p>
                   </div>
@@ -192,14 +202,24 @@ label {
                     <p class="fw-bolder">จำนวนที่ได้ (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 is_to_pass">
+                <div class="col-md-1-5 col-12 is_to_pass">
                   <div class="form-group">
-                    <p class="fw-bolder">ส่งไปโรงโม่  (ตัน)</p>
+                    <p class="fw-bolder">ส่งไปโรงโม่ที่แรก (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-2 col-12 is_to_pass">
+                <div class="col-md-1-25 col-12 is_to_pass">
                   <div class="form-group">
-                    <p class="fw-bolder">จำนวนที่ส่ง  (ตัน)</p>
+                    <p class="fw-bolder">จำนวนที่ส่งที่แรก (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-1-5 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">ส่งไปโรงโม่ที่สอง (ตัน)</p>
+                  </div>
+                </div>
+                <div class="col-md-1-25 col-12 is_to_pass">
+                  <div class="form-group">
+                    <p class="fw-bolder">จำนวนที่ส่งที่สอง (ตัน)</p>
                   </div>
                 </div>
                 <div class="col-md-1-5 col-12 npt">
@@ -207,7 +227,7 @@ label {
                     <p class="fw-bolder">รวมหินที่โม่ได้  (ตัน)</p>
                   </div>
                 </div>
-                <div class="col-md-1 col-12">
+                <div class="col-md-0-25 col-12">
                   <div class="form-group">
                     <p class="fw-bolder">.</p>
                   </div>
@@ -216,12 +236,12 @@ label {
                 {{ formset.management_form }}
                 {% for form in formset %}
                   <div class="row form-row spacer" id="div-{% if form.id.value %}{{form.id.value}}{% else %}None{% endif %}">
-                    <div class="col-md-2-5 col-12 nps">
+                    <div class="col-md-2 col-12 nps">
                       <div class="form-group">
                          <!-- จำเป็นมาก -->{{form.id}}<!-- จำเป็นมาก -->{{form.stone_type | add_class:"form-control stone_type"}}
                       </div>
                     </div>
-                    <div class="col-md-1-5 col-12 npp">
+                    <div class="col-md-1-25 col-12 npp">
                       <div class="form-group">
                         <div class="input-group">
                           {{ form.percent|add_class:"form-control percent" }}
@@ -236,14 +256,24 @@ label {
                         {{form.qty | add_class:"form-control qty border border-success" |attr:"readonly:readonly"}}
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 is_to_pass">
+                    <div class="col-md-1-5 col-12 is_to_pass">
                       <div class="form-group">
                         {{form.site_id | add_class:"form-control site_id"}}
                       </div>
                     </div>
-                    <div class="col-md-2 col-12 is_to_pass">
+                    <div class="col-md-1-25 col-12 is_to_pass">
                       <div class="form-group">
                         {{form.qty_site | add_class:"form-control qty_site"}}
+                      </div>
+                    </div>
+                    <div class="col-md-1-5 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.nd_site_id | add_class:"form-control nd_site_id"}}
+                      </div>
+                    </div>
+                    <div class="col-md-1-25 col-12 is_to_pass">
+                      <div class="form-group">
+                        {{form.nd_qty_site | add_class:"form-control nd_qty_site"}}
                       </div>
                     </div>
                     <div class="col-md-1-5 col-12 npt">
@@ -252,7 +282,7 @@ label {
                       </div>
                     </div>
 
-                    <div class="col-md-1 col-12">
+                    <div class="col-md-0-25 col-12">
                       {% if form.id.value %}
                         <div class="input-group-append text-right">
                           <button type="button" class="btn btn-danger hidden-print" onclick="hideDiv('{{form.id.value}}')">-</button>
@@ -337,6 +367,13 @@ label {
         $('#id_stoneestimateitem_set-'+ i +'-qty_site').val('0.0');
       }
     }
+
+    var nd_inputs = $(".nd_qty_site");
+    for(var i = 0; i < nd_inputs.length; i++){
+      if($(nd_inputs[i]).val() == ''){
+        $('#id_stoneestimateitem_set-'+ i +'-nd_qty_site').val('0.0');
+      }
+    }
   }
 
   function hideDiv(id){
@@ -356,13 +393,15 @@ label {
         submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
 
         //เช็คโรงโม่หลัก กับ ส่งต่อห้ามเหมือนกัน
-        var site_ids = $(".site_id");
+        var stone_types = $(".stone_type");
         var main_site = $("#id_site").val();
-        for(var i = 0; i < site_ids.length; i++){
-          if($(site_ids[i]).val()){
-            tmp_site_item = $(site_ids[i]).val();
-            if(tmp_site_item == main_site){
-              $(site_ids[i]).trigger( "focus" );
+        for(var i = 0; i < stone_types.length; i++){
+          if($(stone_types[i]).val()){
+            site_item =  $("#id_stoneestimateitem_set-"+ i +"-site_id").val();
+            nd_site_item =  $("#id_stoneestimateitem_set-"+ i +"-nd_site_id").val();
+
+            if(site_item != "" && site_item == main_site){
+              $("#id_stoneestimateitem_set-"+ i +"-site_id").trigger( "focus" );
               alert('ไม่สามารถส่งไปโรงโม่เดียวกับโรงโม่หลักได้ กรุณาเปลี่ยนโรงโม่ที่ส่งต่อ');
 
               submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
@@ -370,6 +409,23 @@ label {
               return false;
             }
 
+            if(nd_site_item != "" && nd_site_item == main_site){
+              $("#id_stoneestimateitem_set-"+ i +"-nd_site_id").trigger( "focus" );
+              alert('ไม่สามารถส่งไปโรงโม่เดียวกับโรงโม่หลักได้ กรุณาเปลี่ยนโรงโม่ที่ส่งต่อ');
+
+              submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+              event.preventDefault(); // Prevent form submission
+              return false;
+            }
+
+            if(site_item != "" && nd_site_item != "" && site_item == nd_site_item){
+              $("#id_stoneestimateitem_set-"+ i +"-nd_site_id").trigger( "focus" );
+              alert('ส่งไปโม่ต่อที่แรก และส่งไปโม่ต่อที่สองเป็นโรงโม่เดียวกันได้ กรุณาเปลี่ยนส่งไปโม่ต่อที่สอง');
+
+              submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+              event.preventDefault(); // Prevent form submission
+              return false;
+            }
           }
         }
 
@@ -541,6 +597,10 @@ label {
   $(".qty_site").blur(function() {
     $(this).val(parseFloat($(this).val()).toFixed(3));
   });
+
+  $(".nd_qty_site").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(3));
+  });
   
   //คำนวน รวมหินที่โม่ได้ (ตัน)
   function sumTotalWeight(){
@@ -562,7 +622,7 @@ label {
     sumTotalWeight();
   });
 
-  $('.percent, .qty_site').blur(function() {
+  $('.percent, .qty_site, .nd_qty_site').blur(function() {
     calculateQty()
   });
 
@@ -578,7 +638,8 @@ label {
           qty = total * percent / 100;
 
           qty_site =  parseFloat($('#id_stoneestimateitem_set-'+ i +'-qty_site').val());
-          result = qty - qty_site;
+          nd_qty_site =  parseFloat($('#id_stoneestimateitem_set-'+ i +'-nd_qty_site').val());
+          result = qty - (qty_site + nd_qty_site);
 
           $('#id_stoneestimateitem_set-'+ i +'-qty').val(qty.toFixed(3));
           $('#id_stoneestimateitem_set-'+ i +'-total').val(result.toFixed(3));
@@ -595,8 +656,8 @@ label {
   function visibleIsPass(){
     if ($('#id_is_pass').is(':checked')) {
       $('.is_to_pass').show();
-      $('.nps').removeClass('col-md-5').addClass('col-md-2-5');
-      $('.npp').removeClass('col-md-3').addClass('col-md-1-5');
+      $('.nps').removeClass('col-md-5').addClass('col-md-2');
+      $('.npp').removeClass('col-md-3').addClass('col-md-1-25');
       $('.npt').removeClass('col-md-3').addClass('col-md-1-5');
     } else {
       if (isQtySite() == true){
@@ -606,16 +667,16 @@ label {
           e.preventDefault();
         }else{
           $('.is_to_pass').hide();
-          $('.nps').removeClass('col-md-2-5').addClass('col-md-5');
-          $('.npp').removeClass('col-md-1-5').addClass('col-md-3');
+          $('.nps').removeClass('col-md-2').addClass('col-md-5');
+          $('.npp').removeClass('col-md-1-25').addClass('col-md-3');
           $('.npt').removeClass('col-md-1-5').addClass('col-md-3');
           resetToPass();
           calculateQty();
         }
       }else{
           $('.is_to_pass').hide();
-          $('.nps').removeClass('col-md-2-5').addClass('col-md-5');
-          $('.npp').removeClass('col-md-1-5').addClass('col-md-3');
+          $('.nps').removeClass('col-md-2').addClass('col-md-5');
+          $('.npp').removeClass('col-md-1-25').addClass('col-md-3');
           $('.npt').removeClass('col-md-1-5').addClass('col-md-3');
           resetToPass();
           calculateQty();
@@ -629,6 +690,9 @@ label {
     for(var i = 0; i < inputs.length; i++){
       $('#id_stoneestimateitem_set-'+ i +'-site_id').val('');
       $('#id_stoneestimateitem_set-'+ i +'-qty_site').val(0);
+
+      $('#id_stoneestimateitem_set-'+ i +'-nd_site_id').val('');
+      $('#id_stoneestimateitem_set-'+ i +'-nd_qty_site').val(0);
     }
   }
 
@@ -640,6 +704,15 @@ label {
         return true;
       }
     }
+
+    var nd_inputs = $(".nd_qty_site");
+    for (var i = 0; i < nd_inputs.length; i++) {
+      var nd_value = parseFloat($(nd_inputs[i]).val());
+      if (!(nd_value == 0.00 || isNaN(nd_value))) {
+        return true;
+      }
+    }
+
     return false;
   }
 

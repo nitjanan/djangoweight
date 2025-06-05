@@ -212,7 +212,7 @@ class StoneEstimateForm(forms.ModelForm):
 class StoneEstimateItemForm(forms.ModelForm):
     class Meta:
         model = StoneEstimateItem
-        fields = ('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'total')
+        fields = ('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'nd_site_id', 'nd_qty_site', 'total')
 
     def __init__(self, *args, **kwargs):
         company_code = kwargs.pop('company_code', None)
@@ -223,13 +223,16 @@ class StoneEstimateItemForm(forms.ModelForm):
             self.fields['site_id'].widget = Select(
                 choices=[('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
             )
+            self.fields['nd_site_id'].widget = Select(
+                choices=[('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
+            )
 
 #เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
 StoneEstimateItemInlineFormset = inlineformset_factory(
     StoneEstimate,
     StoneEstimateItem,
     form=StoneEstimateItemForm,
-    fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'total'),
+    fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'nd_site_id', 'nd_qty_site', 'total'),
     extra=1,
 )
 

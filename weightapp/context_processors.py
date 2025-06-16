@@ -14,7 +14,7 @@ def companyVisibleTab(request):
     try:
         user_profile = UserProfile.objects.get(user_id = request.user.id)
         #มี ALL ด้วย company_tab = BaseCompany.objects.filter(userprofile = user_profile).order_by('code')
-        company_tab = BaseCompany.objects.filter(userprofile = user_profile)
+        company_tab = BaseCompany.objects.filter(userprofile = user_profile).order_by('step')
     except:
         company_tab = None
 

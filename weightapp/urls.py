@@ -49,6 +49,8 @@ urlpatterns = [
     path('exportExcelStockStone/', views.exportExcelStockStone,name="exportExcelStockStone"),
     path('exportExcelStockStoneInDashboard/', views.exportExcelStockStoneInDashboard,name="exportExcelStockStoneInDashboard"),
 
+    path('exportExcelPercentEstimate/', views.exportExcelPercentEstimate,name="exportExcelPercentEstimate"),
+
     path('exportExcelProductionByStone/', views.exportExcelProductionByStone,name="exportExcelProductionByStone"),
     path('exportExcelProductionByStone/dashboard', views.exportExcelProductionByStoneInDashboard,name="exportExcelProductionByStoneInDashboard"),
 

@@ -27,10 +27,23 @@ class BaseVisible(models.Model):
     
     def __str__(self):
         return str(self.name)
+
+class BaseBusiness(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อประเภทธุรกิจ")
+    class Meta:
+        db_table = 'base_biz'
+        verbose_name = 'ประเภทธุรกิจ'
+        verbose_name_plural = 'ข้อมูลประเภทธุรกิจ'
+
+    def __str__(self):
+        return self.name
     
 class BaseCompany(models.Model):
     name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อบริษัท")
     code = models.CharField(blank=True, null=True, max_length=120, verbose_name="โค้ดบริษัท")
+    biz = models.ForeignKey(BaseBusiness, on_delete=models.CASCADE, blank = True, null = True, verbose_name="ประเภทธุรกิจ")
+    step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับแท็ปบริษัท")
+
     class Meta:
         db_table = 'base_comp'
         verbose_name = 'บริษัท'
@@ -290,6 +303,17 @@ class BaseDriver(models.Model):
 
     def __str__(self):
         return self.driver_name
+    
+class BaseSiteStore(models.Model):
+    name = models.CharField(blank=True, null=True, max_length=120, verbose_name="การจัดเก็บของปลายทาง")
+
+    class Meta:
+        db_table = 'base_site_store'
+        verbose_name = 'การจัดเก็บของปลายทาง'
+        verbose_name_plural = 'ข้อมูลการจัดเก็บของปลายทาง'
+
+    def __str__(self):
+        return self.name
 
 class BaseSite(models.Model):
     base_site_id = models.CharField(primary_key = True, max_length=120, verbose_name="รหัสปลายทาง")
@@ -301,6 +325,7 @@ class BaseSite(models.Model):
     target = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="กำลังการผลิต (Target)")
     user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
     created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
+    store = models.ForeignKey(BaseSiteStore, on_delete=models.CASCADE, blank=True, null = True, verbose_name="การจัดเก็บ")
     
     class Meta:
         db_table = 'base_site'

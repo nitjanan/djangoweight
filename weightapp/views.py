@@ -4,9 +4,9 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore
 from django.db.models import Sum, Q, Max, Value
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
@@ -419,6 +419,72 @@ def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
     list_sum_stone.append(getSumOther(request, mode, stone_list_id, type, company_in))
     return list_sum_stone
 
+######################################
+############## Port ##################
+######################################
+
+def getPortSumByStone(request, mode, stoneType, type, company_in):
+    start_date = request.session['db_start_date']
+    end_date = request.session['db_end_date']
+
+    start_year = datetime.strptime(start_date, '%Y-%m-%d').year
+
+    #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
+    if type == 1:#เครื่องขาย ปลายทาง รับเข้า
+        w = Weight.objects.filter(site__store = 1, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 2:
+        w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-stk__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
+    elif type == 4:#เครื่องขาย ปลายทาง จ่ายภายนอก
+        w = Weight.objects.filter(site__store = 2, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 5:#เครื่องขาย ปลายทาง จ่ายลงเรือ
+        w = Weight.objects.filter(site__store = 3, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 6:#รวม เครื่องขาย ปลายทางจ่ายออก
+        w = Weight.objects.filter(site__store__in = [2,3], bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')    
+    return  float(w)
+
+def getNumListStonePortChart(request, mode, stone_list_id, type, company_in):
+    #sell
+    list_sum_stone = []
+    for stone_id in stone_list_id:
+        list_sum_stone.append(getPortSumByStone(request, mode, stone_id, type, company_in))
+
+    list_sum_stone.append(getPortSumOther(request, mode, stone_list_id, type, company_in))
+    return list_sum_stone
+
+def getPortSumOther(request, mode, list_sum_stone, type, company_in):
+    start_date = request.session['db_start_date']
+    end_date = request.session['db_end_date']
+
+    start_year = datetime.strptime(start_date, '%Y-%m-%d').year
+
+    query_filters = Q()
+    ss_query_filters = Q()
+    for item_number_prefix in list_sum_stone:
+        query_filters |= Q(stone_type = item_number_prefix)
+        ss_query_filters |= Q(stone = item_number_prefix)
+
+    #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
+    if type == 1:#เครื่องขาย ปลายทาง รับเข้า
+        w = Weight.objects.filter(site__store = 1, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 2:
+        qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        qr_list = list(qr)
+
+        # Group by 'stone', keeping the most recent 'stk__created'
+        filtered_results = [
+            max(group, key=itemgetter('stk__created'))
+            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+        ]
+        w = sum(item['total'] for item in filtered_results)
+
+    elif type == 4:#เครื่องขาย ปลายทาง จ่ายภายนอก
+        w = Weight.objects.filter(site__store = 2, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 5:#เครื่องขาย ปลายทาง จ่ายภายลงเรือ
+        w = Weight.objects.filter(site__store = 3, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    elif type == 6:#รวม เครื่องขาย ปลายทางจ่ายออก
+        w = Weight.objects.filter(site__store__in = [2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    return  float(w)
+
 # Create your views here.
 @login_required(login_url='login')
 def index(request):
@@ -428,6 +494,8 @@ def index(request):
         #active : active คือแท็ปบริษัท active
         active = request.session['company_code']
         company_in = findCompanyIn(request)
+
+        comp = BaseCompany.objects.get(code = active)
 
         start_date = request.session['db_start_date']
         end_date = request.session['db_end_date']
@@ -442,87 +510,9 @@ def index(request):
     current_date = datetime.now()
     previous_day = current_date - timedelta(days=1)
 
-    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
-    #list วันที่ทั้งหมด ระหว่าง startDate และ endDate
-    start_date = datetime.strptime(startDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    end_date = datetime.strptime(endDateInMonth(str(previous_day.strftime('%Y-%m-%d'))), "%Y-%m-%d")
-    now_date = datetime.strptime(str(previous_day.strftime('%Y-%m-%d')), "%Y-%m-%d")
-    '''
-
-    ####################################
-    ###### list customer weight ########
-    ####################################
-    ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
-    weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).values('date','customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')
-    sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date = previous_day, bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
-    '''
-    #แสดงชื่อลูกค้าแค่ 10 อันดับแรกที่มีน้ำหนักสูงสุด ไม่ใช้แล้ว 17/02/2025
-    #weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).values('customer_name').annotate(sum_weight_total=Sum('weight_total')).order_by('-sum_weight_total')[:10]
-    #sum_all_weight = Weight.objects.filter(bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum('weight_total'))["s"]
-
-    ####################################
-    ######## data weight stock #########
-    ####################################
-    mill_name_list = []
-
+    s_comp = BaseSite.objects.filter(s_comp__code = active).values('base_site_id', 'base_site_name').order_by('base_site_id')
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
     s_comp_name = BaseSite.objects.filter(s_comp__code = active).values('base_site_name').order_by('base_site_id')
-
-    s_comp = BaseSite.objects.filter(s_comp__code = active).values('base_site_id', 'base_site_name').order_by('base_site_id')
-    # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-    data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date__range=(start_date, end_date), bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-
-    data_sum_produc = []
-    data_sum_produc.append(('Total', data_sum_produc_all))
-
-    for site in s_comp:
-        ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
-        aggregated_value = Weight.objects.filter(
-            bws__company__code__in=company_in,
-            site=site['base_site_id'],
-            date=previous_day,
-            bws__weight_type=2
-        ).aggregate(s=Sum("weight_total"))["s"]        
-        '''
-        aggregated_value = Weight.objects.filter(
-            bws__company__code__in=company_in,
-            site=site['base_site_id'],
-            date__range=(start_date, end_date),
-            bws__weight_type=2
-        ).aggregate(s=Sum("weight_total"))["s"] 
-
-        
-        # Append a tuple (site_id, aggregated_value) to the list
-        data_sum_produc.append((site['base_site_name'], aggregated_value))
-    
-    ####################################
-    ########### chart stone ############
-    ####################################
-    #ดึงชนิดหินตามบริษัท ถ้าไม่มีดึงตามนี้ 'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
-    try:
-        set_stone = SetCompStone.objects.filter(comp__code = active)
-        result_list = list(set_stone.values_list('stone', flat=True))
-
-        text_value = result_list[0]
-        stone_list = text_value.replace("'", "").split(',')
-    except:
-        stone_list = ['01ST', '07ST', '09ST', '10ST', '16ST']
-
-    #หาชื่อหินจาก stone_list
-    stone_name_list = list(BaseStoneType.objects.filter(base_stone_type_id__in = stone_list).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id'))
-    stone_name_list.append('อื่นๆ')
-    
-    #หาจำนวนตันจาก stone_list
-    sell_mill_list = getNumListStoneWeightChart(request, 1, stone_list, 1, company_in)
-    sell_stock_list = getNumListStoneWeightChart(request, 1, stone_list, 4, company_in)
-    sell_purchase_list = getNumListStoneWeightChart(request, 1, stone_list, 5, company_in)
-    total_sell_list = getNumListStoneWeightChart(request, 1, stone_list, 6, company_in)
-
-    stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
-    produce_list = getNumListStoneWeightChart(request, 2, stone_list, 3, company_in)
-
-    sell_total = sum(sum(lst) for lst in [sell_mill_list, sell_stock_list, sell_purchase_list]) #รวม group sell
-    produce_total = sum(produce_list)#รวม group produce
 
     ####################################
     ########### chart mill #############
@@ -613,29 +603,180 @@ def index(request):
     loade_t = int((loade_en - loade_st) * 1000 - 100)
     request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds    
     '''
+    if not comp.biz or comp.biz.id == 1:
+        ####################################
+        ######## data weight stock #########
+        ####################################
+        # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+        data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date__range=(start_date, end_date), bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
 
-    context = { 
-                'previous_day':previous_day,
-                'start_day':start_day,
-                'end_day':end_day,
-                'actual_working_time_all':actual_working_time_all,
-                'sell_mill_list':sell_mill_list,
-                'sell_stock_list': sell_stock_list,
-                'sell_purchase_list': sell_purchase_list,
-                'total_sell_list': total_sell_list,
-                'stock_list':stock_list,
-                'produce_list':produce_list,
-                'data_sum_produc_all':data_sum_produc_all,
-                'data_sum_produc':data_sum_produc,
-                'sell_total':sell_total,
-                'produce_total':produce_total,
-                'list_date': list_date,
-                'list_goal_mill' : list_goal_mill,
-                'list_persent_loss_weight':list_persent_loss_weight,
-                'stone_name_list':stone_name_list,
-                'dashboard_page':'active',
-                active :"active",}
-    return render(request, "index.html",context)
+        data_sum_produc = []
+        data_sum_produc.append(('Total', data_sum_produc_all))
+
+        for site in s_comp:
+            ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
+            aggregated_value = Weight.objects.filter(
+                bws__company__code__in=company_in,
+                site=site['base_site_id'],
+                date=previous_day,
+                bws__weight_type=2
+            ).aggregate(s=Sum("weight_total"))["s"]        
+            '''
+            aggregated_value = Weight.objects.filter(
+                bws__company__code__in=company_in,
+                site=site['base_site_id'],
+                date__range=(start_date, end_date),
+                bws__weight_type=2
+            ).aggregate(s=Sum("weight_total"))["s"] 
+
+            
+            # Append a tuple (site_id, aggregated_value) to the list
+            data_sum_produc.append((site['base_site_name'], aggregated_value))
+
+        ####################################
+        ########### chart stone ############
+        ####################################
+        #ดึงชนิดหินตามบริษัท ถ้าไม่มีดึงตามนี้ 'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
+        try:
+            set_stone = SetCompStone.objects.filter(comp__code = active)
+            result_list = list(set_stone.values_list('stone', flat=True))
+
+            text_value = result_list[0]
+            stone_list = text_value.replace("'", "").split(',')
+        except:
+            stone_list = ['01ST', '07ST', '09ST', '10ST', '16ST']
+
+        #หาชื่อหินจาก stone_list
+        stone_name_list = list(BaseStoneType.objects.filter(base_stone_type_id__in = stone_list).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id'))
+        stone_name_list.append('อื่นๆ')
+        
+        #หาจำนวนตันจาก stone_list
+        sell_mill_list = getNumListStoneWeightChart(request, 1, stone_list, 1, company_in)
+        sell_stock_list = getNumListStoneWeightChart(request, 1, stone_list, 4, company_in)
+        sell_purchase_list = getNumListStoneWeightChart(request, 1, stone_list, 5, company_in)
+        total_sell_list = getNumListStoneWeightChart(request, 1, stone_list, 6, company_in)
+
+        stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
+        produce_list = getNumListStoneWeightChart(request, 2, stone_list, 3, company_in)
+
+        sell_total = sum(sum(lst) for lst in [sell_mill_list, sell_stock_list, sell_purchase_list]) #รวม group sell
+        produce_total = sum(produce_list)#รวม group produce
+
+        context = { 
+                    'previous_day':previous_day,
+                    'start_day':start_day,
+                    'end_day':end_day,
+                    'actual_working_time_all':actual_working_time_all,
+                    'sell_mill_list':sell_mill_list,
+                    'sell_stock_list': sell_stock_list,
+                    'sell_purchase_list': sell_purchase_list,
+                    'total_sell_list': total_sell_list,
+                    'stock_list':stock_list,
+                    'produce_list':produce_list,
+                    'data_sum_produc_all':data_sum_produc_all,
+                    'data_sum_produc':data_sum_produc,
+                    'sell_total':sell_total,
+                    'produce_total':produce_total,
+                    'list_date': list_date,
+                    'list_goal_mill' : list_goal_mill,
+                    'list_persent_loss_weight':list_persent_loss_weight,
+                    'stone_name_list':stone_name_list,
+                    'dashboard_page':'active',
+                    active :"active",
+        }
+        return render(request, "index.html",context)
+    
+    elif comp.biz.id == 2:
+        store = BaseSiteStore.objects.filter(id__in = [1,2,3]).values('id', 'name').order_by('id')
+        store_id = BaseSiteStore.objects.filter(id__in = [1,2,3]).values_list('id').order_by('id')
+
+        ####################################
+        ######## data weight stock #########
+        ####################################
+        # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+        data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__store__in = store_id, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"]
+
+        data_sum_produc = []
+        data_sum_produc.append(('Total', data_sum_produc_all))
+
+        for st in store:
+            aggregated_value = Weight.objects.filter(
+                bws__company__code__in=company_in,
+                site__store = st['id'],
+                date__range=(start_date, end_date),
+                bws__weight_type=1
+            ).aggregate(s=Sum("weight_total"))["s"]
+
+            # Append a tuple (site_id, aggregated_value) to the list
+            data_sum_produc.append((st['name'], aggregated_value))
+
+        ####################################
+        ########### chart stone ############
+        ####################################
+        #ดึงชนิดหินตามบริษัท ถ้าไม่มีดึงตามนี้ 'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
+        try:
+            set_stone = SetCompStone.objects.filter(comp__code = active)
+            result_list = list(set_stone.values_list('stone', flat=True))
+
+            text_value = result_list[0]
+            stone_list = text_value.replace("'", "").split(',')
+        except:
+            stone_list = ['01ST', '07ST', '09ST', '10ST', '16ST']
+        
+        #หาชื่อหินจาก stone_list
+        stone_name_list = list(BaseStoneType.objects.filter(base_stone_type_id__in = stone_list).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id'))
+        stone_name_list.append('อื่นๆ')
+
+        # Define lists to store cumulative totals and goal percentages for each mill
+        list_store_mills = [[] for _ in range(len(store_id))]
+        cumulative_totals = [0] * len(store_id)
+
+        # Fetch weights for each mill within the date range
+        weights = {}
+        for i, st_id in enumerate(store_id):
+            weights[st_id] = Weight.objects.filter(
+                date__range=(start_date, end_date),
+                site__store = st_id
+            ).values('date').annotate(
+                cumulative_total=Sum('weight_total')
+            ).order_by('date')
+
+        for date in list_date:
+            for i, st_id in enumerate(store_id):
+                found = False  # Flag to track if we find a matching date
+                for w in weights[st_id]:
+                    if str(date) == str(w['date']):
+                        cumulative_totals[i] = str(w['cumulative_total'])
+                        list_store_mills[i].append(cumulative_totals[i])
+                        found = True
+                        break
+                if not found:
+                    list_store_mills[i].append(0)
+
+        list_store_mill = []
+        for i, store in enumerate(store):
+            list_store_mill.append((store['name'], list_store_mills[i]))
+
+        ################## stock ########################
+        stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
+
+        context = { 
+                    'previous_day':previous_day,
+                    'start_day':start_day,
+                    'end_day':end_day,
+                    'actual_working_time_all':actual_working_time_all,
+                    'stock_list':stock_list,
+                    'data_sum_produc_all':data_sum_produc_all,
+                    'data_sum_produc':data_sum_produc,
+                    'list_date': list_date,
+                    'list_goal_mill' : list_goal_mill,
+                    'list_store_mill' : list_store_mill,
+                    'list_persent_loss_weight':list_persent_loss_weight,
+                    'stone_name_list':stone_name_list,
+                    'dashboard_page':'active',
+                    active :"active",
+        }
+        return render(request, "ndIndex.html",context)
 
 def calculatePersent(num, num_all):
     persent = 0.0
@@ -851,15 +992,15 @@ def editWeight(request, mode, weight_id):
 
     weight_data = get_object_or_404(Weight, pk=weight_id)
 
-    if mode == 1:
+    if company.biz.id == 1 and mode == 1:
         template_name = "weight/editWeightSell.html"
         tmp_form_post = WeightForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightForm(instance=weight_data)
-    elif mode == 2:
+    elif company.biz.id == 1 and mode == 2:
         template_name = "weight/editWeightStock.html"
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
-    elif mode == 4:
+    elif company.biz.id == 2 and mode == 1:
         template_name = "weight/editWeightPort.html"
         tmp_form_post = WeightPortForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightPortForm(instance=weight_data)
@@ -1201,13 +1342,20 @@ def excelProductionByStone(request, my_q, list_date):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    # Query ข้อมูลขาย
-    #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
-    stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+    comp = BaseCompany.objects.get(code = active)
 
-    #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
-    m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
-    data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    if comp.biz.id == 1:
+        # Query ข้อมูลขาย
+        #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
+        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+
+        #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
+        m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
+        data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+    
+    elif comp.biz.id == 2:
+        #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
+        data = Weight.objects.filter(my_q, site__store__in = [2,3], bws__weight_type = 1).order_by('date','site','stone_type').values_list('date','site_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     
     # Query ข้อมูลผลิตรวม
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
@@ -1468,18 +1616,31 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    # Query ข้อมูลขาย
-    #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
-    stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
-    
-    #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
-    m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
-    data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).annotate(
-        month=ExtractMonth('date'),
-        year=ExtractYear('date')
-    ).values_list('year', 'month', 'mill_name', 'stone_type_name').annotate(
-        sum_weight_total=Sum('weight_total')
-    ).order_by('year', 'month', 'mill_name', 'stone_type_name')
+    comp = BaseCompany.objects.get(code = active)
+
+    if comp.biz.id == 1:
+        # Query ข้อมูลขาย
+        #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
+        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+        
+        #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
+        m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
+        data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).annotate(
+            month=ExtractMonth('date'),
+            year=ExtractYear('date')
+        ).values_list('year', 'month', 'mill_name', 'stone_type_name').annotate(
+            sum_weight_total=Sum('weight_total')
+        ).order_by('year', 'month', 'mill_name', 'stone_type_name')
+
+    elif comp.biz.id == 2:
+        # Query ข้อมูลขาย
+        #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
+        data = Weight.objects.filter(my_q, site__store__in = [2,3], bws__weight_type = 1).annotate(
+            month=ExtractMonth('date'),
+            year=ExtractYear('date')
+        ).values_list('year', 'month', 'site_name', 'stone_type_name').annotate(
+            sum_weight_total=Sum('weight_total')
+        ).order_by('year', 'month', 'site_name', 'stone_type_name')
     
     # Query ข้อมูลผลิตรวม
     s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
@@ -3377,7 +3538,7 @@ def settingBaseMill(request):
     base_mill = p.get_page(page)
 
     context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
-    return render(request, "manage/baseMill.html",context)
+    return render(request, "manage/BaseMill/baseMill.html",context)
 
 
 def createBaseMill(request):
@@ -3409,7 +3570,7 @@ def createBaseMill(request):
         active :"active",
     }
 
-    return render(request, "manage/formBase.html", context)
+    return render(request, "manage/BaseMill/formBaseMill.html", context)
 
 def editBaseMill(request, id):
     active = request.session['company_code']
@@ -3441,7 +3602,7 @@ def editBaseMill(request, id):
         active :"active",
     }
 
-    return render(request, "manage/formBase.html", context)
+    return render(request, "manage/BaseMill/formBaseMill.html", context)
 
 ################### BaseJobType ####################
 @login_required(login_url='login')
@@ -6164,3 +6325,180 @@ def searchWeightBySite(request):
 
     data = {'scale': scale, 'other': other}
     return JsonResponse(data)
+
+def exportExcelPercentEstimate(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+    site = request.GET.get('site') or None
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(se__created__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(se__created__lte = end_created)
+    if site is not None:
+        my_q &=Q(se__site = site)
+
+    my_q &= Q(se__company__code__in = company_in)
+   
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    startDate = datetime.strptime(start_created or startDateInMonth(previous_date_time.strftime('%Y-%m-%d')), "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created or previous_date_time.strftime('%Y-%m-%d'), "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
+
+    response = excelPercentEstimate(request, my_q, list_date)
+    return response
+
+def excelPercentEstimate(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    stone_id = StoneEstimateItem.objects.filter(Q(percent__gt = 0) & my_q).values_list('stone_type__base_stone_type_id', flat=True).order_by('stone_type__base_stone_type_id').distinct() #ดึงเฉพาะ stone_id ที่มีการคีย์ percent > 0
+    data = StoneEstimateItem.objects.filter(Q(stone_type__in = stone_id) & my_q).order_by('se__created', 'se__site', 'stone_type').values_list('se__created', 'se__site__base_site_name', 'stone_type__base_stone_type_name', 'percent')
+
+    # Create a new workbook and get the active worksheet
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+
+    if data:
+        worksheet.cell(row=1, column=1, value='Date')
+        worksheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
+
+        date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+        
+        # Create a set of all unique mill and stone values
+        sites = set()
+        stones = set()
+        for item in data:
+            sites.add(item[1])
+            stones.add(item[2]) 
+
+        site_col_list = []
+        
+        # Create a list of colors for each line_type
+        site_colors = [generate_pastel_color() for i  in range(len(sites) + 1)]
+
+        column_index = 2
+        for st in sites:
+            worksheet.cell(row=1, column=column_index, value=f'เปอร์เซ็นต์การผลิตหิน {st}')
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones) + 1) -1 )
+            
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.alignment = Alignment(horizontal='center')
+
+            info = {}
+            info['st'] = st
+            info['strat_col'] = column_index
+            info['end_col'] = column_index + len(stones) + 1 
+            site_col_list.append(info)
+
+            #อัพเดทจำนวน col ตามที่มา
+            column_index += len(stones) + 1
+
+        #set color in header in row 1-2
+        for row in worksheet.iter_rows(min_row=1, max_row=2):
+            # Set the background color for each cell in the column
+            for cell in row:
+                #cell.border = Border(top=side, bottom=side, left=side, right=side)
+                cell.alignment = Alignment(horizontal='center')
+                line_index = (cell.column - 2) // (len(stones) + 1)
+                fill_color = site_colors[line_index % len(site_colors)]
+                fill = PatternFill(start_color=fill_color, fill_type="solid")
+                cell.fill = fill
+
+        # Write headers row 2 to the worksheet
+        column_index = 2
+        for st in sites:
+            for sou in stones:
+                worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
+                column_index += 1
+            
+            worksheet.cell(row=2, column=column_index, value= 'Total').alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="FF0000")
+            column_index += 1
+                
+        # Create a dictionary to store data by date, mill, and stone
+        date_data = {}
+
+        # Loop through the data and populate the dictionary  
+        for item in data:
+            date = item[0]
+            site = item[1]
+            stone = item[2]
+            value = item[3]
+
+            if date not in date_data:
+                date_data[date] = {}
+
+            if site not in date_data[date]:
+                date_data[date][site] = {}
+
+            date_data[date][site][stone] = value
+
+        row_index = 3
+        for idl, ldate in enumerate(list_date):
+            #เขียนวันที่ใน worksheet column 1
+            worksheet.cell(row=idl+3, column=1, value=ldate).style = date_style
+            worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
+
+            for date, site_data in date_data.items():
+                #เขียน weight total ของแต่ละหินใน worksheet
+                if worksheet.cell(row=idl+3, column = 1).value == date:
+                    column_index = 2
+                    for site in sites:
+                        sum_value = 0
+                        stone_data = site_data.get(site, {})
+                        for stone in stones:
+                            value = stone_data.get(stone, '')
+                            try:
+                                value = Decimal(value) / 100
+                                sum_value += value
+                                cell = worksheet.cell(row=idl+3, column=column_index, value=value)
+                                cell.number_format = '0%'
+                            except (InvalidOperation, TypeError):
+                                worksheet.cell(row=idl+3, column=column_index, value='')
+                            column_index += 1
+                        
+                        worksheet.cell(row=idl + 3, column=column_index, value = sum_value).number_format = '0%'
+                        worksheet.cell(row=idl + 3, column=column_index).font = Font(bold=True, color="FF0000")
+                        column_index += 1
+                    #row_index += 1
+            row_index += 1
+
+        # Set the column widths
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column = column_cells[2].column_letter
+            for cell in column_cells:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            if column == 'A':
+                worksheet.column_dimensions[column].width = 15
+            else:
+                worksheet.column_dimensions[column].width = adjusted_width
+            worksheet.column_dimensions[column].height = 20
+
+        side = Side(border_style='thin', color='000000')
+        set_border(worksheet, side)
+
+    else:
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
+
+    # Set the response headers for the Excel file
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+
+    # Save the workbook to the response
+    workbook.save(response)
+    return response

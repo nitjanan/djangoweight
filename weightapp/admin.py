@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -68,8 +68,8 @@ class BaseSiteResource(resources.ModelResource):
     class Meta:
         model = BaseSite
         import_id_fields = ('base_site_id',)
-        fields = ('base_site_id', 'base_site_name', 'weight_type')
-        export_order = ('base_site_id', 'base_site_name', 'weight_type')
+        fields = ('base_site_id', 'base_site_name', 'weight_type', 'store')
+        export_order = ('base_site_id', 'base_site_name', 'weight_type', 'store')
 
     #ถ้ามาจากการ Import ให้ update Weight ด้วย
     def after_save_instance(self, instance, using_transactions, dry_run):
@@ -78,8 +78,8 @@ class BaseSiteResource(resources.ModelResource):
 
 class BaseSiteAdmin(ImportExportModelAdmin):
     resource_class = BaseSiteResource
-    list_display = ('base_site_id', 'base_site_name',)
-    search_fields = ('base_site_id', 'base_site_name',)
+    list_display = ['base_site_id', 'base_site_name', 'weight_type', 'store']
+    search_fields = ('base_site_id', 'base_site_name')
 
 class BaseStoneColorAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id', 'name'] #แสดงรายการสินค้าในรูปแบบตาราง
@@ -294,7 +294,7 @@ class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     search_fields = ('id', 'customer__customer_name', 'site__base_site_name',)
 
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['name', 'code'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['name', 'code', 'biz', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -397,6 +397,14 @@ class BaseMillSourceAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id', 'name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+class BaseSiteStoreAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'name',)
+    search_fields = ('id', 'name',)
+
+class BaseBusinessAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -441,6 +449,7 @@ admin.site.register(StockStoneItem, StockStoneItemAdmin)
 admin.site.register(SetLineMessaging, SetLineMessagingAdmin)
 admin.site.register(GasPrice, GasPriceAdmin)
 admin.site.register(BaseMillSource, BaseMillSourceAdmin)
-
+admin.site.register(BaseSiteStore, BaseSiteStoreAdmin)
+admin.site.register(BaseBusiness, BaseBusinessAdmin)
 
 

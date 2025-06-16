@@ -616,13 +616,14 @@ class BaseCarForm(forms.ModelForm):
 class BaseSiteForm(forms.ModelForm):
     class Meta:
        model = BaseSite
-       fields = ('base_site_id' , 'base_site_name', 'weight_type', 'user_created')
+       fields = ('base_site_id' , 'base_site_name', 'weight_type', 'user_created', 'store')
        widgets = {
             'user_created': forms.HiddenInput(),
         }
        labels = {
             'base_site_id': _('รหัสปลายทาง'),
             'base_site_name': _('ชื่อปลายทาง'),
+            'store': _('การจัดเก็บของท่าเรือ'),
        }
 
     def clean_name_field(self):

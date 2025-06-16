@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<style>
+.red-text {
+  color: red;
+}
+.apexcharts-datalabel-value{
+  fill: #737CA1;
+  font-weight : 600 ;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="row">
+    <div class="col-7">
+      <h3>Weight Statistics</h3>
+    </div>
+    <div class="col-4">
+      <div id="reportrange" style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
+        <i class="fa fa-calendar"></i>&nbsp;
+        <span></span> <i class="fa fa-caret-down"></i>
+      </div>
+      <input type="text" id="db_start_date" name="db_start_date" class="d-none">
+      <input type="text" id="db_end_date" name="db_end_date" class="d-none">
+    </div>
+    <div class="col-1">
+      <a class="btn btn-light" onClick="setDateInDashbord()"><i class="fa-solid fa-magnifying-glass"></i></a>
+    </div>
+  </div>
+</div>
+<div class="page-content">
+  <section class="row">
+    <div class="col-12 col-lg-9">
+      <div class="row">
+        {% for dt in data_sum_produc %}
+        <div class="col-6 col-sm">
+          <div class="card">
+            <div class="card-body px-4 py-4-5">
+              <div class="row">
+                <div
+                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
+                >
+                  <!--div class="stats-icon blue mb-2">
+                    <i class="iconly-boldProfile"></i>
+                  </div-->
+                  <div class="avatar avatar-lg">
+                    <img src="{% static 'images/stone/4080.jpg' %}" />
+                  </div>
+                </div>
+                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
+                  <h6 class="text-muted font-semibold">{{dt.0}}</h6>
+                  <h6 class="font-extrabold mb-0">
+                    {% if dt.1 %}{{dt.1 |floatformat:2|intcomma}}{% else %}0{% endif %} ตัน
+                  </h6>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h4>ยอดสะสมประจำเดือน</h4>
+            </div>
+            <div class="card-body">
+              <div id="chart-stone"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-3">
+      <div class="card">
+        <div class="card-body py-4 px-4">
+          <div class="d-flex align-items-center">
+            <div class="avatar avatar-xl">
+              <img src="{% static 'compiled/jpg/5.jpg'%}" alt="Face 1" />
+            </div>
+            {% if request.user.is_authenticated %}
+            <div class="ms-3 name">
+              <h5 class="font-bold">{{request.user}}</h5>
+              <h6 class="text-muted mb-0"><a href="{% url 'logout' %}">Logout</a></h6>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card" style="height: 30rem;">
+        <div class="card-header">
+          <h4>รายงานประจำเดือน</h4>
+        </div>
+        <div class="card-content pb-4">
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block" download>ยอดขายตามประเภทหินรายวัน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionByStoneAndMonthInDashboard' %}" class="btn btn-danger rounded-pill btn-block" download>ยอดขายตามประเภทหินรายเดือน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelProductionAndLossDashboard' %}" class="btn btn-success rounded-pill btn-block" download>บันทึกปฏิบัติการงานโรงโม่</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelStockStoneInDashboard' %}" class="btn rounded-pill btn-block" style="background-color:#8e44ad ;color: white;" download>รายงาน Stock หิน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'summaryProduction' %}" class="btn btn-primary rounded-pill btn-block">รายงานการผลิต Weekly Report</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelEstimateDashboard' %}" class="btn btn-info rounded-pill btn-block" download>รายงานผลิตหินประจำวัน</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'monthlyProduction' %}" class="btn btn-secondary rounded-pill btn-block">รายงานผลิตรายเดือน</a>
+          </div>
+        </div>
+        <!-- div class="card-content pb-4">
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/4.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">Hank Schrader</h5>
+              <h6 class="text-muted mb-0">@johnducky</h6>
+            </div>
+          </div>
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/6.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">Dean Winchester</h5>
+              <h6 class="text-muted mb-0">@imdean</h6>
+            </div>
+          </div>
+          <div class="recent-message d-flex px-4 py-3">
+            <div class="avatar avatar-lg">
+              <img src="{% static 'compiled/jpg/1.jpg' %}" />
+            </div>
+            <div class="name ms-4">
+              <h5 class="mb-1">John Dodol</h5>
+              <h6 class="text-muted mb-0">@dodoljohn</h6>
+            </div>
+          </div>
+          <div class="px-4">
+            <button
+              class="btn btn-block btn-xl btn-outline-primary font-bold mt-3"
+            >
+              Start Conversation
+            </button>
+          </div>
+        </div-->
+      </div>
+      <!--div class="card">
+        <div class="card-header">Simple Datatable</div>
+        <div class="card-body">
+        </div>
+      </div-->
+    </div>
+          <div class="row">
+        <div class="col-12 col-xl-6">
+          <div class="card">
+            <div class="card-header">
+              <h4>ยอด Stock ประจำเดือน</h4>
+            </div>
+            <div class="card-body">
+              <div id="chart-stock"></div>
+            </div>
+          </div>
+        </div>        
+        <div div class="col-12 col-xl-6">
+          <div class="card">
+            <div class="card-header">
+              <h4>ยอด stock ตามลูกค้า</h4>
+            </div>
+            <div class="card-body">
+              <!-- table class="table table-striped" id="table1">
+                <thead>
+                  <tr>
+                    <th>ลูกค้า</th>
+                    {% for st in stone_name_list %}
+                      <th>{{st}}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1</td>
+                    <td>2</td>
+                    <td>3</td>
+                    <td>4</td>
+                    <td>5</td>
+                    <td>6</td>
+                    <td>
+                      <span class="badge bg-success">Active</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </!-->
+            </div>
+          </div>
+        </div>
+      </div>
+  </section>
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <!-- p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p -->
+      </div>
+    </div>
+  </footer>
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<!-- Need: Apexcharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<!--script src="{% static 'extensions/apexcharts/apexcharts.min.js' %}"></script-->
+<script src="{% static 'js/pages/dashboard.js' %}"></script>
+
+<!-- DataTable -->
+<script src="{% static 'extensions/simple-datatables/umd/simple-datatables.js' %}"></script>
+<script src="{% static 'js/pages/simple-datatables.js' %}"></script>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+<!-- tabSidebar -->
+<script src="{% static 'js/tabSidebar/tab.js' %}"></script>
+
+<!-- Predefined Date Ranges -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/jquery/latest/jquery.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+
+<script type="text/javascript">
+    var optionsStone = {
+      series: [           
+            {% for item in list_store_mill %}
+                {
+                    name: '{{ item.0 }}',
+                    data: {{ item.1|safe }}
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+      ],
+        chart: {
+        height: 350,
+        type: 'line',
+        zoom: {
+          enabled: false
+        },
+      },
+      dataLabels: {
+        enabled: false
+      },
+      stroke: {
+        width: [5, 7, 5],
+        curve: 'straight',
+        dashArray: [0, 8, 5]
+      },
+      title: {
+        //text: 'Page Statistics',
+        align: 'left'
+      },
+      legend: {
+        tooltipHoverFormatter: function(val, opts) {
+          return val + ' = <strong>' + opts.w.globals.series[opts.seriesIndex][opts.dataPointIndex] + '</strong>'
+        }
+      },
+      markers: {
+        size: 0,
+        hover: {
+          sizeOffset: 6
+        }
+      },
+      xaxis: {
+        type: 'datetime',
+        /*
+        labels: {
+          format: 'dd/MM/yy'
+        },
+        */
+        categories: {{ list_date|safe }},
+      },
+      yaxis: {
+        forceNiceScale: true,
+        labels: {
+          formatter: function (value) {
+            return value.toLocaleString() + " ตัน";
+          }
+        }
+      },
+      tooltip: {
+        y: [
+          {
+            title: {
+              formatter: function (val) {
+                return val;
+              }
+            }
+          },
+          {
+            title: {
+              formatter: function (val) {
+                return val;
+              }
+            }
+          },
+          {
+            title: {
+              formatter: function (val) {
+                return val;
+              }
+            }
+          }
+        ]
+      },
+      grid: {
+        borderColor: '#f1f1f1',
+      }
+    };
+
+  /////////////////////////////
+  var optionsStock = {
+          series: [{
+          name: 'stock',
+          data: {{stock_list|safe}},
+        },
+      ],
+    chart: {
+          height: 350,
+          type: 'bar',
+          stacked: false,
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 2,
+        dataLabels: {
+          position: 'top',
+        },
+      }
+    },
+    dataLabels: {
+      enabled: true,
+      formatter: function (val) {
+        return (val == '0') ? '' : val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+      offsetY: -20,
+      style: {
+        fontSize: '12px',
+        colors: ["#85929e"]
+      },
+    },
+    xaxis: {
+      categories: {{stone_name_list|safe}},
+      axisBorder: {
+        show: false
+      },
+      axisTicks: {
+        show: false
+      }
+    },
+    yaxis: {
+      forceNiceScale: true,
+      title: {
+        text: 'stone weight total on mounth'
+      },
+      labels: {
+        formatter: function (value) {
+          return value.toLocaleString() + " ตัน";
+        }
+      }
+    }
+  };
+  
+  /////////////////////////////
+  var optionsWeightLoss = {
+        series: {{list_persent_loss_weight|safe}},
+          chart: {
+          height: "350px",
+          redrawOnParentResize: true,
+          type: 'radialBar',
+        },
+        plotOptions: {
+          radialBar: {
+            dataLabels: {
+              name: {
+                fontSize: '22px',
+              },
+              value: {
+                fontSize: '16px',
+              },
+              total: {
+                show: true,
+                label: 'ชั่วโมงทำงาน',
+                color: '#9370DB',
+                formatter: function (w) {
+                  return '{{actual_working_time_all | format_duration }}' + ' ชม.';
+                },
+                style: {
+                  color: 'red' // Set the color of the text here
+                }
+              }
+            }
+          }
+        },
+        labels: [
+            {% for name in list_persent_loss_weight %}
+                {% if not forloop.last %}
+                    'โรงโม่ {{ forloop.counter }}',
+                {% else %}
+                    'เวลาสูญเสียรวม',
+                {% endif %}
+            {% endfor %}
+        ]
+
+  };
+
+  /////////////////////////////
+  var optionsMill = {
+        series: [           
+            {% for item in list_goal_mill %}
+                {
+                    name: '{{ item.0 }}',
+                    data: {{ item.1|safe }}
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ],
+          chart: {
+          height: 350,
+          type: 'area'
+        },
+        dataLabels: {
+          enabled: false
+        },
+        stroke: {
+          curve: 'smooth'
+        },
+        xaxis: {
+          type: 'datetime',
+          categories: {{ list_date|safe }},
+        },
+        yaxis: {
+          min: 0,
+          max: 100,
+          labels: {
+            formatter: function (value) {
+              return value + '%';
+            }
+          }
+        },
+        tooltip: {
+          x: {
+            format: 'dd/MM/yyyy'
+          },
+        },
+  };
+
+
+  var chartStone = new ApexCharts(
+    document.querySelector("#chart-stone"), 
+    optionsStone
+  );
+  chartStone.render();
+
+  var chartStock = new ApexCharts(
+    document.querySelector("#chart-stock"), 
+    optionsStock
+  );
+  chartStock.render();
+
+  var chartWeightLoss = new ApexCharts(
+    document.querySelector("#chart-weight-loss"),
+    optionsWeightLoss
+  );
+
+  chartWeightLoss.render();
+
+  window.addEventListener('resize', onResizeFunction);
+  window.addEventListener("load", onResizeFunction);
+
+  function onResizeFunction (e){
+    var chartElement = document.querySelector("#chart-weight-loss");
+    var chartWidth = chartElement.offsetWidth;
+
+      chartWeightLoss.updateOptions({
+        chart: {
+          height: chartWidth + 60 // Set the chart height equal to the current width
+        },
+      });
+  }
+
+  var chartMill = new ApexCharts(
+    document.querySelector("#chart-mill"),
+    optionsMill
+  );
+
+  chartMill.render();
+
+  //Predefined Date Ranges
+  $(function() {
+
+    var start = moment('{{ request.session.db_start_date }}');
+    var end = moment('{{ request.session.db_end_date }}');
+
+    function cb(start, end) {
+        $('#reportrange span').html(start.format('DD/MM/YYYY') + ' - ' + end.format('DD/MM/YYYY'));
+        $('#db_start_date').val(start.format('YYYY-MM-DD'));
+        $('#db_end_date').val(end.format('YYYY-MM-DD'));
+        //alert("start = " + start.format('YYYY-MM-DD') + ' & end = '+ end.format('YYYY-MM-DD'));
+    }
+
+    $('#reportrange').daterangepicker({
+        startDate: start,
+        endDate: end,
+        ranges: {
+          'Today': [moment(), moment()],
+          'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+          'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+          'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+          'This Month': [moment().startOf('month'), moment().endOf('month')],
+          'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+        }
+    }, cb);
+
+    cb(start, end);
+
+    });
+
+
+  function setDateInDashbord(){
+        var db_start_date = $('#db_start_date').val();
+        var db_end_date = $('#db_end_date').val();
+        $.ajax({
+            url: '{% url "setDateInDashbord" %}',
+            type: 'GET',
+            data: {
+                'db_start_date': db_start_date,
+                'db_end_date': db_end_date,
+            },
+            dataType: 'json',
+            success: function (data) {
+              if (data) {
+                  location.reload();
+                  e.preventDefault();
+              }else{
+
+              }
+            },
+            error: function(xhr, status, error) {
+              alert('error = ' + error);
+            }
+        });
+    return false;
+  }
+
+  new DataTable('#example');
+
+</script>
+
+{% endblock %}

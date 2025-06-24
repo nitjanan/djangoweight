@@ -171,7 +171,7 @@
       </div-->
     </div>
           <div class="row">
-        <div class="col-12 col-xl-6">
+        <div class="col-12 col-xl-5">
           <div class="card">
             <div class="card-header">
               <h4>ยอด Stock ประจำเดือน</h4>
@@ -181,35 +181,38 @@
             </div>
           </div>
         </div>        
-        <div div class="col-12 col-xl-6">
+        <div div class="col-12 col-xl-7">
           <div class="card">
             <div class="card-header">
               <h4>ยอด stock ตามลูกค้า</h4>
             </div>
             <div class="card-body">
-              <!-- table class="table table-striped" id="table1">
+              <table class="table table-striped" id="table1">
                 <thead>
-                  <tr>
-                    <th>ลูกค้า</th>
-                    {% for st in stone_name_list %}
-                      <th>{{st}}</th>
-                    {% endfor %}
-                  </tr>
+                    <tr>
+                        <th>Customer</th>
+                        {% for stone in port_stone_types %}
+                            <th>{{ stone }}</th>
+                        {% endfor %}
+                        <th>Total</th>
+                    </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>1</td>
-                    <td>2</td>
-                    <td>3</td>
-                    <td>4</td>
-                    <td>5</td>
-                    <td>6</td>
-                    <td>
-                      <span class="badge bg-success">Active</span>
-                    </td>
-                  </tr>
+                    {% for customer, row in port_stock_list.items %}
+                        <tr>
+                            <td>{{ customer }}</td>
+                            {% for stone in port_stone_types %}
+                                <td>{{ row|get_item:stone }}</td>
+                            {% endfor %}
+                            <td>{{ row|get_item:"__total__" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="{{ port_stone_types|length|add:2 }}">No data found</td>
+                        </tr>
+                    {% endfor %}
                 </tbody>
-              </!-->
+              </table>
             </div>
           </div>
         </div>
@@ -263,14 +266,14 @@
 <script type="text/javascript">
     var optionsStone = {
       series: [           
-            {% for item in list_store_mill %}
+            {% for item in list_store_site %}
                 {
                     name: '{{ item.0 }}',
                     data: {{ item.1|safe }}
                 }{% if not forloop.last %},{% endif %}
             {% endfor %}
       ],
-        chart: {
+      chart: {
         height: 350,
         type: 'line',
         zoom: {
@@ -344,7 +347,13 @@
       },
       grid: {
         borderColor: '#f1f1f1',
-      }
+      },
+      colors: [
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(255, 206, 86, 0.8)',
+      ],
     };
 
   /////////////////////////////

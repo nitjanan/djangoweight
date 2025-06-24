@@ -125,19 +125,25 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
 <script src="{% static 'js/pages/datatables.js' %}"></script>
 <script>
+  visibleSource();
+
   id_name = "{{id_name}}";
   if("{{mode}}" == 1){
     $(id_name).prop('readonly', true);
   }
 
   $("#id_weight_type").on( "change", function() {
-    if($(this).val() == 1 || $(this).val() == 3){
+    visibleSource();
+  });
+
+  function visibleSource(){
+    if($("#id_weight_type").val() == 1 || $("#id_weight_type").val() == 3){
       $(".d-source").removeClass("d-none");
       $("#id_mill_source").prop('required',true);
     }else{
       $(".d-source").addClass("d-none");
       $("#id_mill_source").prop('required',false);
     }
-  });
+  }
 </script>
 {% endblock %}

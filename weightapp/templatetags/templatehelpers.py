@@ -31,3 +31,7 @@ def format_duration_substring(tmpStr):
 @register.filter
 def dict_keys(input_dict):
     return input_dict.keys()
+
+@register.filter
+def get_item(dictionary, key):
+    return dictionary.get(key, "0.00")

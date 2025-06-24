@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -355,6 +355,9 @@ def getSumByStone(request, mode, stoneType, type, company_in):
         w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 6:#รวม เครื่องขาย
         w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+
+    elif type == 10:#port stock
+        w = PortStockStone.objects.filter(ps__company__code__in = company_in, stone = stoneType, ps__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-ps__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
     return  float(w)
 
 def getSumOther(request, mode, list_sum_stone, type, company_in):
@@ -408,6 +411,18 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
         w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 6:#รวมเครื่องขาย
         w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+    
+    elif type == 10:#port stock
+        qr = PortStockStone.objects.filter(ps__company__code__in = company_in, ps__created__range=(start_date, end_date)).exclude(ss_query_filters).values('ps__created', 'stone', 'total').order_by('-ps__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        qr_list = list(qr)
+
+        # Group by 'stone', keeping the most recent 'stk__created'
+        filtered_results = [
+            max(group, key=itemgetter('ps__created'))
+            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+        ]
+        w = sum(item['total'] for item in filtered_results)
+
     return  float(w)
 
 def getNumListStoneWeightChart(request, mode, stone_list_id, type, company_in):
@@ -728,7 +743,7 @@ def index(request):
         stone_name_list.append('อื่นๆ')
 
         # Define lists to store cumulative totals and goal percentages for each mill
-        list_store_mills = [[] for _ in range(len(store_id))]
+        list_store_sites = [[] for _ in range(len(store_id))]
         cumulative_totals = [0] * len(store_id)
 
         # Fetch weights for each mill within the date range
@@ -747,18 +762,44 @@ def index(request):
                 for w in weights[st_id]:
                     if str(date) == str(w['date']):
                         cumulative_totals[i] = str(w['cumulative_total'])
-                        list_store_mills[i].append(cumulative_totals[i])
+                        list_store_sites[i].append(cumulative_totals[i])
                         found = True
                         break
                 if not found:
-                    list_store_mills[i].append(0)
+                    list_store_sites[i].append(0)
 
-        list_store_mill = []
+        list_store_site = []
         for i, store in enumerate(store):
-            list_store_mill.append((store['name'], list_store_mills[i]))
+            list_store_site.append((store['name'], list_store_sites[i]))
 
         ################## stock ########################
-        stock_list = getNumListStoneWeightChart(request, 2, stone_list, 2, company_in)
+        stock_list = getNumListStoneWeightChart(request, 1, stone_list, 10, company_in)
+
+        ################## stock port ###################
+        ps = PortStock.objects.filter(company__code__in = company_in, created__range=(start_date, end_date)).values_list('id', flat=True).order_by('-created').first()
+        qs_port_stock = PortStockStoneItem.objects.filter(pss__ps = ps).values('cus__customer_name', 'pss__stone__base_stone_type_name', 'total').order_by('-pss__ps__created')
+
+        data = defaultdict(lambda: defaultdict(Decimal))
+
+        port_stone_types = set()
+
+        for row in qs_port_stock:
+            customer = row['cus__customer_name']
+            stone = row['pss__stone__base_stone_type_name']
+            total = row['total']
+            data[customer][stone] += total
+            port_stone_types.add(stone)
+
+        port_stone_types = sorted(port_stone_types)  # Sort columns
+
+        # Optionally calculate row totals
+        for customer in data:
+            for stone in port_stone_types:
+                if stone not in data[customer]:
+                    data[customer][stone] = Decimal('0.00')
+            data[customer]['__total__'] = sum(data[customer][stype] for stype in port_stone_types)
+
+        port_stock_list = recursive_defaultdict_to_dict(data)
 
         context = { 
                     'previous_day':previous_day,
@@ -766,17 +807,25 @@ def index(request):
                     'end_day':end_day,
                     'actual_working_time_all':actual_working_time_all,
                     'stock_list':stock_list,
+                    'port_stone_types':port_stone_types,
+                    'port_stock_list': port_stock_list,
                     'data_sum_produc_all':data_sum_produc_all,
                     'data_sum_produc':data_sum_produc,
                     'list_date': list_date,
                     'list_goal_mill' : list_goal_mill,
-                    'list_store_mill' : list_store_mill,
+                    'list_store_site' : list_store_site,
                     'list_persent_loss_weight':list_persent_loss_weight,
                     'stone_name_list':stone_name_list,
                     'dashboard_page':'active',
                     active :"active",
         }
         return render(request, "ndIndex.html",context)
+
+# Convert to plain dict
+def recursive_defaultdict_to_dict(d):
+    if isinstance(d, defaultdict):
+        d = {k: recursive_defaultdict_to_dict(v) for k, v in d.items()}
+    return d
 
 def calculatePersent(num, num_all):
     persent = 0.0
@@ -5685,6 +5734,21 @@ def searchStockInDay(request):
     }
     return JsonResponse(data)
 
+def searchPortStockInDay(request):
+    if 'created' in request.GET and 'company' in request.GET and 'stock_id' in request.GET:
+        created =  request.GET.get('created')
+        company =  request.GET.get('company')
+        stock_id =  request.GET.get('stock_id')
+
+        if stock_id == '':
+            have_stock = PortStock.objects.filter(company = company, created = created).exists()
+        else:
+            have_stock = PortStock.objects.filter(~Q(id = stock_id), company = company, created = created).exists()
+    data = {
+        'have_stock' :have_stock,
+    }
+    return JsonResponse(data)
+
 def searchDataWeightToStock(request):
     if 'created' in request.GET and 'company' in request.GET and 'stone' in request.GET:
         created =  request.GET.get('created')
@@ -6502,3 +6566,259 @@ def excelPercentEstimate(request, my_q, list_date):
     # Save the workbook to the response
     workbook.save(response)
     return response
+
+@login_required(login_url='login')
+def viewPortStock(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+
+    data = PortStock.objects.filter(company__code__in = company_in).order_by('-created')
+
+    #กรองข้อมูล
+    myFilter = PortStockFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    stock = p.get_page(page)
+
+    context = {'port_stock_page':'active', 'stock': stock,'filter':myFilter, active :"active",}
+    return render(request, "portStock/viewPortStock.html",context)
+
+@login_required(login_url='login')
+def createPortStock(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'total'), extra=len(cus_qs),)
+    
+    if request.method == 'POST':
+        form = PortStockForm(request.POST)
+        ss_form = PortStockStoneForm(request.POST)
+        formset = PortStockStoneItemFormSet(request.POST)
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            pss = ss_form.save()
+            pss.ps = form
+            pss.save()
+
+            formset_instances = formset.save(commit=False)
+            for instance in formset_instances:
+                instance.pss = pss
+                instance.save()
+
+            '''
+            ss_item = PortStockStoneItem.objects.filter(pss = pss.pk)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่            
+            '''
+
+            return HttpResponseRedirect(reverse('editStep2PortStock', args=(pss.ps,)))
+    else:
+        form = PortStockForm(initial={'company': company})
+        ss_form = PortStockStoneForm()
+        formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
+
+    context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "portStock/createPortStock.html", context)
+
+@login_required(login_url='login')
+def editStep2PortStock(request, stock_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'total'), extra=len(cus_qs),)
+    
+    try:
+        stock_data = PortStock.objects.get(id=stock_id)
+    except PortStock.DoesNotExist:
+        return redirect('viewPortStock')
+
+    ssn_data = PortStockStone.objects.filter(ps=stock_data)
+
+    if request.method == 'POST':
+        form = PortStockForm(request.POST, instance=stock_data)
+        ss_form = PortStockStoneForm(request.POST)
+        formset = PortStockStoneItemFormSet(request.POST)
+        
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            pss = ss_form.save(commit=False)
+            if  ss_form.cleaned_data.get('stone'):
+                pss.ps = form
+                pss.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances:
+                    instance.pss = pss
+                    instance.save()
+
+            '''
+            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+            '''
+
+            return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
+    else:
+        form = PortStockForm(instance=stock_data)
+        ss_form = PortStockStoneForm()
+        formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
+
+    context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, 'ssn_data': ssn_data,'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "portStock/editStep2PortStock.html",context)
+
+@login_required(login_url='login')
+def editPortStockStoneItem(request, stock_id, pss_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+    
+    try:
+        stock_data = PortStock.objects.get(id=stock_id)
+    except PortStock.DoesNotExist:
+        return redirect('viewProduction')
+
+    ssn_data = PortStockStone.objects.filter(ps = stock_id)#ssn all in stock id
+    data = PortStockStone.objects.get(id = pss_id)#id edit
+
+    if request.method == 'POST':
+        form = PortStockForm(request.POST, instance=stock_data)
+        ss_form = PortStockStoneForm(request.POST, instance=data)
+        formset = PortStockStoneItemInlineFormset(request.POST, instance=data)
+        
+        if form.is_valid() and ss_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            ssn = ss_form.save(commit=False)
+            if  ss_form.cleaned_data.get('stone'):
+                ssn.ps = form
+                ssn.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances: #อันนี้ไม่มี deleted_objects นะ
+                    if instance.quoted is None:
+                        instance.quoted = 0
+                    instance.save()
+
+                '''
+                # add function calculate total stock
+                ssn.total = calculateTotalStock(pss_id)
+                ssn.save()                
+                '''
+            
+            '''
+            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
+            for i in ss_item:
+                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่            
+            '''
+
+            return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
+    else:
+        form = PortStockForm(instance=stock_data)
+        ss_form = PortStockStoneForm(instance=data)
+        formset = PortStockStoneItemInlineFormset(instance=data)
+
+    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': cus_qs, 'ssn_data': ssn_data, 'ss_id': data.id, 'ss_stone_id': data.stone.base_stone_type_id, 'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "portStock/editPortStockStoneItem.html",context)
+
+@login_required(login_url='login')
+def removePortStock(request, stock_id):
+    ps = PortStock.objects.get(id = stock_id)
+
+    #ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    previous_day = PortStock.objects.filter(
+        created__lt = ps.created, company = ps.company
+    ).aggregate(max_date=Max('created'))['max_date']
+    tmp_company = ps.company
+
+    #ลบ StockStone ใน Stock ด้วย
+    pss = PortStockStone.objects.filter(ps = ps)
+    for i in pss:
+        items = PortStockStoneItem.objects.filter(pss = i)
+        items.delete()
+
+    pss.delete()
+    ps.delete()
+
+    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+
+    return redirect('viewPortStock')
+
+@login_required(login_url='login')
+def removePortStockStone(request, pss_id):
+
+    #ลบ ProductionLossItem ใน Production ด้วย
+    pss = PortStockStone.objects.get(id = pss_id)
+    stock_id = pss.ps
+
+    #ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    previous_day = PortStock.objects.filter(
+        created__lt = pss.ps.created, company = pss.ps.company
+    ).aggregate(max_date=Max('created'))['max_date']
+    tmp_company = pss.ps.company
+
+    items = PortStockStoneItem.objects.filter(pss = pss)
+    items.delete()
+
+    pss.delete()
+
+    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
+
+
+def searchDataWeightToPortStock(request):
+    if 'created' in request.GET and 'company' in request.GET and 'stone' in request.GET:
+        created =  request.GET.get('created')
+        company =  request.GET.get('company')
+        stone =  request.GET.get('stone')
+
+        if stone:
+            stone_name = BaseStoneType.objects.get(base_stone_type_id = stone).base_stone_type_name
+
+        cus_id = BaseCustomer.objects.filter(is_port_stock = True).values_list('customer_id', flat=True)
+
+        alert = ""
+
+        #ยกมา
+        try:
+            latest_date = PortStockStone.objects.filter(
+                ps__created__lt=created, ps__company=company, stone=stone
+            ).aggregate(max_date=Max('ps__created'))['max_date']
+
+            # Get the records with that latest date
+            quot = PortStockStoneItem.objects.filter(
+               pss__ps__created=latest_date, pss__ps__company=company, pss__stone=stone
+            ).values('cus__customer_id', 'total')
+
+        except TypeError or StockStone.DoesNotExist:
+            quot = PortStockStoneItem.objects.none()
+
+        #รับเข้า
+        receive = Weight.objects.filter(stone_type = stone, customer__in = cus_id, site__store = 1, bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
+
+        #จ่ายภายลงเรือ
+        pay = Weight.objects.filter(stone_type = stone, customer__in = cus_id, site__store = 3, bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
+
+        if stone:
+            if not quot:
+                alert += "ยกมา : ไม่มียอดยกมาของ "+ str(stone_name) +" วันก่อนหน้านี้<br>"
+            if not receive:
+                alert += "รับเข้า : ไม่มีรายการชั่ง "+ str(stone_name) +" ในวันนี้ หรือไม่การชั่งประเภทรับเข้า<br>"
+            if not pay:
+                alert += "ลงเรือ : ไม่มีรายการชั่ง "+ str(stone_name) +" ในวันนี้ หรือไม่การชั่งประเภทลงเรือ<br>"
+
+    data = {'list_quot': list(quot), 'list_receive': list(receive), 'list_pay': list(pay), 'alert' : alert}
+    return JsonResponse(data)

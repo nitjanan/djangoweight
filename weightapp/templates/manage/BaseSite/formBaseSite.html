@@ -122,20 +122,26 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
 <script>
+  visibleStore();
+
   id_name = "{{id_name}}";
   if("{{mode}}" == 1){
     $(id_name).prop('readonly', true);
   }
 
   $("#id_weight_type").on( "change", function() {
-    if($(this).val() == 4){
+    visibleStore();
+  });
+
+  function visibleStore(){
+    if($("#id_weight_type").val() == 4){
       $(".d-store").removeClass("d-none");
       $("#id_store").prop('required',true);
     }else{
       $(".d-store").addClass("d-none");
       $("#id_store").prop('required',false);
     }
-  });
+  }
 
 </script>
 {% endblock %}

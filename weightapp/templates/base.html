@@ -167,6 +167,14 @@
                     </a>
                   </li>
                   {% endif %}
+                  {% if 'PortStone' in tab.name %}
+                  <li class="sidebar-item {{port_stock_page}}">
+                    <a href="{% url 'viewPortStock' %}" class="sidebar-link">
+                      <i class="fas fa-warehouse"></i>
+                      <span>Port Stock Stone</span>
+                    </a>
+                  </li>
+                  {% endif %}
                   {% if 'Transport' in tab.name %}
                   <li class="sidebar-item {{ts_page}}">
                     <a href="{% url 'viewGasPrice' %}" class="sidebar-link">

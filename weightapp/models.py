@@ -244,6 +244,7 @@ class BaseCustomer(models.Model):
     is_stone_estimate = models.BooleanField(default=False, verbose_name="ใช้ในการประมาณการณ์หิน")
     v_stamp = models.DateTimeField(auto_now=True)
     is_disable = models.BooleanField(default=False, verbose_name="ปิดการใช้งาน")
+    is_port_stock = models.BooleanField(default=False, verbose_name="ใช้ใน stock หินท่าเรือ")
     user_created = models.ForeignKey(User,on_delete=models.CASCADE,blank=True,null=True, verbose_name="ผู้สร้าง")#เก็บผู้สร้าง
     created = models.DateTimeField(default = timezone.now, verbose_name="วันที่สร้าง") #เก็บวันที่สร้าง
     
@@ -1050,3 +1051,47 @@ class GasPrice(models.Model):
 
     def __str__(self):
         return str(self.id)
+    
+#Port Stock
+class PortStock(models.Model):
+    created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ stock
+    update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+
+    class Meta:
+        db_table = 'port_stock'
+
+    def __str__(self):
+        return str(self.id)
+
+#ชนิดหินและจำนวนหินทั้งหมดใน Port Stock
+class PortStockStone(models.Model):
+    stone = models.ForeignKey(BaseStoneType, on_delete=models.CASCADE, null=True, blank=True, max_length=120, verbose_name="ชนิดหิน", to_field='base_stone_type_id')
+    total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="รวมทั้งหมด")
+    ps = models.ForeignKey(PortStock, on_delete=models.CASCADE,null=True, blank=True, verbose_name="port stock")
+
+    class Meta:
+        db_table = 'port_stock_stone'
+
+    def __str__(self):
+        return str(self.id)
+        
+class PortStockStoneItem(models.Model):
+    cus = models.ForeignKey(
+        BaseCustomer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        max_length=120,
+        to_field='customer_id',
+        db_column='cus_id',
+        verbose_name="ลูกค้า"
+    )
+    quoted = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
+    receive = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
+    pay = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
+    total = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
+    pss = models.ForeignKey('PortStockStone', on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        db_table = 'port_stock_stone_item'

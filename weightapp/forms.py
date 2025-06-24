@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice, PortStock, PortStockStone, PortStockStoneItem
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet, Select)
 import string
@@ -892,3 +892,51 @@ class GasPriceForm(forms.ModelForm):
             'sell': _('ราคาขาย'),
             'company': _('บริษัท'),
        }
+
+
+#stock    
+class PortStockForm(forms.ModelForm):
+
+    class Meta:
+       model = PortStock
+       fields = ('created', 'company')
+       widgets = {
+        'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'company': forms.HiddenInput(),
+        }
+       labels = {
+            'created': _('วันที่ stock'),
+       }
+
+#ชนิดหินและจำนวนหินทั้งหมดใน stock
+class PortStockStoneForm(forms.ModelForm):
+    #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
+    class Meta:
+       model = PortStockStone
+       fields = ('stone', 'total', 'ps')
+       widgets = {
+            'total': forms.HiddenInput(),
+        }
+       labels = {
+            'stone': _('ชนิดหิน'),
+            'total': _('total stock'),
+       }
+
+#ที่มาของ stock และจำนวนหินใน stock
+class PortStockStoneItemForm(forms.ModelForm):
+    class Meta:
+       model = PortStockStoneItem
+       fields=('cus', 'quoted', 'receive', 'pay', 'total')
+       widgets = {
+        }
+
+#ที่มาของ stock และจำนวนหินใน stock
+PortStockStoneItemInlineFormset = inlineformset_factory(
+    PortStockStone,
+    PortStockStoneItem,
+    form=PortStockStoneItemForm,
+    fields=('cus', 'quoted', 'receive', 'pay', 'total'),
+    widgets = { 
+    },
+    extra=0,
+)

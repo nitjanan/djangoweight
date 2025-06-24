@@ -3,7 +3,7 @@ from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
-from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock, User, UserScale, GasPrice
+from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock, User, UserScale, GasPrice, PortStock, PortStockStone, PortStockStoneItem
 from django.utils.translation import gettext_lazy as _
 from datetime import date
 
@@ -70,7 +70,7 @@ class StockFilter(django_filters.FilterSet):
     end_created = django_filters.DateFilter(field_name = "created", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
 
     class Meta:
-        model = Production
+        model = Stock
         fields = ('created',)
 
 StockFilter.base_filters['start_created'].label = 'วันที่'
@@ -247,3 +247,13 @@ class GasPriceFilter(django_filters.FilterSet):
 GasPriceFilter.base_filters['start_created'].label = 'วันที่'
 GasPriceFilter.base_filters['end_created'].label = 'ถึง'
 
+class PortStockFilter(django_filters.FilterSet):
+    start_created = django_filters.DateFilter(field_name = "created", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
+    end_created = django_filters.DateFilter(field_name = "created", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
+
+    class Meta:
+        model = PortStock
+        fields = ('created',)
+
+PortStockFilter.base_filters['start_created'].label = 'วันที่'
+PortStockFilter.base_filters['end_created'].label = 'ถึง'

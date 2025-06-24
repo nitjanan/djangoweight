@@ -240,4 +240,14 @@ urlpatterns = [
      #path('callback', views.callback, name='callback'), #line api messaging callback
 
      path('send_line_1pm/', views.send_line_1pm, name="send_line_1pm"),
+
+     path('port/stock/view', views.viewPortStock, name="viewPortStock"),
+     path('port/stock/create', views.createPortStock, name="createPortStock"),
+     path('port/stock/step2/edit/<int:stock_id>', views.editStep2PortStock, name="editStep2PortStock"),
+     path('port/stockStoneItem/edit/<int:stock_id>/<int:pss_id>', views.editPortStockStoneItem, name="editPortStockStoneItem"),
+     path('port/stock/remove/<int:stock_id>', views.removePortStock, name="removePortStock"),
+     path('port/stockStone/remove/<int:pss_id>', views.removePortStockStone, name="removePortStockStone"),
+
+     path('searchDataWeightToPortStock/', views.searchDataWeightToPortStock, name="searchDataWeightToPortStock"),
+     path('searchPortStockInDay/', views.searchPortStockInDay, name="searchPortStockInDay"),
 ]

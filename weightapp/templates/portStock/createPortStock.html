@@ -115,7 +115,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                   <div class="col-md-2 col-12">
                     <div class="form-group">
-                      <p class="fw-bolder">จำนวนที่ลงเรือ</p>
+                      <p class="fw-bolder">จำนวนที่ลงเรือ <b id="b_pay" class="text-success"></b></p>
                     </div>
                   </div>
                   <div class="col-md-2 col-12">
@@ -143,7 +143,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                       </div>
                       <div class="col-md-2 col-12">
                         <div class="form-group">
-                          {{form.pay | add_class:"form-control pay"}}
+                          {{form.pay | add_class:"form-control pay border-success"}}
                         </div>
                       </div>
                       <div class="col-md-2 col-12">
@@ -250,7 +250,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           event.preventDefault(); // Prevent form submission
           return false;
         }
-        sumInputsByClass('total');//sum total
+
+        //เช็คจำนวนที่ลงเรือ ห้ามเกินจากยอดรวม
+        var sum_pay = sumInputsByClass('pay');
+        var b_pay = $("#b_pay").html();
+
+        if(typeof b_pay !== "undefined" && b_pay && sum_pay > b_pay){
+          $("#id_form-0-pay").trigger( "focus" );
+          alert('รวมจำนวนที่ลงเรือมากกว่า ที่ลงเรือจริง กรุณาแก้ไขจำนวนที่ลงเรือ');
+
+          submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+          event.preventDefault(); // Prevent form submission
+          return false;
+        }
+
+        $("#id_total").val(sumInputsByClass('total').toFixed(2));//sum total
     });
   });
 
@@ -262,7 +276,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         sum += val;
       }
     });
-    $("#id_total ").val(sum.toFixed(2));
+    return sum;
   }
 
   ////// start หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////
@@ -320,7 +334,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         success: function (data) {
           getDataListPort(data.list_quot, "quoted");
           getDataListWeight(data.list_receive, "receive");
-          getDataListWeight(data.list_pay, "pay");
+          $("#b_pay").html(data.pay);
 
           if(data.alert && stone != ""){
             $("#alert").removeClass("d-none");

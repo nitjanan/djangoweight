@@ -6694,6 +6694,8 @@ def editPortStockStoneItem(request, stock_id, pss_id):
     ssn_data = PortStockStone.objects.filter(ps = stock_id)#ssn all in stock id
     data = PortStockStone.objects.get(id = pss_id)#id edit
 
+    old_pay = Weight.objects.filter(stone_type = data.stone, site__store = 3, bws__company = company, bws__weight_type = 1, date = data.ps.created).aggregate(total=Sum("weight_total"))['total'] or Decimal('0.00')
+
     if request.method == 'POST':
         form = PortStockForm(request.POST, instance=stock_data)
         ss_form = PortStockStoneForm(request.POST, instance=data)
@@ -6731,7 +6733,7 @@ def editPortStockStoneItem(request, stock_id, pss_id):
         ss_form = PortStockStoneForm(instance=data)
         formset = PortStockStoneItemInlineFormset(instance=data)
 
-    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': cus_qs, 'ssn_data': ssn_data, 'ss_id': data.id, 'ss_stone_id': data.stone.base_stone_type_id, 'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': cus_qs, 'ssn_data': ssn_data, 'ss_id': data.id, 'ss_stone_id': data.stone.base_stone_type_id, 'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user), 'old_pay': old_pay}
     return render(request, "portStock/editPortStockStoneItem.html",context)
 
 @login_required(login_url='login')
@@ -6809,16 +6811,14 @@ def searchDataWeightToPortStock(request):
         #รับเข้า
         receive = Weight.objects.filter(stone_type = stone, customer__in = cus_id, site__store = 1, bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
 
-        #จ่ายภายลงเรือ
-        pay = Weight.objects.filter(stone_type = stone, customer__in = cus_id, site__store = 3, bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
+        #จ่ายภายลงเรือ ดึงจำนวนที่ลงเรือทั้งหมดตามชนิดหิน
+        pay = Weight.objects.filter(stone_type = stone, site__store = 3, bws__company = company, bws__weight_type = 1, date = created).aggregate(total=Sum("weight_total"))['total'] or Decimal('0.00')
 
         if stone:
             if not quot:
                 alert += "ยกมา : ไม่มียอดยกมาของ "+ str(stone_name) +" วันก่อนหน้านี้<br>"
             if not receive:
-                alert += "รับเข้า : ไม่มีรายการชั่ง "+ str(stone_name) +" ในวันนี้ หรือไม่การชั่งประเภทรับเข้า<br>"
-            if not pay:
-                alert += "ลงเรือ : ไม่มีรายการชั่ง "+ str(stone_name) +" ในวันนี้ หรือไม่การชั่งประเภทลงเรือ<br>"
+                alert += "รับเข้า : ไม่มีการ uplode รายการชั่ง หรือไม่มีการรับเข้าของ "+ str(stone_name) +" ในวันนี้<br>"
 
-    data = {'list_quot': list(quot), 'list_receive': list(receive), 'list_pay': list(pay), 'alert' : alert}
+    data = {'list_quot': list(quot), 'list_receive': list(receive), 'pay': pay, 'alert' : alert}
     return JsonResponse(data)

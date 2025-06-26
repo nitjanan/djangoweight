@@ -962,7 +962,7 @@ def approveWeight(request):
     data = myFilter.qs
 
     # Pagination
-    p = Paginator(data, 10)
+    p = Paginator(data, 5)
     page = request.GET.get('page')
     weight = p.get_page(page)
 

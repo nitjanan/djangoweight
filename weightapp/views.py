@@ -6822,3 +6822,207 @@ def searchDataWeightToPortStock(request):
 
     data = {'list_quot': list(quot), 'list_receive': list(receive), 'pay': pay, 'alert' : alert}
     return JsonResponse(data)
+
+def exportExcelTransport(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+    company = BaseCompany.objects.get(code = active)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte=start_created)
+    if end_created is not None:
+        my_q &= Q(date__lte=end_created)
+
+    my_q &= Q(car_team__isnull = False, bws__weight_type=1, bws__company__code__in=company_in)
+
+    queryset = Weight.objects.filter(my_q).annotate(
+        weight_range=Case(
+            When(weight_total__lt=35, then=Value('น้อยกว่า 35')),
+            When(weight_total__gte=35, weight_total__lt=40, then=Value('แบก 35 - 40')),
+            When(weight_total__gte=40, then=Value('แบก 40 up')),
+            output_field=models.CharField(),
+        )
+    ).values(
+        'car_team__car_team_name',
+        'customer__customer_name',
+        'bws__company__name',
+        'weight_range',
+        'stone_type__base_stone_type_name',
+    ).annotate(
+        num_rows=Count('weight_id'),
+        ori_sum_weight=Sum('origin_weight'),
+        sum_weight=Sum('weight_total'),
+    ).annotate(
+        pay_weight=Sum(
+            Case(
+                When(origin_weight__lt=F('weight_total'), then=F('origin_weight')),
+                default = F('weight_total'),
+                output_field = models.DecimalField(),
+            )
+        ),
+        diff_weight = ExpressionWrapper(Sum('weight_total') - Sum('origin_weight'), output_field= models.DecimalField()) 
+    ).order_by('car_team__car_team_name')
+    
+
+    if not queryset.exists():
+        return HttpResponse("No data to export.")
+
+    # Convert to DataFrame
+    df = pd.DataFrame.from_records(queryset)
+
+    # Rename fields
+    df.rename(columns={
+        'car_team__car_team_name': 'ทีม',
+        'customer__customer_name': 'ลูกค้า',
+        'bws__company__name': 'บริษัท',
+        'stone_type__base_stone_type_name': 'ชนิดหิน',
+        'num_rows': 'จำนวนเที่ยว',
+        'ori_sum_weight': 'น้ำหนักต้นทางรวม (ตัน)',
+        'sum_weight': 'น้ำหนักปลายทางรวม (ตัน)',
+        'pay_weight': 'น้ำหนักที่จ่าย (ตัน)',
+        'diff_weight': 'ส่วนต่าง (ตัน)',
+        'weight_range': 'ช่วงน้ำหนัก'
+    }, inplace=True)
+
+    # Add column "ต้นทาง - ปลายทาง"
+    if company.biz.id == 1:
+        df['ต้นทาง - ปลายทาง'] = df['บริษัท'] + ' - ' + df['ลูกค้า']
+    elif company.biz.id == 2:
+        df['ต้นทาง - ปลายทาง'] = df['ลูกค้า'] + ' - ' + df['บริษัท']
+
+    # Keep only needed columns
+    df = df[['ทีม', 'ต้นทาง - ปลายทาง', 'ช่วงน้ำหนัก', 'ชนิดหิน', 'จำนวนเที่ยว', 'น้ำหนักต้นทางรวม (ตัน)', 'น้ำหนักปลายทางรวม (ตัน)', 'น้ำหนักที่จ่าย (ตัน)', 'ส่วนต่าง (ตัน)']]
+    df['ทีม'].fillna('(ไม่มีทีม)', inplace=True)
+
+    # Group by ทีม
+    grouped = df.groupby('ทีม', dropna=False)
+    result = []
+
+    for name, group in grouped:
+        team_header = pd.DataFrame({
+            'ทีม': [name],
+            'ต้นทาง - ปลายทาง': [''],
+            'ช่วงน้ำหนัก': [''],
+            'ชนิดหิน': [''],
+            'จำนวนเที่ยว': [''],
+            'น้ำหนักต้นทางรวม (ตัน)': [''],
+            'น้ำหนักปลายทางรวม (ตัน)': [''],
+            'น้ำหนักที่จ่าย (ตัน)': [''],
+            'ส่วนต่าง (ตัน)': [''],
+        })
+        result.append(team_header)
+        result.append(group.assign(ทีม=''))
+
+        subtotal_row = pd.DataFrame({
+            'ทีม': [f'รวมทีม {name}'],
+            'ต้นทาง - ปลายทาง': [''],
+            'ช่วงน้ำหนัก': [''],
+            'ชนิดหิน': [''],
+            'จำนวนเที่ยว': [group['จำนวนเที่ยว'].sum()],
+            'น้ำหนักต้นทางรวม (ตัน)': [group['น้ำหนักต้นทางรวม (ตัน)'].sum()],
+            'น้ำหนักปลายทางรวม (ตัน)': [group['น้ำหนักปลายทางรวม (ตัน)'].sum()],
+            'น้ำหนักที่จ่าย (ตัน)': [group['น้ำหนักที่จ่าย (ตัน)'].sum()],
+            'ส่วนต่าง (ตัน)': [group['ส่วนต่าง (ตัน)'].sum()],
+        })
+        result.append(subtotal_row)
+
+    df_final = pd.concat(result, ignore_index=True)
+
+    # Convert numeric columns (in case they are str)
+    df_final['จำนวนเที่ยว'] = pd.to_numeric(df_final['จำนวนเที่ยว'], errors='coerce')
+    df_final['น้ำหนักต้นทางรวม (ตัน)'] = pd.to_numeric(df_final['น้ำหนักต้นทางรวม (ตัน)'], errors='coerce')
+    df_final['น้ำหนักปลายทางรวม (ตัน)'] = pd.to_numeric(df_final['น้ำหนักปลายทางรวม (ตัน)'], errors='coerce')
+    df_final['น้ำหนักที่จ่าย (ตัน)'] = pd.to_numeric(df_final['น้ำหนักที่จ่าย (ตัน)'], errors='coerce')
+    df_final['ส่วนต่าง (ตัน)'] = pd.to_numeric(df_final['ส่วนต่าง (ตัน)'], errors='coerce')
+
+    # Grand total row
+    data_rows = df_final[~df_final['ทีม'].str.contains('รวมทีม', na=False)]
+    grand_total_row = pd.DataFrame({
+        'ทีม': ['รวมทั้งหมด'],
+        'ต้นทาง - ปลายทาง': [''],
+        'ช่วงน้ำหนัก': [''],
+        'ชนิดหิน': [''],
+        'จำนวนเที่ยว': [data_rows['จำนวนเที่ยว'].sum()],
+        'น้ำหนักต้นทางรวม (ตัน)': [data_rows['น้ำหนักต้นทางรวม (ตัน)'].sum()],
+        'น้ำหนักปลายทางรวม (ตัน)': [data_rows['น้ำหนักปลายทางรวม (ตัน)'].sum()],
+        'น้ำหนักที่จ่าย (ตัน)': [data_rows['น้ำหนักที่จ่าย (ตัน)'].sum()],
+        'ส่วนต่าง (ตัน)': [data_rows['ส่วนต่าง (ตัน)'].sum()],
+    })
+
+    # Append grand total to bottom
+    df_final = pd.concat([df_final, grand_total_row], ignore_index=True)
+    
+    # Create Excel response
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=Transport({active}) {start_created} to {end_created}.xlsx'
+
+    # Write Excel to memory buffer
+    with BytesIO() as buffer:
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_final.to_excel(writer, index=False, sheet_name='รายงาน', startrow=1)  # ขยับข้อมูลลงไปเริ่มแถวที่ 3
+
+            workbook = writer.book
+            sheet = writer.sheets['รายงาน']
+
+            str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+            str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+            
+            # เพิ่มชื่อรายงานในแถวแรก
+            sheet.merge_cells('A1:I1')  # ปรับช่วงตามจำนวนคอลัมน์ของคุณ
+            title_cell = sheet['A1']
+            title_cell.value = f'รายงานค่าบรรทุก {company.name} วันที่ {str_start} - {str_end}'
+            title_cell.font = Font(size=14, bold=True)
+            title_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+            # Font styling
+            bold_red_font = Font(bold=True, color="FF0000")
+            right_align = Alignment(horizontal="right")
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+
+            for row in sheet.iter_rows(min_row=3, max_row=sheet.max_row):
+
+                team_value = str(row[0].value)
+                row_num = row[0].row
+
+                #แถวที่เป็นชื่อทีม (ไม่ใช่ subtotal หรือ รวมทั้งหมด)
+                if team_value and not team_value.startswith('รวม'):
+                    # merge A:E
+                    sheet.merge_cells(start_row=row_num, start_column=1, end_row=row_num, end_column=9)
+                    for col in range(1, 10):  # A=1 ถึง E=10
+                        cell = sheet.cell(row=row_num, column=col)
+                        cell.font = Font(bold=True)
+                        cell.alignment = Alignment(horizontal="left", vertical="center")
+                        cell.border = thin_border
+
+                #แถวรวมทีม / รวมทั้งหมด = สีแดงตัวหนา
+                elif 'รวมทีม' in team_value or 'รวมทั้งหมด' in team_value:
+                    for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']:
+                        sheet.column_dimensions[col_letter].width = 25
+                        cell = sheet[f'{col_letter}{row_num}']
+                        cell.font = bold_red_font
+
+            #ชิดขวาเฉพาะตัวเลข
+            for col_letter in ['E', 'F', 'G', 'H', 'I']:
+                for cell in sheet[col_letter][1:]:  # [1:] เพื่อข้าม header
+                    cell.alignment = right_align
+
+        # Save to response
+        response.write(buffer.getvalue())
+
+    return response

@@ -24,6 +24,7 @@ urlpatterns = [
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
     path('autocompalteSite/',views.autocompalteSite,name="autocompalteSite"),
     path('weight/approve', views.approveWeight,name="approveWeight"),
+    path('exportExcelTransport/', views.exportExcelTransport,name="exportExcelTransport"),
 
     path('production/view', views.viewProduction,name="viewProduction"),
     path('production/create', views.createProduction,name="createProduction"),

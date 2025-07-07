@@ -1087,10 +1087,13 @@ class PortStockStoneItem(models.Model):
         db_column='cus_id',
         verbose_name="ลูกค้า"
     )
-    quoted = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
-    receive = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
-    pay = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
-    total = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00)
+    quoted = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #ยกมา
+    receive = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #รับเข้า
+    pay = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #จ่ายลงเรือ
+    loss = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #สูญเสียจากการขนถ่าย
+    other = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #เพิ่ม หินอันเดอร์ไซต์ เฉพาะ (หิน 40-80)
+    sell_cus = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #ขายในนามบริษัทอื่น SLC
+    total = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2, default=0.00) #รวม
     pss = models.ForeignKey('PortStockStone', on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:

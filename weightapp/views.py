@@ -6595,9 +6595,9 @@ def createPortStock(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
 
-    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'total'), extra=len(cus_qs),)
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
     
     if request.method == 'POST':
         form = PortStockForm(request.POST)
@@ -6635,9 +6635,9 @@ def editStep2PortStock(request, stock_id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
 
-    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'total'), extra=len(cus_qs),)
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
     
     try:
         stock_data = PortStock.objects.get(id=stock_id)
@@ -6684,7 +6684,7 @@ def editPortStockStoneItem(request, stock_id, pss_id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True)
+    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
     
     try:
         stock_data = PortStock.objects.get(id=stock_id)
@@ -6970,7 +6970,7 @@ def exportExcelTransport(request):
     # Write Excel to memory buffer
     with BytesIO() as buffer:
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_final.to_excel(writer, index=False, sheet_name='รายงาน', startrow=1)  # ขยับข้อมูลลงไปเริ่มแถวที่ 3
+            df_final.to_excel(writer, index=False, sheet_name='รายงาน', startrow=1)  # ขยับข้อมูลลงไปเริ่มแถวที่ 1
 
             workbook = writer.book
             sheet = writer.sheets['รายงาน']

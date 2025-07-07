@@ -16,6 +16,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
   }
 
+  .col-md-1-5 {
+    flex: 0 0 12.5% !important;
+    max-width: 12.5% !important;
+  }
+
+  .col-md-1-4 {
+    flex: 0 0 11.9% !important;
+    max-width: 11.9% !important;
+  }
+
+  .col-md-1-25 {
+    flex: 0 0 10.4167% !important;
+    max-width: 10.4167% !important;
+  }
+
 </style>
   
 {% endblock %}
@@ -87,9 +102,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <thead>
                 <tr class="table-primary">
                   <th scope="col">stock ของลูกค้า</th>
-                  <th scope="col">ยกมา</th>
-                  <th scope="col">รับเข้า</th>
-                  <th scope="col">จำนวนที่ลงเรือ</th>
+                  <th scope="col" class="text-end">ยกมา</th>
+                  <th scope="col" class="text-end">รับเข้า</th>
+                  <th scope="col" class="text-end">จำนวนที่ลงเรือ</th>
+                  <th scope="col" class="text-end">สูญเสียจากการขนถ่าย</th>
+                  <th scope="col" class="text-end">เพิ่ม หินอันเดอร์ไซต์</th>
+                  <th scope="col" class="text-end">ขายในนามบริษัทอื่น SLC</th>
                   <th scope="col" class="text-end">stock คงเหลือ</th>
                 </tr>
               </thead>
@@ -99,14 +117,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <th scope="row">
                       {{item.cus}}
                     </th>
-                    <td>{{item.quoted}}</td>
-                    <td>{{item.receive}}</td>
-                    <td>{{item.pay}}</td>
+                    <td class="text-end">{{item.quoted | intcomma}}</td>
+                    <td class="text-end">{{item.receive | intcomma}}</td>
+                    <td class="text-end">{{item.pay | intcomma}}</td>
+                    <td class="text-end">{{item.loss | intcomma}}</td>
+                    <td class="text-end">{{item.other | intcomma}}</td>
+                    <td class="text-end">{{item.sell_cus | intcomma}}</td>
                     <td class="text-end">{{item.total| intcomma}}</td>
                   </tr>
                 {% endfor %}
                 <tr>
-                  <th scope="row" colspan="4">
+                  <th scope="row" colspan="7">
                     Total Stock
                   </th>
                   <th scope="row" class="text-end">
@@ -141,27 +162,42 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </div>
                 <hr class="my-3">
                 <div class="row">
-                  <div class="col-md-4 col-12">
+                  <div class="col-md-2 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">stock ของลูกค้า</p>
                     </div>
                   </div>
-                  <div class="col-md-2 col-12">
+                  <div class="col-md-1-4 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">ยกมา</p>
                     </div>
                   </div>
-                  <div class="col-md-2 col-12">
+                  <div class="col-md-1-4 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">รับเข้า</p>
                     </div>
                   </div>
-                  <div class="col-md-2 col-12">
+                  <div class="col-md-1-4 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">จำนวนที่ลงเรือ <b id="b_pay" class="text-success"></b></p>
                     </div>
                   </div>
-                  <div class="col-md-2 col-12">
+                  <div class="col-md-1-4 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">สูญเสียจากการขนถ่าย</p>
+                    </div>
+                  </div>
+                  <div class="col-md-1-4 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">หินอันเดอร์ไซต์ 10%</p>
+                    </div>
+                  </div>
+                  <div class="col-md-1-4 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">ขายในนาม SLC</p>
+                    </div>
+                  </div>
+                  <div class="col-md-1-4 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">stock คงเหลือ</p>
                     </div>
@@ -169,27 +205,42 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   {{ formset.management_form }}
                   {% for form in formset %}
                     <div class="row form-row spacer">
-				              <div class="col-md-4 col-12">
+                     <div class="col-md-2 col-12">
                         <div class="form-group">
                           {{form.cus | add_class:"form-control cus"}}
                         </div>
                       </div>
-                      <div class="col-md-2 col-12">
+                      <div class="col-md-1-4 col-12">
                         <div class="form-group">
                           {{form.quoted | add_class:"form-control quoted"}}
                         </div>
                       </div>
-                      <div class="col-md-2 col-12">
+                      <div class="col-md-1-4 col-12">
                         <div class="form-group">
                           {{form.receive | add_class:"form-control receive"}}
                         </div>
                       </div>
-                      <div class="col-md-2 col-12">
+                      <div class="col-md-1-4 col-12">
                         <div class="form-group">
                           {{form.pay | add_class:"form-control pay border-success"}}
                         </div>
                       </div>
-                      <div class="col-md-2 col-12">
+                      <div class="col-md-1-4 col-12">
+                        <div class="form-group">
+                          {{form.loss | add_class:"form-control loss"}}
+                        </div>
+                      </div>
+                      <div class="col-md-1-4 col-12">
+                        <div class="form-group">
+                          {{form.other | add_class:"form-control other"}}
+                        </div>
+                      </div>
+                      <div class="col-md-1-4 col-12">
+                        <div class="form-group">
+                          {{form.sell_cus | add_class:"form-control sell_cus"}}
+                        </div>
+                      </div>
+                      <div class="col-md-1-4 col-12">
                         <div class="form-group">
                           {{form.total | add_class:"form-control total border-primary" |attr:"readonly:readonly"}}
                         </div>
@@ -447,7 +498,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   }
   ////// end ดึงข้อมูลหินและจำนวนตัน //////
 
-  $('.quoted, .receive, .pay').change(function() {
+  $('.quoted, .receive, .pay, .loss, .other, .sell_cus').change(function() {
       calculateTotalByCus();
 	});
 
@@ -463,6 +514,18 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     $(this).val(parseFloat($(this).val()).toFixed(2));
   });
 
+  $(".loss").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+  $(".other").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+    $(".sell_cus").blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
   //คำนวน น้ำหนักรวม ตามลูกค้า
   function calculateTotalByCus(){
     var inputs = $(".cus");
@@ -473,8 +536,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         quoted =  parseFloat($('#id_form-'+ i +'-quoted').val());
         receive =  parseFloat($('#id_form-'+ i +'-receive').val());
         pay =  parseFloat($('#id_form-'+ i +'-pay').val());
+        loss = parseFloat($('#id_form-'+ i +'-loss').val());
+        other = parseFloat($('#id_form-'+ i +'-other').val());
+        sell_cus = parseFloat($('#id_form-'+ i +'-sell_cus').val());
 
-        total = quoted + receive - pay;
+        total = quoted + receive + other - (pay + loss + sell_cus);
 
         $('#id_form-'+ i +'-total').val(total.toFixed(2));
       }

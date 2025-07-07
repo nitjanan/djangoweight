@@ -105,8 +105,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th scope="col" class="text-end">ยกมา</th>
                   <th scope="col" class="text-end">รับเข้า</th>
                   <th scope="col" class="text-end">จำนวนที่ลงเรือ</th>
-                  <th scope="col" class="text-end">สูญเสียจากการขนถ่าย</th>
-                  <th scope="col" class="text-end">เพิ่ม หินอันเดอร์ไซต์</th>
+                  <th scope="col" class="text-end">สูญเสียจากการขนถ่าย (1% - 1.2%)</th>
+                  <th scope="col" class="text-end">หินอันเดอร์ไซต์ (เฉพาะหิน 40/80)</th>
                   <th scope="col" class="text-end">ขายในนามบริษัทอื่น SLC</th>
                   <th scope="col" class="text-end">stock คงเหลือ</th>
                 </tr>
@@ -184,12 +184,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                   <div class="col-md-1-4 col-12">
                     <div class="form-group">
-                      <p class="fw-bolder">สูญเสียจากการขนถ่าย</p>
+                      <p class="fw-bolder">สูญเสียจากการขนถ่าย (1% - 1.2%)</p>
                     </div>
                   </div>
                   <div class="col-md-1-4 col-12">
                     <div class="form-group">
-                      <p class="fw-bolder">หินอันเดอร์ไซต์ 10%</p>
+                      <p class="fw-bolder">หินอันเดอร์ไซต์ 10% (เฉพาะหิน 40/80)</p>
                     </div>
                   </div>
                   <div class="col-md-1-4 col-12">
@@ -364,6 +364,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           return false;
         }
 
+        /* 07/07/2025 เอาเช็คจำนวนที่ลงเรือออก 
         //เช็คจำนวนที่ลงเรือ ห้ามเกินจากยอดรวม
         var sum_pay = sumInputsByClass('pay');
         var b_pay = $("#b_pay").html();
@@ -376,6 +377,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           event.preventDefault(); // Prevent form submission
           return false;
         }
+        */
 
         $("#id_total").val(sumInputsByClass('total').toFixed(2));//sum total
     });

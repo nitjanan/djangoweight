@@ -251,4 +251,7 @@ urlpatterns = [
 
      path('searchDataWeightToPortStock/', views.searchDataWeightToPortStock, name="searchDataWeightToPortStock"),
      path('searchPortStockInDay/', views.searchPortStockInDay, name="searchPortStockInDay"),
+
+     path('excelTransportByCompany/', views.excelTransportByCompany,name="excelTransportByCompany"),
+     path('exportExcelTransport/dashboard', views.exportExcelTransportByCompanyInDashboard,name="exportExcelTransportByCompanyInDashboard"),
 ]

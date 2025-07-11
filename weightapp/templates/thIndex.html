@@ -106,11 +106,15 @@
         </div>
         <div class="card-content pb-4">
           <div class="recent-message d-flex px-4 py-2">
+            <a href="{% url 'exportExcelTransportByCompanyInDashboard' %}" class="btn btn-info rounded-pill btn-block" download>รายงานการขนส่งตามบริษัท</a>
+          </div>
+          <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block" download>ยอดขายตามประเภทหินรายวัน</a>
           </div>
           <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'exportExcelProductionByStoneAndMonthInDashboard' %}" class="btn btn-danger rounded-pill btn-block" download>ยอดขายตามประเภทหินรายเดือน</a>
           </div>
+          <!--
           <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'exportExcelProductionAndLossDashboard' %}" class="btn btn-success rounded-pill btn-block" download>บันทึกปฏิบัติการงานโรงโม่</a>
           </div>
@@ -126,6 +130,7 @@
           <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'monthlyProduction' %}" class="btn btn-secondary rounded-pill btn-block">รายงานผลิตรายเดือน</a>
           </div>
+          -->
         </div>
         <!-- div class="card-content pb-4">
           <div class="recent-message d-flex px-4 py-3">
@@ -165,7 +170,7 @@
         </div-->
       </div>
     </div>
-    	        <div class="row">
+      <div class="row">
         <div class="col-12 col-xl-4">
           <div class="card">
             <div class="card-header">

@@ -7146,3 +7146,87 @@ def exportExcelTransport(request):
         response.write(buffer.getvalue())
 
     return response
+
+def exportExcelTransportByCompanyInDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+
+    my_q &= Q(car_team__isnull = False, bws__weight_type=1)
+    my_q &= ~Q(customer_name ='ยกเลิก')
+
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
+
+    response = excelTransportByCompany(request, my_q, start_created, end_created)
+    return response
+
+def excelTransportByCompany(request, my_q, start_created, end_created):
+    str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+    str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+
+    transport_comp = ['SLC', 'SLT', 'CTM', 'KT', 'UNI', 'STPS']
+    all_comp = BaseCompany.objects.filter(code__in=transport_comp).values('code', 'name')
+
+    output = BytesIO()
+    writer = pd.ExcelWriter(output, engine='openpyxl')
+    has_data = False
+
+    for comp in all_comp:
+        sheet_name = comp['code'] + "-" + comp['name']
+        my_q_with_comp = my_q & Q(bws__company__code=comp['code'], carry_type_name='ส่งให้')
+
+        queryset = Weight.objects.filter(my_q_with_comp)
+
+        if queryset.exists():
+            has_data = True
+
+            data = {
+                'เลขที่เอกสาร': queryset.values_list('doc_id', flat=True),
+                'วันที่': queryset.values_list('date', flat=True),
+                'ทะเบียนรถ': queryset.values_list('car_registration_name', flat=True),
+                'รหัสลูกค้า': queryset.values_list('customer_id', flat=True),
+                'ชื่อลูกค้า': queryset.values_list('customer_name', flat=True),
+                'รหัสทีม': queryset.values_list('car_team_id', flat=True),
+                'ชื่อทีม': queryset.values_list('car_team_name', flat=True),
+                'รหัสสินค้า': queryset.values_list('stone_type_id', flat=True),
+                'ชื่อสินค้า': queryset.values_list('stone_type_name', flat=True),
+                'นน.สุทธิ (ตัน)': queryset.values_list('weight_total', flat=True),
+            }
+
+            df = pd.DataFrame(data)
+            safe_sheet_name = sheet_name[:31]  # Excel จำกัดชื่อ sheet 31 ตัวอักษร
+            df.to_excel(writer, index=False, sheet_name=safe_sheet_name, startrow=1)  # เขียนเริ่มแถวที่ 2
+
+    writer.close()
+
+    # กลับไปอ่าน workbook จาก BytesIO เพื่อแก้ไขหัวตาราง
+    output.seek(0)
+    workbook = openpyxl.load_workbook(output)
+    for comp in all_comp:
+        sheet_name = (comp['code'] + "-" + comp['name'])[:31]
+        if sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            sheet.insert_rows(1)  # แทรกแถวก่อนหน้า
+            sheet.merge_cells('A1:J1')  # ปรับช่วงตามจำนวนคอลัมน์ของคุณ
+            title_cell = sheet['A1']
+            title_cell.value = f"รายงานขนส่งตามบริษัท {comp['name']}  วันที่ {str_start} - {str_end}"
+            title_cell.font = Font(size=14, bold=True)
+            title_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    final_output = BytesIO()
+    workbook.save(final_output)
+    final_output.seek(0)
+
+    response = HttpResponse(final_output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="transport_by_company.xlsx"'
+    return response

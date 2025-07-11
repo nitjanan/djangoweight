@@ -618,7 +618,7 @@ def index(request):
     loade_t = int((loade_en - loade_st) * 1000 - 100)
     request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds    
     '''
-    if not comp.biz or comp.biz.id == 1:
+    if not comp.biz or comp.biz.id == 1:#ธุรกิจเหมือง
         ####################################
         ######## data weight stock #########
         ####################################
@@ -629,14 +629,6 @@ def index(request):
         data_sum_produc.append(('Total', data_sum_produc_all))
 
         for site in s_comp:
-            ''' เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10
-            aggregated_value = Weight.objects.filter(
-                bws__company__code__in=company_in,
-                site=site['base_site_id'],
-                date=previous_day,
-                bws__weight_type=2
-            ).aggregate(s=Sum("weight_total"))["s"]        
-            '''
             aggregated_value = Weight.objects.filter(
                 bws__company__code__in=company_in,
                 site=site['base_site_id'],
@@ -701,7 +693,7 @@ def index(request):
         }
         return render(request, "index.html",context)
     
-    elif comp.biz.id == 2:
+    elif comp.biz.id == 2:#ธุรกิจท่าเรือ
         store = BaseSiteStore.objects.filter(id__in = [1,2,3]).values('id', 'name').order_by('id')
         store_id = BaseSiteStore.objects.filter(id__in = [1,2,3]).values_list('id').order_by('id')
 
@@ -820,6 +812,134 @@ def index(request):
                     active :"active",
         }
         return render(request, "ndIndex.html",context)
+    
+    elif comp.biz.id == 3:#ธุรกิจขนส่ง
+        chart_data = getChartTransport(start_date, end_date, None)
+        slc_chart_data = getChartTransport(start_date, end_date, 'SLC')
+        slt_chart_data = getChartTransport(start_date, end_date, 'SLT')
+        ctm_chart_data = getChartTransport(start_date, end_date, 'CTM')
+        uni_chart_data = getChartTransport(start_date, end_date, 'UNI')
+        kt_chart_data = getChartTransport(start_date, end_date, 'KT')
+        stps_chart_data = getChartTransport(start_date, end_date, 'stps')
+        ####################################
+        ######## data weight stock #########
+        ####################################
+        # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+        data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date__range=(start_date, end_date), bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
+
+        data_sum_produc = []
+        data_sum_produc.append(('Total', data_sum_produc_all))
+
+        for site in s_comp:
+            aggregated_value = Weight.objects.filter(
+                bws__company__code__in=company_in,
+                site=site['base_site_id'],
+                date__range=(start_date, end_date),
+                bws__weight_type=2
+            ).aggregate(s=Sum("weight_total"))["s"] 
+
+            # Append a tuple (site_id, aggregated_value) to the list
+            data_sum_produc.append((site['base_site_name'], aggregated_value))
+
+        context = { 
+                    'chart_data': json.dumps(chart_data, ensure_ascii=False),
+                    'slc_chart_data': json.dumps(slc_chart_data, ensure_ascii=False),
+                    'slt_chart_data': json.dumps(slt_chart_data, ensure_ascii=False),
+                    'ctm_chart_data': json.dumps(ctm_chart_data, ensure_ascii=False),
+                    'uni_chart_data': json.dumps(uni_chart_data, ensure_ascii=False),
+                    'kt_chart_data': json.dumps(kt_chart_data, ensure_ascii=False),
+                    'stps_chart_data': json.dumps(stps_chart_data, ensure_ascii=False),
+                    'previous_day':previous_day,
+                    'start_day':start_day,
+                    'end_day':end_day,
+                    'data_sum_produc_all':data_sum_produc_all,
+                    'data_sum_produc':data_sum_produc,
+                    'dashboard_page':'active',
+                    active :"active",
+        }
+        return render(request, "thindex.html",context)
+
+def getChartTransport(start_date, end_date, company):
+    # Step 1: Get all car_team with their total weights
+    if company:
+        raw_top_teams = Weight.objects.filter(
+            bws__company__code = company,
+            car_team__isnull = False,
+            date__range=(start_date, end_date),
+            carry_type_name='ส่งให้'
+        ).values('car_team__car_team_name').annotate(
+            total_weight=Sum('weight_total')
+        ).order_by('-total_weight')
+    else:
+        raw_top_teams = Weight.objects.filter(
+            car_team__isnull = False,
+            date__range=(start_date, end_date),
+            carry_type_name='ส่งให้'
+        ).values('car_team__car_team_name').annotate(
+            total_weight=Sum('weight_total')
+        ).order_by('-total_weight')
+
+    # Step 2: Take top 10 car teams
+    top_car_teams = [item['car_team__car_team_name'] for item in raw_top_teams[:10]]
+
+    # Step 3: Query only data for these teams
+    if company:
+        queryset = Weight.objects.filter(
+            bws__company__code = company,
+            date__range=(start_date, end_date),
+            carry_type_name='ส่งให้'
+        ).values('car_team__car_team_name', 'stone_type__base_stone_type_name').annotate(
+            sum_weight=Sum('weight_total'),
+            num_count = Count('weight_id'),
+        )
+    else:
+        queryset = Weight.objects.filter(
+            date__range=(start_date, end_date),
+            carry_type_name='ส่งให้'
+        ).values('car_team__car_team_name', 'stone_type__base_stone_type_name').annotate(
+            sum_weight=Sum('weight_total'),
+            num_count = Count('weight_id'),
+        )
+
+    # Step 4: Filter queryset to include only top car teams
+    queryset = [item for item in queryset if item['car_team__car_team_name'] in top_car_teams]
+
+    # Step 5: Prepare data structure
+    car_teams = top_car_teams  # ordered
+    stone_types = sorted(set(item['stone_type__base_stone_type_name'] for item in queryset))
+    car_team_index = {team: idx for idx, team in enumerate(car_teams)}
+
+    stone_data = {stype: [0] * len(car_teams) for stype in stone_types}
+    for item in queryset:
+        team = item['car_team__car_team_name']
+        stype = item['stone_type__base_stone_type_name']
+        weight = float(item['sum_weight'])
+        idx = car_team_index[team]
+        stone_data[stype][idx] = weight
+
+    chart_data = {
+        "categories": car_teams,
+        "series": [
+        {
+            "name": stype,
+            "data": [
+                {
+                    "x": car_teams[idx],
+                    "y": stone_data[stype][idx],
+                    "num_count": next((
+                        item['num_count']
+                        for item in queryset
+                        if item['car_team__car_team_name'] == car_teams[idx] and item['stone_type__base_stone_type_name'] == stype
+                    ), 0)
+                }
+                for idx in range(len(car_teams))
+            ]
+        }
+        for stype in stone_types
+        ]
+    }
+
+    return chart_data
 
 # Convert to plain dict
 def recursive_defaultdict_to_dict(d):
@@ -1041,15 +1161,15 @@ def editWeight(request, mode, weight_id):
 
     weight_data = get_object_or_404(Weight, pk=weight_id)
 
-    if company.biz.id == 1 and mode == 1:
+    if company.biz.id == 1 and mode == 1: #ธุรกิจเหมือง
         template_name = "weight/editWeightSell.html"
         tmp_form_post = WeightForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightForm(instance=weight_data)
-    elif company.biz.id == 1 and mode == 2:
+    elif company.biz.id == 1 and mode == 2: #ธุรกิจเหมือง
         template_name = "weight/editWeightStock.html"
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
-    elif company.biz.id == 2 and mode == 1:
+    elif company.biz.id == 2 and mode == 1: #ธุรกิจท่าเรือ
         template_name = "weight/editWeightPort.html"
         tmp_form_post = WeightPortForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightPortForm(instance=weight_data)
@@ -1976,7 +2096,7 @@ def summaryProduction(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
     
-    ''' แบบเก่าดึง weekly report ตามเดือนนั้นๆ 09/05/2024
+    ''' แบบเก่าดึง Performance การผลิต ตามเดือนนั้นๆ 09/05/2024
     #ดึงข้อมูลย้อนหลัง 1 วัน
     previous_date_time = date_object - timedelta(days=1)
 
@@ -6896,9 +7016,9 @@ def exportExcelTransport(request):
     }, inplace=True)
 
     # Add column "ต้นทาง - ปลายทาง"
-    if company.biz.id == 1:
+    if company.biz.id == 1: #ธุรกิจเหมือง
         df['ต้นทาง - ปลายทาง'] = df['บริษัท'] + ' - ' + df['ลูกค้า']
-    elif company.biz.id == 2:
+    elif company.biz.id == 2: #ธุรกิจท่าเรือ
         df['ต้นทาง - ปลายทาง'] = df['ลูกค้า'] + ' - ' + df['บริษัท']
 
     # Keep only needed columns

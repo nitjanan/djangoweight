@@ -885,6 +885,7 @@ def getChartTransport(start_date, end_date, company):
     # Step 3: Query only data for these teams
     if company:
         queryset = Weight.objects.filter(
+            stone_type__isnull = False,
             bws__company__code = company,
             date__range=(start_date, end_date),
             carry_type_name='ส่งให้'
@@ -894,6 +895,7 @@ def getChartTransport(start_date, end_date, company):
         )
     else:
         queryset = Weight.objects.filter(
+            stone_type__isnull = False,
             date__range=(start_date, end_date),
             carry_type_name='ส่งให้'
         ).values('car_team__car_team_name', 'stone_type__base_stone_type_name').annotate(

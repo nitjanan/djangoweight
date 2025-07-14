@@ -7219,11 +7219,14 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
         if sheet_name in workbook.sheetnames:
             sheet = workbook[sheet_name]
             sheet.insert_rows(1)  # แทรกแถวก่อนหน้า
-            sheet.merge_cells('A1:J1')  # ปรับช่วงตามจำนวนคอลัมน์ของคุณ
+            sheet.merge_cells('A1:J1')  # ปรับช่วงตามจำนวนคอลัมน์
             title_cell = sheet['A1']
             title_cell.value = f"รายงานขนส่งตามบริษัท {comp['name']}  วันที่ {str_start} - {str_end}"
             title_cell.font = Font(size=14, bold=True)
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+            sheet.column_dimensions[col_letter].width = 25
 
     final_output = BytesIO()
     workbook.save(final_output)

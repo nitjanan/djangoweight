@@ -820,7 +820,7 @@ def index(request):
         ctm_chart_data = getChartTransport(start_date, end_date, 'CTM')
         uni_chart_data = getChartTransport(start_date, end_date, 'UNI')
         kt_chart_data = getChartTransport(start_date, end_date, 'KT')
-        stps_chart_data = getChartTransport(start_date, end_date, 'stps')
+        stps_chart_data = getChartTransport(start_date, end_date, 'STPS')
         ####################################
         ######## data weight stock #########
         ####################################

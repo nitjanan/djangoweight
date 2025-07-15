@@ -857,7 +857,7 @@ def index(request):
                     'dashboard_page':'active',
                     active :"active",
         }
-        return render(request, "thindex.html",context)
+        return render(request, "thIndex.html",context)
 
 def getChartTransport(start_date, end_date, company):
     # Step 1: Get all car_team with their total weights

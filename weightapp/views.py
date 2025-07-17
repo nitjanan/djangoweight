@@ -335,7 +335,7 @@ def getSumByStone(request, mode, stoneType, type, company_in):
 
     #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
     if type == 1:#เครื่องขาย ต้นทางจากโรงโม่
-        w = Weight.objects.filter(mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
         w = StockStone.objects.filter(stk__company__code__in = company_in, stone = stoneType, stk__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-stk__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
@@ -350,11 +350,11 @@ def getSumByStone(request, mode, stoneType, type, company_in):
                 crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
                 w += calculateEstimate(i['percent'], crush)
     elif type == 4:#เครื่องขาย ต้นทางจากสต๊อก
-        w = Weight.objects.filter(mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 5:#เครื่องขาย ต้นทางจากการซื้อจากที่อื่น
-        w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 6:#รวม เครื่องขาย
-        w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, stone_type = stoneType, date__range=(start_date, end_date)).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
 
     elif type == 10:#port stock
         w = PortStockStone.objects.filter(ps__company__code__in = company_in, stone = stoneType, ps__created__range=(start_date, end_date)).values_list('total', flat=True).order_by('-ps__created').first() or Decimal('0.0') #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date
@@ -382,7 +382,7 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
 
     #type 1 = sell, 2 = stock, 3 = produce, 4 = purchase 
     if type == 1:#เครื่องขาย ต้นทางจากโรงโม่
-        w = Weight.objects.filter(mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 1, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
@@ -406,11 +406,11 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
                 crush = Weight.objects.filter(bws__company__code__in = company_in, site = i['se__site'], bws__weight_type = mode , date = i['se__created']).aggregate(s = Sum("weight_total"))["s"] or Decimal('0.0')
                 w += calculateEstimate(i['percent'], crush)
     elif type == 4:#เครื่องขาย ต้นทางจากสต๊อก
-        w = Weight.objects.filter(mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 2, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 5:#เครื่องขาย ต้นทางจากการซื้อจากที่อื่น
-        w = Weight.objects.filter(mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source = 3, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 6:#รวมเครื่องขาย
-        w = Weight.objects.filter(mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     
     elif type == 10:#port stock
         qr = PortStockStone.objects.filter(ps__company__code__in = company_in, ps__created__range=(start_date, end_date)).exclude(ss_query_filters).values('ps__created', 'stone', 'total').order_by('-ps__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
@@ -1558,11 +1558,11 @@ def excelProductionByStone(request, my_q, list_date):
     if comp.biz.id == 1:
         # Query ข้อมูลขาย
         #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
-        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), ~Q(site = '200PL') & ~Q(site = '300PL'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
 
         #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
         m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
-        data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+        data = Weight.objects.filter(my_q, ~Q(site = '200PL') & ~Q(site = '300PL'), mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
     
     elif comp.biz.id == 2:
         #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
@@ -2155,7 +2155,7 @@ def summaryProduction(request):
     end_day = datetime.strptime(end_created, "%Y-%m-%d")
 
     #หาวันสุดท้ายที่คีย์ข้อมูลผลิต
-    date_last_pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values_list('created', flat=True).last()
+    date_last_pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, end_created)).values_list('created', flat=True).order_by('-created').first()
 
     b_site = Production.objects.filter(company__code__in = company_in).values('site').distinct()
 
@@ -5941,7 +5941,7 @@ def searchDataWeightToStock(request):
         prod = StoneEstimateItem.objects.filter(se__created = created, stone_type = stone, se__company = company).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
 
         #ขาย
-        sell = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+        sell = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), bws__company = company, bws__weight_type = 1, stone_type = stone, date = created).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
 
         #อนุเคราะห์ (ปลายทาง 300PL)
         aid = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = created, site = '300PL').aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')

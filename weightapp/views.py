@@ -701,18 +701,29 @@ def index(request):
         ######## data weight stock #########
         ####################################
         # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-        data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__store__in = store_id, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"]
+        sum_store = Weight.objects.filter(bws__company__code__in = company_in, site__store__in = [2,3], date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] # ขายภายนอก + ขายลงเรือ
+        sum_line_long = Weight.objects.filter(bws__company__code__in = company_in, line_type = "สายยาว", date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] # รับเข้า เป็นสายยาวทั้งหมด
+
+        data_sum_produc_all = sum_store + sum_line_long
 
         data_sum_produc = []
-        data_sum_produc.append(('Total', data_sum_produc_all))
+        data_sum_produc.append(('ยอดสะสมประจำเดือน', data_sum_produc_all))
 
-        for st in store:
-            aggregated_value = Weight.objects.filter(
-                bws__company__code__in=company_in,
-                site__store = st['id'],
-                date__range=(start_date, end_date),
-                bws__weight_type=1
-            ).aggregate(s=Sum("weight_total"))["s"]
+        for i, st in enumerate(store):
+            if i == 0: #16-07-2025 กราฟ รับเข้า เปลี่ยนการดึงข้อมูล เป็นสายยาวทั้งหมด
+                aggregated_value = Weight.objects.filter(
+                    bws__company__code__in=company_in,
+                    line_type = "สายยาว",
+                    date__range=(start_date, end_date),
+                    bws__weight_type=1
+                ).aggregate(s=Sum("weight_total"))["s"]
+            else:# ขายภายนอก + ขายลงเรือ
+                aggregated_value = Weight.objects.filter(
+                    bws__company__code__in=company_in,
+                    site__store = st['id'],
+                    date__range=(start_date, end_date),
+                    bws__weight_type=1
+                ).aggregate(s=Sum("weight_total"))["s"]
 
             # Append a tuple (site_id, aggregated_value) to the list
             data_sum_produc.append((st['name'], aggregated_value))
@@ -734,31 +745,69 @@ def index(request):
         stone_name_list = list(BaseStoneType.objects.filter(base_stone_type_id__in = stone_list).values_list('base_stone_type_name', flat=True).order_by('base_stone_type_id'))
         stone_name_list.append('อื่นๆ')
 
-        # Define lists to store cumulative totals and goal percentages for each mill
         list_store_sites = [[] for _ in range(len(store_id))]
         cumulative_totals = [0] * len(store_id)
 
-        # Fetch weights for each mill within the date range
+        # เตรียม ship name ตามวันที่
+        ship_name_dict = {}
+        ship_name_summary_by_date = {}
+
+        if (3,) in store_id:
+            ship_data = Weight.objects.filter(
+                date__range=(start_date, end_date),
+                site__store=3
+            ).values('date', 'site__base_site_name').order_by('date').distinct()
+
+            for item in ship_data:
+                date_str = str(item['date'])
+                name = item['site__base_site_name']
+                ship_name_dict[date_str] = name  # ใช้ชื่อเรือเดียว
+                if date_str in ship_name_summary_by_date:
+                    if name not in ship_name_summary_by_date[date_str]:
+                        ship_name_summary_by_date[date_str].append(name)
+                else:
+                    ship_name_summary_by_date[date_str] = [name]
+
+        # สร้าง weights ตามแต่ละ store
         weights = {}
         for i, st_id in enumerate(store_id):
-            weights[st_id] = Weight.objects.filter(
-                date__range=(start_date, end_date),
-                site__store = st_id
-            ).values('date').annotate(
-                cumulative_total=Sum('weight_total')
-            ).order_by('date')
+            if i == 0:  # สำหรับสายยาว
+                weights[st_id] = Weight.objects.filter(
+                    date__range=(start_date, end_date),
+                    line_type="สายยาว"
+                ).values('date').annotate(
+                    cumulative_total=Sum('weight_total')
+                ).order_by('date')
+            else:  # สำหรับแต่ละ store เช่น ขายลงเรือ
+                weights[st_id] = Weight.objects.filter(
+                    date__range=(start_date, end_date),
+                    site__store=st_id
+                ).values('date').annotate(
+                    cumulative_total=Sum('weight_total')
+                ).order_by('date')
+
+        # เตรียมข้อมูลสำหรับกราฟ
+        tooltip_labels = [[] for _ in range(len(store_id))]
 
         for date in list_date:
+            date_str = str(date)
             for i, st_id in enumerate(store_id):
-                found = False  # Flag to track if we find a matching date
+                found = False
                 for w in weights[st_id]:
-                    if str(date) == str(w['date']):
-                        cumulative_totals[i] = str(w['cumulative_total'])
-                        list_store_sites[i].append(cumulative_totals[i])
+                    if date_str == str(w['date']):
+                        weight = float(w['cumulative_total'])
+                        list_store_sites[i].append(weight)
+                        if st_id == (3,):
+                            ship_list = ship_name_summary_by_date.get(date_str, [])
+                            label = f" {weight:.2f} ตัน / {', '.join(ship_list)}"
+                        else:
+                            label = f"{weight:.2f} ตัน"
+                        tooltip_labels[i].append(label)
                         found = True
                         break
                 if not found:
                     list_store_sites[i].append(0)
+                    tooltip_labels[i].append("0 ตัน")
 
         list_store_site = []
         for i, store in enumerate(store):
@@ -806,6 +855,7 @@ def index(request):
                     'list_date': list_date,
                     'list_goal_mill' : list_goal_mill,
                     'list_store_site' : list_store_site,
+                    'tooltip_labels': tooltip_labels,
                     'list_persent_loss_weight':list_persent_loss_weight,
                     'stone_name_list':stone_name_list,
                     'dashboard_page':'active',
@@ -860,84 +910,74 @@ def index(request):
         return render(request, "thIndex.html",context)
 
 def getChartTransport(start_date, end_date, company):
-    # Step 1: Get all car_team with their total weights
+    # Step 1: Get top 10 car_team names ordered by total_weight
+    base_filter = {
+        "car_team__isnull": False,
+        "date__range": (start_date, end_date),
+        "carry_type_name": "ส่งให้"
+    }
     if company:
-        raw_top_teams = Weight.objects.filter(
-            bws__company__code = company,
-            car_team__isnull = False,
-            date__range=(start_date, end_date),
-            carry_type_name='ส่งให้'
-        ).values('car_team__car_team_name').annotate(
-            total_weight=Sum('weight_total')
-        ).order_by('-total_weight')
-    else:
-        raw_top_teams = Weight.objects.filter(
-            car_team__isnull = False,
-            date__range=(start_date, end_date),
-            carry_type_name='ส่งให้'
-        ).values('car_team__car_team_name').annotate(
-            total_weight=Sum('weight_total')
-        ).order_by('-total_weight')
+        base_filter["bws__company__code"] = company
 
-    # Step 2: Take top 10 car teams
-    top_car_teams = [item['car_team__car_team_name'] for item in raw_top_teams[:10]]
+    raw_top_teams = Weight.objects.filter(**base_filter) \
+        .values("car_team__car_team_name") \
+        .annotate(total_weight=Sum("weight_total")) \
+        .order_by("-total_weight")[:10]
 
-    # Step 3: Query only data for these teams
+    top_car_teams = [item["car_team__car_team_name"] for item in raw_top_teams]
+
+    if not top_car_teams:
+        return {"categories": [], "series": []}
+
+    # Step 2: Get summarized data for those top 10 teams
+    detail_filter = {
+        "stone_type__isnull": False,
+        "car_team__car_team_name__in": top_car_teams,
+        "date__range": (start_date, end_date),
+        "carry_type_name": "ส่งให้"
+    }
     if company:
-        queryset = Weight.objects.filter(
-            stone_type__isnull = False,
-            bws__company__code = company,
-            date__range=(start_date, end_date),
-            carry_type_name='ส่งให้'
-        ).values('car_team__car_team_name', 'stone_type__base_stone_type_name').annotate(
-            sum_weight=Sum('weight_total'),
-            num_count = Count('weight_id'),
-        )
-    else:
-        queryset = Weight.objects.filter(
-            stone_type__isnull = False,
-            date__range=(start_date, end_date),
-            carry_type_name='ส่งให้'
-        ).values('car_team__car_team_name', 'stone_type__base_stone_type_name').annotate(
-            sum_weight=Sum('weight_total'),
-            num_count = Count('weight_id'),
+        detail_filter["bws__company__code"] = company
+
+    queryset = Weight.objects.filter(**detail_filter) \
+        .values("car_team__car_team_name", "stone_type__base_stone_type_name") \
+        .annotate(
+            sum_weight=Sum("weight_total"),
+            num_count=Count("weight_id")
         )
 
-    # Step 4: Filter queryset to include only top car teams
-    queryset = [item for item in queryset if item['car_team__car_team_name'] in top_car_teams]
-
-    # Step 5: Prepare data structure
-    car_teams = top_car_teams  # ordered
-    stone_types = sorted(set(item['stone_type__base_stone_type_name'] for item in queryset))
+    # Step 3: Prepare chart data
+    car_teams = top_car_teams  # already ordered
     car_team_index = {team: idx for idx, team in enumerate(car_teams)}
-
+    stone_types = sorted(set(item["stone_type__base_stone_type_name"] for item in queryset))
     stone_data = {stype: [0] * len(car_teams) for stype in stone_types}
+
     for item in queryset:
-        team = item['car_team__car_team_name']
-        stype = item['stone_type__base_stone_type_name']
-        weight = float(item['sum_weight'])
+        team = item["car_team__car_team_name"]
+        stype = item["stone_type__base_stone_type_name"]
+        weight = float(item["sum_weight"])
         idx = car_team_index[team]
         stone_data[stype][idx] = weight
 
     chart_data = {
         "categories": car_teams,
         "series": [
-        {
-            "name": stype,
-            "data": [
-                {
-                    "x": car_teams[idx],
-                    "y": stone_data[stype][idx],
-                    "num_count": next((
-                        item['num_count']
-                        for item in queryset
-                        if item['car_team__car_team_name'] == car_teams[idx] and item['stone_type__base_stone_type_name'] == stype
-                    ), 0)
-                }
-                for idx in range(len(car_teams))
-            ]
-        }
-        for stype in stone_types
+            {
+                "name": stype,
+                "data": [
+                    {
+                        "x": car_teams[idx],
+                        "y": stone_data[stype][idx],
+                        "num_count": next((
+                            item["num_count"]
+                            for item in queryset
+                            if item["car_team__car_team_name"] == car_teams[idx] and item["stone_type__base_stone_type_name"] == stype
+                        ), 0)
+                    }
+                    for idx in range(len(car_teams))
+                ]
+            }
+            for stype in stone_types
         ]
     }
 
@@ -6931,7 +6971,7 @@ def searchDataWeightToPortStock(request):
             quot = PortStockStoneItem.objects.none()
 
         #รับเข้า
-        receive = Weight.objects.filter(stone_type = stone, customer__in = cus_id, site__store = 1, bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
+        receive = Weight.objects.filter(stone_type = stone, customer__in = cus_id, line_type = "สายยาว", bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
 
         #จ่ายภายลงเรือ ดึงจำนวนที่ลงเรือทั้งหมดตามชนิดหิน
         pay = Weight.objects.filter(stone_type = stone, site__store = 3, bws__company = company, bws__weight_type = 1, date = created).aggregate(total=Sum("weight_total"))['total'] or Decimal('0.00')
@@ -7187,25 +7227,64 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
         sheet_name = comp['code'] + "-" + comp['name']
         my_q_with_comp = my_q & Q(bws__company__code=comp['code'], carry_type_name='ส่งให้')
 
-        queryset = Weight.objects.filter(my_q_with_comp)
+        queryset = Weight.objects.filter(my_q_with_comp).values(
+            'car_team__car_team_name', 'date', 'customer__customer_name',
+            'site__base_site_name', 'stone_type__base_stone_type_name'
+        ).annotate(
+            num_rows=Count('weight_id'), 
+            sum_weight=Sum('weight_total'),
+            sum_amount_vat=Sum('amount_vat'),
+        ).order_by('car_team__car_team_name')
 
         if queryset.exists():
             has_data = True
 
-            data = {
-                'เลขที่เอกสาร': queryset.values_list('doc_id', flat=True),
-                'วันที่': queryset.values_list('date', flat=True),
-                'ทะเบียนรถ': queryset.values_list('car_registration_name', flat=True),
-                'รหัสลูกค้า': queryset.values_list('customer_id', flat=True),
-                'ชื่อลูกค้า': queryset.values_list('customer_name', flat=True),
-                'รหัสทีม': queryset.values_list('car_team_id', flat=True),
-                'ชื่อทีม': queryset.values_list('car_team_name', flat=True),
-                'รหัสสินค้า': queryset.values_list('stone_type_id', flat=True),
-                'ชื่อสินค้า': queryset.values_list('stone_type_name', flat=True),
-                'นน.สุทธิ (ตัน)': queryset.values_list('weight_total', flat=True),
-            }
+            df = pd.DataFrame(list(queryset))
 
-            df = pd.DataFrame(data)
+            df.columns = [
+                'ทีม','วันที่', 'ลูกค้า', 'ปลายทาง', 'ชนิดหิน', 
+                'จำนวนเที่ยว', 'น้ำหนักรวม (ตัน)' , 'จำนวนเงินสุทธิ'
+            ]
+
+            if not df.empty:
+                df['วันที่'] = pd.to_datetime(df['วันที่']).dt.strftime('%d/%m/%Y')
+            
+            df.fillna({'ทีม': '(ไม่มีทีม)'}, inplace=True)
+
+            grouped = df.groupby('ทีม', dropna=False)
+            result = []
+
+            for name, group in grouped:
+                result.append(group)
+                subtotal = pd.DataFrame({
+                    'ทีม': [f'รวมทีม {name}'],
+                    'วันที่': [''],
+                    'ลูกค้า': [''], 'ปลายทาง': [''], 'ชนิดหิน': [''],
+                    'จำนวนเที่ยว': [group['จำนวนเที่ยว'].sum()],
+                    'น้ำหนักรวม (ตัน)': [group['น้ำหนักรวม (ตัน)'].sum()],
+                    'จำนวนเงินสุทธิ': [group['จำนวนเงินสุทธิ'].sum()],
+                })
+                result.append(subtotal)
+
+            df = pd.concat(result, ignore_index=True)
+
+            total_row = pd.DataFrame({
+                'ทีม': ['รวมทั้งหมด'], 'วันที่': [''], 'ลูกค้า': [''], 'ปลายทาง': [''], 'ชนิดหิน': [''],
+                'จำนวนเที่ยว': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'จำนวนเที่ยว'].sum()],
+                'น้ำหนักรวม (ตัน)': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'น้ำหนักรวม (ตัน)'].sum()],
+                'จำนวนเงินสุทธิ': [df.loc[df['ทีม'].str.contains('รวมทีม', na=False) == False, 'จำนวนเงินสุทธิ'].sum()],
+            })
+
+            df = pd.concat([df, total_row], ignore_index=True)
+
+            df[['น้ำหนักรวม (ตัน)']] = df[[
+                'น้ำหนักรวม (ตัน)'
+            ]].applymap(lambda x: f"{x:,.2f}" if pd.notna(x) else "")
+
+            df[['จำนวนเงินสุทธิ']] = df[[
+                'จำนวนเงินสุทธิ'
+            ]].applymap(lambda x: f"{x:,.2f}" if pd.notna(x) else "")
+
             safe_sheet_name = sheet_name[:31]  # Excel จำกัดชื่อ sheet 31 ตัวอักษร
             df.to_excel(writer, index=False, sheet_name=safe_sheet_name, startrow=1)  # เขียนเริ่มแถวที่ 2
 
@@ -7219,13 +7298,30 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
         if sheet_name in workbook.sheetnames:
             sheet = workbook[sheet_name]
             sheet.insert_rows(1)  # แทรกแถวก่อนหน้า
-            sheet.merge_cells('A1:J1')  # ปรับช่วงตามจำนวนคอลัมน์
+            sheet.merge_cells('A1:H1')  # ปรับช่วงตามจำนวนคอลัมน์
             title_cell = sheet['A1']
             title_cell.value = f"รายงานขนส่งตามบริษัท {comp['name']}  วันที่ {str_start} - {str_end}"
             title_cell.font = Font(size=14, bold=True)
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+        # Bold subtotal and total row
+        for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+            for cell in row:
+                if 'รวมทีม' in str(cell.value) or 'รวมทั้งหมด' in str(cell.value):
+                    row_number = cell.row  # Get the row number
+                    # Bold and red font
+                    bold_red_font = Font(bold=True, color="FF0000")
 
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+                    # Apply to columns A, G, H, I, J, K in the same row
+                    for col in ['A', 'F', 'G', 'H']:
+                        sheet[f"{col}{row_number}"].font = bold_red_font
+
+        right_align = Alignment(horizontal="right")
+        for col in ['H', 'F', 'G', 'H']:  # Columns for numbers
+            for cell in sheet[col]:  # Iterate through all cells in that column
+                cell.alignment = right_align
+
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
             sheet.column_dimensions[col_letter].width = 25
 
     final_output = BytesIO()

@@ -75,7 +75,7 @@
         <div class="col-12">
           <div class="card">
             <div class="card-header">
-              <h4>ยอดสะสมประจำเดือน</h4>
+              <h4>ยอดประจำวัน</h4>
             </div>
             <div class="card-body">
               <div id="chart-stone"></div>
@@ -264,46 +264,42 @@
 <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
 
 <script type="text/javascript">
-    var optionsStone = {
-      series: [           
-            {% for item in list_store_site %}
-                {
-                    name: '{{ item.0 }}',
-                    data: {{ item.1|safe }}
-                }{% if not forloop.last %},{% endif %}
-            {% endfor %}
-      ],
-      chart: {
-        height: 350,
-        type: 'line',
-        zoom: {
-          enabled: false
-        },
-      },
-      dataLabels: {
+  var optionsStone = {
+    series: [
+      {% for item in list_store_site %}
+        {
+          name: '{{ item.0 }}',
+          data: {{ item.1|safe }}
+        }{% if not forloop.last %},{% endif %}
+      {% endfor %}
+    ],
+    chart: {
+      height: 350,
+      type: 'line',
+      zoom: {
         enabled: false
       },
-      stroke: {
-        width: [5, 7, 5],
-        curve: 'straight',
-        dashArray: [0, 8, 5]
-      },
-      title: {
-        //text: 'Page Statistics',
-        align: 'left'
-      },
-      legend: {
-        tooltipHoverFormatter: function(val, opts) {
-          return val + ' = <strong>' + opts.w.globals.series[opts.seriesIndex][opts.dataPointIndex] + '</strong>'
-        }
-      },
-      markers: {
-        size: 0,
-        hover: {
-          sizeOffset: 6
-        }
-      },
-      xaxis: {
+    },
+    dataLabels: {
+      enabled: false
+    },
+    stroke: {
+      width: [5, 7, 5],
+      curve: 'straight',
+      dashArray: [0, 8, 5]
+    },
+    legend: {
+      tooltipHoverFormatter: function(val, opts) {
+        return val + ' = <strong>' + opts.w.globals.series[opts.seriesIndex][opts.dataPointIndex] + '</strong>';
+      }
+    },
+    markers: {
+      size: 0,
+      hover: {
+        sizeOffset: 6
+      }
+    },
+    xaxis: {
         type: 'datetime',
         /*
         labels: {
@@ -311,50 +307,33 @@
         },
         */
         categories: {{ list_date|safe }},
-      },
-      yaxis: {
-        forceNiceScale: true,
-        labels: {
-          formatter: function (value) {
-            return value.toLocaleString() + " ตัน";
-          }
+    },
+    yaxis: {
+      forceNiceScale: true,
+      labels: {
+        formatter: function(value) {
+          return value.toLocaleString() + " ตัน";
         }
-      },
-      tooltip: {
-        y: [
-          {
-            title: {
-              formatter: function (val) {
-                return val;
-              }
-            }
-          },
-          {
-            title: {
-              formatter: function (val) {
-                return val;
-              }
-            }
-          },
-          {
-            title: {
-              formatter: function (val) {
-                return val;
-              }
-            }
-          }
-        ]
-      },
-      grid: {
-        borderColor: '#f1f1f1',
-      },
-      colors: [
+      }
+    },
+    tooltip: {
+      y: {
+        formatter: function(value, { series, seriesIndex, dataPointIndex, w }) {
+          const customLabels = {{ tooltip_labels|safe }};
+          return customLabels[seriesIndex][dataPointIndex];
+        }
+      }
+    },
+    grid: {
+      borderColor: '#f1f1f1',
+    },
+    colors: [
       'rgba(255, 99, 132, 0.8)',
       'rgba(75, 192, 192, 0.8)',
       'rgba(153, 102, 255, 0.8)',
       'rgba(255, 206, 86, 0.8)',
-      ],
-    };
+    ],
+  };
 
   /////////////////////////////
   var optionsStock = {

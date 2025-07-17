@@ -542,7 +542,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         other = parseFloat($('#id_portstockstoneitem_set-'+ i +'-other').val());
         sell_cus = parseFloat($('#id_portstockstoneitem_set-'+ i +'-sell_cus').val());
 
-        total = quoted + receive + other - (pay + loss + sell_cus);
+        total = quoted + receive - (pay + loss + sell_cus + other);
 
         $('#id_portstockstoneitem_set-'+ i +'-total').val(total.toFixed(2));
       }

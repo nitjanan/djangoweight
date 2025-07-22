@@ -1247,9 +1247,9 @@ def editWeight(request, mode, weight_id):
 
             #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
             if mode == 1 or mode == 4:
+                if weight_form.stone_type:
+                    updateSellStockStoneItem(weight_form.pk)
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total:
-                    if  weight_form.stone_type:
-                        updateSellStockStoneItem(weight_form.pk)
                     if weight_form.oil_content:
                         updateGasPrice(weight_form.bws.company.id, weight_form.date)
                         updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
@@ -1288,6 +1288,19 @@ def updateSellStockStoneItem(weight_id):
     date = weight.date
     stone = weight.stone_type.base_stone_type_id
 
+    #รวมจำนวนขายทั้งหมด ไม่รวมใช้ภายในและอนุเคาราะห์
+    try:
+        ss_sell = StockStoneItem.objects.filter(source__id = 3, ssn__stk__company = company, ssn__stk__created = date, ssn__stone = stone).last()
+        if ss_sell:
+            #ขาย
+            sell = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), bws__company = company, bws__weight_type = 1, stone_type = stone, date = date).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+            tmp_ssn_id = ss_sell.ssn.id
+            tmp_ss_item_id = ss_sell.id
+            ss_sell.quantity = sell #ดึงจำนวนรวมขายมา
+            ss_sell.save()
+    except StockStoneItem.DoesNotExist:
+        pass
+
     #อนุเคราะห์ (ปลายทาง 300PL)
     if weight.site and weight.site.base_site_id == '300PL':
         try:
@@ -1299,18 +1312,6 @@ def updateSellStockStoneItem(weight_id):
                 tmp_ss_item_id = ss_aid.id
                 ss_aid.quantity = aid #ดึงจำนวนรวมอนุเคราะห์
                 ss_aid.save()
-        except StockStoneItem.DoesNotExist:
-            pass
-    else: #รวมจำนวนขายทั้งหมด
-        try:
-            ss_sell = StockStoneItem.objects.filter(source__id = 3, ssn__stk__company = company, ssn__stk__created = date, ssn__stone = stone).last()
-            if ss_sell:
-                #ขาย
-                sell = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = date).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
-                tmp_ssn_id = ss_sell.ssn.id
-                tmp_ss_item_id = ss_sell.id
-                ss_sell.quantity = sell #ดึงจำนวนรวมขายมา
-                ss_sell.save()
         except StockStoneItem.DoesNotExist:
             pass
     

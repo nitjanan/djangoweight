@@ -1234,9 +1234,15 @@ def editWeight(request, mode, weight_id):
                 original_weight_total = original_weight.weight_total
                 if original_weight.site:
                     original_weight_site = original_weight.site.base_site_id
+                if original_weight.customer:
+                    original_weight_cus = original_weight.customer.customer_id
+                if original_weight.stone_type:
+                    original_weight_stone = original_weight.stone_type.base_stone_type_id
             except Weight.DoesNotExist:
                 original_weight_total = None
                 original_weight_site = None
+                original_weight_cus = None
+                original_weight_stone = None
         
             # log history เก็บข้อมูลก่อนแก้
             weight_form = form.save()
@@ -1245,27 +1251,32 @@ def editWeight(request, mode, weight_id):
             weight_history.user_update = request.user
             weight_history.save()
 
-            #กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
-            if mode == 1 or mode == 4:
-                if weight_form.stone_type:
-                    updateSellStockStoneItem(weight_form.pk)
+            #เครื่องขาย
+            if mode == 1:
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total:
                     if weight_form.oil_content:
                         updateGasPrice(weight_form.bws.company.id, weight_form.date)
                         updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
-            #กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
-            if mode == 2:
+            #เครื่องผลิต
+            if mode == 2:#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
                     # update new site
                     updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
                     updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
-                    
+                    # update old site
+                    updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, original_weight_site)
+                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
                     if  weight_form.stone_type:
                         updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
-                    if original_weight_site is not None and original_weight_site != weight_form.site.base_site_id :#09-05-2025 ถ้ามีการเปลี่ยนแปลงโรงโม่ คำนวน โรงโม่เก่าด้วย
-                        # update old site
-                        updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, original_weight_site)
-                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)
+            #ธุรกิจเหมือง
+            if mode == 1  and company.biz.id == 1:#กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
+                if weight_form.stone_type:
+                    updateSellStockStoneItem(weight_form.pk)
+            #ธุรกิจท่าเรือ
+            if mode == 1 and company.biz.id == 2:
+                if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_cus is not None and original_weight_cus != weight_form.customer.customer_id or original_weight_stone is not None and original_weight_stone != weight_form.stone_type.base_stone_type_id:
+                    updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, original_weight_cus, original_weight_stone)
+                    updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, weight_form.customer.customer_id, weight_form.stone_type.base_stone_type_id)
 
             return redirect('weightTable')
     else:
@@ -1323,6 +1334,91 @@ def updateSellStockStoneItem(weight_id):
 
     if tmp_ss_item_id:
         updateTotalStockInMonth(tmp_ss_item_id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+
+def updatePortStockStoneItem(company, date, cus, stone):
+    tmp_pss_id = None
+    try:
+        psi = PortStockStoneItem.objects.filter(pss__ps__company = company, pss__ps__created = date, cus = cus, pss__stone = stone).last()
+        if psi:
+            receive = Weight.objects.filter(bws__company = company, bws__weight_type = 1, stone_type = stone, date = date, customer = cus).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
+            psi.receive = receive
+            psi.total = psi.quoted + receive - (psi.pay + psi.loss + psi.sell_cus + psi.other)
+            tmp_pss_id = psi.pss.id
+            psi.save()
+    except PortStockStoneItem.DoesNotExist:
+        pass
+
+    if tmp_pss_id:
+        #update total stock ของชนิดหินนี้
+        pss = PortStockStone.objects.get(id = tmp_pss_id)
+        pss.total = PortStockStoneItem.objects.filter(pss = tmp_pss_id).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+        pss.save()
+
+    if psi:
+        updateTotalPortStockInMonth(psi.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+
+def updateTotalPortStockInMonth(ps_id):
+    psi = PortStockStoneItem.objects.get(id = ps_id)
+
+    created = psi.pss.ps.created
+    last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
+    stone = psi.pss.stone.base_stone_type_id
+    company = psi.pss.ps.company.id
+    cus = psi.cus.customer_id
+
+    all_stone = PortStockStoneItem.objects.filter(pss__ps__created__range=(created, last_date), pss__stone = stone, pss__ps__company = company, cus = cus).order_by('pss__ps__created')
+    old_quot = None
+
+    for i in all_stone:
+        if old_quot is not None:#2
+            i.quoted = old_quot
+            i.total = old_quot + i.receive - (i.pay + i.loss + i.sell_cus + i.other)
+            old_total = i.total
+            i.save()
+
+            #update total stock ของชนิดหินนี้
+            pss = PortStockStone.objects.get(id = i.pss.id)
+            pss.total = PortStockStoneItem.objects.filter(pss = i.pss.id).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+            pss.save()
+
+        if old_quot is not None:#3
+            old_quot = old_total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
+        elif i.total is not None:#1
+            old_quot = i.total
+
+#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
+def updateTotalPortStockInMonthByDate(previous_day, company):
+
+    stock = PortStock.objects.filter(created = previous_day, company = company).values_list('id', flat=True).first()
+    ss_items = PortStockStoneItem.objects.filter(pss__ps = stock)
+
+    for ss in ss_items:
+        created = ss.pss.ps.created
+        last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
+        stone = ss.pss.stone.base_stone_type_id
+        company = ss.pss.ps.company.id
+        cus = ss.cus.customer_id
+
+        all_stone = PortStockStoneItem.objects.filter(pss__ps__created__range=(created, last_date), pss__stone = stone, pss__ps__company = company, cus = cus).order_by('pss__ps__created')
+        old_quot = None
+
+        for i in all_stone:
+            if old_quot is not None:#2
+                i.quoted = old_quot
+                i.total = old_quot + i.receive - (i.pay + i.loss + i.sell_cus + i.other)
+                old_total = i.total
+                i.save()
+
+                #update total stock ของชนิดหินนี้
+                pss = PortStockStone.objects.get(id = i.pss.id)
+                pss.total = PortStockStoneItem.objects.filter(pss = i.pss.id).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
+                pss.save()
+
+            if old_quot is not None:#3
+                old_quot = old_total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
+            elif i.total is not None:#1
+                old_quot = i.total
+
 
 def updateProdStockStoneItem(company, date):
     #ดึงชนิดหินทั้งหมดใน stock ของวันนั้นที่เป็น source ผลิต
@@ -6778,11 +6874,9 @@ def createPortStock(request):
                 instance.pss = pss
                 instance.save()
 
-            '''
-            ss_item = PortStockStoneItem.objects.filter(pss = pss.pk)
-            for i in ss_item:
-                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่            
-            '''
+            psi = PortStockStoneItem.objects.filter(pss = pss.pk)
+            for i in psi:
+                updateTotalPortStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
             return HttpResponseRedirect(reverse('editStep2PortStock', args=(pss.ps,)))
     else:
@@ -6827,11 +6921,9 @@ def editStep2PortStock(request, stock_id):
                     instance.pss = pss
                     instance.save()
 
-            '''
-            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
-            for i in ss_item:
-                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
-            '''
+            psi = PortStockStoneItem.objects.filter(pss__ps = stock_id)
+            for i in psi:
+                updateTotalPortStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
             return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
     else:
@@ -6878,17 +6970,9 @@ def editPortStockStoneItem(request, stock_id, pss_id):
                         instance.quoted = 0
                     instance.save()
 
-                '''
-                # add function calculate total stock
-                ssn.total = calculateTotalStock(pss_id)
-                ssn.save()                
-                '''
-            
-            '''
-            ss_item = StockStoneItem.objects.filter(ssn__stk = stock_id)
-            for i in ss_item:
-                updateTotalStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่            
-            '''
+            psi = PortStockStoneItem.objects.filter(pss__ps = stock_id)
+            for i in psi:
+                updateTotalPortStockInMonth(i.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
             return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
     else:
@@ -6918,7 +7002,7 @@ def removePortStock(request, stock_id):
     pss.delete()
     ps.delete()
 
-    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    updateTotalPortStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
 
     return redirect('viewPortStock')
 
@@ -6940,7 +7024,7 @@ def removePortStockStone(request, pss_id):
 
     pss.delete()
 
-    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    updateTotalPortStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
     return HttpResponseRedirect(reverse('editStep2PortStock', args=(stock_id,)))
 
 

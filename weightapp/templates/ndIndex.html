@@ -192,9 +192,9 @@
                     <tr>
                         <th>Customer</th>
                         {% for stone in port_stone_types %}
-                            <th>{{ stone }}</th>
+                            <th class="text-center">{{ stone }}</th>
                         {% endfor %}
-                        <th>Total</th>
+                        <th class="text-center">Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -202,9 +202,9 @@
                         <tr>
                             <td>{{ customer }}</td>
                             {% for stone in port_stone_types %}
-                                <td>{{ row|get_item:stone }}</td>
+                                <td class="text-end">{{ row|get_item:stone|floatformat:2|intcomma}}</td>
                             {% endfor %}
-                            <td>{{ row|get_item:"__total__" }}</td>
+                            <td class="text-end">{{ row|get_item:"__total__"|floatformat:2|intcomma}}</td>
                         </tr>
                     {% empty %}
                         <tr>

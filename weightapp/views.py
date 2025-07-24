@@ -6057,17 +6057,24 @@ def searchDataWeightToStock(request):
 def exportExcelStockStoneInDashboard(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
+    company = BaseCompany.objects.get(code = active)
 
     end_created = request.session['db_end_date']
     start_created = request.session['db_start_date']
 
     my_q = Q()
-    if start_created is not None:
-        my_q &= Q(ssn__stk__created__gte = start_created)
-    if end_created is not None:
-        my_q &=Q(ssn__stk__created__lte = end_created)
-
-    my_q &= Q(ssn__stk__company__code__in = company_in)
+    if company.biz.id == 1: #ธุรกิจเหมือง
+        if start_created is not None:
+            my_q &= Q(ssn__stk__created__gte = start_created)
+        if end_created is not None:
+            my_q &=Q(ssn__stk__created__lte = end_created)
+        my_q &= Q(ssn__stk__company__code__in = company_in)
+    elif company.biz.id == 2: #ธุรกิจท่าเรือ
+        if start_created is not None:
+            my_q &= Q(pss__ps__created__gte = start_created)
+        if end_created is not None:
+            my_q &=Q(pss__ps__created__lte = end_created)
+        my_q &= Q(pss__ps__company__code__in = company_in)
 
     #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
     startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
@@ -6082,17 +6089,24 @@ def exportExcelStockStoneInDashboard(request):
 def exportExcelStockStone(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
+    company = BaseCompany.objects.get(code = active)
 
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
 
     my_q = Q()
-    if start_created is not None:
-        my_q &= Q(ssn__stk__created__gte = start_created)
-    if end_created is not None:
-        my_q &=Q(ssn__stk__created__lte = end_created)
-
-    my_q &= Q(ssn__stk__company__code__in = company_in)
+    if company.biz.id == 1: #ธุรกิจเหมือง
+        if start_created is not None:
+            my_q &= Q(ssn__stk__created__gte = start_created)
+        if end_created is not None:
+            my_q &=Q(ssn__stk__created__lte = end_created)
+        my_q &= Q(ssn__stk__company__code__in = company_in)
+    elif company.biz.id == 2: #ธุรกิจท่าเรือ
+        if start_created is not None:
+            my_q &= Q(pss__ps__created__gte = start_created)
+        if end_created is not None:
+            my_q &=Q(pss__ps__created__lte = end_created)
+        my_q &= Q(pss__ps__company__code__in = company_in)
    
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
@@ -6110,8 +6124,12 @@ def exportExcelStockStone(request):
 def excelStockStone(request, my_q, list_date):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
+    company = BaseCompany.objects.get(code = active)
 
-    data = StockStoneItem.objects.filter(my_q).order_by('ssn__stk__created', 'source__id', 'ssn__stone__base_stone_type_id').values_list('ssn__stk__created', 'ssn__stone__base_stone_type_name', 'source__name', 'quantity', 'ssn__total')
+    if company.biz.id == 1: #ธุรกิจเหมือง
+        data = StockStoneItem.objects.filter(my_q).order_by('ssn__stk__created', 'source__id', 'ssn__stone__base_stone_type_id').values_list('ssn__stk__created', 'ssn__stone__base_stone_type_name', 'source__name', 'quantity', 'ssn__total')
+    elif company.biz.id == 2: #ธุรกิจท่าเรือ
+        data = PortStockStoneItem.objects.filter(my_q).order_by('pss__ps__created', 'cus__customer_id', 'pss__stone__base_stone_type_id').values_list('pss__ps__created', 'pss__stone__base_stone_type_name', 'cus__customer_name', 'total', 'pss__total')
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()

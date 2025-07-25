@@ -1660,14 +1660,18 @@ def excelProductionByStone(request, my_q, list_date):
         #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
         m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
         data = Weight.objects.filter(my_q, ~Q(site = '200PL') & ~Q(site = '300PL'), mill__in = m_comp_id, bws__weight_type = 1).order_by('date','mill','stone_type').values_list('date','mill_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
+
+        # Query ข้อมูลผลิตรวม
+        s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+        data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).order_by('date','site').values_list('date','site_name').annotate(sum_weight_total = Sum('weight_total'))
     
     elif comp.biz.id == 2:
         #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
         data = Weight.objects.filter(my_q, site__store__in = [2,3], bws__weight_type = 1).order_by('date','site','stone_type').values_list('date','site_name', 'stone_type_name').annotate(sum_weight_total = Sum('weight_total'))
-    
-    # Query ข้อมูลผลิตรวม
-    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
-    data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).order_by('date','site').values_list('date','site_name').annotate(sum_weight_total = Sum('weight_total'))
+
+        # Query ข้อมูลรับเข้า
+        s_comp_id = Weight.objects.filter(my_q, line_type = "สายยาว").values_list('customer__customer_id').order_by('customer__customer_id').distinct()
+        data_sum_produc = Weight.objects.filter(my_q, customer__in = s_comp_id, line_type = "สายยาว", bws__weight_type = 1).order_by('date','customer').values_list('date', 'customer__customer_name').annotate(sum_weight_total=Sum("weight_total"))
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -1776,7 +1780,7 @@ def excelProductionByStone(request, my_q, list_date):
         headers = ['Date'] + list(set(row[1] for row in sorted_queryset))
         for col_num, header in enumerate(headers, 1):
             cell = worksheet.cell(row=1, column=col_num)
-            cell.value = f'ยอดผลิต{header}'
+            cell.value =  f'ยอดผลิต{header}' if comp.biz.id == 1 else f'ยอดรับเข้า{header}'
             cell.alignment = Alignment(horizontal='center')
             worksheet.merge_cells(start_row=1, start_column = col_num, end_row=2, end_column=col_num)
 
@@ -1940,6 +1944,15 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
             sum_weight_total=Sum('weight_total')
         ).order_by('year', 'month', 'mill_name', 'stone_type_name')
 
+        # Query ข้อมูลผลิตรวม
+        s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
+        data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).annotate(
+            month=ExtractMonth('date'),
+            year=ExtractYear('date')
+        ).values_list('year', 'month', 'site_name').annotate(
+            sum_weight_total=Sum('weight_total')
+        ).order_by('year', 'month', 'site_name')
+
     elif comp.biz.id == 2:
         # Query ข้อมูลขาย
         #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
@@ -1949,15 +1962,14 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
         ).values_list('year', 'month', 'site_name', 'stone_type_name').annotate(
             sum_weight_total=Sum('weight_total')
         ).order_by('year', 'month', 'site_name', 'stone_type_name')
-    
-    # Query ข้อมูลผลิตรวม
-    s_comp_id = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id').order_by('base_site_id')
-    data_sum_produc = Weight.objects.filter(my_q, site__in = s_comp_id, bws__weight_type = 2).annotate(
-        month=ExtractMonth('date'),
-        year=ExtractYear('date')
-    ).values_list('year', 'month', 'site_name').annotate(
-        sum_weight_total=Sum('weight_total')
-    ).order_by('year', 'month', 'site_name')
+
+        s_comp_id = Weight.objects.filter(my_q, line_type = "สายยาว").values_list('customer__customer_id').order_by('customer__customer_id').distinct()
+        data_sum_produc = Weight.objects.filter(my_q, customer__in = s_comp_id, line_type = "สายยาว", bws__weight_type = 1).annotate(
+            month=ExtractMonth('date'),
+            year=ExtractYear('date')
+        ).values_list('year', 'month', 'customer__customer_name').annotate(
+            sum_weight_total=Sum('weight_total')
+        ).order_by('year', 'month', 'customer__customer_name')
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()

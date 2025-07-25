@@ -217,16 +217,6 @@
         <div class="col-12 col-xl-4">
           <div class="card">
             <div class="card-header">
-              <h4>UNI ยูนิไมนิ่ง</h4>
-            </div>
-            <div class="card-body">
-              <div id="chart-stone-uni"></div>
-            </div>
-          </div>     
-        </div>
-        <div class="col-12 col-xl-4">
-          <div class="card">
-            <div class="card-header">
               <h4>STPS เซาเทิร์นพอร์ท สุราษฏร์</h4>
             </div>
             <div class="card-body">
@@ -234,16 +224,28 @@
             </div>
           </div>
         </div>
-        <!--div class="col-12 col-xl-4">
+        <div class="col-12 col-xl-4">
           <div class="card">
             <div class="card-header">
-              <h4>TY ทุ่งใหญ่</h4>
+              <h4>TYM ทุ่งใหญ่</h4>
             </div>
             <div class="card-body">
-               <div id="chart-stone-ty"></div>
+               <div id="chart-stone-tym"></div>
             </div>
           </div>
-        </div-->
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12 col-xl-4">
+          <div class="card">
+            <div class="card-header">
+              <h4>UNI ยูนิไมนิ่ง</h4>
+            </div>
+            <div class="card-body">
+              <div id="chart-stone-uni"></div>
+            </div>
+          </div>
+        </div>
         <!--div class="card">
           <div class="card-header">
             <h4>STPK เซาเทิร์นพอร์ท กระบี่</h4>
@@ -893,6 +895,92 @@
     }
   };
 
+  /////////////////////////// TYM ///////////////////
+  var chartDataTYM = JSON.parse('{{ tym_chart_data|safe }}');
+  var optionsStoneTYM = {
+    series: chartDataTYM.series,
+    chart: {
+      type: 'bar',
+      height: 350,
+      stacked: true,
+    },
+    colors:[
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(255, 159, 64, 0.8)',
+      'rgba(255, 205, 86, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(54, 162, 235, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(192, 179, 199, 0.8)'
+    ],
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        dataLabels: {
+          total: {
+            enabled: true,
+            formatter: function (val) {
+              return Math.round(val); // Format with 2 decimals
+            },
+            offsetX: 0,
+            style: {
+              fontSize: '13px',
+              fontWeight: 900,
+            },
+          },
+        }
+      },
+    },
+    dataLabels: {
+      enabled: true, //เปิดให้แสดงบนแท่ง
+      formatter: function (val) {
+        return Math.round(val); //ปัดเศษตัวเลขเป็นจำนวนเต็ม
+      },
+      style: {
+        fontSize: '12px',
+        fontWeight: 'bold',
+      }
+    },
+    stroke: {
+      width: 1,
+      colors: ['#fff'],
+    },
+    xaxis: {
+      categories: chartDataTYM.categories,
+      labels: {
+        formatter: function (val) {
+          return val.toLocaleString('en-US', {});
+        },
+      }
+    },
+    yaxis: {
+      title: {
+        text: undefined
+      },
+    },
+    tooltip: {
+      custom: function({ series, seriesIndex, dataPointIndex, w }) {
+        const point = w.config.series[seriesIndex].data[dataPointIndex];
+        const weight = point.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const trips = point.num_count || 0;
+        return `<div style="padding:10px;">
+                  <strong>${w.config.series[seriesIndex].name}</strong>
+                  <hr>
+                  ${weight} ตัน. / ${trips} เที่ยว
+                </div>`;
+      }
+    },
+    fill: {
+      opacity: 1
+    },
+    legend: {
+      position: 'top',
+      horizontalAlign: 'left',
+      offsetX: 40
+    }
+  };
+
+
   ///////////////////////////
   var chartStone = new ApexCharts(
     document.querySelector("#chart-stone"), 
@@ -935,6 +1023,12 @@
     optionsStoneSTPS
   );
   chartStoneSTPS.render();
+
+  var chartStoneTYM = new ApexCharts(
+    document.querySelector("#chart-stone-tym"), 
+    optionsStoneTYM
+  );
+  chartStoneTYM.render();
 
   //Predefined Date Ranges
   $(function() {

@@ -871,6 +871,7 @@ def index(request):
         uni_chart_data = getChartTransport(start_date, end_date, 'UNI')
         kt_chart_data = getChartTransport(start_date, end_date, 'KT')
         stps_chart_data = getChartTransport(start_date, end_date, 'STPS')
+        tym_chart_data = getChartTransport(start_date, end_date, 'TYM')
         ####################################
         ######## data weight stock #########
         ####################################
@@ -899,6 +900,7 @@ def index(request):
                     'uni_chart_data': json.dumps(uni_chart_data, ensure_ascii=False),
                     'kt_chart_data': json.dumps(kt_chart_data, ensure_ascii=False),
                     'stps_chart_data': json.dumps(stps_chart_data, ensure_ascii=False),
+                    'tym_chart_data': json.dumps(tym_chart_data, ensure_ascii=False),
                     'previous_day':previous_day,
                     'start_day':start_day,
                     'end_day':end_day,
@@ -7331,7 +7333,7 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
     str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
     str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
 
-    transport_comp = ['SLC', 'SLT', 'CTM', 'KT', 'UNI', 'STPS']
+    transport_comp = ['SLC', 'SLT', 'CTM', 'KT', 'UNI', 'STPS', 'TYM']
     all_comp = BaseCompany.objects.filter(code__in=transport_comp).values('code', 'name')
 
     output = BytesIO()
@@ -7418,26 +7420,26 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
             title_cell.value = f"รายงานขนส่งตามบริษัท {comp['name']}  วันที่ {str_start} - {str_end}"
             title_cell.font = Font(size=14, bold=True)
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
-            
-        # Bold subtotal and total row
-        for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
-            for cell in row:
-                if 'รวมทีม' in str(cell.value) or 'รวมทั้งหมด' in str(cell.value):
-                    row_number = cell.row  # Get the row number
-                    # Bold and red font
-                    bold_red_font = Font(bold=True, color="FF0000")
 
-                    # Apply to columns A, G, H, I, J, K in the same row
-                    for col in ['A', 'F', 'G', 'H']:
-                        sheet[f"{col}{row_number}"].font = bold_red_font
+            # Bold subtotal and total row
+            for row in sheet.iter_rows(min_row=4, max_row=sheet.max_row):
+                for cell in row:
+                    if 'รวมทีม' in str(cell.value) or 'รวมทั้งหมด' in str(cell.value):
+                        row_number = cell.row  # Get the row number
+                        # Bold and red font
+                        bold_red_font = Font(bold=True, color="FF0000")
 
-        right_align = Alignment(horizontal="right")
-        for col in ['H', 'F', 'G', 'H']:  # Columns for numbers
-            for cell in sheet[col]:  # Iterate through all cells in that column
-                cell.alignment = right_align
+                        # Apply to columns A, G, H, I, J, K in the same row
+                        for col in ['A', 'F', 'G', 'H']:
+                            sheet[f"{col}{row_number}"].font = bold_red_font
 
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
-            sheet.column_dimensions[col_letter].width = 25
+            right_align = Alignment(horizontal="right")
+            for col in ['H', 'F', 'G', 'H']:  # Columns for numbers
+                for cell in sheet[col]:  # Iterate through all cells in that column
+                    cell.alignment = right_align
+
+            for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+                sheet.column_dimensions[col_letter].width = 25
 
     final_output = BytesIO()
     workbook.save(final_output)

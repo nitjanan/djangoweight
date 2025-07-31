@@ -333,7 +333,7 @@ class WeightPortForm(forms.ModelForm):
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
 
-    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 1) | Q(weight_type = 3)), required=False)
+    mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(weight_type = 4), required=False)
     site = forms.ModelChoiceField(label='ปลายทาง', queryset = BaseSite.objects.filter(weight_type = 4), required=False)
 
     class Meta:

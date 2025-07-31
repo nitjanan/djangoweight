@@ -431,6 +431,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
   function searchDataWeightToPortStock(){
     $("#alert").addClass("d-none");
+    //รีเซ็ตค่าก่อนดึงข้อมูล
+    resetVal("quoted");
+    resetVal("receive");
 
     var created = $("#id_created").val();
     var company = $("#id_company").val();
@@ -462,6 +465,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       });
     }
     return false;
+  }
+
+  function resetVal(name){
+    var inputs = $(".cus");
+    for(var i = 0; i < inputs.length; i++){
+      $("#id_form-"+i+"-"+name).val(0);
+    }
   }
 
   function getDataListPort(list, name){

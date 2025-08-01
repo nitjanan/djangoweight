@@ -831,7 +831,8 @@ input.del[type=checkbox] {
     if($('#id_weight_in').val() && $('#id_weight_out').val()){
       weight_in = parseFloat($('#id_weight_in').val());
       weight_out = parseFloat($('#id_weight_out').val());
-        weight_total = weight_out - weight_in;
+      weight_total = weight_out - weight_in;
+      weight_total = Math.abs(weight_total);//01-08-2025 ถอดติดลบ weight total 
         $('#id_weight_in').val(weight_in.toFixed(3));
         $('#id_weight_out').val(weight_out.toFixed(3));
         $('#id_weight_total').val(weight_total.toFixed(3));

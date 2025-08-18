@@ -634,11 +634,11 @@ def index(request):
                 site=site['base_site_id'],
                 date__range=(start_date, end_date),
                 bws__weight_type=2
-            ).aggregate(s=Sum("weight_total"))["s"] 
+            ).aggregate(s=Sum("weight_total"))["s"]
 
-            
-            # Append a tuple (site_id, aggregated_value) to the list
-            data_sum_produc.append((site['base_site_name'], aggregated_value))
+            if aggregated_value:
+                # Append a tuple (site_id, aggregated_value) to the list
+                data_sum_produc.append((site['base_site_name'], aggregated_value))
 
         ####################################
         ########### chart stone ############
@@ -701,9 +701,9 @@ def index(request):
         ######## data weight stock #########
         ####################################
         # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-        sum_line_long = Weight.objects.filter(bws__company__code__in = company_in, mill__isnull = True, line_type = "สายยาว", date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] # รับเข้า เป็นสายยาวทั้งหมด
-        sum_cus_ot = Weight.objects.filter(Q(site__store = 2) | Q(site__isnull = True), mill__isnull = False, line_type = "สายยาว", bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] #ขายภายนอก
-        sum_ship = Weight.objects.filter(bws__company__code__in = company_in, site__store = 3, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] #ขายลงเรือ
+        sum_line_long = Weight.objects.filter(bws__company__code__in = company_in, mill__isnull = True, line_type = "สายยาว", date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"]  or Decimal(0) # รับเข้า เป็นสายยาวทั้งหมด
+        sum_cus_ot = Weight.objects.filter(Q(site__store = 2) | Q(site__isnull = True), mill__isnull = False, line_type = "สายยาว", bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] or Decimal(0)#ขายภายนอก
+        sum_ship = Weight.objects.filter(bws__company__code__in = company_in, site__store = 3, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] or Decimal(0) #ขายลงเรือ
 
         data_sum_produc_all = sum_line_long + sum_cus_ot + sum_ship
 

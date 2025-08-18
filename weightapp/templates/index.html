@@ -43,34 +43,39 @@
 <div class="page-content">
   <section class="row">
     <div class="col-12 col-lg-9">
-      <div class="row">
-        {% for dt in data_sum_produc %}
-        <div class="col-6 col-sm">
-          <div class="card">
-            <div class="card-body px-4 py-4-5">
-              <div class="row">
-                <div
-                  class="col-md-4 col-lg-12 col-xl-12 col-xxl-5 d-flex justify-content-start"
-                >
-                  <!--div class="stats-icon blue mb-2">
-                    <i class="iconly-boldProfile"></i>
-                  </div-->
-                  <div class="avatar avatar-lg">
-                    <img src="{% static 'images/stone/4080.jpg' %}" />
-                  </div>
+    {% for dt in data_sum_produc %}
+      {% if forloop.first or forloop.counter0|divisibleby:4 %}
+        <div class="row">
+      {% endif %}
+
+      <div class="col-6 col-md-3 col-lg-3">
+        <div class="card">
+          <div class="card-body px-2 py-1-5">
+            <div class="row">
+              <div class="col-4 col-md-12 col-xxl-3 d-flex justify-content-start">
+                <div class="avatar avatar-lg">
+                  <img src="{% static 'images/stone/4080.jpg' %}" />
                 </div>
-                <div class="col-md-8 col-lg-12 col-xl-12 col-xxl-7">
-                  <h6 class="text-muted font-semibold">{{dt.0}}</h6>
-                  <h6 class="font-extrabold mb-0">
-                    {% if dt.1 %}{{dt.1 |floatformat:2|intcomma}}{% else %}0{% endif %} ตัน
-                  </h6>
-                </div>
+              </div>
+              <div class="col-8 col-md-12 col-xxl-9">
+                <h6 class="text-muted font-semibold">{{ dt.0 }}</h6>
+                <h6 class="font-extrabold mb-0">
+                  {% if dt.1 %}
+                    {{ dt.1|floatformat:2|intcomma }}
+                  {% else %}
+                    0
+                  {% endif %} ตัน
+                </h6>
               </div>
             </div>
           </div>
         </div>
-        {% endfor %}
       </div>
+
+      {% if forloop.counter|divisibleby:4 or forloop.last %}
+        </div>
+      {% endif %}
+    {% endfor %}
       <div class="row">
         <div class="col-12">
           <div class="card">

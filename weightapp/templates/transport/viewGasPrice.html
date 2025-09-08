@@ -65,7 +65,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col">
-                <a href="{% url 'exportExcelGasPriceTransport' %}?{{request.GET.urlencode}}" class="btn btn-success" download>รายงานขนส่งจากตาชั่ง</a>
+                <button id="gp_download-btn" class="btn btn-success" style="position: relative; overflow: hidden;">
+                  <span id="gp_btn-text">รายงานขนส่งจากตาชั่ง</span>
+                  <div id="gp_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="gp_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
               </div>
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createGasPrice' %}">สร้างบันทึก ราคาน้ำมัน <i class="fa-solid fa-circle-plus"></i></a>
@@ -193,6 +202,72 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   $(window).on('load', function() {
     //after load
     //$('#form_filter').submit();
+  });
+
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time){
+    btn.disabled = true;
+    btnText.style.visibility = "hidden";
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+        if (fakeProgress < 95) {
+            fakeProgress++;
+            btnProgress.style.width = fakeProgress + "%";
+            btnPercent.innerText = fakeProgress + "%";
+        }
+    }, delay_time);
+
+    fetch(py_url)
+        .then(response => {
+            if (!response.ok) throw new Error("Server error");
+            return response.blob();
+        })
+        .then(blob => {
+            clearInterval(timer);
+            btnProgress.style.width = "100%";
+            btnPercent.innerText = "100%";
+
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.style.visibility = "visible";
+                btnPercent.style.display = "none";
+                btnProgress.style.width = "0%";
+            }, 1000);
+        })
+        .catch(err => {
+            clearInterval(timer);
+            console.error(err);
+            alert("ไม่มีข้อมูลจากวันที่เลือก กรุณาเลือกวันที่ กดกรอง และดาว์นโหลดไฟล์อีกครั้ง");
+            btn.disabled = false;
+            btnText.style.visibility = "visible";
+            btnPercent.style.display = "none";
+            btnProgress.style.width = "0%";
+        });
+  }
+
+  document.getElementById('gp_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('gp_download-btn');
+    const btnText = document.getElementById('gp_btn-text');
+    const btnProgress = document.getElementById('gp_btn-progress');
+    const btnPercent = document.getElementById('gp_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelGasPriceTransport' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "GasPriceTransport("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+	  const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
   });
 </script>
 {% endblock %}

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseBadRequest
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseBadRequest, StreamingHttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -1868,12 +1868,27 @@ def excelProductionByStone(request, my_q, list_date):
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
 
-    # Set the response headers for the Excel file
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=sales_daily_({active}).xlsx'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    # Save the workbook to the response
-    workbook.save(response)
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="sales_daily_({active}).xlsx"'
+    response["Content-Length"] = str(size)
     return response
 
 def exportExcelProductionByStone(request):
@@ -2171,12 +2186,27 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
 
-    # Set the response headers for the Excel file
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=sales_monthly_({active}).xlsx'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    # Save the workbook to the response
-    workbook.save(response)
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="sales_monthly_({active}).xlsx"'
+    response["Content-Length"] = str(size)
     return response
 
 def exportExcelProductionByStoneAndMonthInDashboard(request):
@@ -2982,11 +3012,27 @@ def excelProductionAndLoss(request, my_q, sc_q):
         worksheet = workbook.active
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลบันทึกปฎิบัติการโรงโม่ดือนนี้')
 
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="production_record_({active}).xlsx"'
+    size = output.getbuffer().nbytes
 
-    workbook.save(response)
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="production_record_({active}).xlsx"'
+    response["Content-Length"] = str(size)
     return response
 
 def exportExcelProductionAndLoss(request):
@@ -2996,6 +3042,14 @@ def exportExcelProductionAndLoss(request):
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
     site = request.GET.get('site') or None
+
+    date_object = datetime.today()
+    previous_date_time = date_object - timedelta(days=1)
+
+    if end_created is None:
+        end_created = previous_date_time.strftime('%Y-%m-%d')
+    if start_created is None:
+        start_created = startDateInMonth(end_created)
 
     my_q = Q()
     if start_created is not None:
@@ -3660,10 +3714,29 @@ def excelStoneEstimateAndProduction(request, my_q, sc_q):
         worksheet = workbook.active
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลรายงานผลิตแยกผู้รับเหมาและชนิดหินดือนนี้')
 
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="Prod_daily_({active}).xlsx"'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    workbook.save(response)
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="Prod_daily_({active}).xlsx"'
+    response["Content-Length"] = str(size)
+
+    #workbook.save(response)
     return response
 
 def exportExcelEstimate(request):
@@ -3851,12 +3924,27 @@ def excelEstimate(request, my_q, list_date):
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
 
-    # Set the response headers for the Excel file
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    # Save the workbook to the response
-    workbook.save(response)
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="estimate_stone_({active}).xlsx"'
+    response["Content-Length"] = str(size)
     return response
 
 ################### BaesMill ####################
@@ -5666,86 +5754,59 @@ def exportWeightToExpress(request):
     my_q &=Q(bws__company__code__in = company_in)
 
     queryset = Weight.objects.filter(my_q)
-    if not queryset.exists():
-        return HttpResponse("No data to export.")
 
-    data = {'docid': queryset.values_list('doc_id', flat=True),
-            'docdat': queryset.values_list('date', flat=True),
-            'datin': queryset.values_list('date_in', flat=True),
-            'datout': queryset.values_list('date_out', flat=True),
-            'tmin': queryset.values_list('time_in', flat=True),
-            'tmout': queryset.values_list('time_out', flat=True),
-            'truck': queryset.values_list('car_registration_name', flat=True),
-            'cuscod': queryset.values_list('customer_id', flat=True),
-            'cusname': queryset.values_list('customer_name', flat=True),
-            'depcod': queryset.values_list('base_weight_station_name', flat=True),
-            'stkcod': queryset.values_list('stone_type_id', flat=True),
-            'stkdes': queryset.values_list('stone_type_name', flat=True),
-            'trnqty': queryset.values_list('weight_total', flat=True),
-            'unitpr': queryset.values_list('price_per_ton', flat=True),
-            'amount': queryset.values_list('amount', flat=True),
-            'vat': queryset.values_list('vat', flat=True),
-            'stonenam': queryset.values_list('stone_color', flat=True),
-            'transport': queryset.values_list('transport', flat=True),
-            'oilcuscod': queryset.values_list('car_team__oil_customer_id', flat=True),
-            'oilcusnam': queryset.values_list('car_team__car_team_name', flat=True),
-            'oillt': queryset.values_list('oil_content', flat=True),
-            'nillnam': queryset.values_list('mill_name', flat=True),
-            'iscancle': queryset.values_list('is_cancel', flat=True),
-            'sttcod': queryset.values_list('base_weight_station_name', flat=True),
-            'scaleid': queryset.values_list('scale_id', flat=True),
-            'scalenam': queryset.values_list('scale_name', flat=True),
-            'scoopnam': queryset.values_list('scoop_name', flat=True),
-            'siteid': queryset.values_list('site_id', flat=True),
-            'sitenam': queryset.values_list('site_name', flat=True),
-            'isvat': queryset.values_list('is_s', flat=True),
-            'vattyp': queryset.values_list('vat_type', flat=True),
-            'pay': queryset.values_list('pay', flat=True),
-            'company': queryset.values_list('bws__company__code', flat=True),
-            'bws': queryset.values_list('bws', flat=True),
-            'note': queryset.values_list('note', flat=True),
-            }
+    if queryset:
+        data = {'docid': queryset.values_list('doc_id', flat=True),
+                'docdat': queryset.values_list('date', flat=True),
+                'datin': queryset.values_list('date_in', flat=True),
+                'datout': queryset.values_list('date_out', flat=True),
+                'tmin': queryset.values_list('time_in', flat=True),
+                'tmout': queryset.values_list('time_out', flat=True),
+                'truck': queryset.values_list('car_registration_name', flat=True),
+                'cuscod': queryset.values_list('customer_id', flat=True),
+                'cusname': queryset.values_list('customer_name', flat=True),
+                'depcod': queryset.values_list('base_weight_station_name', flat=True),
+                'stkcod': queryset.values_list('stone_type_id', flat=True),
+                'stkdes': queryset.values_list('stone_type_name', flat=True),
+                'trnqty': queryset.values_list('weight_total', flat=True),
+                'unitpr': queryset.values_list('price_per_ton', flat=True),
+                'amount': queryset.values_list('amount', flat=True),
+                'vat': queryset.values_list('vat', flat=True),
+                'stonenam': queryset.values_list('stone_color', flat=True),
+                'transport': queryset.values_list('transport', flat=True),
+                'oilcuscod': queryset.values_list('car_team__oil_customer_id', flat=True),
+                'oilcusnam': queryset.values_list('car_team__car_team_name', flat=True),
+                'oillt': queryset.values_list('oil_content', flat=True),
+                'nillnam': queryset.values_list('mill_name', flat=True),
+                'iscancle': queryset.values_list('is_cancel', flat=True),
+                'sttcod': queryset.values_list('base_weight_station_name', flat=True),
+                'scaleid': queryset.values_list('scale_id', flat=True),
+                'scalenam': queryset.values_list('scale_name', flat=True),
+                'scoopnam': queryset.values_list('scoop_name', flat=True),
+                'siteid': queryset.values_list('site_id', flat=True),
+                'sitenam': queryset.values_list('site_name', flat=True),
+                'isvat': queryset.values_list('is_s', flat=True),
+                'vattyp': queryset.values_list('vat_type', flat=True),
+                'pay': queryset.values_list('pay', flat=True),
+                'company': queryset.values_list('bws__company__code', flat=True),
+                'bws': queryset.values_list('bws', flat=True),
+                'note': queryset.values_list('note', flat=True),
+                }
+    else:
+        data = "ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก"
 
     df = pd.DataFrame(data)
 
-    # Create an in-memory buffer
     output = BytesIO()
-
-    # Save DataFrame to Excel in the buffer
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Sheet1")
-
-    # Load workbook from buffer (without saving to disk)
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
     output.seek(0)
-    wb = load_workbook(output)
-    ws = wb.active
 
-    column_widths = {
-        'A': 15,
-        'B': 15,
-        'C': 15,
-        'D': 15,
-        'G': 15,
-        'I': 40,
-        'L': 25,
-        'R': 15,
-        'T': 25,
-        'V': 25,
-        'Z': 15,
-        'AA': 15,
-        'AC': 20,
-        'AE': 15,
-        'AI': 25,
-    }
-
-    for col, width in column_widths.items():
-        ws.column_dimensions[col].width = width
-
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
     response['Content-Disposition'] = f'attachment; filename=weight_express({active}) '+ start_created + " to "+ end_created +'.xlsx'
-
-    df.to_excel(response, index=False, engine='openpyxl')
-
     return response
 
 def setSessionCompany(request):
@@ -6307,12 +6368,27 @@ def excelStockStone(request, my_q, list_date):
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูล Stock หินของเดือนนี้')
 
-    # Set the response headers for the Excel file
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    # Save the workbook to the response
-    workbook.save(response)
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="stock_stone_({active}).xlsx"'
+    response["Content-Length"] = str(size)
     return response
 
 @login_required(login_url='login')
@@ -6453,12 +6529,13 @@ def exportExcelGasPriceTransport(request):
     start_created = request.GET.get('start_created') or None
     end_created = request.GET.get('end_created') or None
 
-    current_date_time = datetime.today()
-    previous_date_time = current_date_time - timedelta(days=1)
+    date_object = datetime.today()
+    previous_date_time = date_object - timedelta(days=1)
 
-    if start_created is None and end_created is None:
-        start_created = previous_date_time.strftime("%Y-%m-%d")
-        end_created = previous_date_time.strftime("%Y-%m-%d")
+    if end_created is None:
+        end_created = previous_date_time.strftime('%Y-%m-%d')
+    if start_created is None:
+        start_created = startDateInMonth(end_created)
 
     my_q = Q()
     if start_created is not None:
@@ -6480,9 +6557,6 @@ def exportExcelGasPriceTransport(request):
             output_field = models.DecimalField()
         ), sum_oil_sell=Sum('oil_sell')
     ).order_by('car_team__car_team_name')
-    
-    if not queryset.exists():
-        return HttpResponse("No data to export.")
     
     df = pd.DataFrame(list(queryset))
 
@@ -6536,7 +6610,13 @@ def exportExcelGasPriceTransport(request):
     ]].applymap(lambda x: f"{x:,.4f}" if pd.notna(x) else "")
 
     # Create an Excel response with openpyxl
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    output = BytesIO()
+    output.seek(0)
+	
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
     response['Content-Disposition'] = f'attachment; filename=GasPriceTransport({active}) {start_created} to {end_created}.xlsx'
 
     # Write to Excel with openpyxl engine
@@ -6871,12 +6951,30 @@ def excelPercentEstimate(request, my_q, list_date):
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
 
-    # Set the response headers for the Excel file
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=stock_stone_({active}).xlsx'
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="percent_estimate({active}).xlsx"'
+    response["Content-Length"] = str(size)
 
     # Save the workbook to the response
-    workbook.save(response)
+    #workbook.save(response)
     return response
 
 @login_required(login_url='login')
@@ -7262,9 +7360,14 @@ def exportExcelTransport(request):
 
     # Append grand total to bottom
     df_final = pd.concat([df_final, grand_total_row], ignore_index=True)
-    
-    # Create Excel response
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    output = BytesIO()
+    output.seek(0)
+
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
     response['Content-Disposition'] = f'attachment; filename=Transport({active}) {start_created} to {end_created}.xlsx'
 
     # Write Excel to memory buffer

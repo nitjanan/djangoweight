@@ -68,16 +68,43 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
             <div class="row">
               <div class="col-2">
-                <a href="{% url 'exportExcelPercentEstimate' %}?{{request.GET.urlencode}}" class="btn btn-block btn-success" download>รายงานเปอร์เซ็นต์การผลิต</a>
+                <button id="es_download-btn" class="btn btn-block btn-success" style="position: relative; overflow: hidden;">
+                  <span id="es_btn-text">รายงานเปอร์เซ็นต์การผลิต</span>
+                  <div id="es_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="es_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
               </div>
               <div class="col-3">
-                <a href="{% url 'exportExcelStoneEstimateAndProduction' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#54a2d6 ;color: white;" download>รายงานผลิตแยกผู้รับเหมาและชนิดหิน</a>
+                <button id="ep_download-btn" class="btn btn-block" style="position: relative; overflow: hidden; background-color:#54a2d6 ;color: white;">
+                  <span id="ep_btn-text">รายงานผลิตแยกผู้รับเหมาและชนิดหิน</span>
+                  <div id="ep_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="ep_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
               </div>
               <div class="col-2">
                 <a href="{% url 'monthlyProduction' %}" class="btn btn-block" style="background-color:#2e86c1 ;color: white;">รายงานผลิตรายเดือน</a>
               </div>
               <div class="col-2">
-                <a href="{% url 'exportExcelEstimate' %}?{{request.GET.urlencode}}" class="btn btn-block" style="background-color:#236591 ;color: white;" download>รายงานผลิตหินประจำวัน</a>
+                <button id="ed_download-btn" class="btn btn-block" style="position: relative; overflow: hidden; background-color:#236591 ;color: white;">
+                  <span id="ed_btn-text">รายงานผลิตหินประจำวัน</span>
+                  <div id="ed_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="ed_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
               </div>              
             </div>
             <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createStoneEstimate' %}">สร้างการประมาณการณ์หิน <i class="fa-solid fa-circle-plus"></i></a>
@@ -223,5 +250,100 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     //after load
     //$('#form_filter').submit();
   });
+
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time){
+    btn.disabled = true;
+    btnText.style.visibility = "hidden";
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+        if (fakeProgress < 95) {
+            fakeProgress++;
+            btnProgress.style.width = fakeProgress + "%";
+            btnPercent.innerText = fakeProgress + "%";
+        }
+    }, delay_time);
+
+    fetch(py_url)
+        .then(response => {
+            if (!response.ok) throw new Error("Server error");
+            return response.blob();
+        })
+        .then(blob => {
+            clearInterval(timer);
+            btnProgress.style.width = "100%";
+            btnPercent.innerText = "100%";
+
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.style.visibility = "visible";
+                btnPercent.style.display = "none";
+                btnProgress.style.width = "0%";
+            }, 1000);
+        })
+        .catch(err => {
+            clearInterval(timer);
+            console.error(err);
+            alert("ไม่มีข้อมูลจากวันที่เลือก กรุณาเลือกวันที่ กดกรอง และดาว์นโหลดไฟล์อีกครั้ง");
+            btn.disabled = false;
+            btnText.style.visibility = "visible";
+            btnPercent.style.display = "none";
+            btnProgress.style.width = "0%";
+        });
+  }
+
+  document.getElementById('es_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('es_download-btn');
+    const btnText = document.getElementById('es_btn-text');
+    const btnProgress = document.getElementById('es_btn-progress');
+    const btnPercent = document.getElementById('es_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelPercentEstimate' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "percent_estimate("+'{{ request.session.company_code }}'+").xlsx";
+
+	  const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
+  });
+
+  document.getElementById('ep_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('ep_download-btn');
+    const btnText = document.getElementById('ep_btn-text');
+    const btnProgress = document.getElementById('ep_btn-progress');
+    const btnPercent = document.getElementById('ep_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelStoneEstimateAndProduction' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "Prod_daily_("+'{{ request.session.company_code }}'+").xlsx";
+
+	  const delay_time = 400;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
+  });
+
+  document.getElementById('ed_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('ed_download-btn');
+    const btnText = document.getElementById('ed_btn-text');
+    const btnProgress = document.getElementById('ed_btn-progress');
+    const btnPercent = document.getElementById('ed_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelEstimate' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "estimate_stone_("+'{{ request.session.company_code }}'+").xlsx";
+
+	  const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
+  });
+
 </script>
 {% endblock %}

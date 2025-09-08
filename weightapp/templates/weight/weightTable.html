@@ -92,10 +92,49 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </form>
           <div class="row mb-1">
             <div class="col-10">
-              <a href="{% url 'exportWeightToExpress' %}?{{request.GET.urlencode}}" class="btn btn-info" download>Weight to Express</a>
-              <a href="{% url 'exportExcelProductionByStone' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#5dade2 ;color: black;" download>ยอดขายตามประเภทหินรายวัน</a>
-              <a href="{% url 'exportExcelProductionByStoneAndMonth' %}?{{request.GET.urlencode}}" class="btn" style="background-color:#2e86c1;color: black;" download>ยอดขายตามประเภทหินรายเดือน</a>
-              <a href="{% url 'exportExcelTransport' %}?{{request.GET.urlencode}}" class="btn btn-success" download>รายงานค่าบรรทุก</a>
+              <!-- Weight to Express -->
+              <button id="wt_download-btn" class="btn btn-info" style="position: relative; overflow: hidden;">
+                <span id="wt_btn-text">Weight to Express</span>
+                <div id="wt_btn-progress" 
+                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                <span id="wt_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                    0%
+                </span>
+              </button>
+
+              <button id="sd_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#5dade2 ;color: black;">
+                <span id="sd_btn-text">ยอดขายตามประเภทหินรายวัน</span>
+                <div id="sd_btn-progress" 
+                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                <span id="sd_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                    0%
+                </span>
+              </button>
+
+              <button id="sm_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#2e86c1;color: black;">
+                <span id="sm_btn-text">ยอดขายตามประเภทหินรายเดือน</span>
+                <div id="sm_btn-progress" 
+                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                <span id="sm_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                    0%
+                </span>
+              </button>
+              <button id="ts_download-btn" class="btn btn-success" style="position: relative; overflow: hidden;">
+                <span id="ts_btn-text">รายงานค่าบรรทุก</span>
+                <div id="ts_btn-progress" 
+                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                <span id="ts_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                    0%
+                </span>
+              </button>
               {% if request.user.is_superuser %}
                 <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight Fix Bug</a>
                 <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight History Fix Bug</a>
@@ -240,5 +279,112 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
 <script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
 <script src="{% static 'js/pages/datatables.js' %}"></script>
+
+<script>
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name){
+    btn.disabled = true;
+    btnText.style.visibility = "hidden";
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+        if (fakeProgress < 95) {
+            fakeProgress++;
+            btnProgress.style.width = fakeProgress + "%";
+            btnPercent.innerText = fakeProgress + "%";
+        }
+    }, 50);
+
+    fetch(py_url)
+        .then(response => {
+            if (!response.ok) throw new Error("Server error");
+            return response.blob();
+        })
+        .then(blob => {
+            clearInterval(timer);
+            btnProgress.style.width = "100%";
+            btnPercent.innerText = "100%";
+
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.style.visibility = "visible";
+                btnPercent.style.display = "none";
+                btnProgress.style.width = "0%";
+            }, 1000);
+        })
+        .catch(err => {
+            clearInterval(timer);
+            console.error(err);
+            alert("ไม่มีข้อมูลจากวันที่เลือก กรุณาเลือกวันที่ กดกรอง และดาว์นโหลดไฟล์อีกครั้ง");
+            btn.disabled = false;
+            btnText.style.visibility = "visible";
+            btnPercent.style.display = "none";
+            btnProgress.style.width = "0%";
+        });
+  }
+
+  document.getElementById('wt_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('wt_download-btn');
+    const btnText = document.getElementById('wt_btn-text');
+    const btnProgress = document.getElementById('wt_btn-progress');
+    const btnPercent = document.getElementById('wt_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportWeightToExpress' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "weight_express("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
+  });
+
+  document.getElementById('sd_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('sd_download-btn');
+    const btnText = document.getElementById('sd_btn-text');
+    const btnProgress = document.getElementById('sd_btn-progress');
+    const btnPercent = document.getElementById('sd_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelProductionByStone' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "sales_daily("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
+  });
+
+  document.getElementById('sm_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('sm_download-btn');
+    const btnText = document.getElementById('sm_btn-text');
+    const btnProgress = document.getElementById('sm_btn-progress');
+    const btnPercent = document.getElementById('sm_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelProductionByStoneAndMonth' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "sales_monthly("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
+  });
+
+  document.getElementById('ts_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('ts_download-btn');
+    const btnText = document.getElementById('ts_btn-text');
+    const btnProgress = document.getElementById('ts_btn-progress');
+    const btnPercent = document.getElementById('ts_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelTransport' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "Transport("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
+  });
+
+</script>
 
 {% endblock %}

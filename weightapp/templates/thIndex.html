@@ -106,7 +106,16 @@
         </div>
         <div class="card-content pb-4">
           <div class="recent-message d-flex px-4 py-2">
-            <a href="{% url 'exportExcelTransportByCompanyInDashboard' %}" class="btn btn-info rounded-pill btn-block" download>รายงานการขนส่งตามบริษัท</a>
+            <button id="ta_download-btn" class="btn btn-info rounded-pill btn-block" style="position: relative; overflow: hidden;">
+              <span id="ta_btn-text">รายงานการขนส่งตามบริษัท</span>
+              <div id="ta_btn-progress" 
+                  style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                          background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+              <span id="ta_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                    transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                  0%
+              </span>
+            </button>
           </div>
           <div class="recent-message d-flex px-4 py-2">
             <a href="{% url 'exportExcelProductionByStoneInDashboard' %}" class="btn btn-warning rounded-pill btn-block" download>ยอดขายตามประเภทหินรายวัน</a>
@@ -1086,6 +1095,72 @@
         });
     return false;
   }
+
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time){
+    // Disable button
+    btn.disabled = true;
+    btnText.style.visibility = "hidden"; // hide original text
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+        if (fakeProgress < 95) {  // stop at 95%, leave room for finish
+            fakeProgress++;
+            btnProgress.style.width = fakeProgress + "%";
+            btnPercent.innerText = fakeProgress + "%";
+        }
+    }, delay_time);
+
+    fetch(py_url)
+        .then(response => response.blob())
+        .then(blob => {
+            clearInterval(timer);
+
+            // Jump to 100%
+            btnProgress.style.width = "100%";
+            btnPercent.innerText = "100%";
+
+            // Trigger download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            // Reset button after 1s
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.style.visibility = "visible";
+                btnPercent.style.display = "none";
+                btnProgress.style.width = "0%";
+            }, 1000);
+        })
+        .catch(err => {
+            clearInterval(timer);
+            console.error(err);
+            alert("Download failed!");
+            btn.disabled = false;
+            btnText.style.visibility = "visible";
+            btnPercent.style.display = "none";
+            btnProgress.style.width = "0%";
+        });
+  }
+
+  document.getElementById('ta_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('ta_download-btn');
+    const btnText = document.getElementById('ta_btn-text');
+    const btnProgress = document.getElementById('ta_btn-progress');
+    const btnPercent = document.getElementById('ta_btn-percent');
+
+    const py_url = "{% url 'exportExcelTransportByCompanyInDashboard' %}";
+    const file_name = "transport_by_company.xlsx";
+    const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time);
+  });
 
 
 </script>

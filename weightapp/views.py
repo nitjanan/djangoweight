@@ -3826,7 +3826,7 @@ def excelEstimate(request, my_q, list_date):
         column_index = 2
         for st in sites:
             worksheet.cell(row=1, column=column_index, value=f'การผลิตหิน {st}')
-            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones)) -1 )
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones) + 4) -1 )
             
             cell = worksheet.cell(row=1, column=column_index)
             cell.alignment = Alignment(horizontal='center')
@@ -3834,11 +3834,11 @@ def excelEstimate(request, my_q, list_date):
             info = {}
             info['st'] = st
             info['strat_col'] = column_index
-            info['end_col'] = column_index + len(stones)
+            info['end_col'] = column_index + len(stones) + 4
             site_col_list.append(info)
 
             #อัพเดทจำนวน col ตามที่มา
-            column_index += len(stones)
+            column_index += len(stones) + 4
 
         #set color in header in row 1-2
         for row in worksheet.iter_rows(min_row=1, max_row=2):
@@ -3846,7 +3846,7 @@ def excelEstimate(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 2) // (len(stones))
+                line_index = (cell.column - 2) // (len(stones) + 4)
                 fill_color = site_colors[line_index % len(site_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -3854,6 +3854,19 @@ def excelEstimate(request, my_q, list_date):
         # Write headers row 2 to the worksheet
         column_index = 2
         for st in sites:
+            # top up ไม่ผ่านตาชั่ง, จากโรงโม่อื่น, จากตาชั่ง, รวมเข้าโม่
+            worksheet.cell(row=2, column=column_index, value="Top up ไม่ผ่านตาชั่ง").alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="0000FF")
+            column_index += 1
+            worksheet.cell(row=2, column=column_index, value="จากโรงโม่อื่น").alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="0000FF")
+            column_index += 1
+            worksheet.cell(row=2, column=column_index, value="จากตาชั่ง").alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="0000FF")
+            column_index += 1
+            worksheet.cell(row=2, column=column_index, value=f'รวมเข้า{st}').alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="0000FF")
+            column_index += 1
             for sou in stones:
                 worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
                 column_index += 1
@@ -3887,6 +3900,16 @@ def excelEstimate(request, my_q, list_date):
                 if worksheet.cell(row=idl+3, column = 1).value == date:
                     column_index = 2
                     for site in sites:
+                        # top up ไม่ผ่านตาชั่ง, จากโรงโม่อื่น, จากตาชั่ง, รวมเข้าโม่
+                        et = StoneEstimate.objects.filter(created = date, site__base_site_name = site).values_list('topup', 'other', 'scale', 'total').first() or (0, 0, 0, 0)
+                        worksheet.cell(row=idl+3, column=column_index, value=et[0]).number_format = '#,##0.00'
+                        column_index += 1
+                        worksheet.cell(row=idl+3, column=column_index, value=et[1]).number_format = '#,##0.00'
+                        column_index += 1
+                        worksheet.cell(row=idl+3, column=column_index, value=et[2]).number_format = '#,##0.00'
+                        column_index += 1
+                        worksheet.cell(row=idl+3, column=column_index, value=et[3]).number_format = '#,##0.00'
+                        column_index += 1
                         stone_data = site_data.get(site, {})
                         for stone in stones:
                             value = stone_data.get(stone, '')

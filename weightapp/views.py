@@ -3901,7 +3901,7 @@ def excelEstimate(request, my_q, list_date):
                     column_index = 2
                     for site in sites:
                         # top up ไม่ผ่านตาชั่ง, จากโรงโม่อื่น, จากตาชั่ง, รวมเข้าโม่
-                        et = StoneEstimate.objects.filter(created = date, site__base_site_name = site).values_list('topup', 'other', 'scale', 'total').first() or (0, 0, 0, 0)
+                        et = StoneEstimate.objects.filter(created = date, site__base_site_name = site, company__code__in = company_in).values_list('topup', 'other', 'scale', 'total').first() or (0, 0, 0, 0)
                         worksheet.cell(row=idl+3, column=column_index, value=et[0]).number_format = '#,##0.00'
                         column_index += 1
                         worksheet.cell(row=idl+3, column=column_index, value=et[1]).number_format = '#,##0.00'

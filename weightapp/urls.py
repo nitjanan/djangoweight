@@ -254,4 +254,6 @@ urlpatterns = [
 
      path('excelTransportByCompany/', views.excelTransportByCompany,name="excelTransportByCompany"),
      path('exportExcelTransport/dashboard', views.exportExcelTransportByCompanyInDashboard,name="exportExcelTransportByCompanyInDashboard"),
+
+     path('exportExcelTranToSellInDashboard/', views.exportExcelTranToSellInDashboard,name="exportExcelTranToSellInDashboard"),
 ]

@@ -201,12 +201,12 @@
           </div>
         </div>
       </div>
-      <div class="card" style="height: 30rem;">
+      <div class="card" style="height: 32rem;">
         <div class="card-header">
           <h4>รายงานประจำเดือน</h4>
         </div>
-        <div class="card-content pb-4">
-          <div class="recent-message d-flex px-4 py-2">
+        <div class="card-content pb-2">
+          <div class="recent-message d-flex px-4">
             <button id="sd_download-btn" class="btn btn-warning rounded-pill btn-block" style="position: relative; overflow: hidden;">
               <span id="sd_btn-text">ยอดขายตามประเภทหินรายวัน</span>
               <div id="sd_btn-progress" 
@@ -230,6 +230,20 @@
               </span>
             </button>
           </div>
+
+          <div class="recent-message d-flex px-4 py-2">
+            <button id="ts_download-btn" class="btn rounded-pill btn-block" style="position: relative; overflow: hidden; background-color: #901347;color: #fff;">
+              <span id="ts_btn-text">ยอดขนไปจำหน่ายตามประเภทหินประจำวัน</span>
+              <div id="ts_btn-progress" 
+                  style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                          background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+              <span id="ts_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                    transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                  0%
+              </span>
+            </button>
+          </div>
+
           <div class="recent-message d-flex px-4 py-2">
           <button id="pd_download-btn" class="btn btn-success rounded-pill btn-block" style="position: relative; overflow: hidden;">
               <span id="pd_btn-text">บันทึกปฏิบัติการงานโรงโม่</span>
@@ -872,6 +886,18 @@
 
     const py_url = "{% url 'exportExcelProductionByStoneInDashboard' %}";
     const file_name = "sales_daily_("+'{{ request.session.company_code }}'+").xlsx";
+    const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time);
+  });
+
+  document.getElementById('ts_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('ts_download-btn');
+    const btnText = document.getElementById('ts_btn-text');
+    const btnProgress = document.getElementById('ts_btn-progress');
+    const btnPercent = document.getElementById('ts_btn-percent');
+
+    const py_url = "{% url 'exportExcelTranToSellInDashboard' %}";
+    const file_name = "tran_to_sell("+'{{ request.session.company_code }}'+").xlsx";
     const delay_time = 50;
     progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time);
   });

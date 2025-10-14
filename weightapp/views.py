@@ -7595,3 +7595,210 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
     response = HttpResponse(final_output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="transport_by_company.xlsx"'
     return response
+
+def exportExcelTranToSellInDashboard(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+
+    my_q &= Q(bws__company__code__in = company_in)
+    my_q &= ~Q(customer_name ='ยกเลิก')
+
+    #เปลี่ยนออกเป็น ดึงรายงานของเดือนนั้นๆเท่านั้น
+    startDate = datetime.strptime(start_created, "%Y-%m-%d").date()
+    endDate = datetime.strptime(end_created, "%Y-%m-%d").date()
+
+    #สร้าง list ระหว่าง start_date และ end_date
+    list_date = [startDate+timedelta(days=x) for x in range((endDate-startDate).days + 1)]
+
+    response = excelTranToSell(request, my_q, list_date)
+    return response
+
+def excelTranToSell(request, my_q, list_date):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+    company = BaseCompany.objects.get(code = active)
+
+    if company.biz.id == 1: #ธุรกิจเหมือง
+        data1 = Weight.objects.filter(my_q, ~Q(site = '200PL') & ~Q(site = '300PL'), Q(customer__customer_name__contains='พอร์ท') | Q(customer__customer_name__contains='พอร์ต') | Q(customer__customer_name__contains='ท่าเรือ') , bws__weight_type = 1).order_by(
+                                'date','customer','stone_type').values_list(
+                                'date','customer_name', 'stone_type_name').annotate(
+                                sum_weight_total = Sum('weight_total'))
+        
+        data2 = Weight.objects.filter(my_q, Q(site = '200PL') | Q(site = '300PL'), bws__weight_type = 1).order_by(
+                                'date','site','stone_type').values_list(
+                                'date','site_name', 'stone_type_name').annotate(
+                                sum_weight_total = Sum('weight_total'))
+        data = list(data1) + list(data2)
+
+    # Create a new workbook and get the active worksheet
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+
+    if data:
+        worksheet.cell(row=1, column=1, value='Date')
+        worksheet.merge_cells(start_row=1, start_column = 1, end_row=2, end_column=1)
+
+        date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
+        
+        # Create a set of all unique mill and cus values
+        customer = set()
+        stones = set()
+        customer_data1 = [item[1] for item in data1]
+        customer_data2 = [item[1] for item in data2]
+        # ลบซ้ำภายในแต่ละกลุ่มก่อน
+        customer_data1_unique = list(dict.fromkeys(customer_data1))
+        customer_data2_unique = list(dict.fromkeys(customer_data2))
+
+        # รวม โดยให้ data1 มาก่อน data2
+        customer = customer_data1_unique + [st for st in customer_data2_unique if st not in customer_data1_unique]
+
+        stones = list(dict.fromkeys([item[2] for item in data]))
+
+        cus_col_list = []
+        cus_colors = [generate_pastel_color() for _ in range(len(customer) + 1)]
+
+        column_index = 2
+        for st in customer:
+            worksheet.cell(row=1, column=column_index, value=f'ยอดขนไป {st}')
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(stones) + 1) -1 )
+            
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.alignment = Alignment(horizontal='center')
+
+            info = {}
+            info['st'] = st
+            info['strat_col'] = column_index
+            info['end_col'] = column_index + len(stones) + 1
+            cus_col_list.append(info)
+
+            #อัพเดทจำนวน col ตามที่มา
+            column_index += len(stones) + 1
+
+        #set color in header in row 1-2
+        for row in worksheet.iter_rows(min_row=1, max_row=2):
+            # Set the background color for each cell in the column
+            for cell in row:
+                #cell.border = Border(top=side, bottom=side, left=side, right=side)
+                cell.alignment = Alignment(horizontal='center')
+                line_index = (cell.column - 2) // (len(stones) + 1 )
+                fill_color = cus_colors[line_index % len(cus_colors)]
+                fill = PatternFill(start_color=fill_color, fill_type="solid")
+                cell.fill = fill
+
+        # Write headers row 2 to the worksheet
+        column_index = 2
+        for st in customer:
+            for sou in stones:
+                worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
+                column_index += 1
+                
+            worksheet.cell(row=2, column=column_index, value= 'Total').alignment = Alignment(horizontal='center')
+            worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="FF0000")
+            column_index += 1
+
+
+        # Create a dictionary to store data by date, mill, and cus
+        date_data = {}
+
+        # Loop through the data and populate the dictionary  
+        for item in data:
+            date = item[0]
+            cus = item[1]
+            stone = item[2]
+            quantity = item[3]
+
+            if date not in date_data:
+                date_data[date] = {}
+
+            if cus not in date_data[date]:
+                date_data[date][cus] = {'stones': {}, 'total': 0}
+
+            date_data[date][cus]['stones'][stone] = quantity
+            date_data[date][cus]['total'] += quantity  # Store the total for this cus
+
+        row_index = 3
+        for idl, ldate in enumerate(list_date):
+            #เขียนวันที่ใน worksheet column 1
+            worksheet.cell(row=idl+3, column=1, value=ldate).style = date_style
+            worksheet.cell(row=idl+3, column=1).alignment = Alignment(horizontal='center')
+
+            for date, cus_data in date_data.items():
+                #เขียน weight total ของแต่ละหินใน worksheet
+                if worksheet.cell(row=idl+3, column = 1).value == date:
+                    column_index = 2
+                    for st in customer:
+                        stone_data = cus_data.get(st, {}).get('stones', {})
+                        total_value = cus_data.get(st, {}).get('total', '')
+
+                        # Write quantities by stone
+                        for sou in stones:
+                            value = stone_data.get(sou, '')
+                            worksheet.cell(row=idl + 3, column=column_index, value=value).number_format = '#,##0.00'
+                            column_index += 1
+
+                        # Write the ssn__total value for the cus
+                        worksheet.cell(row=idl + 3, column=column_index, value=total_value).number_format = '#,##0.00'
+                        worksheet.cell(row=idl + 3, column=column_index).font = Font(bold=True, color="FF0000")
+                        column_index += 1
+            row_index += 1
+
+        worksheet.cell(row=row_index, column=1, value='รวมทั้งสิ้น')
+        sum_by_col = Decimal('0.00')
+        for col in range(2, column_index):
+            for row in range(3, row_index):
+                sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
+            worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
+            worksheet.cell(row=row_index, column=col).font = Font(bold=True, color="FF0000")
+            sum_by_col = Decimal('0.00')
+
+        # Set the column widths
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column = column_cells[2].column_letter
+            for cell in column_cells:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            worksheet.column_dimensions[column].width = adjusted_width
+            worksheet.column_dimensions[column].height = 20
+
+        side = Side(border_style='thin', color='000000')
+        set_border(worksheet, side)
+
+    else:
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลขนหินไปจำหน่ายหินของเดือนนี้')
+
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="tran_to_sell({active}).xlsx"'
+    response["Content-Length"] = str(size)
+    return response

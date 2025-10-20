@@ -224,6 +224,51 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
                 <hr class="my-4">
+                <h6 class="card-title my-3">เวลาเดินเครื่องของเครื่องจักรหลัก
+                </h6>
+                <div class="col-md-5 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เครื่องจักรโรงโม่</p>
+                  </div>
+                </div>
+                <div class="col-md-4 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เลขไมล์เริ่มต้น</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เลขไมล์สิ้นสุด</p>
+                  </div>
+                </div>
+                {{ mc_formset.management_form }}
+                {% for mc_form in mc_formset %}
+                <div class="row form-row spacer d-none" id="mc_div-None{{forloop.counter0}}">
+                  <div class="col-md-5 col-12">
+                    <div class="form-group">
+                      {{mc_form.mc_type | add_class:"form-control mc_type1"}}
+                    </div>
+                  </div>
+                  <div class="col-md-3 col-12">
+                    <div class="form-group">
+                      {{mc_form.mile_start | add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-3 col-12">
+                    <div class="form-group">
+                      {{mc_form.mile_end | add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1 col-12">
+                    <div class="input-group-append text-right">
+                      <!--button class="btn btn-success add-form-row hidden-print">+</button-->
+                      <button id="mc_vis-{{forloop.counter0}}" class="btn btn-success hidden-print mc_visible-row">+</button>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+
+                <hr class="my-4">
                 {{pd_goal_form.pk_goal}}
                 {{pd_goal_form.company}}
                 <div class="col-md-2">
@@ -232,7 +277,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="col-md-10">
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
-                      {{pd_goal_form.accumulated_goal | add_class:"form-control"|attr:"required:true" }}
+                      {{pd_goal_form.accumulated_goal | add_class:"form-control border border-warning"|attr:"required:true" }}
                       <div class="form-control-icon">
                         <i class="bi bi-graph-up-arrow"></i>
                       </div>
@@ -261,7 +306,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="row form-row spacer d-none" id="div-None{{forloop.counter0}}">
                   <div class="col-md-5 col-12">
                     <div class="form-group">
-                      {{form.mc_type | add_class:"form-control mc_type"}}
+                      {{form.mc_type | add_class:"form-control mc_type2"}}
                     </div>
                   </div>
                   <div class="col-md-4 col-12">
@@ -416,8 +461,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   //after load
   $(window).on('load', function() {
     $("#div-None0").removeClass("d-none");
+    $("#mc_div-None0").removeClass("d-none");
 
-    $('.mc_type').select2({width: "100%",  theme: 'bootstrap-5'});
+    $('.mc_type1').select2({width: "100%",  theme: 'bootstrap-5'});
+    $('.mc_type2').select2({width: "100%",  theme: 'bootstrap-5'});
     $('.loss_type').select2({width: "100%",  theme: 'bootstrap-5'});
 
     $(".f-decimal").hide();
@@ -445,6 +492,23 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     return false;
   });
 
+  $(document).on('click', '.mc_visible-row', function(e){
+    e.preventDefault();
+
+    //เปิด div ช่องต่อไป
+    let btnId = $(this).attr('id');
+    let id = btnId.split('-')[1];
+    let next_id = parseInt(id) + 1;
+    $("#mc_div-None"+next_id+"").removeClass( "d-none" );
+
+    //เปลี่ยนปุ่ม + เป็น -
+    $(this).removeClass('btn-success').addClass('btn-danger')
+    .removeClass('add-form-row').addClass('remove-form-row')
+    .html('-');
+
+    return false;
+  });
+
   //before save
   $('form').submit(function() {
 
@@ -463,6 +527,29 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       $("#id_site").trigger( "focus" );
       alert('มีข้อมูลปลายทาง และ line ของวันนี้อยู่แล้ว กรุณาเปลี่ยน ปลายทาง และ line');
       return false;
+    }
+
+    //เช็ค error เวลาเครื่องจักร
+    var inputs = $(".mc_type1");
+    var seen = new Set();
+
+    for (var i = 0; i < inputs.length; i++) {
+        var mc_type = $("#id_machine-" + i + "-mc_type").val();
+        var mile_start = $("#id_machine-" + i + "-mile_start").val();
+        var mile_end = $("#id_machine-" + i + "-mile_end").val();
+
+        if(mile_start > mile_end){
+            alert("เลขไมล์สิ้นสุดน้อยกว่าเลขไมล์เริ่มต้นแถวที่ " + (i + 1) +  " กรุณาเปลี่ยนเลขไมล์ใหม่");
+            $("#id_machine-" + i + "-mile_end").focus();1
+            return false;
+
+        }
+        if (mc_type && seen.has(mc_type)) {
+            alert("ไม่สามารถบันทึก เวลาเครื่องจักรแถวที่ " + (i + 1) + " เนื่องจากเครื่องจักรซ้ำกัน กรุณาเปลี่ยนเครื่องจักรใหม่");
+            $("#id_machine-" + i + "-mc_type").focus();
+            return false;
+        }
+        seen.add(mc_type);
     }
 
   });

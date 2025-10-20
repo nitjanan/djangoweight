@@ -896,6 +896,21 @@ class ProductionLossItem(models.Model):
     class Meta:
         db_table = 'production_loss_item'
 
+class ProductionMachineItem(models.Model):
+    production = models.ForeignKey(Production,on_delete=models.CASCADE, null = True, blank=True)
+    mc_type = models.ForeignKey(BaseMachineType,on_delete=models.CASCADE, null = True, blank=True)
+    mile_start = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)
+    mile_end = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=20)
+    diff_time = models.DurationField(null = True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.mile_start and self.mile_end:
+            self.diff_time = decimal_to_time(calculatorDiffTime(self.mile_start, self.mile_end))
+        super().save(*args, **kwargs)
+
+    class Meta:
+        db_table = 'production_machine_item'
+
 #stock
 class Stock(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ stock

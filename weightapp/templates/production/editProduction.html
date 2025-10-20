@@ -229,6 +229,57 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     </div>
                   </div>
                 </div>
+                <hr class="my-4">
+                <h6 class="card-title my-3">เวลาเดินเครื่องของเครื่องจักรหลัก
+                </h6>
+                <div class="col-md-5 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เครื่องจักรโรงโม่</p>
+                  </div>
+                </div>
+                <div class="col-md-4 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เลขไมล์เริ่มต้น</p>
+                  </div>
+                </div>
+                <div class="col-md-2 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">เลขไมล์สิ้นสุด</p>
+                  </div>
+                </div>
+                {{ mc_formset.management_form }}
+                {% for mc_form in mc_formset %}
+                <div class="row form-row spacer {% if not mc_form.id.value %}d-none mc_div-null{%endif%}" id="mc_div-{% if mc_form.id.value %}{{mc_form.id.value}}{% else %}None{{forloop.counter0}}{% endif %}">
+                  <div class="col-md-5 col-12">
+                    <div class="form-group">
+                       <!-- จำเป็นมาก -->{{mc_form.id}}<!-- จำเป็นมาก -->{{mc_form.mc_type | add_class:"form-control mc_type1"}}
+                    </div>
+                  </div>
+                  <div class="col-md-3 col-12">
+                    <div class="form-group">
+                      {{mc_form.mile_start | add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-3 col-12">
+                    <div class="form-group">
+                      {{mc_form.mile_end | add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1 col-12">
+                    {% if mc_form.id.value %}
+                      <div class="input-group-append text-right">
+                        <button type="button" class="btn btn-danger hidden-print" onclick="hideDivMC('{{mc_form.id.value}}')">-</button>
+                    </div>
+                    {% else %}
+                      <div class="input-group-append text-right">
+                          <!--button class="btn btn-success add-form-row hidden-print">+</button-->
+                          <button id="mc_vis-{{forloop.counter0}}" class="btn btn-success hidden-print mc_visible-row">+</button>
+                      </div>
+                    {% endif %}
+                    {{ mc_form.DELETE| add_class:"del"}}
+                  </div>
+                </div>
+                {% endfor %}
 
                 <hr class="my-4">
                 {{pd_goal_form.pk_goal}}
@@ -239,7 +290,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="col-md-10">
                   <div class="form-group has-icon-left">
                     <div class="position-relative">
-                      {{pd_goal_form.accumulated_goal | add_class:"form-control"|attr:"required:true" }}
+                      {{pd_goal_form.accumulated_goal | add_class:"form-control border border-warning"|attr:"required:true" }}
                       <div class="form-control-icon">
                         <i class="bi bi-graph-up-arrow"></i>
                       </div>
@@ -269,7 +320,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 <div class="row form-row spacer {% if not form.id.value %}d-none div-null{%endif%}" id="div-{% if form.id.value %}{{form.id.value}}{% else %}None{{forloop.counter0}}{% endif %}">
                   <div class="col-md-5 col-12">
                     <div class="form-group">
-                       <!-- จำเป็นมาก -->{{form.id}}<!-- จำเป็นมาก -->{{form.mc_type | add_class:"form-control mc_type"}}
+                       <!-- จำเป็นมาก -->{{form.id}}<!-- จำเป็นมาก -->{{form.mc_type | add_class:"form-control mc_type2"}}
                     </div>
                   </div>
                   <div class="col-md-4 col-12">
@@ -295,7 +346,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     {% endif %}
                     {{ form.DELETE| add_class:"del"}}
                   </div>
-              </div>
+                </div>
                 {% endfor %}
                 <div class="col-md-2">
                   <p class="fw-bolder">{{form.note.label}}</p>
@@ -366,7 +417,13 @@ function hideDiv(id){
     var inputId = $("#div-"+id+" div.col-md-5 div.form-group input[value='"+id+"']").attr("id").match(/\d+/);
     $("#id_productionlossitem_set-"+inputId+"-DELETE").prop('checked', true);
     $("#div-"+id).hide();
-  }
+}
+
+function hideDivMC(id){
+    var inputId = $("#mc_div-"+id+" div.col-md-5 div.form-group input[value='"+id+"']").attr("id").match(/\d+/);
+    $("#id_productionmachineitem_set-"+inputId+"-DELETE").prop('checked', true);
+    $("#mc_div-"+id).hide();
+}
   
   function updateElementIndex(el, prefix, ndx) {
       var id_regex = new RegExp('(' + prefix + '-\\d+)');
@@ -420,11 +477,13 @@ function hideDiv(id){
   $(document).on('click', '.add-form-row', function(e){
       e.preventDefault();
       cloneMore('.form-row:last', 'productionlossitem_set');
+      cloneMore('.form-row:last', 'productionmachineitem_set');
       return false;
   });
   $(document).on('click', '.remove-form-row', function(e){
       e.preventDefault();
       deleteForm('productionlossitem_set', $(this));
+      deleteForm('productionmachineitem_set', $(this));
       return false;
   });
 
@@ -436,6 +495,23 @@ function hideDiv(id){
     let id = btnId.split('-')[1];
     let next_id = parseInt(id) + 1;
     $("#div-None"+next_id+"").removeClass( "d-none" );
+
+    //เปลี่ยนปุ่ม + เป็น -
+    $(this).removeClass('btn-success').addClass('btn-danger')
+    .removeClass('add-form-row').addClass('remove-form-row')
+    .html('-');
+
+    return false;
+  });
+
+  $(document).on('click', '.mc_visible-row', function(e){
+    e.preventDefault();
+
+    //เปิด div ช่องต่อไป
+    let btnId = $(this).attr('id');
+    let id = btnId.split('-')[1];
+    let next_id = parseInt(id) + 1;
+    $("#mc_div-None"+next_id+"").removeClass( "d-none" );
 
     //เปลี่ยนปุ่ม + เป็น -
     $(this).removeClass('btn-success').addClass('btn-danger')
@@ -469,12 +545,35 @@ function hideDiv(id){
       return false;
     }
 
+    //เช็ค error เวลาเครื่องจักร
+    var inputs = $(".mc_type1");
+    var seen = new Set();
+
+    for (var i = 0; i < inputs.length; i++) {
+        var mc_type = $("#id_productionmachineitem_set-" + i + "-mc_type").val();
+        var mile_start = $("#id_productionmachineitem_set-" + i + "-mile_start").val();
+        var mile_end = $("#id_productionmachineitem_set-" + i + "-mile_end").val();
+
+        if(mile_start > mile_end){
+            alert("เลขไมล์สิ้นสุดน้อยกว่าเลขไมล์เริ่มต้นแถวที่ " + (i + 1) +  " กรุณาเปลี่ยนเลขไมล์ใหม่");
+            $("#id_productionmachineitem_set-" + i + "-mile_end").focus();1
+            return false;
+
+        }
+        if (mc_type && seen.has(mc_type)) {
+            alert("ไม่สามารถบันทึก เวลาเครื่องจักรแถวที่ " + (i + 1) + " เนื่องจากเครื่องจักรซ้ำกัน กรุณาเปลี่ยนเครื่องจักรใหม่");
+            $("#id_productionmachineitem_set-" + i + "-mc_type").focus();
+            return false;
+        }
+        seen.add(mc_type);
+    }
+
   });
 
     //หา div-None ที่น้อยที่สุดจากนั้น เปิดให้มองเห็น
     function findMinDivNone(){
       let minId = null;
-
+      //loss type
       $(".div-null").each(function () {
           let divId = $(this).attr("id"); 
           let numPart = parseInt(divId.replace("div-None", ""));
@@ -487,11 +586,31 @@ function hideDiv(id){
       });
       $("#div-None"+ minId+"").removeClass("d-none");
     }
+
+    //หา div-None ที่น้อยที่สุดจากนั้น เปิดให้มองเห็น
+    function findMinDivNoneMC(){
+      let minId = null;
+      //loss type
+      $(".mc_div-null").each(function () {
+          let divId = $(this).attr("id"); 
+          let numPart = parseInt(divId.replace("mc_div-None", ""));
+
+          if (!isNaN(numPart)) {
+              if (minId === null || numPart < minId) {
+                  minId = numPart;
+              }
+          }
+      });
+      $("#mc_div-None"+ minId+"").removeClass("d-none");
+    }
+
     //after load
     $(window).on('load', function() {
       findMinDivNone();
+      findMinDivNoneMC();
 
-      $('.mc_type').select2({width: "100%",  theme: 'bootstrap-5'});
+      $('.mc_type1').select2({width: "100%",  theme: 'bootstrap-5'});
+      $('.mc_type2').select2({width: "100%",  theme: 'bootstrap-5'});
       $('.loss_type').select2({width: "100%",  theme: 'bootstrap-5'});
 
     if($("#id_site").val() == '011PL' || $("#id_site").val() == '028PL' || $("#id_site").val() == '019PL' || $("#id_site").val() == '020PL'  || $("#id_site").val() == '021PL' ){

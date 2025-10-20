@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice, PortStock, PortStockStone, PortStockStoneItem
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet, Select)
 import string
@@ -172,6 +172,23 @@ ProductionLossItemInlineFormset = inlineformset_factory(
         'loss_time': forms.TimeInput(format='%H:%M', attrs={'class':'form-control', 'type': 'time'}),
     },
     extra=15,
+)
+
+class ProductionMachineItemForm(forms.ModelForm):
+    class Meta:
+       model = ProductionMachineItem
+       fields = ('mc_type', 'mile_start', 'mile_end',)
+       widgets = {
+        }
+       
+ProductionMachineItemInlineFormset = inlineformset_factory(
+    Production,
+    ProductionMachineItem,
+    form=ProductionMachineItemForm,
+    fields=('mc_type', 'mile_start', 'mile_end'),
+    widgets = {
+    },
+    extra=5,
 )
 
 

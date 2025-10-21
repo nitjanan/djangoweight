@@ -6878,7 +6878,7 @@ def searchDataWeightInDay(request):
         if mode == '2':
             have_weight = Weight.objects.filter(date = created, bws__weight_type = 2, bws__company__code = company).exists()
             if not have_weight:
-                alert = "ไม่มีรายการชั่งขายผลิตวันนี้ กรุณา uploade รายการชั่งของวันที่ "+ str(created) + " มาก่อน"
+                alert = "ไม่มีรายการชั่งผลิตวันนี้ กรุณา uploade รายการชั่งของวันที่ "+ str(created) + " มาก่อน"
 
     data = {'alert' : alert, 'have_weight': have_weight,}
     return JsonResponse(data)

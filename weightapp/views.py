@@ -386,15 +386,21 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
     elif type == 2:
         #อันเก่าดึงข้อมูลจากกองสต็อค 09-09-2024
         #w = Weight.objects.filter(bws__company__code__in = company_in, site__base_site_name__contains='สต็อค', bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
-        qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
-        qr_list = list(qr)
+        w = Decimal('0.0')
+        try:
+            qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        except StockStone.DoesNotExist:
+            qr = None
 
-        # Group by 'stone', keeping the most recent 'stk__created'
-        filtered_results = [
-            max(group, key=itemgetter('stk__created'))
-            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
-        ]
-        w = sum(item['total'] for item in filtered_results)
+        if qr:
+            qr_list = list(qr)
+
+            # Group by 'stone', keeping the most recent 'stk__created'
+            filtered_results = [
+                max(group, key=itemgetter('stk__created'))
+                for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+            ]
+            w = sum(item['total'] for item in filtered_results)
 
     elif type == 3:
         if start_year > 2024:#แบบใหม่ 19-12-2024
@@ -413,15 +419,21 @@ def getSumOther(request, mode, list_sum_stone, type, company_in):
         w = Weight.objects.filter(~Q(site = '200PL') & ~Q(site = '300PL'), mill__mill_source__in = [1,2,3], bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     
     elif type == 10:#port stock
-        qr = PortStockStone.objects.filter(ps__company__code__in = company_in, ps__created__range=(start_date, end_date)).exclude(ss_query_filters).values('ps__created', 'stone', 'total').order_by('-ps__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
-        qr_list = list(qr)
+        w = Decimal('0.0')
+        try:
+            qr = PortStockStone.objects.filter(ps__company__code__in = company_in, ps__created__range=(start_date, end_date)).exclude(ss_query_filters).values('ps__created', 'stone', 'total').order_by('-ps__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        except PortStockStone.DoesNotExist:
+            qr = None
 
-        # Group by 'stone', keeping the most recent 'stk__created'
-        filtered_results = [
-            max(group, key=itemgetter('ps__created'))
-            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
-        ]
-        w = sum(item['total'] for item in filtered_results)
+        if qr:
+            qr_list = list(qr)
+
+            # Group by 'stone', keeping the most recent 'stk__created'
+            filtered_results = [
+                max(group, key=itemgetter('ps__created'))
+                for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+            ]
+            w = sum(item['total'] for item in filtered_results)
 
     return  float(w)
 
@@ -482,15 +494,21 @@ def getPortSumOther(request, mode, list_sum_stone, type, company_in):
     if type == 1:#เครื่องขาย ปลายทาง รับเข้า
         w = Weight.objects.filter(site__store = 1, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')
     elif type == 2:
-        qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
-        qr_list = list(qr)
+        w = Decimal('0.0')
+        try:
+            qr = StockStone.objects.filter(stk__company__code__in = company_in, stk__created__range=(start_date, end_date)).exclude(ss_query_filters).values('stk__created', 'stone', 'total').order_by('-stk__created').distinct() #ดึงข้อมูลสต็อกที่เหลือจากวันที่คีย์ล่าสุด ระหว่าง start_date, end_date และรวมกัน
+        except StockStone.DoesNotExist:
+            qr = None
 
-        # Group by 'stone', keeping the most recent 'stk__created'
-        filtered_results = [
-            max(group, key=itemgetter('stk__created'))
-            for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
-        ]
-        w = sum(item['total'] for item in filtered_results)
+        if qr:
+            qr_list = list(qr)
+
+            # Group by 'stone', keeping the most recent 'stk__created'
+            filtered_results = [
+                max(group, key=itemgetter('stk__created'))
+                for _, group in groupby(sorted(qr_list, key=itemgetter('stone')), key=itemgetter('stone'))
+            ]
+            w = sum(item['total'] for item in filtered_results)
 
     elif type == 4:#เครื่องขาย ปลายทาง จ่ายภายนอก
         w = Weight.objects.filter(site__store = 2, bws__company__code__in = company_in, bws__weight_type = mode, date__range=(start_date, end_date)).exclude(query_filters).aggregate(s=Sum("weight_total"))["s"] or Decimal('0.0')

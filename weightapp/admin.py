@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -405,6 +405,44 @@ class BaseBusinessAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id', 'name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+class PortStockAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'created', 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'created', 'company']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class PortStockStoneAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    autocomplete_fields = ['stone']
+
+    list_display = ['id', 'stone', 'total', 'ps', 'ps_created']
+    search_fields = [
+        'id__startswith',        # ค้นหา id (int) แทน icontains
+        'ps__created',           # วันที่ผลิต (DateField)
+        'ps__id',
+    ]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    # method สำหรับแสดงค่าในตาราง
+    def ps_created(self, obj):
+        return obj.ps.created if obj.ps else '-'
+    ps_created.short_description = 'วันที่ผลิต'
+
+class PortStockStoneItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    autocomplete_fields = ['cus']
+
+    list_display = ['id', 'cus', 'total', 'pss', 'pss_ps_created'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'cus', 'total', 'pss']
+
+    search_fields = [
+        'id__startswith',
+        'cus__customer_id',
+        'cus__customer_name',
+        'pss__id',
+        'pss__ps__created',
+    ]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    def pss_ps_created(self, obj):
+        return obj.pss.ps.created if obj.pss.ps else '-'
+    pss_ps_created.short_description = 'วันที่ผลิต'
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -451,5 +489,8 @@ admin.site.register(GasPrice, GasPriceAdmin)
 admin.site.register(BaseMillSource, BaseMillSourceAdmin)
 admin.site.register(BaseSiteStore, BaseSiteStoreAdmin)
 admin.site.register(BaseBusiness, BaseBusinessAdmin)
+admin.site.register(PortStock, PortStockAdmin)
+admin.site.register(PortStockStone, PortStockStoneAdmin)
+admin.site.register(PortStockStoneItem, PortStockStoneItemAdmin)
 
 

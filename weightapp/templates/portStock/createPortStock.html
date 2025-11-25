@@ -103,7 +103,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                   <div class="col-md-9">
                     <div class="form-group">
-                      {{ss_form.stone| add_class:"form-control"}}
+                      {{ss_form.stone| add_class:"form-control" |attr:"required:true"}}
                       {{ss_form.total}}
                     </div>
                   </div>

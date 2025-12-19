@@ -165,6 +165,16 @@ class BaseCarSerializer(serializers.ModelSerializer):
     ชื่อรถร่วม = serializers.CharField(source='car_name')
     รหัสทีม = serializers.CharField(source='base_car_team.car_team_id')
 
+class CarPartnerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BaseCar
+        fields = ('code', 'name','oil_cus')
+
+    # Define custom field names
+    code = serializers.CharField(source='car_id')
+    name = serializers.CharField(source='car_name')
+    oil_cus = serializers.CharField(source='base_car_team.oil_customer_id')
+
 class BaseSiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseSite

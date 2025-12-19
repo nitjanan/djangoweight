@@ -207,6 +207,7 @@ urlpatterns = [
      path('baseCar/api/create/',views.baseCarCreate,name="baseCarCreate"),
      path('baseCar/api/update/<str:pk>/',views.baseCarUpdate,name="baseCarUpdate"),
      path('baseCar/api/vStamp/<str:dt>/',views.baseCarVStamp,name="baseCarVStamp"),
+     path('car/partner/api/all/',views.allCarPartner,name="allCarPartner"),
 
      path('baseJobType/api/',views.apiBaseJobTypeOverview,name="apiBaseJobTypeOverview"),
      path('baseJobType/api/list/',views.baseJobTypeList,name="baseJobTypeList"),

@@ -44,8 +44,9 @@ from rest_framework.request import Request
 from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -5664,6 +5665,11 @@ def baseSiteVStamp(request, dt):
     serializer = BaseSiteSerializer(queryset, many = True)
     return Response(serializer.data)
 
+
+############# Page API ###############
+class SmallResultsSetPagination(PageNumberPagination):
+    page_size = 100  # or any number suitable for your fro
+
 ############# BaseCar API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -5675,6 +5681,7 @@ def apiBaseCarOverview(request):
         'Update':'/baseCar/api/update/<str:pk>/',
         'Delete':'/baseCar/api/delete/<str:pk>/',
         'VStamp':'/baseCar/api/vStamp/<str:dt>/',
+        'All Base Car View':'/car/partner/api/all/',
     }
     return Response(api_urls)
 
@@ -5719,6 +5726,15 @@ def baseCarVStamp(request, dt):
     queryset = BaseCar.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
     serializer = BaseCarSerializer(queryset, many = True)
     return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def allCarPartner(request):
+    queryset = BaseCar.objects.all()
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+    serializer = CarPartnerSerializer(result_page, many=True)
+    return paginator.get_paginated_response(serializer.data)
 
 ############# BaseJobType API ###############
 @api_view(['GET'])

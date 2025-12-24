@@ -31,6 +31,115 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     text-decoration-line: underline;
     text-decoration-style: double;
   }
+
+
+  /* ===============================
+    Wrapper สำหรับ Horizontal Scroll
+    =============================== */
+  .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  /* บังคับให้ table กว้าง */
+  #tableCompany {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate; /* สำคัญมาก */
+    border-spacing: 0;
+  }
+
+  /* ไม่ให้ข้อความตัดบรรทัด */
+  #tableCompany th,
+  #tableCompany td {
+    white-space: nowrap;
+  }
+
+  /* ===============================
+    Sticky Header
+    =============================== */
+  #tableCompany thead th {
+    position: sticky;
+    top: 0;
+    background-color: #212529; /* table-dark */
+    color: #fff;
+    z-index: 10;
+  }
+
+  /* ===============================
+    Freeze คอลัมน์ที่ 1
+    =============================== */
+  #tableCompany th:nth-child(1),
+  #tableCompany td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    background-color: #ffffff;
+    z-index: 20;
+    min-width: 60px;
+  }
+
+  /* ===============================
+    Freeze คอลัมน์ที่ 2
+    =============================== */
+  #tableCompany th:nth-child(2),
+  #tableCompany td:nth-child(2) {
+    position: sticky;
+    left: 60px; /* ต้องเท่ากับคอลัมน์แรก */
+    background-color: #ffffff;
+    z-index: 20;
+    min-width: 200px;
+  }
+
+  /* ===============================
+    Header ของคอลัมน์ที่ Freeze
+    =============================== */
+  #tableCompany thead th:nth-child(1),
+  #tableCompany thead th:nth-child(2) {
+    background-color: #212529;
+    color: #fff;
+    z-index: 30;
+  }
+
+  /* กันเส้นขอบหาย */
+  #tableCompany th,
+  #tableCompany td {
+    border: 1px solid #dee2e6;
+  }
+
+
+  /* ===== Scroll bar ด้านบน ===== */
+  .scroll-top {
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 18px;
+  }
+
+  .scroll-top-inner {
+    height: 1px;
+  }
+
+  /* ===== Scroll bar ด้านล่าง (ตารางจริง) ===== */
+  .table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    position: relative;
+  }
+
+  /* บังคับ table ให้กว้าง */
+  #tableCompany {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  /* ไม่ให้ข้อความตัด */
+  #tableCompany th,
+  #tableCompany td {
+    white-space: nowrap;
+  }
+
     
   </style>
 {% endblock %}
@@ -87,8 +196,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </div>
               </div>
             </div>
-            <div class="table-responsive my-3">
-                  <table class="table table-bordered my-3 display" id="tableCompany">
+            <!-- Scroll bar ด้านบน -->
+            <div class="scroll-top my-2" id="scrollTop">
+              <div class="scroll-top-inner"></div>
+            </div>
+            <!-- ตารางจริง -->
+            <div class="table-wrapper" id="scrollBody">
+              <table class="table table-bordered display" id="tableCompany">
                     {% for site_name, site_data in aggregated_results.items %}
                       <thead class="table-dark">
                           <!--tr>
@@ -232,7 +346,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <th class="text-end" id="id_sum_hour_per_day_{{ forloop.counter0 }}"></th>
                             <th class="text-end" id="id_avg_hour_per_day_{{ forloop.counter0 }}"></th>
                           </tr>
-                          <tr style="height: 40px; background-color: gainsboro; border-right-color:gainsboro; border-left-color:gainsboro; border-bottom-color:gainsboro; border-top-color:gainsboro">
+                          <tr style="height: 40px; background-color: #dee2e6; border-right-color:#dee2e6; border-left-color:#dee2e6; border-bottom-color:#dee2e6; border-top-color:#dee2e6">
                             <th scope="row"></th>
                             <th></th>
                             <th></th>
@@ -451,6 +565,28 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       });
     });
   });
+
+  /* ===== Scroll bar ด้านบน ===== */
+  const scrollTop = document.getElementById('scrollTop');
+  const scrollBody = document.getElementById('scrollBody');
+  const table = document.getElementById('tableCompany');
+
+  function syncWidth() {
+    scrollTop.querySelector('.scroll-top-inner').style.width =
+      table.scrollWidth + 'px';
+  }
+
+  syncWidth();
+  window.addEventListener('resize', syncWidth);
+
+  scrollTop.addEventListener('scroll', () => {
+    scrollBody.scrollLeft = scrollTop.scrollLeft;
+  });
+
+  scrollBody.addEventListener('scroll', () => {
+    scrollTop.scrollLeft = scrollBody.scrollLeft;
+  });
+  /* ===== Scroll bar ด้านบน ===== */
     
 </script>
 {% endblock %}

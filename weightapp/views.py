@@ -1993,11 +1993,11 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
     if comp.biz.id == 1:
         # Query ข้อมูลขาย
         #ดึงข้อมูลต้นทางกองสต็อค ที่มีในรายการชั่งของบริษัทนี้
-        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
+        stock_name = Weight.objects.filter(my_q, Q(mill_name__contains='สต็อค') | Q(mill_name__contains='สต๊อก'), ~Q(site = '200PL') & ~Q(site = '300PL'), bws__weight_type = 1, bws__company__code = active).values_list('mill_id').order_by('mill_id').distinct()
         
         #ดึงข้อมูลต้นทางกองสต็อคและโรงโม่ของบริษัท
         m_comp_id = BaseMill.objects.filter(Q(m_comp__code = active) | Q(mill_id__in = stock_name)).values_list('mill_id').order_by('mill_id')
-        data = Weight.objects.filter(my_q, mill__in = m_comp_id, bws__weight_type = 1).annotate(
+        data = Weight.objects.filter(my_q, ~Q(site = '200PL') & ~Q(site = '300PL'), mill__in = m_comp_id, bws__weight_type = 1).annotate(
             month=ExtractMonth('date'),
             year=ExtractYear('date')
         ).values_list('year', 'month', 'mill_name', 'stone_type_name').annotate(

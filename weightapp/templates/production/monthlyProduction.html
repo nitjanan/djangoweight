@@ -140,8 +140,13 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     white-space: nowrap;
   }
 
-    
-  </style>
+  #line_grey{
+    height: 40px;
+    background-color: #dee2e6;
+    border-color:#dee2e6;
+  }
+
+</style>
 {% endblock %}
 
 {% block content %}
@@ -228,15 +233,20 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                               <tr>
                                   <th scope="row">{{forloop.counter}}</th>
                                   <td class="text-primary"><b>{{ stone_type }}</b></td>
-                                  {% for s_name, site_data in data_stone_old_year.items %}
-                                    {% for st_type, stone_type_data in site_data.items %}
-                                      {% for mon_year, est_weight in stone_type_data.items %}
-                                        {% if site_name == s_name and stone_type == st_type%}
-                                          <td class="text-end text-success"><b>{{est_weight}}</b></td>
-                                        {% endif %}
+                                  {% if data_stone_old_year %}
+                                    {% for s_name, site_data in data_stone_old_year.items %}
+                                      {% for st_type, stone_type_data in site_data.items %}
+                                        {% for mon_year, est_weight in stone_type_data.items %}
+                                          {% if site_name == s_name and stone_type == st_type%}
+                                            <td class="text-end text-success"><b>{{est_weight}}</b></td>
+                                          {% endif %}
+                                        {% endfor %}
                                       {% endfor %}
                                     {% endfor %}
-                                  {% endfor %}
+                                  {%else%}
+                                    <td class="text-end text-success"><b>-</b></td>
+                                    <td class="text-end text-success"><b>-</b></td>
+                                  {%endif%}
                                   {% for month_year, est_weight in stone_type_data.items %}
                                       <td id="id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" class="text-end">{{ est_weight |intcomma }}</td>
                                   {% endfor %}
@@ -265,13 +275,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           <tr>
                             <th></th>
                             <th>ชม.โม่</th>
-                            {% for s, s_data in data_run_old_year.items %}
-                              {% for m_y, result in s_data.items %}
-                                {% if s == site_name %}
-                                  <th class="text-end">{{ result }}</th>
-                                {%endif%}
+                            {% if data_run_old_year %}
+                              {% for s, s_data in data_run_old_year.items %}
+                                {% for m_y, result in s_data.items %}
+                                  {% if s == site_name %}
+                                    <th class="text-end">{{ result }}</th>
+                                  {%endif%}
+                                {% endfor %}
                               {% endfor %}
-                            {% endfor %}
+                            {%else%}
+                              <th class="text-end">-</th>
+                            {%endif%}
                             <td></td>
                             {% for s, s_data in produc_run_results.items %}
                               {% for m_y, sum_run in s_data.items %}
@@ -286,13 +300,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           <tr>
                             <th></th>
                             <th>กำลังการผลิต</th><!-- old ตัน / ชม. -->
-                            {% for s, s_data in data_cap_old_year.items %}
-                              {% for m_y, result in s_data.items %}
-                                {% if s == site_name %}
-                                  <th class="text-end">{{ result }}</th>
-                                {%endif%}
+                            {% if data_cap_old_year %}
+                              {% for s, s_data in data_cap_old_year.items %}
+                                {% for m_y, result in s_data.items %}
+                                  {% if s == site_name %}
+                                    <th class="text-end">{{ result }}</th>
+                                  {%endif%}
+                                {% endfor %}
                               {% endfor %}
-                            {% endfor %}
+                            {%else%}
+                              <th class="text-end">-</th>
+                            {%endif%}
                             <td></td>
                             {% for s, s_data in produc_capacity_results.items %}
                               {% for m_y, capacity in s_data.items %}
@@ -307,13 +325,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           <tr>
                             <th></th>
                             <th>วันทำงาน</th>
-                            {% for s, s_data in data_work_old_year.items %}
-                              {% for m_y, result in s_data.items %}
-                                {% if s == site_name %}
-                                  <th class="text-end">{{ result }}</th>
-                                {%endif%}
+                            {% if data_work_old_year %}
+                              {% for s, s_data in data_work_old_year.items %}
+                                {% for m_y, result in s_data.items %}
+                                  {% if s == site_name %}
+                                    <th class="text-end">{{ result }}</th>
+                                  {%endif%}
+                                {% endfor %}
                               {% endfor %}
-                            {% endfor %}
+                            {%else%}
+                              <th class="text-end">-</th>
+                            {%endif%}
                             <td></td>
                             {% for s, s_data in produc_work_results.items %}
                               {% for m_y, working_time in s_data.items %}
@@ -328,13 +350,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                           <tr>
                             <th></th>
                             <th>ชม.ต่อวัน</th><!-- old ชม. -->
-                            {% for s, s_data in data_hpd_old_year.items %}
-                              {% for m_y, result in s_data.items %}
-                                {% if s == site_name %}
-                                  <th class="text-end">{{ result }}</th>
-                                {%endif%}
+                            {% if data_hpd_old_year %}
+                              {% for s, s_data in data_hpd_old_year.items %}
+                                {% for m_y, result in s_data.items %}
+                                  {% if s == site_name %}
+                                    <th class="text-end">{{ result }}</th>
+                                  {%endif%}
+                                {% endfor %}
                               {% endfor %}
-                            {% endfor %}
+                            {%else%}
+                              <th class="text-end">-</th>
+                            {%endif%}
                             <td></td>
                             {% for s, s_data in produc_hour_per_day_results.items %}
                               {% for m_y, hour_per_day in s_data.items %}
@@ -346,7 +372,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                             <th class="text-end" id="id_sum_hour_per_day_{{ forloop.counter0 }}"></th>
                             <th class="text-end" id="id_avg_hour_per_day_{{ forloop.counter0 }}"></th>
                           </tr>
-                          <tr style="height: 40px; background-color: #dee2e6; border-right-color:#dee2e6; border-left-color:#dee2e6; border-bottom-color:#dee2e6; border-top-color:#dee2e6">
+                          <tr id="line_grey">
                             <th scope="row"></th>
                             <th></th>
                             <th></th>

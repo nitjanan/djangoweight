@@ -29,7 +29,7 @@ from django.db.models import F, ExpressionWrapper, Case, When
 from django.db import models
 import pandas as pd
 import calendar
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from re import escape as reescape
 from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat
@@ -73,6 +73,7 @@ from io import BytesIO
 from openpyxl.workbook.protection import WorkbookProtection
 from openpyxl.styles import Protection
 import time
+import re
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -2408,17 +2409,25 @@ def monthlyProduction(request):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
 
-    #ดึงข้อมูล 2025 ขึ้นไป   
-    current_date_time = datetime.now()
+    end_created = request.session['db_end_date']
+    start_created = request.session['db_start_date']
+
+    current_date_time = datetime.strptime(end_created, "%Y-%m-%d")
+    last_day = calendar.monthrange(current_date_time.year, current_date_time.month)[1]
+
+    first_day_in_year = f"{current_date_time.year}-01-01"
+    last_day_in_month = f"{current_date_time.year}-{current_date_time.month:02d}-{last_day:02d}"
+
+    this_year = current_date_time.year
     current_year = current_date_time.year - 1
     numeric_month = current_date_time.month
 
     s_comp = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_id', flat=True).order_by('base_site_id')
     s_comp_name = BaseSite.objects.filter(s_comp__code = active).values_list('base_site_name', flat=True).order_by('base_site_name')
     #ดึงข้อมูล 2025 ขึ้นไป
-    stone_id = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year, percent__gt = 0).values_list('stone_type__base_stone_type_id', flat=True).order_by('stone_type__base_stone_type_id').distinct() #ดึงเฉพาะ stone_id ที่มีการคีย์ percent > 0
+    stone_id = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__range=(first_day_in_year, last_day_in_month), percent__gt = 0).values_list('stone_type__base_stone_type_id', flat=True).order_by('stone_type__base_stone_type_id').distinct() #ดึงเฉพาะ stone_id ที่มีการคีย์ percent > 0
 
-    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__year__gt = current_year, stone_type__in = stone_id
+    date_data = StoneEstimateItem.objects.filter(se__site__in = s_comp, se__created__range=(first_day_in_year, last_day_in_month), stone_type__in = stone_id
     ).annotate(
         year=ExtractYear('se__created'),
         month=ExtractMonth('se__created'),
@@ -2462,7 +2471,7 @@ def monthlyProduction(request):
     product_data = list(
         Production.objects.filter(
             site__in=s_comp,
-            created__year__gt=current_year
+            created__range=(first_day_in_year, last_day_in_month)
         ).annotate(
             year=ExtractYear('created'),
             month=ExtractMonth('created'),
@@ -2535,12 +2544,24 @@ def monthlyProduction(request):
                     
                 sum_aggregated[site_name][month_year] += result
     ################ end รวมทุกชนิดหินในเดือนนั้นๆ ######################
+    data_stone_old_year = None
+    data_run_old_year = None
+    data_work_old_year = None
+    data_cap_old_year = None
+    data_hpd_old_year = None
 
-    data_stone_old_year = strToArrList(active, 'weight')
-    data_run_old_year = strToArrList(active, 'prod_run')
-    data_work_old_year = strToArrList(active, 'prod_work')
-    data_cap_old_year = strToArrList(active, 'prod_cap')
-    data_hpd_old_year = strToArrList(active, 'prod_hpd')
+    if this_year == 2025:
+        data_stone_old_year = strToArrList(active, 'weight')
+        data_run_old_year = strToArrList(active, 'prod_run')
+        data_work_old_year = strToArrList(active, 'prod_work')
+        data_cap_old_year = strToArrList(active, 'prod_cap')
+        data_hpd_old_year = strToArrList(active, 'prod_hpd') 
+    elif this_year > 2025:
+        data_stone_old_year = strToArrListOldYear(active, 'weight', s_comp, current_year)
+        data_run_old_year = strToArrListOldYear(active, 'prod_run', s_comp, current_year)
+        data_work_old_year = strToArrListOldYear(active, 'prod_work', s_comp, current_year)
+        data_cap_old_year = strToArrListOldYear(active, 'prod_cap', s_comp, current_year)
+        data_hpd_old_year = strToArrListOldYear(active, 'prod_hpd', s_comp, current_year)
 
     context = {
                'aggregated_results':aggregated_results,
@@ -2570,6 +2591,121 @@ def strToArrList(active, field):
         data_old_year = None
 
     return data_old_year
+
+def strToArrListOldYear(active, field, s_comp, current_year):
+    try:
+        queryset_string = None
+        if field == "weight":
+            queryset = StoneEstimateItem.objects.filter(se__company__code = active, se__created__year = current_year
+                ).values_list('se__site__base_site_name', 'stone_type__base_stone_type_name'
+                ).annotate(
+                    A = Coalesce(Sum('total'), Value(0), output_field=models.DecimalField()),
+                    B = Coalesce(Sum('id'), Value(0), output_field=models.DecimalField()),
+                ).order_by('se__site', 'stone_type')
+            queryset_string = transform_queryset(queryset, active)
+
+        else:
+            pd_data = Production.objects.filter(company__code=active, site__in=s_comp, created__year = current_year
+            ).annotate(
+                working_time=ExpressionWrapper(F('actual_time') - F('total_loss_time'), output_field=models.DurationField()),
+                hour_per_day=ExpressionWrapper(F('actual_time') / (F('actual_time') - F('total_loss_time')), output_field=models.DecimalField()),
+            ).values_list(
+                'site__base_site_name'
+            ).annotate(
+                sum_run=Sum('run_time'),
+                sum_total_working_time=Sum('working_time'),
+                sum_hour_per_day=Sum('hour_per_day'),
+                sum_capacity_per_hour=Sum('capacity_per_hour'),
+            )
+            if field == "prod_run":
+                queryset_string = {
+                    name: {
+                        'A': f"{td_to_hours(td):,.2f}".replace('.', ':')
+                    }
+                    for name, td, _, _, _ in pd_data
+                }
+            elif field == "prod_work":
+                queryset_string = {
+                    name: {
+                        'A': f"{td_to_hours(td):,.2f}".replace('.', ':')
+                    }
+                    for name, _, td, _, _ in pd_data
+                }
+            elif field == "prod_cap":
+                queryset_string = {
+                    name: {
+                        'A': f"{td:,.2f}"
+                    }
+                    for name, _, _, td, _ in pd_data
+                }
+            elif field == "prod_hpd":
+                queryset_string = {
+                    name: {
+                        'A': f"{td:,.2f}"
+                    }
+                    for name, _, _, td, _ in pd_data
+                }
+        data_old_year = queryset_string
+    except IndexError:
+        data_old_year = None
+
+    return data_old_year
+
+def clean_text(text):
+    """ลบช่องว่างซ้อน"""
+    return re.sub(r'\s+', ' ', text).strip()
+
+def fmt(n):
+    """format ตัวเลขเป็น 1,234"""
+    return f"{int(n):,}" if n else '0'
+
+def td_to_hours(td):
+    return td.total_seconds() / 3600
+
+def transform_queryset(queryset, active):
+    result = defaultdict(dict)
+    plant_order = {}# เก็บ id โรงโม่
+    total_A = defaultdict(Decimal)
+    total_B = defaultdict(Decimal)
+
+    for plant, stone, a, plant_id in queryset:
+        num_mount = StoneEstimateItem.objects.filter(
+                se__company__code = active, se__created__year = '2025', se__site__base_site_name = plant, stone_type__base_stone_type_name = stone
+                ).annotate(month=ExtractMonth('se__created')
+                ).values('month'
+                ).annotate(total=Count('id')
+                ).order_by('month')
+        
+        plant = clean_text(plant)
+        stone = clean_text(stone)
+
+        a = a or Decimal('0')
+        plant_id = int(plant_id)
+
+        # เก็บ id โรงโม่ (ใช้เรียง)
+        plant_order.setdefault(plant, plant_id)
+        # ===== คำนวณค่า B (ปรับสูตรได้) =====
+        b = a / Decimal(len(num_mount))
+
+        result[plant][stone] = {
+            'A': fmt(a),
+            'B': fmt(b),
+        }
+        total_A[stone] += a
+        total_B[stone] += b
+
+    # ===== เรียงโรงโม่ตาม id =====
+    sorted_result = OrderedDict(
+        sorted(result.items(), key=lambda x: plant_order[x[0]])
+    )
+    # ===== เพิ่ม Total (อยู่ล่างสุด) =====
+    sorted_result['Total'] = {}
+    for stone in total_A:
+        sorted_result['Total'][stone] = {
+            'A': fmt(total_A[stone]),
+            'B': fmt(total_B[stone]),
+        }
+    return sorted_result
 
 def update_results(all_month_years, format,  dictionary, key1, key2, value):
     if value is None:

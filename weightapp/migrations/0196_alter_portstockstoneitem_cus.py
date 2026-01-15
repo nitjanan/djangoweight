@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='portstockstoneitem',
             name='cus',
-            field=models.ForeignKey(blank=True, db_column='cus_id', max_length=120, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basecustomer', verbose_name='ลูกค้า'),
+            field=models.ForeignKey(blank=True, db_column='cus_id', null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basecustomer', verbose_name='ลูกค้า'),
         ),
     ]

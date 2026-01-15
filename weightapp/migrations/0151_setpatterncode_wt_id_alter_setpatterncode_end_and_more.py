@@ -13,26 +13,26 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='setpatterncode',
             name='wt_id',
-            field=models.CharField(blank=True, max_length=120, null=True, unique=True, verbose_name='Weight Type Id'),
+            field=models.CharField(blank=True, max_length=120, null=True, verbose_name='Weight Type Id'),
         ),
         migrations.AlterField(
             model_name='setpatterncode',
             name='end',
-            field=models.CharField(blank=True, max_length=120, null=True, unique=True, verbose_name='ถึง'),
+            field=models.CharField(blank=True, max_length=120, null=True, verbose_name='ถึง'),
         ),
         migrations.AlterField(
             model_name='setpatterncode',
             name='m_name',
-            field=models.CharField(blank=True, max_length=120, null=True, unique=True, verbose_name='Models Name'),
+            field=models.CharField(blank=True, max_length=120, null=True, verbose_name='Models Name'),
         ),
         migrations.AlterField(
             model_name='setpatterncode',
             name='pattern',
-            field=models.CharField(blank=True, max_length=120, null=True, unique=True, verbose_name='แพทเทิร์นรหัส'),
+            field=models.CharField(blank=True, max_length=120, null=True, verbose_name='แพทเทิร์นรหัส'),
         ),
         migrations.AlterField(
             model_name='setpatterncode',
             name='start',
-            field=models.CharField(blank=True, max_length=120, null=True, unique=True, verbose_name='เริ่มจาก'),
+            field=models.CharField(blank=True, max_length=120, null=True, verbose_name='เริ่มจาก'),
         ),
     ]

@@ -250,6 +250,18 @@ urlpatterns = [
      path('port/stock/remove/<int:stock_id>', views.removePortStock, name="removePortStock"),
      path('port/stockStone/remove/<int:pss_id>', views.removePortStockStone, name="removePortStockStone"),
 
+
+     path('loding/rate/view', views.viewLoadingRate, name="viewLoadingRate"),
+     path('loding/rate/create', views.createLoadingRate, name="createLoadingRate"),
+     path('loding/rate/step2/edit/<int:lr_id>', views.editStep2LoadingRate, name="editStep2LoadingRate"),
+     path('loding/rate/item/edit/<int:lr_id>/<int:lrl_id>', views.editLoadingRateItem, name="editLoadingRateItem"),
+     path('loding/rate/remove/<int:lr_id>', views.removeLoadingRate, name="removeLoadingRate"),
+     path('loding/rate/loc/remove/<int:lrl_id>', views.removeLoadingRateLoc, name="removeLoadingRateLoc"),
+
+     path('searchLRInDay', views.searchLRInDay, name="searchLRInDay"),
+     path('exportLoadingRate', views.exportLoadingRate, name="exportLoadingRate"),
+     path('exportWeightLoadingRate', views.exportWeightLoadingRate, name="exportWeightLoadingRate"),
+
      path('searchDataWeightToPortStock/', views.searchDataWeightToPortStock, name="searchDataWeightToPortStock"),
      path('searchPortStockInDay/', views.searchPortStockInDay, name="searchPortStockInDay"),
 

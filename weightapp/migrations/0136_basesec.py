@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('weightapp', '0135_remove_basecustomer_company'),
     ]
-
+    '''
     operations = [
         migrations.CreateModel(
             name='BaseSEC',
@@ -26,4 +26,6 @@ class Migration(migrations.Migration):
                 'unique_together': {('customer', 'company')},
             },
         ),
-    ]
+    ]    
+    '''
+

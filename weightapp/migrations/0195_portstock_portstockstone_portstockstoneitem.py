@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('total', models.DecimalField(blank=True, decimal_places=2, max_digits=10, null=True, verbose_name='รวมทั้งหมด')),
                 ('ps', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.portstock', verbose_name='port stock')),
-                ('stone', models.ForeignKey(blank=True, max_length=120, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basestonetype', verbose_name='ชนิดหิน')),
+                ('stone', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basestonetype',to_field='base_stone_type_id', verbose_name='ชนิดหิน')),
             ],
             options={
                 'db_table': 'port_stock_stone',
@@ -44,7 +44,7 @@ class Migration(migrations.Migration):
                 ('receive', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
                 ('pay', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
                 ('total', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
-                ('cus', models.ForeignKey(blank=True, db_column='cus_id', null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basecustomer', verbose_name='ลูกค้า')),
+                ('cus', models.ForeignKey(blank=True, db_column='cus_id', null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basecustomer', to_field='customer_id', verbose_name='ลูกค้า')),
                 ('pss', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.portstockstone')),
             ],
             options={

@@ -4,14 +4,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
-from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset
+from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -25,7 +25,7 @@ from django import forms
 from django.db.models import Sum, Subquery
 import random
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
-from django.db.models import F, ExpressionWrapper, Case, When
+from django.db.models import F, ExpressionWrapper, Case, When, OuterRef, Exists
 from django.db import models
 import pandas as pd
 import calendar
@@ -1080,7 +1080,7 @@ def loginPage(request):
                     user_profile = UserProfile.objects.get(user = request.user.id)
                     company = BaseCompany.objects.filter(userprofile = user_profile).first()
                 except:
-                    company = None
+                    company = BaseCompany.objects.get(id = 1)
                 request.session['company_code'] = company.code
                 request.session['company'] = company.name
 
@@ -1888,6 +1888,7 @@ def excelProductionByStone(request, my_q, list_date):
 
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
+        worksheet.freeze_panes = "B3" #freeze
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
 
@@ -2206,6 +2207,7 @@ def excelProductionByStoneAndMonth(request, my_q, list_date):
 
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
+        worksheet.freeze_panes = "B3" #freeze
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลยอดขายตามประเภทหินของเดือนนี้')
 
@@ -3259,6 +3261,8 @@ def excelProductionAndLoss(request, my_q, sc_q):
                 else:
                     sheet.merge_cells(start_row=2, start_column=col_index - num_loss, end_row=2, end_column=col_index)
                     num_loss = 0
+            
+            sheet.freeze_panes = "B4" #freeze
 
         workbook.remove(workbook['Sheet'])
     else:
@@ -4196,7 +4200,7 @@ def excelEstimate(request, my_q, list_date):
 
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
-
+        worksheet.freeze_panes = "B3" #freeze
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
 
@@ -6655,7 +6659,7 @@ def excelStockStone(request, my_q, list_date):
 
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
-
+        worksheet.freeze_panes = "B3" #freeze
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูล Stock หินของเดือนนี้')
 
@@ -7238,7 +7242,7 @@ def excelPercentEstimate(request, my_q, list_date):
 
         side = Side(border_style='thin', color='000000')
         set_border(worksheet, side)
-
+        worksheet.freeze_panes = "B3" #freeze
     else:
         worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลผลิตหินประจำวันของเดือนนี้')
 
@@ -7668,6 +7672,7 @@ def exportExcelTransport(request):
 
             workbook = writer.book
             sheet = writer.sheets['รายงาน']
+            sheet.freeze_panes = "A3" #freeze
 
             str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
             str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
@@ -7831,6 +7836,7 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
             sheet = workbook[sheet_name]
             sheet.insert_rows(1)  # แทรกแถวก่อนหน้า
             sheet.merge_cells('A1:H1')  # ปรับช่วงตามจำนวนคอลัมน์
+            sheet.freeze_panes = "A4" #freeze
             title_cell = sheet['A1']
             title_cell.value = f"รายงานขนส่งตามบริษัท {comp['name']}  วันที่ {str_start} - {str_end}"
             title_cell.font = Font(size=14, bold=True)
@@ -8068,5 +8074,565 @@ def excelTranToSell(request, my_q, list_date):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = f'attachment; filename="tran_to_sell({active}).xlsx"'
+    response["Content-Length"] = str(size)
+    return response
+
+@login_required(login_url='login')
+def viewLoadingRate(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+
+    data = LoadingRate.objects.filter(company__code__in = company_in).order_by('-created')
+
+    #กรองข้อมูล
+    myFilter = LoadingRateFilter(request.GET, queryset = data)
+    data = myFilter.qs
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    lr = p.get_page(page)
+
+    context = {'ldr_page':'active', 'lr': lr,'filter':myFilter, active :"active",}
+    return render(request, "loadingRate/viewLoadingRate.html",context)
+
+@login_required(login_url='login')
+def createLoadingRate(request):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_weight_rang = BaseWeightRange.objects.filter(company = company).order_by('rate_min', 'rate_max')
+    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'), extra=len(base_weight_rang), widgets={})
+    
+    if request.method == 'POST':
+        form = LoadingRateForm(request.POST)
+        lrl_form = LoadingRateLocForm(request, request.POST or None)
+        formset = LoadingRateItemFormSet(request.POST)
+        if form.is_valid() and lrl_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            if  lrl_form.cleaned_data.get('site'):
+                lrl = lrl_form.save()
+                lrl.Lr = form
+                lrl.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances:
+                    instance.Lrl = lrl
+                    instance.Lr = lrl.Lr
+                    instance.save()
+
+            return HttpResponseRedirect(reverse('editStep2LoadingRate', args=(lrl.Lr,)))
+
+    else:
+        form = LoadingRateForm(initial={'company': company})
+        lrl_form = LoadingRateLocForm(request)
+        formset = LoadingRateItemFormSet(queryset=LoadingRateItem.objects.none())
+
+    context = {'ldr_page':'active', 'form': form, 'lrl_form': lrl_form, 'formset' : formset, 'base_stock_source': base_weight_rang, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
+    return render(request, "loadingRate/createLoadingRate.html",context)
+
+
+@login_required(login_url='login')
+def editStep2LoadingRate(request, lr_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_weight_rang = BaseWeightRange.objects.filter(company = company).order_by('rate_min', 'rate_max')
+    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'), extra=len(base_weight_rang), widgets={})
+    
+    try:
+        lr_data = LoadingRate.objects.get(id=lr_id)
+    except LoadingRate.DoesNotExist:
+        return redirect('viewLoadingRate')
+
+    lrl_data = LoadingRateLoc.objects.filter(Lr=lr_data)
+
+    if request.method == 'POST':
+        form = LoadingRateForm(request.POST, instance=lr_data)
+        lrl_form = LoadingRateLocForm(request, request.POST or None)
+        formset = LoadingRateItemFormSet(request.POST)
+        
+        if form.is_valid() and lrl_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            if  lrl_form.cleaned_data.get('site'):
+                lrl = lrl_form.save()
+                lrl.Lr = form
+                lrl.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances:
+                    instance.Lrl = lrl
+                    instance.Lr = lrl.Lr
+                    instance.save()
+
+            return HttpResponseRedirect(reverse('editStep2LoadingRate', args=(lr_id,)))
+    else:
+        form = LoadingRateForm(instance=lr_data)
+        lrl_form = LoadingRateLocForm(request)
+        formset = LoadingRateItemFormSet(queryset=LoadingRateItem.objects.none())
+
+    context = {'ldr_page':'active', 'form': form, 'lrl_form': lrl_form, 'formset' : formset, 'base_weight_rang': base_weight_rang, 'lrl_data': lrl_data,'lr_data':lr_data, active :"active", 'disabledTab' : 'disabled',}
+    return render(request, "loadingRate/editStep2LoadingRate.html",context)
+
+@login_required(login_url='login')
+def editLoadingRateItem(request, lr_id, lrl_id):
+    active = request.session['company_code']
+    company = BaseCompany.objects.get(code = active)
+
+    base_weight_rang = BaseWeightRange.objects.filter(company = company).order_by('rate_min', 'rate_max')
+    
+    try:
+        lr_data = LoadingRate.objects.get(id=lr_id)
+    except LoadingRate.DoesNotExist:
+        return redirect('viewLoadingRate')
+
+    lrl_data = LoadingRateLoc.objects.filter(Lr = lr_id)#ssn all in stock id
+    data = LoadingRateLoc.objects.get(id = lrl_id)#id edit
+    lrl_ms = f"{data.mill.mill_id}{data.site.base_site_id}" if data.mill else ""
+
+
+    if request.method == 'POST':
+        form = LoadingRateForm(request.POST, instance=lr_data)
+        lrl_form = LoadingRateLocForm(request, request.POST, instance=data)
+        formset = LoadingRateItemInlineFormset(request.POST, instance=data)
+        
+        if form.is_valid() and lrl_form.is_valid() and formset.is_valid():
+            form = form.save()
+
+            lrl = lrl_form.save(commit=False)
+            if  lrl_form.cleaned_data.get('site'):
+                lrl.Lr = form
+                lrl.save()
+
+                formset_instances = formset.save(commit=False)
+                for instance in formset_instances: #อันนี้ไม่มี deleted_objects นะ
+                    instance.save()
+
+            return HttpResponseRedirect(reverse('editStep2LoadingRate', args=(lr_id,)))
+    else:
+        form = LoadingRateForm(instance=lr_data)
+        lrl_form = LoadingRateLocForm(request,instance=data)
+        formset = LoadingRateItemInlineFormset(instance=data)
+
+    context = {'ldr_page':'active', 'form': form, 'lrl_form': lrl_form, 'formset' : formset, 'base_weight_rang': base_weight_rang, 'lrl_data': lrl_data, 'lr_data':lr_data, 'lrl_id': data.id, 'lrl_ms' : lrl_ms, active :"active", 'disabledTab' : 'disabled',}
+    return render(request, "loadingRate/editLoadingRateItem.html",context)
+
+
+@login_required(login_url='login')
+def removeLoadingRate(request, lr_id):
+    lr = LoadingRate.objects.get(id = lr_id)
+
+    #ลบ LoadingRateLoc ใน LoadingRate ด้วย
+    all_lrl = LoadingRateLoc.objects.filter(Lr = lr)
+    for lrl in all_lrl:
+        items = LoadingRateItem.objects.filter(Lrl = lrl)
+        items.delete()
+
+    all_lrl.delete()
+    lr.delete()
+
+    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    return redirect('viewLoadingRate')
+
+@login_required(login_url='login')
+def removeLoadingRateLoc(request, lrl_id):
+    #ลบ LoadingRateItem ใน LoadingRateLoc ด้วย
+    lrl = LoadingRateLoc.objects.get(id = lrl_id)
+    lr_id = lrl.Lr
+
+    items = LoadingRateItem.objects.filter(Lrl = lrl)
+    items.delete()
+
+    lrl.delete()
+
+    #updateTotalStockInMonthByDate(previous_day, tmp_company)#ดึงข้อมูล stock ก่อนหน้ามาเพื่อ update วันถัดไป
+    return HttpResponseRedirect(reverse('editStep2LoadingRate', args=(lr_id,)))
+
+def searchLRInDay(request):
+    if 'date_start_rate' in request.GET and 'company' in request.GET and 'lr_id' in request.GET:
+        date_start_rate =  request.GET.get('date_start_rate')
+        company =  request.GET.get('company')
+        lr_id =  request.GET.get('lr_id')
+
+        if lr_id == '':
+            have_lr = LoadingRate.objects.filter(company = company, date_start_rate = date_start_rate).exists()
+        else:
+            have_lr = LoadingRate.objects.filter(~Q(id = lr_id), company = company, date_start_rate = date_start_rate).exists()
+    data = {
+        'have_lr' :have_lr,
+    }
+    return JsonResponse(data)
+
+def rate_subquery(value_field, ignore_mill=False):
+    filters = {
+        'Lr__date_start_rate__lte': OuterRef('date'),
+        'wt_range__rate_min__lte': OuterRef('weight_total'),
+        'wt_range__rate_max__gt': OuterRef('weight_total'),
+        'Lrl__site': OuterRef('site'),
+    }
+
+    if not ignore_mill:
+        filters['Lrl__mill'] = OuterRef('mill')
+
+    return (
+        LoadingRateItem.objects
+        .filter(**filters)
+        .order_by('-Lr__date_start_rate')
+        .values(value_field)[:1]
+    )
+    
+def exportWeightLoadingRate(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+    comp = BaseCompany.objects.get(code = active)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+    str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date__lte = end_created)
+
+    my_q &=Q(bws__company__code__in = company_in, is_cancel = False)
+
+    lr_sub = LoadingRateLoc.objects.filter(Lr__company__code__in = company_in, Lr__date_start_rate__gte=start_created, Lr__date_start_rate__lte=end_created, site=OuterRef('site'))
+
+    queryset = Weight.objects.filter(my_q).annotate(has_lr=Exists(lr_sub)).filter(has_lr=True)
+
+    if queryset:
+        transport_tru = Case(
+            When(
+                site__in=['200PL', '300PL'],
+                then=Subquery(
+                    rate_subquery('tru_scoop', ignore_mill=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+            default=Subquery(
+                rate_subquery('tru_scoop'),
+                output_field=models.DecimalField()
+            ),
+            output_field=models.DecimalField(),
+        )
+        
+        transport_chi_sub = (
+            LoadingRateItem.objects
+            .filter(
+                Lr__date_start_rate__lte=OuterRef('date'),
+                wt_range__rate_min__lte=OuterRef('weight_total'),
+                wt_range__rate_max__gt=OuterRef('weight_total'),
+                Lrl__mill=OuterRef('mill'),
+                Lrl__site=OuterRef('site'),
+            )
+            .order_by('-Lr__date_start_rate')
+            .values('chi_scoop')[:1]
+        )
+
+        shipping_tru = Case(
+            When(
+                site__in=['200PL', '300PL'],
+                then=Subquery(
+                    rate_subquery('tru_shipp', ignore_mill=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+            default=Subquery(
+                rate_subquery('tru_shipp'),
+                output_field=models.DecimalField()
+            ),
+            output_field=models.DecimalField(),
+        )
+        
+        shipping_chi_sub = (
+            LoadingRateItem.objects
+            .filter(
+                Lr__date_start_rate__lte=OuterRef('date'),
+                wt_range__rate_min__lte=OuterRef('weight_total'),
+                wt_range__rate_max__gt=OuterRef('weight_total'),
+                Lrl__mill=OuterRef('mill'),
+                Lrl__site=OuterRef('site'),
+            )
+            .order_by('-Lr__date_start_rate')
+            .values('chi_shipp')[:1]
+        )
+        
+        qs = (
+            queryset
+            .annotate(
+                transport_tru=transport_tru,
+                transport_chi=Subquery(transport_chi_sub, output_field=models.DecimalField()),
+                shipping_tru=shipping_tru,
+                shipping_chi=Subquery(shipping_chi_sub, output_field=models.DecimalField()),
+            )
+            .annotate(
+                transport_rate=Case(
+                    When(car_registration__car_type='สิบล้อ', then=F('transport_tru')),
+                    When(car_registration__car_type='จีน', then=F('transport_chi')),
+                    default=F('transport_tru'),
+                    output_field=models.DecimalField(),
+                ),
+                shipping_rate=Case(
+                    When(car_registration__car_type='สิบล้อ', then=F('shipping_tru')),
+                    When(car_registration__car_type='จีน', then=F('shipping_chi')),
+                    default=F('transport_tru'),
+                    output_field=models.DecimalField(),
+                ),
+            )
+        )
+
+        data = {
+                'วันที่': queryset.values_list('date', flat=True),
+                'เลขที่ใบชั่ง': queryset.values_list('doc_id', flat=True),
+                'ทะเบียนรถ': queryset.values_list('car_registration_name', flat=True),
+                'ชื่อคนขับ': queryset.values_list('driver_name', flat=True),
+                'ต้นทาง': queryset.values_list('mill_name', flat=True),
+                'ปลายทาง': queryset.values_list('site_name', flat=True),
+                'น้ำหนักสุทธิ': queryset.values_list('weight_total', flat=True),
+                'เครื่องชั่ง': queryset.values_list('bws__weight_type__name', flat=True),
+        }
+        
+        data2 = {
+            'อัตราค่าขน': [],
+            'ค่าขน': [],
+            'อัตราค่าตัก': [],
+            'ค่าตัก': [],
+        }
+
+        for row in qs.values(
+            'transport_rate',
+            'shipping_rate',
+            'weight_total'
+        ):
+            w = row['weight_total']
+
+            data2['อัตราค่าขน'].append(row['transport_rate'])
+            data2['ค่าขน'].append(cal_ld_rate(row['transport_rate'], w))
+
+            data2['อัตราค่าตัก'].append(row['shipping_rate'])
+            data2['ค่าตัก'].append(cal_ld_rate(row['shipping_rate'], w))
+    else:
+        data = {'ข้อความ': ['ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก']}
+        data2 = {'' : []}
+
+    data.update(data2)
+    df = pd.DataFrame(data)
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        sheet_name = 'Sheet1'
+
+        # Write DataFrame (start from row 2)
+        df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=1)
+
+        ws = writer.book[sheet_name]
+
+        # Report Header
+        ws['A1'] = f"รายงานค่าขน/ค่าตัก {comp.name}  วันที่ {str_start} - {str_end}"
+        ws.merge_cells(
+            start_row=1,
+            start_column=1,
+            end_row=1,
+            end_column=len(df.columns)
+        )
+
+        ws['A1'].font = Font(bold=True, size=16)
+        ws['A1'].alignment = Alignment(horizontal='center')
+        ws.freeze_panes = ws["A3"]
+
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']:
+            ws.column_dimensions[col_letter].width = 20
+
+    output.seek(0)
+
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename=weight_loading_rate({active}) '+ start_created + " to "+ end_created +'.xlsx'
+    return response
+
+def cal_ld_rate(rate, weight_total):
+    result = None
+    if rate:
+        result = Decimal(rate) * Decimal(weight_total)
+        result = round(result, 2)
+    return result
+
+def exportLoadingRate(request):
+    active = request.session['company_code']
+    company_in = findCompanyIn(request)
+    comp = BaseCompany.objects.get(code = active)
+
+    start_created = request.GET.get('start_created') or None
+    end_created = request.GET.get('end_created') or None
+
+    current_date_time = datetime.today()
+    previous_date_time = current_date_time - timedelta(days=1)
+
+    if start_created is None and end_created is None:
+        start_created = previous_date_time.strftime("%Y-%m-%d")
+        end_created = previous_date_time.strftime("%Y-%m-%d")
+
+    str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+    str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
+
+    my_q = Q()
+    if start_created is not None:
+        my_q &= Q(date_start_rate__gte = start_created)
+    if end_created is not None:
+        my_q &=Q(date_start_rate__lte = end_created)
+
+    my_q &=Q(company__code = active)
+
+    base_wt = BaseWeightRange.objects.filter(company__code=active)
+    lr_data = LoadingRate.objects.filter(my_q)
+
+    workbook = openpyxl.Workbook()
+
+    # =========================
+    # Border style
+    # =========================
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin'),
+    )
+
+    if lr_data.exists():
+        for lr in lr_data:
+            sheet = workbook.create_sheet(title=lr.date_start_rate.strftime('%d-%m-%Y'))
+            # Freeze row 1–2
+            sheet.freeze_panes = "B3"
+
+            # Header ซ้าย
+            sheet.cell(row=1, column=1, value="น้ำหนักรถ")
+            sheet.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
+            sheet.cell(row=1, column=1).alignment = Alignment(horizontal='center',vertical='center')
+
+            # น้ำหนักรถ (แนวตั้ง)
+            data_start_row = 3
+            for i, wt in enumerate(base_wt):
+                sheet.cell(row=data_start_row + i, column=1, value=wt.name)
+
+            # Location rate
+            lr_loc = LoadingRateLoc.objects.filter(Lr=lr)
+
+            hd_colors = [generate_pastel_color() for i  in range(len(lr_loc) + 1)]
+            col1_fill = PatternFill(start_color=hd_colors[0],end_color=hd_colors[0],fill_type="solid")
+
+            column_index = 2
+            color_index = 1
+            for loc in lr_loc:
+                fill = PatternFill(start_color=hd_colors[color_index],end_color=hd_colors[color_index],fill_type="solid")
+
+                start_col = column_index
+                end_col = column_index + 3
+                
+                # header
+                header = (f"{loc.mill.mill_name} - {loc.site.base_site_name}" if loc.mill else f"- {loc.site.base_site_name}")
+                sheet.cell(row=1, column=start_col, value=header)
+                sheet.merge_cells(start_row=1,start_column=start_col,end_row=1,end_column=end_col)
+
+                # color header
+                for col in range(start_col, end_col + 1):
+                    cell = sheet.cell(row=1, column=col)
+                    cell.fill = fill
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                # sub header
+                sub_headers = ["สิบล้อ/ค่าตัก","สิบล้อ/ค่าขน","รถจีน/ค่าตัก","รถจีน/ค่าขน",]
+                for i, text in enumerate(sub_headers):
+                    cell = sheet.cell(row=2, column=start_col + i, value=text)
+                    cell.fill = fill
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                # -------- Data --------
+                for wt_index, wt in enumerate(base_wt):
+                    try:
+                        item = LoadingRateItem.objects.get(Lrl=loc,wt_range=wt)
+                    except LoadingRateItem.DoesNotExist:
+                        item = None
+
+                    current_row = data_start_row + wt_index
+
+                    sheet.cell(current_row, start_col,     item.tru_scoop if item else None)
+                    sheet.cell(current_row, start_col + 1, item.tru_shipp if item else None)
+                    sheet.cell(current_row, start_col + 2, item.chi_scoop if item else None)
+                    sheet.cell(current_row, start_col + 3, item.chi_shipp if item else None)
+
+                column_index += 4
+                color_index += 1
+
+            # border (ทั้ง sheet)
+            for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row,min_col=1,max_col=sheet.max_column):
+                for cell in row:
+                    cell.border = thin_border
+
+            # Auto width column
+            for col in range(1, sheet.max_column + 1):
+                col_letter = get_column_letter(col)
+                max_length = 0
+
+                for cell in sheet[col_letter]:
+                    if cell.value:
+                        max_length = max(max_length, 16)
+
+                sheet.column_dimensions[col_letter].width = max_length + 3
+
+            # add color colunm 1 
+            for r in (1, 2):
+                cell = sheet.cell(row=r, column=1)
+                cell.fill = col1_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.font = Font(bold=True)
+
+            for r in range(3, sheet.max_row + 1):
+                cell = sheet.cell(row=r, column=1)
+                cell.fill = col1_fill
+
+        workbook.remove(workbook['Sheet'])
+    else:
+        worksheet = workbook.active
+        worksheet.cell(row = 1, column = 1, value = f'ไม่มีข้อมูลบันทึกเรทราคาค่าขน/ตัก')
+
+    # Save workbook into memory
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+
+    size = output.getbuffer().nbytes
+
+    # Generator to stream file in chunks
+    def file_iterator(buffer, chunk_size=8192):
+        while True:
+            data = buffer.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+    response = StreamingHttpResponse(
+        file_iterator(output),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="loading_rate({active}).xlsx"'
     response["Content-Length"] = str(size)
     return response

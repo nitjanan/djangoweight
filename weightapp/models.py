@@ -1113,3 +1113,82 @@ class PortStockStoneItem(models.Model):
 
     class Meta:
         db_table = 'port_stock_stone_item'
+
+class BaseWeightRange(models.Model):
+    name = models.CharField(max_length=120,unique=True, verbose_name="ชื่อ")
+    descrip = models.CharField(max_length=255,unique=True, verbose_name="คำอธิบาย")
+    rate_min = models.IntegerField(blank = True, null = True, verbose_name="เรทน้ำหนักน้อยที่สุด")
+    rate_max = models.IntegerField(blank = True, null = True, verbose_name="เรทน้ำหนักมากที่สุด")
+    company = models.ManyToManyField(BaseCompany,verbose_name="บริษัท")
+
+    class Meta:
+        db_table = 'base_weight_range'
+        ordering=('id',)
+        verbose_name = 'เรทน้ำหนักตาชั่ง'
+        verbose_name_plural = 'ข้อมูลเรทน้ำหนักตาชั่ง'
+    
+    def __str__(self):
+        return str(self.name)
+
+############# เรทค่าตัก/ขน #############
+######################################
+class LoadingRate(models.Model):
+    created = models.DateField(auto_now_add=True, verbose_name="วันที่สร้าง")
+    update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
+    date_start_rate = models.DateField(default = timezone.now, verbose_name="วันเริ่มใช้เรทราคา")
+    company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True, verbose_name="บริษัท")
+
+    class Meta:
+        db_table = 'loading_rate'
+    
+    def __str__(self):
+        return str(self.id)
+    
+class LoadingRateLoc(models.Model):
+    mill = models.ForeignKey(
+        BaseMill,
+        max_length=120,
+        to_field='mill_id',
+        db_column='mill_id',
+        on_delete=models.CASCADE,
+        verbose_name="รหัสต้นทาง",
+        blank=True, null=True,
+    )
+    site = models.ForeignKey(
+        BaseSite,
+        max_length=120,
+        to_field='base_site_id',
+        db_column='site_id',
+        on_delete=models.CASCADE,
+        verbose_name="รหัสปลายทาง",
+        blank=True, null=True,
+    )
+    Lr = models.ForeignKey(LoadingRate,on_delete=models.CASCADE, blank=True, null = True)
+
+    class Meta:
+        db_table = 'loading_rate_loc'
+    
+    def __str__(self):
+        return str(self.id)
+    
+class LoadingRateItem(models.Model):
+    wt_range = models.ForeignKey(BaseWeightRange, on_delete=models.CASCADE, blank=True, null = True, verbose_name="เรทน้ำหนักตาชั่ง")
+    tru_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าตักรถสิบล้อ")
+    tru_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าขนรถสิบล้อ")
+    chi_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าตักรถจีน")
+    chi_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าขนรถจีน")
+    Lrl = models.ForeignKey(LoadingRateLoc ,on_delete=models.CASCADE, blank=True, null = True)
+    Lr = models.ForeignKey(LoadingRate ,on_delete=models.CASCADE, blank=True, null = True)
+
+    class Meta:
+        db_table = 'loading_rate_item'
+        indexes = [
+            models.Index(fields=['Lrl', 'wt_range']),
+            models.Index(fields=['Lr']),
+        ]
+    
+    def __str__(self):
+        return str(self.id)
+    
+############# เรทค่าตัก/ขน #############
+######################################

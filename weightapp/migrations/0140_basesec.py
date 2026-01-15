@@ -10,6 +10,7 @@ class Migration(migrations.Migration):
         ('weightapp', '0139_delete_basesec'),
     ]
 
+    '''
     operations = [
         migrations.CreateModel(
             name='BaseSEC',
@@ -26,4 +27,5 @@ class Migration(migrations.Migration):
                 'unique_together': {('customer', 'company')},
             },
         ),
-    ]
+    ]    
+    '''

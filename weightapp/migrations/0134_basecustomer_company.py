@@ -9,10 +9,13 @@ class Migration(migrations.Migration):
         ('weightapp', '0133_basemill_m_comp_basemill_step_alter_basesite_s_comp_and_more'),
     ]
 
+    '''
     operations = [
         migrations.AddField(
             model_name='basecustomer',
             name='company',
             field=models.ManyToManyField(blank=True, null=True, to='weightapp.basecompany', verbose_name='การมองเห็นแท็ปบริษัท'),
         ),
-    ]
+    ]    
+    '''
+

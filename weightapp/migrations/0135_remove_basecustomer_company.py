@@ -9,9 +9,12 @@ class Migration(migrations.Migration):
         ('weightapp', '0134_basecustomer_company'),
     ]
 
+    '''
     operations = [
         migrations.RemoveField(
             model_name='basecustomer',
             name='company',
         ),
-    ]
+    ]    
+    '''
+

@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+{% load widget_tweaks %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<style>
+  .div-shadow{
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  }
+
+</style>
+  
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Edit Transfer Rate</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item">
+                <a href="{% url 'viewLoadingRate' %}">Transfer Rate</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Edit Transfer Rate
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <hr class="my-3">
+      <form class="form" method="post">
+        {% csrf_token %}
+        <div class="row my-3">
+          <div class="col-md-2">
+            <p class="fw-bolder">{{form.date_start_rate.label}}</p>
+          </div>
+          <div class="col-md-10">
+            <div class="form-group has-icon-left">
+              <div class="position-relative">
+                {{form.date_start_rate | add_class:"form-control is-valid" |attr:"required:true"}}
+                {{form.company}}
+                <div class="form-control-icon">
+                  <i class="bi bi-calendar-week"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% for lrl in lrl_data %}
+        <div class="card {% if lrl.id == lrl_id%}border border-warning border-1{%endif%}">
+          <div class="card-header">
+            <h3 class="float-start">{{forloop.counter}}. {% if lrl.mill%}{{lrl.mill}}{%endif%} - {{lrl.site}}</h3>
+            <a href="{% url 'editLoadingRateItem' lrl.Lr.id lrl.id %}" class="btn btn-warning float-end"><i class="fas fa-pen"></i> แก้ไข</a>
+            <a onclick="return confirm('คุณต้องการลบรายการนี้หรือไม่ ?')" href="{% url 'removeLoadingRateLoc' lrl.id %}" class="btn btn-danger float-end"><i class="fas fa-trash-alt"></i> ลบ</a>
+          </div>
+          <div class="card-body">
+            <table class="table">
+              <thead>
+                <tr class="{% if lrl.id == lrl_id%} table-warning {%else%} table-primary {%endif%}">
+                  <th scope="col">ช่วงน้ำหนัก</th>
+                  <th scope="col" class="text-end">รถสิบล้อ/ค่าตัก</th>
+                  <th scope="col" class="text-end">รถสิบล้อ/ค่าขน</th>
+                  <th scope="col" class="text-end">รถจีน/ค่าตัก</th>
+                  <th scope="col" class="text-end">รถจีน/ค่าขน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in lrl.loadingrateitem_set.all %}
+                  {% if item.tru_scoop or item.tru_shipp or item.chi_scoop or item.chi_shipp%}
+                    <tr>
+                      <th scope="row">
+                        {{item.wt_range}}
+                      </th>
+                      <td class="text-end">{% if item.tru_scoop %}{{item.tru_scoop | intcomma}}{%else%}-{%endif%}</td>
+                      <td class="text-end">{% if item.tru_shipp %}{{item.tru_shipp | intcomma}}{%else%}-{%endif%}</td>
+                      <td class="text-end">{% if item.chi_scoop %}{{item.chi_scoop | intcomma}}{%else%}-{%endif%}</td>
+                      <td class="text-end">{% if item.chi_shipp %}{{item.chi_shipp | intcomma}}{%else%}-{%endif%}</td>
+                    </tr>
+                  {%endif%}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {%endfor%}
+
+        <h4><span class="my-3 badge rounded-pill bg-warning">แก้ไขเรทราคาค่าขน/ตัก</span></h4>
+        <div class="card div-shadow border border-warning border-4">
+          <div class="card-content">
+            <div class="card-body">
+              <div id="alert" class="alert alert-warning d-none" role="alert"></div><!-- แจ้งเตือนหากมีการดึงข้อมูลมาไม่ครบ -->
+              <form class="form" method="post">
+                <div class="row">
+                  <div class="col-md-1">
+                    <p class="fw-bolder">{{lrl_form.mill.label}}</p>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      {{lrl_form.mill| add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
+                    <p class="fw-bolder">{{lrl_form.site.label}}</p>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      {{lrl_form.site| add_class:"form-control" |attr:"required:true"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
+                    <a href="{% url 'editStep2LoadingRate' lr_data.id %}" class="btn btn-secondary float-right"><i class="fas fa-brush"></i> ล้าง</a>
+                  </div>
+                </div>
+                <hr class="my-3">
+                <div class="row">
+                  <div class="col-md-4 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder text-center">ช่วงน้ำหนัก</p>
+                    </div>
+                  </div>
+                  <div class="col-md-2 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder text-center">รถสิบล้อ/ค่าตัก</p>
+                    </div>
+                  </div>
+                  <div class="col-md-2 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder text-center">รถสิบล้อ/ค่าขน</p>
+                    </div>
+                  </div>
+                  <div class="col-md-2 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder text-center">รถจีน/ค่าตัก</p>
+                    </div>
+                  </div>
+                  <div class="col-md-2 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder text-center">รถจีน/ค่าขน</p>
+                    </div>
+                  </div>
+                  {{ formset.management_form }}
+                  {% for form in formset %}
+                    <!-- จำเป็นมาก -->{{form.id}}<!-- จำเป็นมาก -->
+                    <div class="row form-row spacer">
+                      <div class="col-md-4 col-12">
+                        <div class="form-group">
+                          {{form.wt_range | add_class:"form-control wt_range"}}
+                        </div>
+                      </div>
+                      <div class="col-md-2 col-12">
+                        <div class="form-group">
+                          {{form.tru_scoop | add_class:"form-control quantity"}}
+                        </div>
+                      </div>
+                      <div class="col-md-2 col-12">
+                        <div class="form-group">
+                          {{form.tru_shipp | add_class:"form-control quantity"}}
+                        </div>
+                      </div>
+
+                      <div class="col-md-2 col-12">
+                        <div class="form-group">
+                          {{form.chi_scoop | add_class:"form-control quantity"}}
+                        </div>
+                      </div>
+                      <div class="col-md-2 col-12">
+                        <div class="form-group">
+                          {{form.chi_shipp | add_class:"form-control quantity"}}
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="col-12 d-flex justify-content-end">
+                      <button type="submit" class="btn btn-warning me-1 mb-1">
+                        บันทึกการแก้ไข
+                      </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <!-- p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p -->
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+ <!-- select2 Styles -->
+ <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+ <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+ <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+
+<script type="text/javascript">
+  $('#id_date_start_rate').val('{{lr_data.date_start_rate|date:"Y-m-d"}}');
+  //ห้ามเปลี่ยน select option
+  $('.wt_range').css('pointer-events','none');
+
+  //after load
+  $(window).on('load', function() {
+    //select2
+    $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
+    $('#id_site').select2({width: "100%" ,  theme: 'bootstrap-5'});
+    
+  });
+
+  $(".quantity") .blur(function() {
+    $(this).val(parseFloat($(this).val()).toFixed(2));
+  });
+
+    ////// start หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////
+  $('#id_date_start_rate').change(function() {
+      searchLRInDay();
+	});
+
+  function searchLRInDay(){
+    var date_start_rate = $("#id_date_start_rate").val();
+    var company = $("#id_company").val();
+    var lr_id = '{{lr_data.id}}';
+    // Create Ajax Call
+    if(date_start_rate){
+      //set id_distributor
+      $.ajax({
+        url: '{% url "searchLRInDay" %}',
+        data: {
+          'date_start_rate': date_start_rate,
+          'company':company,
+          'lr_id':lr_id,
+        },
+        dataType: 'json',
+        success: function (data) {
+          have_lr = data.have_lr;
+        }
+      });
+    }
+    return false;
+  }
+  ////// end หาว่ามีการ save stock ซ้ำของวันนี้ไหม //////
+
+    //before save
+  $(document).ready(function() {
+    $("form").submit(function(event) {
+        const submitButton = $(this).find("[type='submit']");
+        submitButton.prop("disabled", true); //ปิดปุ่ม submit หากมีการกดซ้ำ
+
+        //id ต้นทาง ปลายทางทั้งหมด py to java
+        var list_ms_id = [];
+        "{% for lrl in lrl_data %}"
+          var tmp_ms = "{{ lrl.mill.mill_id }}{{ lrl.site.base_site_id }}";
+          list_ms_id.push(tmp_ms);
+        "{% endfor %}"
+
+        //เก็บ id หินก่อนเปลี่ยน
+        var old_ms_id = "{{lrl_ms}}";
+
+        //ลบ id หินก่อนเปลี่ยนที่มีอยู่แล้วใน list
+        var index = list_ms_id.indexOf(old_ms_id);
+        if (index !== -1) {
+          list_ms_id.splice(index, 1); // Remove the element at the found index
+        }
+
+        //หา id ของร้านที่เราจะ save
+        var id_ms = $("#id_mill").val() + $("#id_site").val();
+
+        var haveMS = false
+        $.each(list_ms_id, function(index, value) {
+            if(value == id_ms){
+                haveMS = true;
+                alert('มีต้นทางและปลายทางในเรทราคาอยู่แล้ว กรุณาเลือกต้นทางปลายอื่น');
+            }
+        });
+
+        //เช็คว่าวันนี้มี save stock หรือยัง
+        if(typeof have_lr !== "undefined" &&  have_lr){
+          $("#id_date_start_rate").trigger( "focus" );
+          alert('มีข้อมูลเรทค่าขน/ค่าตักของวันนี้อยู่แล้ว กรุณาเปลี่ยนวันที่เริ่มเรทราคา');
+
+          submitButton.prop("disabled", false); // เปิดปุ่ม submit อีกครั้ง
+          event.preventDefault(); // Prevent form submission
+          return false;
+        }
+    });
+  });
+
+ </script>
+
+{% endblock %}

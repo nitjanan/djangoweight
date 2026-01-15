@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<link
+rel="stylesheet"
+href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
+/>
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+    <a href="#" class="burger-btn d-block d-xl-none">
+      <i class="bi bi-justify fs-3"></i>
+    </a>
+  </header>
+
+  <div class="page-heading">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-12 col-md-6 order-md-1 order-last">
+          <h3>Transfer Rate</h3>
+        </div>
+        <div class="col-12 col-md-6 order-md-2 order-first">
+          <nav
+            aria-label="breadcrumb"
+            class="breadcrumb-header float-start float-lg-end"
+          >
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">
+                <a href="{% url 'home' %}">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">
+                Transfer Rate
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Basic Tables start -->
+    <section class="section">
+      <div class="card">
+        <div class="card-body">
+          <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.start_created|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              {{ filter.form.end_created|as_crispy_field }}
+            </div>
+            <div class="form-group col-md-2 mb-0">
+              <div>
+                <label for=""></label>
+                <div class="my-2">
+                  <button type="submit" class="btn btn-outline-info"><i class="fas fa-filter"></i> กรอง</button>
+                </div>
+              </div>
+            </div>
+          </form>
+            <div class="row">
+              <div class="col-2">
+                <button id="wlr_download-btn" class="btn btn-success" style="position: relative; overflow: hidden;">
+                  <span id="wlr_btn-text">รายงานค่าตัก/ขนหินจากตาชั่ง</span>
+                  <div id="wlr_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="wlr_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
+              </div>
+              <div class="col-2">
+                <button id="lr_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#54a2d6 ;color: white;">
+                  <span id="lr_btn-text">รายงานอัตราค่าตัก/ขนหิน</span>
+                  <div id="lr_btn-progress" 
+                      style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
+                              background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                  <span id="lr_btn-percent" style="position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                      0%
+                  </span>
+                </button>
+              </div>
+            </div>
+            <a type="button" class="btn btn-info btn-block btn-lg rounded-pill my-3" href="{% url 'createLoadingRate' %}">สร้างบันทึก เรทค่าตัก/ขนหิน <i class="fa-solid fa-circle-plus"></i></a>
+            <div class="table-responsive my-3">
+              <table class="table table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th>วันที่สร้าง</th>
+                    <th>วันที่เริ่มใช้เรทราคา</th>
+                    <th>ต้นทาง - ปลายทาง</th>
+                    <th>แก้ไข</th>
+                    <th>ลบ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for i in lr%}
+                  <tr>
+                    <td>{{i.created}}</td>
+                    <td>{{i.date_start_rate}}</td>
+                    <td>
+                      <ul style="list-style-type:circle">
+                        {% for item in i.loadingrateloc_set.all %}
+                          <li>{{ item.mill.mill_name }} - {{ item.site.base_site_name}}</li>
+                        {% endfor %}
+                      </ul>
+                    </td>
+                    <td>
+                      <a href="{% url 'editStep2LoadingRate' i.id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
+                    </td>
+                    <td>
+                      <a onclick="return confirm('คุณต้องการลบบันทึกเรทค่าขน/ตักนี้หรือไม่ ?')" href="{% url 'removeLoadingRate' i.id %}" class="btn btn-danger btn-sm"><i class="fas fa-trash-alt"></i> ลบ</a>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <th scope="row" colspan="10" class="text-center">
+                      <div class="alert alert-light-warning color-warning">
+                        <i class="bi bi-exclamation-triangle"></i>  ไม่มีรายการบันทึก เรทค่าตัก/ขนหิน
+                      </div>
+                    </th>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <!--Pagination-->
+              <nav aria-label="Page navigation">
+                <ul class="pagination float-end">
+                {% if lr.has_previous %}
+                    <li class="page-item">
+                    <a class="page-link" href="{% my_url lr.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                  </li>
+                {% endif %}
+
+                {% if lr.number|add:'-4' > 1 %}
+                    <li class="page-item"><a class="page-link" href="{% my_url lr.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% for i in lr.paginator.page_range %}
+                    {% if lr.number == i %}
+                        <li class="page-item active" aria-current="page">
+                      <span class="page-link">
+                        {{ i }}
+                        <span class="sr-only">(current)</span>
+                      </span>
+                    </li>
+                    {% elif i > lr.number|add:'-5' and i < lr.number|add:'5' %}
+                        <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if lr.paginator.num_pages > lr.number|add:'4' %}
+                  <li class="page-item"><a class="page-link" href="{% my_url lr.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+                {% endif %}
+
+                {% if lr.has_next %}
+                    <li class="page-item">
+                    <a class="page-link"  href="{% my_url lr.next_page_number 'page' request.GET.urlencode %}">Next</a>
+                  </li>
+                {% else %}
+                    <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
+                  </li>
+                {% endif %}
+              </ul>
+            </nav>
+            <!--end of Pagination-->
+            </div>
+        </div>
+      </div>
+    </section>
+    <!-- Basic Tables end -->
+  </div>
+  <footer>
+    <div class="footer clearfix mb-0 text-muted">
+      <div class="float-start">
+        <p>2023 &copy; Nitjanan</p>
+      </div>
+      <div class="float-end">
+        <!-- p>
+          Crafted with
+          <span class="text-danger"
+            ><i class="bi bi-heart-fill icon-mid"></i
+          ></span>
+          by <a href="https://saugi.me">Saugi</a>
+        </p -->
+      </div>
+    </div>
+  </footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
+<script src="{% static 'js/pages/datatables.js' %}"></script>
+
+<script>
+  var today = new Date();
+  var formattedDate = today.toISOString().split('T')[0];
+  //$('#id_start_created').val(formattedDate);
+  //$('#id_end_created').val(formattedDate);
+
+  $(window).on('load', function() {
+    //after load
+    //$('#form_filter').submit();
+  });
+
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time){
+    btn.disabled = true;
+    btnText.style.visibility = "hidden";
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+        if (fakeProgress < 95) {
+            fakeProgress++;
+            btnProgress.style.width = fakeProgress + "%";
+            btnPercent.innerText = fakeProgress + "%";
+        }
+    }, delay_time);
+
+    fetch(py_url)
+        .then(response => {
+            if (!response.ok) throw new Error("Server error");
+            return response.blob();
+        })
+        .then(blob => {
+            clearInterval(timer);
+            btnProgress.style.width = "100%";
+            btnPercent.innerText = "100%";
+
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.style.visibility = "visible";
+                btnPercent.style.display = "none";
+                btnProgress.style.width = "0%";
+            }, 1000);
+        })
+        .catch(err => {
+            clearInterval(timer);
+            console.error(err);
+            alert("ไม่มีข้อมูลจากวันที่เลือก กรุณาเลือกวันที่ กดกรอง และดาว์นโหลดไฟล์อีกครั้ง");
+            btn.disabled = false;
+            btnText.style.visibility = "visible";
+            btnPercent.style.display = "none";
+            btnProgress.style.width = "0%";
+        });
+  }
+
+  document.getElementById('lr_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('lr_download-btn');
+    const btnText = document.getElementById('lr_btn-text');
+    const btnProgress = document.getElementById('lr_btn-progress');
+    const btnPercent = document.getElementById('lr_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportLoadingRate' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "loading_rate("+'{{ request.session.company_code }}'+").xlsx";
+
+	  const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
+  });
+
+  document.getElementById('wlr_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('wlr_download-btn');
+    const btnText = document.getElementById('wlr_btn-text');
+    const btnProgress = document.getElementById('wlr_btn-progress');
+    const btnPercent = document.getElementById('wlr_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportWeightLoadingRate' %}" + (queryString ? "?" + queryString : "");
+    const file_name = "weight_loading_rate("+'{{ request.session.company_code }}'+").xlsx";
+
+	  const delay_time = 50;
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time)
+  });
+</script>
+{% endblock %}

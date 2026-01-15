@@ -10,6 +10,7 @@ class Migration(migrations.Migration):
         ('weightapp', '0137_delete_basesec'),
     ]
 
+'''
     operations = [
         migrations.CreateModel(
             name='BaseSEC',
@@ -27,3 +28,5 @@ class Migration(migrations.Migration):
             },
         ),
     ]
+'''
+

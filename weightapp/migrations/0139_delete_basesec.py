@@ -8,9 +8,10 @@ class Migration(migrations.Migration):
     dependencies = [
         ('weightapp', '0138_basesec'),
     ]
-
+    '''
     operations = [
         migrations.DeleteModel(
             name='BaseSEC',
         ),
     ]
+    '''

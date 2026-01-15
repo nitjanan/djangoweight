@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models.fields.related import ManyToManyField
 from django.forms import fields, widgets, CheckboxSelectMultiple
 from django.contrib.auth.forms import UserCreationForm
-from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem
+from weightapp.models import  Production, ProductionLossItem, BaseLossType, ProductionGoal, StoneEstimate, StoneEstimateItem, Weight, BaseSite, BaseMill, BaseStoneType, BaseStoneColor, BaseCustomer, BaseCarRegistration, BaseDriver, BaseScoop, BaseTransport, BaseMill, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, BaseCompany, BaseWeightType, Stock, StockStone, StockStoneItem, SetPatternCode, ApproveWeight, GasPrice, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, LoadingRate, LoadingRateLoc, LoadingRateItem
 from django.utils.translation import gettext_lazy as _
 from django.forms import (formset_factory, modelformset_factory, inlineformset_factory, BaseModelFormSet, Select)
 import string
@@ -953,6 +953,57 @@ PortStockStoneItemInlineFormset = inlineformset_factory(
     PortStockStoneItem,
     form=PortStockStoneItemForm,
     fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'),
+    widgets = { 
+    },
+    extra=0,
+)
+
+#LoadingRate   
+class LoadingRateForm(forms.ModelForm):
+
+    class Meta:
+       model = LoadingRate
+       fields = ('date_start_rate', 'company')
+       widgets = {
+        'date_start_rate': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
+        'company': forms.HiddenInput(),
+        }
+       labels = {
+            'date_start_rate': _('วันที่เริ่มใช้เรทราคา'),
+       }
+
+#ชนิดหินและจำนวนหินทั้งหมดใน stock
+class LoadingRateLocForm(forms.ModelForm):
+    def __init__(self,request,*args,**kwargs):
+        super (LoadingRateLocForm,self).__init__(*args,**kwargs)
+        id_mill = Weight.objects.filter(bws__company__code =  request.session['company_code']).values_list('mill__mill_id', flat=True)
+        id_site = Weight.objects.filter(bws__company__code =  request.session['company_code']).values_list('site__base_site_id', flat=True)
+        self.fields['mill'] = forms.ModelChoiceField(label='ต้นทาง', queryset =  BaseMill.objects.filter(mill_id__in = id_mill), required=False)
+        self.fields['site'] = forms.ModelChoiceField(label='ปลายทาง', queryset =  BaseSite.objects.filter(base_site_id__in = id_site), required=False)
+
+    class Meta:
+       model = LoadingRateLoc
+       fields = ( 'Lr', 'mill', 'site')
+       widgets = {
+
+        }
+       labels = {
+            'mill': _('รหัสต้นทาง'),
+            'site': _('รหัสปลายทาง'),
+       }
+
+class LoadingRateItemForm(forms.ModelForm):
+    class Meta:
+       model = LoadingRateItem
+       fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp')
+       widgets = {
+        }
+
+LoadingRateItemInlineFormset = inlineformset_factory(
+    LoadingRateLoc,
+    LoadingRateItem,
+    form=LoadingRateItemForm,
+    fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'),
     widgets = { 
     },
     extra=0,

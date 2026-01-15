@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -443,6 +443,50 @@ class PortStockStoneItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         return obj.pss.ps.created if obj.pss.ps else '-'
     pss_ps_created.short_description = 'วันที่ผลิต'
 
+class BaseWeightRangeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    formfield_overrides = {
+        models.ManyToManyField: {'widget': CheckboxSelectMultiple},
+    }
+    list_display = ['id', 'name','descrip', 'rate_min', 'rate_max'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class LoadingRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'created', 'date_start_rate' , 'company'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'created', 'date_start_rate', 'company']
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+class LoadingRateLocAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    autocomplete_fields = ['Lr']
+
+    list_display = ['id', 'Lr', 'Lr_created']
+    search_fields = [
+        'id__startswith',        # ค้นหา id (int) แทน icontains
+        'Lr__created',           # วันที่ผลิต (DateField)
+        'Lr__id',
+    ]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    # method สำหรับแสดงค่าในตาราง
+    def Lr_created(self, obj):
+        return obj.Lr.created if obj.Lr else '-'
+    Lr_created.short_description = 'วันที่สร้าง'
+
+class LoadingRateItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+
+    list_display = ['id', 'wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp', 'Lr_created'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['id', 'wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp']
+
+    search_fields = [
+        'id__startswith',
+        'wt_range__code',
+        'wt_range__name',
+        'Lrl__id',
+        'Lr__created',
+    ]
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+    def Lr_created(self, obj):
+        return obj.Lr.created if obj.Lr else '-'
+    Lr_created.short_description = 'วันที่สร้าง'
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -492,5 +536,10 @@ admin.site.register(BaseBusiness, BaseBusinessAdmin)
 admin.site.register(PortStock, PortStockAdmin)
 admin.site.register(PortStockStone, PortStockStoneAdmin)
 admin.site.register(PortStockStoneItem, PortStockStoneItemAdmin)
+admin.site.register(BaseWeightRange, BaseWeightRangeAdmin)
+admin.site.register(LoadingRate, LoadingRateAdmin)
+admin.site.register(LoadingRateLoc, LoadingRateLocAdmin)
+admin.site.register(LoadingRateItem, LoadingRateItemAdmin)
+
 
 

@@ -9,6 +9,7 @@ class Migration(migrations.Migration):
         ('weightapp', '0140_basesec'),
     ]
 
+    '''
     operations = [
         migrations.AlterUniqueTogether(
             name='basesec',
@@ -23,4 +24,6 @@ class Migration(migrations.Migration):
             name='company',
             field=models.ManyToManyField(blank=True, null=True, to='weightapp.basecompany', verbose_name='บริษัท'),
         ),
-    ]
+    ]    
+    '''
+

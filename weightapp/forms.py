@@ -995,7 +995,7 @@ class LoadingRateLocForm(forms.ModelForm):
 class LoadingRateItemForm(forms.ModelForm):
     class Meta:
        model = LoadingRateItem
-       fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp')
+       fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp', 'bh_tru_scoop', 'bh_chi_scoop')
        widgets = {
         }
 
@@ -1003,7 +1003,7 @@ LoadingRateItemInlineFormset = inlineformset_factory(
     LoadingRateLoc,
     LoadingRateItem,
     form=LoadingRateItemForm,
-    fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'),
+    fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp', 'bh_tru_scoop', 'bh_chi_scoop'),
     widgets = { 
     },
     extra=0,

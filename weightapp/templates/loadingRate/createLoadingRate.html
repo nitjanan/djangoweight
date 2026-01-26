@@ -109,75 +109,74 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                 </div>
                 <hr class="my-3">
-                <div class="row">
-                  <div class="col-md-4 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder text-center">ช่วงน้ำหนัก</p>
-                    </div>
-                  </div>
-                  <div class="col-md-2 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder text-center">รถสิบล้อ/ค่าตัก</p>
-                    </div>
-                  </div>
-                  <div class="col-md-2 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder text-center">รถสิบล้อ/ค่าขน</p>
-                    </div>
-                  </div>
-                  <div class="col-md-2 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder text-center">รถจีน/ค่าตัก</p>
-                    </div>
-                  </div>
-                  <div class="col-md-2 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder text-center">รถจีน/ค่าขน</p>
-                    </div>
-                  </div>
-                  {{ formset.management_form }}
-                  {% for form in formset %}
-                    <div class="row form-row spacer">
-                      <div class="col-md-4 col-12">
-                        <div class="form-group">
-                          {{form.wt_range | add_class:"form-control wt_range"}}
-                        </div>
-                      </div>
-
-                      <div class="col-md-2 col-12">
-                        <div class="form-group">
-                          {{form.tru_scoop | add_class:"form-control quantity"}}
-                        </div>
-                      </div>
-                      <div class="col-md-2 col-12">
-                        <div class="form-group">
-                          {{form.tru_shipp | add_class:"form-control quantity"}}
-                        </div>
-                      </div>
-
-                      <div class="col-md-2 col-12">
-                        <div class="form-group">
-                          {{form.chi_scoop | add_class:"form-control quantity"}}
-                        </div>
-                      </div>
-                      <div class="col-md-2 col-12">
-                        <div class="form-group">
-                          {{form.chi_shipp | add_class:"form-control quantity"}}
-                        </div>
-                      </div>
-                      <div class="col-md-1 col-12">
-                        <!-- div class="input-group-append text-right">
-                          <button class="btn btn-success add-form-row hidden-print">+</button>
-                        </div !-->
-                      </div>
-                    </div>
-                    {% endfor %}
-                    <div class="col-12 d-flex justify-content-end">
-                      <button type="submit" class="btn btn-primary me-1 mb-1">
-                        บันทึก
-                      </button>
-                    </div>
+                <div class="table-container">
+                  <table class="table table-bordered">
+                    <thead class="table-dark">
+                      <tr>
+                        <th scope="col" rowspan="2" class="w-25">ช่วงน้ำหนักรถจากตาชั่ง</th>
+                        <th scope="col" colspan="2" class="text-center">อัตราค่าขน/บรรทุก</th>
+                        <th scope="col" colspan="2" class="text-center">อัตราค่าตักจากแบ็คโฮ</th>
+                        <th scope="col" colspan="2" class="text-center">อัตราค่าตักจากรถตัก</th>
+                      </tr>
+                      <tr>
+                        <th scope="col" class="text-center">รถสิบล้อ</th>
+                        <th scope="col" class="text-center">รถจีน</th>
+                        <th scope="col" class="text-center">รถสิบล้อ</th>
+                        <th scope="col" class="text-center">รถจีน</th>
+                        <th scope="col" class="text-center">รถสิบล้อ</th>
+                        <th scope="col" class="text-center">รถจีน</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{ formset.management_form }}
+                      {% for form in formset %}
+                        <tr>
+                          <th scope="row">
+                            <div class="form-group">
+                              {{form.wt_range | add_class:"form-control wt_range"}}
+                            </div>
+                          </th>
+                          <td>                        
+                            <div class="form-group">
+                              {{form.tru_shipp | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-group">
+                              {{form.chi_shipp | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-group">
+                              {{form.bh_tru_scoop | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-group">
+                              {{form.bh_chi_scoop | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-group">
+                              {{form.tru_scoop | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-group">
+                              {{form.chi_scoop | add_class:"form-control quantity"}}
+                            </div>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
                 </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary me-1 mb-1">
+                    บันทึก
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

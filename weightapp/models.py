@@ -1173,10 +1173,16 @@ class LoadingRateLoc(models.Model):
     
 class LoadingRateItem(models.Model):
     wt_range = models.ForeignKey(BaseWeightRange, on_delete=models.CASCADE, blank=True, null = True, verbose_name="เรทน้ำหนักตาชั่ง")
-    tru_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าตักรถสิบล้อ")
-    tru_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าขนรถสิบล้อ")
-    chi_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าตักรถจีน")
-    chi_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="ค่าขนรถจีน")
+
+    tru_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าขน/บรรทุก (สิบล้อ)")
+    chi_shipp = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าขน/บรรทุก (จีน)")
+
+    bh_tru_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าตักจากแบ็คโฮ (สิบล้อ)")
+    bh_chi_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าตักจากแบ็คโฮ (จีน)")
+
+    tru_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าตักจากรถตัก (สิบล้อ)")
+    chi_scoop = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5 , verbose_name="อัตราค่าตักจากรถตัก (จีน)")
+
     Lrl = models.ForeignKey(LoadingRateLoc ,on_delete=models.CASCADE, blank=True, null = True)
     Lr = models.ForeignKey(LoadingRate ,on_delete=models.CASCADE, blank=True, null = True)
 

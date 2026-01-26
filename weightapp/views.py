@@ -8106,7 +8106,7 @@ def createLoadingRate(request):
     company = BaseCompany.objects.get(code = active)
 
     base_weight_rang = BaseWeightRange.objects.filter(company = company).order_by('rate_min', 'rate_max')
-    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'), extra=len(base_weight_rang), widgets={})
+    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp', 'bh_tru_scoop', 'bh_chi_scoop'), extra=len(base_weight_rang), widgets={})
     
     if request.method == 'POST':
         form = LoadingRateForm(request.POST)
@@ -8143,7 +8143,7 @@ def editStep2LoadingRate(request, lr_id):
     company = BaseCompany.objects.get(code = active)
 
     base_weight_rang = BaseWeightRange.objects.filter(company = company).order_by('rate_min', 'rate_max')
-    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp'), extra=len(base_weight_rang), widgets={})
+    LoadingRateItemFormSet = modelformset_factory(LoadingRateItem, fields=('wt_range', 'tru_scoop', 'tru_shipp', 'chi_scoop', 'chi_shipp', 'bh_tru_scoop', 'bh_chi_scoop'), extra=len(base_weight_rang), widgets={})
     
     try:
         lr_data = LoadingRate.objects.get(id=lr_id)
@@ -8318,34 +8318,7 @@ def exportWeightLoadingRate(request):
     queryset = Weight.objects.filter(my_q).annotate(has_lr=Exists(lr_sub)).filter(has_lr=True)
 
     if queryset:
-        transport_tru = Case(
-            When(
-                site__in=['200PL', '300PL'],
-                then=Subquery(
-                    rate_subquery('tru_scoop', ignore_mill=True),
-                    output_field=models.DecimalField()
-                ),
-            ),
-            default=Subquery(
-                rate_subquery('tru_scoop'),
-                output_field=models.DecimalField()
-            ),
-            output_field=models.DecimalField(),
-        )
-        
-        transport_chi_sub = (
-            LoadingRateItem.objects
-            .filter(
-                Lr__date_start_rate__lte=OuterRef('date'),
-                wt_range__rate_min__lte=OuterRef('weight_total'),
-                wt_range__rate_max__gt=OuterRef('weight_total'),
-                Lrl__mill=OuterRef('mill'),
-                Lrl__site=OuterRef('site'),
-            )
-            .order_by('-Lr__date_start_rate')
-            .values('chi_scoop')[:1]
-        )
-
+        ########## อัตราค่าขน/บรรทุก ##########
         shipping_tru = Case(
             When(
                 site__in=['200PL', '300PL'],
@@ -8361,6 +8334,7 @@ def exportWeightLoadingRate(request):
             output_field=models.DecimalField(),
         )
         
+        ########## อัตราค่าขน/บรรทุก ##########
         shipping_chi_sub = (
             LoadingRateItem.objects
             .filter(
@@ -8373,26 +8347,96 @@ def exportWeightLoadingRate(request):
             .order_by('-Lr__date_start_rate')
             .values('chi_shipp')[:1]
         )
+
+        ########## อัตราค่าตักจากรถแบ็คโฮ ##########
+        bh_scoop_tru = Case(
+            When(
+                site__in=['200PL', '300PL'],
+                then=Subquery(
+                    rate_subquery('bh_tru_scoop', ignore_mill=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+            default=Subquery(
+                rate_subquery('bh_tru_scoop'),
+                output_field=models.DecimalField()
+            ),
+            output_field=models.DecimalField(),
+        )
+        
+        ########## อัตราค่าตักจากรถแบ็คโฮ ##########
+        bh_scoop_chi_sub = (
+            LoadingRateItem.objects
+            .filter(
+                Lr__date_start_rate__lte=OuterRef('date'),
+                wt_range__rate_min__lte=OuterRef('weight_total'),
+                wt_range__rate_max__gt=OuterRef('weight_total'),
+                Lrl__mill=OuterRef('mill'),
+                Lrl__site=OuterRef('site'),
+            )
+            .order_by('-Lr__date_start_rate')
+            .values('bh_chi_scoop')[:1]
+        )
+
+        ########## อัตราค่าตักจากรถตัก ##########
+        scoop_tru = Case(
+            When(
+                site__in=['200PL', '300PL'],
+                then=Subquery(
+                    rate_subquery('tru_scoop', ignore_mill=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+            default=Subquery(
+                rate_subquery('tru_scoop'),
+                output_field=models.DecimalField()
+            ),
+            output_field=models.DecimalField(),
+        )
+        
+        ########## อัตราค่าตักจากรถตัก ##########
+        scoop_chi_sub = (
+            LoadingRateItem.objects
+            .filter(
+                Lr__date_start_rate__lte=OuterRef('date'),
+                wt_range__rate_min__lte=OuterRef('weight_total'),
+                wt_range__rate_max__gt=OuterRef('weight_total'),
+                Lrl__mill=OuterRef('mill'),
+                Lrl__site=OuterRef('site'),
+            )
+            .order_by('-Lr__date_start_rate')
+            .values('chi_scoop')[:1]
+        )
         
         qs = (
             queryset
             .annotate(
-                transport_tru=transport_tru,
-                transport_chi=Subquery(transport_chi_sub, output_field=models.DecimalField()),
+                scoop_tru=scoop_tru,
+                scoop_chi=Subquery(scoop_chi_sub, output_field=models.DecimalField()),
+
+                bh_scoop_tru=bh_scoop_tru,
+                bh_scoop_chi=Subquery(bh_scoop_chi_sub, output_field=models.DecimalField()),
+
                 shipping_tru=shipping_tru,
                 shipping_chi=Subquery(shipping_chi_sub, output_field=models.DecimalField()),
             )
             .annotate(
-                transport_rate=Case(
-                    When(car_registration__car_type='สิบล้อ', then=F('transport_tru')),
-                    When(car_registration__car_type='จีน', then=F('transport_chi')),
-                    default=F('transport_tru'),
-                    output_field=models.DecimalField(),
-                ),
                 shipping_rate=Case(
                     When(car_registration__car_type='สิบล้อ', then=F('shipping_tru')),
                     When(car_registration__car_type='จีน', then=F('shipping_chi')),
-                    default=F('transport_tru'),
+                    default=F('shipping_tru'),
+                    output_field=models.DecimalField(),
+                ),
+                bh_scoop_rate=Case(
+                    When(car_registration__car_type='สิบล้อ', then=F('bh_scoop_tru')),
+                    When(car_registration__car_type='จีน', then=F('bh_scoop_chi')),
+                    default=F('bh_scoop_tru'),
+                    output_field=models.DecimalField(),
+                ),
+                scoop_rate=Case(
+                    When(car_registration__car_type='สิบล้อ', then=F('scoop_tru')),
+                    When(car_registration__car_type='จีน', then=F('scoop_chi')),
+                    default=F('scoop_tru'),
                     output_field=models.DecimalField(),
                 ),
             )
@@ -8410,24 +8454,30 @@ def exportWeightLoadingRate(request):
         }
         
         data2 = {
-            'อัตราค่าขน': [],
-            'ค่าขน': [],
-            'อัตราค่าตัก': [],
-            'ค่าตัก': [],
+            'อัตราค่าขน/บรรทุก': [],
+            'ค่าขน/บรรทุก': [],
+            'อัตราค่าตักจากรถแบ็คโฮ': [],
+            'ค่าตักจากรถแบ็คโฮ': [],
+            'อัตราค่าตักจากรถตัก': [],
+            'ค่าตักจากรถตัก': [],
         }
 
         for row in qs.values(
-            'transport_rate',
             'shipping_rate',
+            'bh_scoop_rate',
+            'scoop_rate',
             'weight_total'
         ):
             w = row['weight_total']
 
-            data2['อัตราค่าขน'].append(row['transport_rate'])
-            data2['ค่าขน'].append(cal_ld_rate(row['transport_rate'], w))
+            data2['อัตราค่าขน/บรรทุก'].append(row['shipping_rate'])
+            data2['ค่าขน/บรรทุก'].append(cal_ld_rate(row['shipping_rate'], w))
 
-            data2['อัตราค่าตัก'].append(row['shipping_rate'])
-            data2['ค่าตัก'].append(cal_ld_rate(row['shipping_rate'], w))
+            data2['อัตราค่าตักจากรถแบ็คโฮ'].append(row['bh_scoop_rate'])
+            data2['ค่าตักจากรถแบ็คโฮ'].append(cal_ld_rate(row['bh_scoop_rate'], w))
+
+            data2['อัตราค่าตักจากรถตัก'].append(row['scoop_rate'])
+            data2['ค่าตักจากรถตัก'].append(cal_ld_rate(row['scoop_rate'], w))
     else:
         data = {'ข้อความ': ['ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก']}
         data2 = {'' : []}
@@ -8457,8 +8507,8 @@ def exportWeightLoadingRate(request):
         ws['A1'].alignment = Alignment(horizontal='center')
         ws.freeze_panes = ws["A3"]
 
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']:
-            ws.column_dimensions[col_letter].width = 20
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
+            ws.column_dimensions[col_letter].width = 23
 
     output.seek(0)
 

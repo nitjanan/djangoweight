@@ -8115,7 +8115,7 @@ def createLoadingRate(request):
         if form.is_valid() and lrl_form.is_valid() and formset.is_valid():
             form = form.save()
 
-            if  lrl_form.cleaned_data.get('site'):
+            if  lrl_form.cleaned_data.get('site') or lrl_form.cleaned_data.get('mill'):
                 lrl = lrl_form.save()
                 lrl.Lr = form
                 lrl.save()
@@ -8160,7 +8160,7 @@ def editStep2LoadingRate(request, lr_id):
         if form.is_valid() and lrl_form.is_valid() and formset.is_valid():
             form = form.save()
 
-            if  lrl_form.cleaned_data.get('site'):
+            if  lrl_form.cleaned_data.get('site') or lrl_form.cleaned_data.get('mill'):
                 lrl = lrl_form.save()
                 lrl.Lr = form
                 lrl.save()
@@ -8194,8 +8194,13 @@ def editLoadingRateItem(request, lr_id, lrl_id):
 
     lrl_data = LoadingRateLoc.objects.filter(Lr = lr_id)#ssn all in stock id
     data = LoadingRateLoc.objects.get(id = lrl_id)#id edit
-    lrl_ms = f"{data.mill.mill_id}{data.site.base_site_id}" if data.mill else ""
 
+    if data.mill and data.site:
+        lrl_ms = f"{data.mill.mill_id}{data.site.base_site_id}"
+    elif data.mill:
+        lrl_ms = f"{data.mill.mill_id}"
+    elif data.site:
+        lrl_ms = f"{data.site.base_site_id}"
 
     if request.method == 'POST':
         form = LoadingRateForm(request.POST, instance=lr_data)
@@ -8206,7 +8211,7 @@ def editLoadingRateItem(request, lr_id, lrl_id):
             form = form.save()
 
             lrl = lrl_form.save(commit=False)
-            if  lrl_form.cleaned_data.get('site'):
+            if  lrl_form.cleaned_data.get('site') or lrl_form.cleaned_data.get('mill'):
                 lrl.Lr = form
                 lrl.save()
 
@@ -8269,13 +8274,15 @@ def searchLRInDay(request):
     }
     return JsonResponse(data)
 
-def rate_subquery(value_field, ignore_mill=False):
+def rate_subquery(value_field, ignore_mill=False, ignore_site=False):
     filters = {
         'Lr__date_start_rate__lte': OuterRef('date'),
         'wt_range__rate_min__lte': OuterRef('weight_total'),
         'wt_range__rate_max__gt': OuterRef('weight_total'),
-        'Lrl__site': OuterRef('site'),
     }
+
+    if not ignore_site:
+        filters['Lrl__site'] = OuterRef('site')
 
     if not ignore_mill:
         filters['Lrl__mill'] = OuterRef('mill')
@@ -8313,20 +8320,85 @@ def exportWeightLoadingRate(request):
 
     my_q &=Q(bws__company__code__in = company_in, is_cancel = False)
 
-    lr_sub = LoadingRateLoc.objects.filter(Lr__company__code__in = company_in, Lr__date_start_rate__gte=start_created, Lr__date_start_rate__lte=end_created, site=OuterRef('site'))
+    # 🔹 LR มีทั้ง mill + site
+    lr_mill_site = LoadingRateLoc.objects.filter(
+        Lr__company__code__in=company_in,
+        Lr__date_start_rate__gte=start_created,
+        Lr__date_start_rate__lte=end_created,
+        mill=OuterRef('mill'),
+        site=OuterRef('site'),
+    )
 
-    queryset = Weight.objects.filter(my_q).annotate(has_lr=Exists(lr_sub)).filter(has_lr=True)
+    # 🔹 LR มีเฉพาะ site (mill ต้อง NULL)
+    lr_site_only = LoadingRateLoc.objects.filter(
+        Lr__company__code__in=company_in,
+        Lr__date_start_rate__gte=start_created,
+        Lr__date_start_rate__lte=end_created,
+        site=OuterRef('site'),
+        mill__isnull=True,
+    )
+
+    # 🔹 LR มีเฉพาะ mill (site ต้อง NULL)
+    lr_mill_only = LoadingRateLoc.objects.filter(
+        Lr__company__code__in=company_in,
+        Lr__date_start_rate__gte=start_created,
+        Lr__date_start_rate__lte=end_created,
+        mill=OuterRef('mill'),
+        site__isnull=True,
+    )
+
+    queryset = (
+        Weight.objects
+        .filter(my_q)
+        .annotate(
+            has_lr=Case(
+                # ✅ CASE 1: MILL + SITE (เฉพาะที่สุด ต้องมาก่อน)
+                When(
+                    Exists(lr_mill_site),
+                    then=True,
+                ),
+
+                # ✅ CASE 2: SITE ONLY
+                When(
+                    Q(site__in=['200PL','300PL']) & Exists(lr_site_only),
+                    then=True,
+                ),
+
+                # ✅ CASE 3: MILL ONLY
+                When(
+                    Exists(lr_mill_only),
+                    then=True,
+                ),
+
+                default=False,
+                output_field=models.BooleanField(),
+            )
+        )
+        .filter(has_lr=True)
+    )
 
     if queryset:
         ########## อัตราค่าขน/บรรทุก ##########
         shipping_tru = Case(
+            # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
+                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('tru_shipp', ignore_mill=True),
                     output_field=models.DecimalField()
                 ),
             ),
+
+            # 🟢 CASE 2: WT1 + MILL (LR มีเฉพาะ mill)
+            When(
+                bws__weight_type__id=1,
+                then=Subquery(
+                    rate_subquery('tru_shipp', ignore_site=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+
             default=Subquery(
                 rate_subquery('tru_shipp'),
                 output_field=models.DecimalField()
@@ -8350,10 +8422,21 @@ def exportWeightLoadingRate(request):
 
         ########## อัตราค่าตักจากรถแบ็คโฮ ##########
         bh_scoop_tru = Case(
+            # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
+                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('bh_tru_scoop', ignore_mill=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+
+            # 🟢 CASE 2: WT1 + MILL (LR มีเฉพาะ mill)
+            When(
+                bws__weight_type__id=1,
+                then=Subquery(
+                    rate_subquery('bh_tru_scoop', ignore_site=True),
                     output_field=models.DecimalField()
                 ),
             ),
@@ -8380,13 +8463,25 @@ def exportWeightLoadingRate(request):
 
         ########## อัตราค่าตักจากรถตัก ##########
         scoop_tru = Case(
+            # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
+                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('tru_scoop', ignore_mill=True),
                     output_field=models.DecimalField()
                 ),
             ),
+
+            # 🟢 CASE 2: WT1 + MILL (LR มีเฉพาะ mill)
+            When(
+                bws__weight_type__id=1,
+                then=Subquery(
+                    rate_subquery('tru_scoop', ignore_site=True),
+                    output_field=models.DecimalField()
+                ),
+            ),
+            # 🔹 default: mill + site ปกติ
             default=Subquery(
                 rate_subquery('tru_scoop'),
                 output_field=models.DecimalField()
@@ -8507,7 +8602,10 @@ def exportWeightLoadingRate(request):
         ws['A1'].alignment = Alignment(horizontal='center')
         ws.freeze_panes = ws["A3"]
 
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+            ws.column_dimensions[col_letter].width = 13
+        
+        for col_letter in ['I', 'J', 'K', 'L', 'M', 'N']:
             ws.column_dimensions[col_letter].width = 23
 
     output.seek(0)
@@ -8571,15 +8669,15 @@ def exportLoadingRate(request):
         for lr in lr_data:
             sheet = workbook.create_sheet(title=lr.date_start_rate.strftime('%d-%m-%Y'))
             # Freeze row 1–2
-            sheet.freeze_panes = "B3"
+            sheet.freeze_panes = "B4"
 
             # Header ซ้าย
             sheet.cell(row=1, column=1, value="น้ำหนักรถ")
-            sheet.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
+            sheet.merge_cells(start_row=1, start_column=1, end_row=3, end_column=1)
             sheet.cell(row=1, column=1).alignment = Alignment(horizontal='center',vertical='center')
 
             # น้ำหนักรถ (แนวตั้ง)
-            data_start_row = 3
+            data_start_row = 4
             for i, wt in enumerate(base_wt):
                 sheet.cell(row=data_start_row + i, column=1, value=wt.name)
 
@@ -8595,10 +8693,16 @@ def exportLoadingRate(request):
                 fill = PatternFill(start_color=hd_colors[color_index],end_color=hd_colors[color_index],fill_type="solid")
 
                 start_col = column_index
-                end_col = column_index + 3
+                end_col = column_index + 5
                 
                 # header
-                header = (f"{loc.mill.mill_name} - {loc.site.base_site_name}" if loc.mill else f"- {loc.site.base_site_name}")
+                if loc.mill and loc.site:
+                    header = f"{loc.mill.mill_name} - {loc.site.base_site_name}"
+                elif loc.mill:
+                    header = f"{loc.mill.mill_name}"
+                elif loc.site:
+                    header = f"- {loc.site.base_site_name}"
+
                 sheet.cell(row=1, column=start_col, value=header)
                 sheet.merge_cells(start_row=1,start_column=start_col,end_row=1,end_column=end_col)
 
@@ -8608,10 +8712,26 @@ def exportLoadingRate(request):
                     cell.fill = fill
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
+                sub_col = start_col
                 # sub header
-                sub_headers = ["สิบล้อ/ค่าตัก","สิบล้อ/ค่าขน","รถจีน/ค่าตัก","รถจีน/ค่าขน",]
-                for i, text in enumerate(sub_headers):
-                    cell = sheet.cell(row=2, column=start_col + i, value=text)
+                sub_headers1 = ["อัตราค่าขน/บรรทุก","อัตราค่าตักจากแบ็คโฮ","อัตราค่าตักจากรถตัก",]
+                for i, text in enumerate(sub_headers1):
+                    cell1 = sheet.cell(row=2, column=sub_col + i, value=text)
+                    cell2 = sheet.cell(row=2, column=sub_col + i + 1, value=text)
+                    sheet.merge_cells(start_row=2, start_column=sub_col + i, end_row=2 ,end_column=sub_col + i + 1)
+
+                    cell1.fill = fill
+                    cell1.alignment = Alignment(horizontal="center", vertical="center")
+
+                    cell2.fill = fill
+                    cell2.alignment = Alignment(horizontal="center", vertical="center")
+
+                    sub_col += 1
+
+                # sub header
+                sub_headers2 = ["สิบล้อ","รถจีน","สิบล้อ","รถจีน","สิบล้อ","รถจีน",]
+                for i, text in enumerate(sub_headers2):
+                    cell = sheet.cell(row=3, column=start_col + i, value=text)
                     cell.fill = fill
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -8624,12 +8744,16 @@ def exportLoadingRate(request):
 
                     current_row = data_start_row + wt_index
 
-                    sheet.cell(current_row, start_col,     item.tru_scoop if item else None)
-                    sheet.cell(current_row, start_col + 1, item.tru_shipp if item else None)
-                    sheet.cell(current_row, start_col + 2, item.chi_scoop if item else None)
-                    sheet.cell(current_row, start_col + 3, item.chi_shipp if item else None)
+                    sheet.cell(current_row, start_col, item.tru_shipp if item else None)
+                    sheet.cell(current_row, start_col + 1, item.chi_shipp if item else None)
 
-                column_index += 4
+                    sheet.cell(current_row, start_col + 2, item.bh_tru_scoop if item else None)
+                    sheet.cell(current_row, start_col + 3, item.bh_chi_scoop if item else None)
+
+                    sheet.cell(current_row, start_col + 4,     item.tru_scoop if item else None)
+                    sheet.cell(current_row, start_col + 5, item.chi_scoop if item else None)
+
+                column_index += 6
                 color_index += 1
 
             # border (ทั้ง sheet)
@@ -8655,7 +8779,7 @@ def exportLoadingRate(request):
                 cell.alignment = Alignment(horizontal="center", vertical="center")
                 cell.font = Font(bold=True)
 
-            for r in range(3, sheet.max_row + 1):
+            for r in range(4, sheet.max_row + 1):
                 cell = sheet.cell(row=r, column=1)
                 cell.fill = col1_fill
 

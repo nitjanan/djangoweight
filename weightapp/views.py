@@ -32,7 +32,7 @@ import calendar
 from collections import defaultdict, OrderedDict
 from re import escape as reescape
 from django.db.models import Value as V
-from django.db.models.functions import Cast, Concat
+from django.db.models.functions import Cast, Concat, Right
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 
@@ -6050,8 +6050,22 @@ def exportWeightToExpress(request):
 
     queryset = Weight.objects.filter(my_q)
 
+    #เลขที่เอกสารเป็น yy + doc_id
+    queryset = queryset.annotate(
+        thai_year=ExtractYear('date') + Value(543),
+        yy=Right(Cast('thai_year', output_field=models.CharField()), 2),
+        cut_docid=Right(Cast('doc_id', output_field=models.CharField()), 6),
+        new_docid=Cast(
+            Concat(
+                F('yy'),
+                F('cut_docid'),
+            ),
+            output_field=models.CharField()
+        )
+    )
+
     if queryset:
-        data = {'docid': queryset.values_list('doc_id', flat=True),
+        data = {'docid': queryset.values_list('new_docid', flat=True),
                 'docdat': queryset.values_list('date', flat=True),
                 'datin': queryset.values_list('date_in', flat=True),
                 'datout': queryset.values_list('date_out', flat=True),

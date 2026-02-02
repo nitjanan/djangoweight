@@ -91,9 +91,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <form class="form" method="post">
                 <div class="row">
                   <div class="col-md-1">
+                    <p class="fw-bolder">{{lrl_form.weight_type.label}}</p>
+                  </div>
+                  <div class="col-md-2">
+                    <div class="form-group">
+                      {{lrl_form.weight_type| add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
                     <p class="fw-bolder">{{lrl_form.mill.label}}</p>
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-3">
                     <div class="form-group">
                       {{lrl_form.mill| add_class:"form-control"}}
                     </div>
@@ -102,7 +110,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <div class="col-md-1">
                     <p class="fw-bolder">{{lrl_form.site.label}}</p>
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-3">
                     <div class="form-group">
                       {{lrl_form.site| add_class:"form-control"}}
                     </div>

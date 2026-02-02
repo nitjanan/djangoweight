@@ -981,15 +981,17 @@ class LoadingRateLocForm(forms.ModelForm):
         self.fields['mill'] = forms.ModelChoiceField(label='ต้นทาง', queryset =  BaseMill.objects.filter(mill_id__in = id_mill), required=False)
         self.fields['site'] = forms.ModelChoiceField(label='ปลายทาง', queryset =  BaseSite.objects.filter(base_site_id__in = id_site), required=False)
 
+    weight_type = forms.ModelChoiceField(label='เครื่องชั่ง', queryset = BaseWeightType.objects.filter(Q(id = 1) | Q(id = 2)), required=False)
     class Meta:
        model = LoadingRateLoc
-       fields = ( 'Lr', 'mill', 'site')
+       fields = ( 'Lr', 'mill', 'site', 'weight_type')
        widgets = {
 
         }
        labels = {
             'mill': _('รหัสต้นทาง'),
             'site': _('รหัสปลายทาง'),
+            'weight_type': _('เครื่องชั่ง'),
        }
 
 class LoadingRateItemForm(forms.ModelForm):

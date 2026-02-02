@@ -93,7 +93,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         {% for lrl in lrl_data %}
         <div class="card">
           <div class="card-header">
-            <h3 class="float-start">{{forloop.counter}}. {{lrl.mill}} - {{lrl.site}}</h3>
+            <h3 class="float-start">{{forloop.counter}}. เครื่องชั่ง{{lrl.weight_type}} : {% if lrl.mill %}{{lrl.mill}}{%endif%} - {% if lrl.site %}{{lrl.site}}{%endif%}</h3>
             <a href="{% url 'editLoadingRateItem' lrl.Lr.id lrl.id %}" class="btn btn-warning float-end"><i class="fas fa-pen"></i> แก้ไข</a>
             <a onclick="return confirm('คุณต้องการลบรายการนี้หรือไม่ ?')" href="{% url 'removeLoadingRateLoc' lrl.id %}" class="btn btn-danger float-end"><i class="fas fa-trash-alt"></i> ลบ</a>
           </div>
@@ -145,9 +145,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               <form class="form" method="post">
                 <div class="row">
                   <div class="col-md-1">
+                    <p class="fw-bolder">{{lrl_form.weight_type.label}}</p>
+                  </div>
+                  <div class="col-md-2">
+                    <div class="form-group">
+                      {{lrl_form.weight_type| add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
                     <p class="fw-bolder">{{lrl_form.mill.label}}</p>
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-3">
                     <div class="form-group">
                       {{lrl_form.mill| add_class:"form-control"}}
                     </div>
@@ -155,7 +163,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <div class="col-md-1">
                     <p class="fw-bolder">{{lrl_form.site.label}}</p>
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-3">
                     <div class="form-group">
                       {{lrl_form.site| add_class:"form-control"}}
                     </div>

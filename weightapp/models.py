@@ -1163,6 +1163,7 @@ class LoadingRateLoc(models.Model):
         verbose_name="รหัสปลายทาง",
         blank=True, null=True,
     )
+    weight_type = models.ForeignKey(BaseWeightType,on_delete=models.CASCADE, null = True , verbose_name="ประเภทเครื่องชั่ง")
     Lr = models.ForeignKey(LoadingRate,on_delete=models.CASCADE, blank=True, null = True)
 
     class Meta:

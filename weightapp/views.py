@@ -8100,11 +8100,25 @@ def viewLoadingRate(request):
     except:
         return redirect('logout')
 
-    data = LoadingRate.objects.filter(company__code__in = company_in).order_by('-created')
+    base_qs = LoadingRate.objects.filter(
+        company__code__in=company_in
+    )
 
-    #กรองข้อมูล
-    myFilter = LoadingRateFilter(request.GET, queryset = data)
+    myFilter = LoadingRateFilter(request.GET, queryset=base_qs)
     data = myFilter.qs
+
+    start_created = myFilter.form.cleaned_data.get('start_created')
+    end_created = myFilter.form.cleaned_data.get('end_created')
+
+    # 👉 fallback เฉพาะกรณี filter แล้วไม่เจอข้อมูล
+    if not data.exists() and start_created:
+        last_item = base_qs.order_by('-date_start_rate').first()
+
+        # แสดงเฉพาะกรณี date_start_rate >= start_created
+        if last_item.date_start_rate > start_created and last_item.date_start_rate > end_created:
+            data = LoadingRate.objects.none()
+        else:
+            data = LoadingRate.objects.filter(pk=last_item.pk)
 
     #สร้าง page
     p = Paginator(data, 10)
@@ -8293,6 +8307,7 @@ def rate_subquery(value_field, ignore_mill=False, ignore_site=False):
         'Lr__date_start_rate__lte': OuterRef('date'),
         'wt_range__rate_min__lte': OuterRef('weight_total'),
         'wt_range__rate_max__gt': OuterRef('weight_total'),
+        'Lrl__weight_type': OuterRef('bws__weight_type'),
     }
 
     if not ignore_site:
@@ -8339,6 +8354,7 @@ def exportWeightLoadingRate(request):
         Lr__company__code__in=company_in,
         Lr__date_start_rate__gte=start_created,
         Lr__date_start_rate__lte=end_created,
+        weight_type=OuterRef('bws__weight_type'),
         mill=OuterRef('mill'),
         site=OuterRef('site'),
     )
@@ -8348,6 +8364,7 @@ def exportWeightLoadingRate(request):
         Lr__company__code__in=company_in,
         Lr__date_start_rate__gte=start_created,
         Lr__date_start_rate__lte=end_created,
+        weight_type=OuterRef('bws__weight_type'),
         site=OuterRef('site'),
         mill__isnull=True,
     )
@@ -8357,6 +8374,7 @@ def exportWeightLoadingRate(request):
         Lr__company__code__in=company_in,
         Lr__date_start_rate__gte=start_created,
         Lr__date_start_rate__lte=end_created,
+        weight_type=OuterRef('bws__weight_type'),
         mill=OuterRef('mill'),
         site__isnull=True,
     )
@@ -8396,7 +8414,6 @@ def exportWeightLoadingRate(request):
         shipping_tru = Case(
             # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
-                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('tru_shipp', ignore_mill=True),
@@ -8429,6 +8446,7 @@ def exportWeightLoadingRate(request):
                 wt_range__rate_max__gt=OuterRef('weight_total'),
                 Lrl__mill=OuterRef('mill'),
                 Lrl__site=OuterRef('site'),
+                Lrl__weight_type=OuterRef('bws__weight_type'),
             )
             .order_by('-Lr__date_start_rate')
             .values('chi_shipp')[:1]
@@ -8438,7 +8456,6 @@ def exportWeightLoadingRate(request):
         bh_scoop_tru = Case(
             # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
-                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('bh_tru_scoop', ignore_mill=True),
@@ -8470,6 +8487,7 @@ def exportWeightLoadingRate(request):
                 wt_range__rate_max__gt=OuterRef('weight_total'),
                 Lrl__mill=OuterRef('mill'),
                 Lrl__site=OuterRef('site'),
+                Lrl__weight_type=OuterRef('bws__weight_type'),
             )
             .order_by('-Lr__date_start_rate')
             .values('bh_chi_scoop')[:1]
@@ -8479,7 +8497,6 @@ def exportWeightLoadingRate(request):
         scoop_tru = Case(
             # 🟢 CASE 1: WT1 + SITE (LR มีเฉพาะ site)
             When(
-                bws__weight_type__id=1,
                 site__in=['200PL', '300PL'],
                 then=Subquery(
                     rate_subquery('tru_scoop', ignore_mill=True),
@@ -8512,6 +8529,7 @@ def exportWeightLoadingRate(request):
                 wt_range__rate_max__gt=OuterRef('weight_total'),
                 Lrl__mill=OuterRef('mill'),
                 Lrl__site=OuterRef('site'),
+                Lrl__weight_type=OuterRef('bws__weight_type'),
             )
             .order_by('-Lr__date_start_rate')
             .values('chi_scoop')[:1]
@@ -8711,11 +8729,11 @@ def exportLoadingRate(request):
                 
                 # header
                 if loc.mill and loc.site:
-                    header = f"{loc.mill.mill_name} - {loc.site.base_site_name}"
+                    header = f"เครื่องชั่ง{loc.weight_type} : {loc.mill.mill_name} - {loc.site.base_site_name}"
                 elif loc.mill:
-                    header = f"{loc.mill.mill_name}"
+                    header = f"เครื่องชั่ง{loc.weight_type} : {loc.mill.mill_name} -"
                 elif loc.site:
-                    header = f"- {loc.site.base_site_name}"
+                    header = f"เครื่องชั่ง{loc.weight_type} : - {loc.site.base_site_name}"
 
                 sheet.cell(row=1, column=start_col, value=header)
                 sheet.merge_cells(start_row=1,start_column=start_col,end_row=1,end_column=end_col)

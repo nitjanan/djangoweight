@@ -8110,7 +8110,7 @@ def viewLoadingRate(request):
     start_created = myFilter.form.cleaned_data.get('start_created')
     end_created = myFilter.form.cleaned_data.get('end_created')
 
-    # 👉 fallback เฉพาะกรณี filter แล้วไม่เจอข้อมูล
+    # fallback เฉพาะกรณี filter แล้วไม่เจอข้อมูล
     if not data.exists() and start_created:
         last_item = base_qs.order_by('-date_start_rate').first()
 
@@ -8349,34 +8349,47 @@ def exportWeightLoadingRate(request):
 
     my_q &=Q(bws__company__code__in = company_in, is_cancel = False)
 
-    # 🔹 LR มีทั้ง mill + site
-    lr_mill_site = LoadingRateLoc.objects.filter(
-        Lr__company__code__in=company_in,
-        Lr__date_start_rate__gte=start_created,
-        Lr__date_start_rate__lte=end_created,
-        weight_type=OuterRef('bws__weight_type'),
-        mill=OuterRef('mill'),
-        site=OuterRef('site'),
+    ''' ดึง weight เฉพาะ ต้นทาง - ปลายทางที่ set ไว้
+    # LR มีทั้ง mill + site
+    lr_mill_site = (
+        LoadingRateLoc.objects
+        .filter(
+            Lr__company__code__in=company_in,
+            Lr__date_start_rate__lte=start_created,   # ✅ เอาก่อนหรือเท่ากับ
+            weight_type=OuterRef('bws__weight_type'),
+            mill=OuterRef('mill'),
+            site=OuterRef('site'),
+        )
+        .order_by('-Lr__date_start_rate')   # ✅ ล่าสุด
+        [:1]
     )
 
-    # 🔹 LR มีเฉพาะ site (mill ต้อง NULL)
-    lr_site_only = LoadingRateLoc.objects.filter(
-        Lr__company__code__in=company_in,
-        Lr__date_start_rate__gte=start_created,
-        Lr__date_start_rate__lte=end_created,
-        weight_type=OuterRef('bws__weight_type'),
-        site=OuterRef('site'),
-        mill__isnull=True,
+    # LR มีเฉพาะ site (mill ต้อง NULL)
+    lr_site_only = (
+        LoadingRateLoc.objects
+        .filter(
+            Lr__company__code__in=company_in,
+            Lr__date_start_rate__lte=start_created,
+            weight_type=OuterRef('bws__weight_type'),
+            site=OuterRef('site'),
+            mill__isnull=True,
+        )
+        .order_by('-Lr__date_start_rate')
+        [:1]
     )
 
-    # 🔹 LR มีเฉพาะ mill (site ต้อง NULL)
-    lr_mill_only = LoadingRateLoc.objects.filter(
-        Lr__company__code__in=company_in,
-        Lr__date_start_rate__gte=start_created,
-        Lr__date_start_rate__lte=end_created,
-        weight_type=OuterRef('bws__weight_type'),
-        mill=OuterRef('mill'),
-        site__isnull=True,
+    # LR มีเฉพาะ mill (site ต้อง NULL)
+    lr_mill_only = (
+        LoadingRateLoc.objects
+        .filter(
+            Lr__company__code__in=company_in,
+            Lr__date_start_rate__lte=start_created,
+            weight_type=OuterRef('bws__weight_type'),
+            mill=OuterRef('mill'),
+            site__isnull=True,
+        )
+        .order_by('-Lr__date_start_rate')
+        [:1]
     )
 
     queryset = (
@@ -8384,19 +8397,19 @@ def exportWeightLoadingRate(request):
         .filter(my_q)
         .annotate(
             has_lr=Case(
-                # ✅ CASE 1: MILL + SITE (เฉพาะที่สุด ต้องมาก่อน)
+                # CASE 1: MILL + SITE (เฉพาะที่สุด ต้องมาก่อน)
                 When(
                     Exists(lr_mill_site),
                     then=True,
                 ),
 
-                # ✅ CASE 2: SITE ONLY
+                # CASE 2: SITE ONLY
                 When(
                     Q(site__in=['200PL','300PL']) & Exists(lr_site_only),
                     then=True,
                 ),
 
-                # ✅ CASE 3: MILL ONLY
+                # CASE 3: MILL ONLY
                 When(
                     Exists(lr_mill_only),
                     then=True,
@@ -8407,6 +8420,14 @@ def exportWeightLoadingRate(request):
             )
         )
         .filter(has_lr=True)
+    )    
+    
+    '''
+
+    #ดึงข้อมูลทั้งหมด ของ weight
+    queryset = (
+        Weight.objects
+        .filter(my_q)
     )
 
     if queryset:
@@ -8684,6 +8705,9 @@ def exportLoadingRate(request):
 
     base_wt = BaseWeightRange.objects.filter(company__code=active)
     lr_data = LoadingRate.objects.filter(my_q)
+
+    if not lr_data.exists():
+        lr_data = LoadingRate.objects.filter(date_start_rate__lte = start_created, company__code = active)
 
     workbook = openpyxl.Workbook()
 

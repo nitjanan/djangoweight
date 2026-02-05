@@ -109,7 +109,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <td>
                       <ul style="list-style-type:circle">
                         {% for item in i.loadingrateloc_set.all %}
-                          <li>{{ item.mill.mill_name }} - {{ item.site.base_site_name}}</li>
+                          <li>{{ item.weight_type.name }} : {{ item.mill.mill_name }} - {{ item.site.base_site_name}}</li>
                         {% endfor %}
                       </ul>
                     </td>

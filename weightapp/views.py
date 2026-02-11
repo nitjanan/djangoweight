@@ -8590,24 +8590,54 @@ def exportWeightLoadingRate(request):
             )
         )
 
+        rows = queryset.values(
+            'date',
+            'doc_id',
+            'car_registration_name',
+            'driver_name',
+            'scoop_name',
+            'customer__customer_id',
+            'customer__customer_name',
+            'mill_name',
+            'site_name',
+            'weight_total',
+            'bws__weight_type__name'
+        )
+
         data = {
-                'วันที่': queryset.values_list('date', flat=True),
-                'เลขที่ใบชั่ง': queryset.values_list('doc_id', flat=True),
-                'ทะเบียนรถ': queryset.values_list('car_registration_name', flat=True),
-                'ชื่อคนขับ': queryset.values_list('driver_name', flat=True),
-                'ต้นทาง': queryset.values_list('mill_name', flat=True),
-                'ปลายทาง': queryset.values_list('site_name', flat=True),
-                'น้ำหนักสุทธิ': queryset.values_list('weight_total', flat=True),
-                'เครื่องชั่ง': queryset.values_list('bws__weight_type__name', flat=True),
+            'วันที่': [],
+            'เลขที่ใบชั่ง': [],
+            'ทะเบียนรถ': [],
+            'ชื่อคนขับ': [],
+            'ชื่อผู้ตัก': [],
+            'รหัสลูกค้า': [],
+            'ชื่อลูกค้า': [],
+            'ต้นทาง': [],
+            'ปลายทาง': [],
+            'น้ำหนักสุทธิ': [],
+            'เครื่องชั่ง': [],
         }
+
+        for r in rows:
+            data['วันที่'].append(r['date'])
+            data['เลขที่ใบชั่ง'].append(r['doc_id'])
+            data['ทะเบียนรถ'].append(r['car_registration_name'])
+            data['ชื่อคนขับ'].append(r['driver_name'])
+
+            data['ชื่อผู้ตัก'].append(r['scoop_name'])
+            data['รหัสลูกค้า'].append(r['customer__customer_id'])
+            data['ชื่อลูกค้า'].append(r['customer__customer_name'])
+
+            data['ต้นทาง'].append(r['mill_name'])
+            data['ปลายทาง'].append(r['site_name'])
+            data['น้ำหนักสุทธิ'].append(to_float(r['weight_total']))
+            data['เครื่องชั่ง'].append(r['bws__weight_type__name'])
+
         
         data2 = {
             'อัตราค่าขน/บรรทุก': [],
-            'ค่าขน/บรรทุก': [],
             'อัตราค่าตักจากรถแบ็คโฮ': [],
-            'ค่าตักจากรถแบ็คโฮ': [],
             'อัตราค่าตักจากรถตัก': [],
-            'ค่าตักจากรถตัก': [],
         }
 
         for row in qs.values(
@@ -8616,16 +8646,12 @@ def exportWeightLoadingRate(request):
             'scoop_rate',
             'weight_total'
         ):
-            w = row['weight_total']
 
-            data2['อัตราค่าขน/บรรทุก'].append(row['shipping_rate'])
-            data2['ค่าขน/บรรทุก'].append(cal_ld_rate(row['shipping_rate'], w))
+            data2['อัตราค่าขน/บรรทุก'].append(to_float(row['shipping_rate']))
 
-            data2['อัตราค่าตักจากรถแบ็คโฮ'].append(row['bh_scoop_rate'])
-            data2['ค่าตักจากรถแบ็คโฮ'].append(cal_ld_rate(row['bh_scoop_rate'], w))
+            data2['อัตราค่าตักจากรถแบ็คโฮ'].append(to_float(row['bh_scoop_rate']))
 
-            data2['อัตราค่าตักจากรถตัก'].append(row['scoop_rate'])
-            data2['ค่าตักจากรถตัก'].append(cal_ld_rate(row['scoop_rate'], w))
+            data2['อัตราค่าตักจากรถตัก'].append(to_float(row['scoop_rate']))
     else:
         data = {'ข้อความ': ['ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก']}
         data2 = {'' : []}
@@ -8655,10 +8681,10 @@ def exportWeightLoadingRate(request):
         ws['A1'].alignment = Alignment(horizontal='center')
         ws.freeze_panes = ws["A3"]
 
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'J', 'K']:
             ws.column_dimensions[col_letter].width = 13
         
-        for col_letter in ['I', 'J', 'K', 'L', 'M', 'N']:
+        for col_letter in ['G', 'H','I', 'L', 'M', 'N']:
             ws.column_dimensions[col_letter].width = 23
 
     output.seek(0)
@@ -8669,6 +8695,12 @@ def exportWeightLoadingRate(request):
     )
     response['Content-Disposition'] = f'attachment; filename=weight_loading_rate({active}) '+ start_created + " to "+ end_created +'.xlsx'
     return response
+
+def to_float(val):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 def cal_ld_rate(rate, weight_total):
     result = None

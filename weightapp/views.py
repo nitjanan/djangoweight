@@ -25,7 +25,7 @@ from django import forms
 from django.db.models import Sum, Subquery
 import random
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
-from django.db.models import F, ExpressionWrapper, Case, When, OuterRef, Exists
+from django.db.models import F, ExpressionWrapper, Case, When, OuterRef, Exists, Prefetch
 from django.db import models
 import pandas as pd
 import calendar
@@ -8178,7 +8178,13 @@ def editStep2LoadingRate(request, lr_id):
     except LoadingRate.DoesNotExist:
         return redirect('viewLoadingRate')
 
-    lrl_data = LoadingRateLoc.objects.filter(Lr=lr_data)
+    lrl_data = LoadingRateLoc.objects.filter(Lr=lr_data).prefetch_related(
+        Prefetch(
+            'loadingrateitem_set',
+            queryset=LoadingRateItem.objects.select_related('wt_range')
+            .order_by('wt_range__rate_min', 'wt_range__rate_max')
+        )
+    )
 
     if request.method == 'POST':
         form = LoadingRateForm(request.POST, instance=lr_data)
@@ -8220,7 +8226,13 @@ def editLoadingRateItem(request, lr_id, lrl_id):
     except LoadingRate.DoesNotExist:
         return redirect('viewLoadingRate')
 
-    lrl_data = LoadingRateLoc.objects.filter(Lr = lr_id)#ssn all in stock id
+    lrl_data = LoadingRateLoc.objects.filter(Lr=lr_data).prefetch_related(
+        Prefetch(
+            'loadingrateitem_set',
+            queryset=LoadingRateItem.objects.select_related('wt_range')
+            .order_by('wt_range__rate_min', 'wt_range__rate_max')
+        )
+    )#ssn all in stock id
     data = LoadingRateLoc.objects.get(id = lrl_id)#id edit
 
     if data.mill and data.site:

@@ -8747,7 +8747,7 @@ def exportLoadingRate(request):
 
     my_q &=Q(company__code = active)
 
-    base_wt = BaseWeightRange.objects.filter(company__code=active)
+    base_wt = BaseWeightRange.objects.filter(company__code=active).order_by('rate_min', 'rate_max')
     lr_data = LoadingRate.objects.filter(my_q)
 
     if not lr_data.exists():

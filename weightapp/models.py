@@ -1117,8 +1117,8 @@ class PortStockStoneItem(models.Model):
 class BaseWeightRange(models.Model):
     name = models.CharField(max_length=120,unique=True, verbose_name="ชื่อ")
     descrip = models.CharField(max_length=255,unique=True, verbose_name="คำอธิบาย")
-    rate_min = models.IntegerField(blank = True, null = True, verbose_name="เรทน้ำหนักน้อยที่สุด")
-    rate_max = models.IntegerField(blank = True, null = True, verbose_name="เรทน้ำหนักมากที่สุด")
+    rate_min =  models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5, verbose_name="เรทน้ำหนักน้อยที่สุด")
+    rate_max =  models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=5, verbose_name="เรทน้ำหนักมากที่สุด")
     company = models.ManyToManyField(BaseCompany,verbose_name="บริษัท")
 
     class Meta:

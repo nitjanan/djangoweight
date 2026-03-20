@@ -2348,7 +2348,9 @@ def summaryProduction(request):
 
     real_pd = Weight.objects.filter(bws__company__code__in = company_in, site__in = b_site, date__range=(start_created, date_last_pd), bws__weight_type = 2).values('site__base_site_id', 'site__base_site_name').order_by('site__base_site_id').annotate(sum_weight = Sum("weight_total"))
 
-    pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, date_last_pd)).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(count=Count('site__base_site_id') 
+    #ดึงเวลาจาก line 1 อย่างเดียว กรณีโรงโม่ 3 มี 2 line จะทำให้เวลา *2
+    pd = Production.objects.filter(company__code__in = company_in, created__range=(start_created, date_last_pd), line_type__id = 1).values('site__base_site_id', 'site__base_site_name', 'pd_goal__accumulated_goal').order_by('site__base_site_id').annotate(
+        count = Count('site__base_site_id'), count_run = Count('run_time')
         , sum_goal = Sum('goal'), sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_run = Sum('run_time'), percent_p = ExpressionWrapper(F('sum_run') / F('sum_actual'), output_field= models.DecimalField())
         , sum_uncontrol=Sum(Case(When(uncontrol_time__isnull=True, then=Value(timedelta(0))), default='uncontrol_time', output_field = models.DurationField()))
         , sum_loss_n_un = ExpressionWrapper(F('sum_loss') - F('sum_uncontrol'), output_field= models.DurationField())

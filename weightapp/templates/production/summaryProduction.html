@@ -116,6 +116,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                                 <td id="id_loss_{{forloop.counter0}}"></td>
                                 <td>ตัน</td>
                             </tr>
+                            <tr>
+                                <td>จำนวนวันที่ผลิต</td>
+                                <td>{{i.count_run}}</td>
+                                <td>วัน</td>
+                            </tr>
                             {% if mc_type_time %}
                             <tr>
                                 <td class="{% if forloop.counter0  == 0 %}table-success{% elif forloop.counter0  == 1%}table-primary{% elif forloop.counter0  == 2%}table-warning{% elif forloop.counter0  == 3%}table-info{%endif%}" colspan="3">เวลาเดินเครื่องของเครื่องจักรหลัก</td>

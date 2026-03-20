@@ -636,7 +636,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   });
 
   $('.percent, .qty_site, .nd_qty_site').blur(function() {
-    calculateQty()
+    calculateQty();
   });
 
   //คำนวน จำนวนที่ได้จาก น้ำหนักรวม และ เปอร์เซ็น
@@ -726,6 +726,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     }
     return false;
   }
+
+  $(".percent" )
+  .focusout(function() {
+  })  
+  .blur(function() {
+    if($(this).val() == "")
+      $(this).val('0.0000');
+    else
+      $(this).val(parseFloat($(this).val()).toFixed(4));
+    calculateQty();
+  });
   
   </script>
 {% endblock %}

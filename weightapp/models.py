@@ -962,7 +962,7 @@ class StoneEstimate(models.Model):
 
 class StoneEstimateItem(models.Model):
     stone_type = models.ForeignKey(BaseStoneType,on_delete=models.CASCADE, null = True, blank=True)
-    percent = models.IntegerField(blank=True, null=True, default=0)
+    percent = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=8, default=0.0000 , verbose_name="เปอร์เซ็นต์")
     qty = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="จำนวนที่ได้ (ตัน)")
     site_id = models.CharField(blank=True, null=True, max_length=120, verbose_name="ส่งไปต่อ (รหัสปลายทาง) ที่แรก")
     qty_site = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10 , verbose_name="ส่งไปต่อ (ตัน) ที่แรก")

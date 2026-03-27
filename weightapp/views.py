@@ -663,6 +663,7 @@ def index(request):
         ####################################
         ########### chart stone ############
         ####################################
+        ''' โค้ดเก่า
         #ดึงชนิดหินตามบริษัท ถ้าไม่มีดึงตามนี้ 'หิน 3/4', 'หิน 40/80', 'หินฝุ่น', 'หินคลุก A', 'หินคลุก B', 'อื่นๆ',
         try:
             set_stone = SetCompStone.objects.filter(comp__code = active)
@@ -688,6 +689,113 @@ def index(request):
 
         sell_total = sum(sum(lst) for lst in [sell_mill_list, sell_stock_list, sell_purchase_list]) #รวม group sell
         produce_total = sum(produce_list)#รวม group produce
+        '''
+
+        # STEP 1: stone list
+        try:
+            set_stone = SetCompStone.objects.filter(comp__code=active)
+            result_list = list(set_stone.values_list('stone', flat=True))
+
+            text_value = result_list[0]
+            stone_list = text_value.replace("'", "").split(',')
+        except:
+            stone_list = ['01ST', '07ST', '09ST', '10ST', '16ST']
+
+        # STEP 2: stone name
+        stone_name_map = dict(
+            BaseStoneType.objects.filter(
+                base_stone_type_id__in=stone_list
+            ).values_list('base_stone_type_id', 'base_stone_type_name')
+        )
+
+        stone_name_list = [stone_name_map.get(s, '') for s in stone_list]
+        stone_name_list.append('อื่นๆ')
+
+        # date
+        start_date = request.session['db_start_date']
+        end_date = request.session['db_end_date']
+
+        # WEIGHT (type 1,4,5,6)
+        weight_qs = Weight.objects.filter(
+            ~Q(site='200PL'),
+            ~Q(site='300PL'),
+            bws__company__code__in=company_in,
+            bws__weight_type=1,
+            date__range=(start_date, end_date)
+        ).values('stone_type').annotate(
+            sell_mill=Sum(Case(When(mill__mill_source=1, then='weight_total'), default=0, output_field=models.FloatField())),
+            sell_stock=Sum(Case(When(mill__mill_source=2, then='weight_total'), default=0, output_field=models.FloatField())),
+            sell_purchase=Sum(Case(When(mill__mill_source=3, then='weight_total'), default=0, output_field=models.FloatField())),
+            total_sell=Sum(Case(When(mill__mill_source__in=[1,2,3], then='weight_total'), default=0, output_field=models.FloatField()))
+        )
+
+        weight_map = defaultdict(lambda: {'sell_mill': 0, 'sell_stock': 0, 'sell_purchase': 0, 'total_sell': 0})
+        other_weight = {'sell_mill': 0, 'sell_stock': 0, 'sell_purchase': 0, 'total_sell': 0}
+
+        for row in weight_qs:
+            stone = row['stone_type']
+            target = weight_map[stone] if stone in stone_list else other_weight
+
+            target['sell_mill'] += row['sell_mill'] or 0
+            target['sell_stock'] += row['sell_stock'] or 0
+            target['sell_purchase'] += row['sell_purchase'] or 0
+            target['total_sell'] += row['total_sell'] or 0
+
+
+        # STOCK (type 2)
+        latest_stock = StockStone.objects.filter(
+            stone=OuterRef('stone'),
+            stk__company__code__in=company_in,
+            stk__created__range=(start_date, end_date)
+        ).order_by('-stk__created')
+
+        stock_qs = StockStone.objects.filter(
+            stk__company__code__in=company_in,
+            stk__created__range=(start_date, end_date)
+        ).values('stone').annotate(
+            total=Subquery(latest_stock.values('total')[:1])
+        )
+
+        stock_map = defaultdict(float)
+        other_stock = 0
+
+        for row in stock_qs:
+            stone = row['stone']
+            if stone in stone_list:
+                stock_map[stone] = float(row['total'] or 0)
+            else:
+                other_stock += float(row['total'] or 0)
+
+        # PRODUCE (type 3)
+        produce_qs = StoneEstimateItem.objects.filter(
+            se__company__code__in=company_in,
+            se__created__range=(start_date, end_date)
+        ).values('stone_type').annotate(
+            total=Sum('total')
+        )
+
+        produce_map = defaultdict(float)
+        other_produce = 0
+
+        for row in produce_qs:
+            stone = row['stone_type']
+            if stone in stone_list:
+                produce_map[stone] += float(row['total'] or 0)
+            else:
+                other_produce += float(row['total'] or 0)
+
+        # BUILD LIST
+        sell_mill_list = [weight_map[s]['sell_mill'] for s in stone_list] + [other_weight['sell_mill']]
+        sell_stock_list = [weight_map[s]['sell_stock'] for s in stone_list] + [other_weight['sell_stock']]
+        sell_purchase_list = [weight_map[s]['sell_purchase'] for s in stone_list] + [other_weight['sell_purchase']]
+        total_sell_list = [weight_map[s]['total_sell'] for s in stone_list] + [other_weight['total_sell']]
+
+        stock_list = [stock_map[s] for s in stone_list] + [other_stock]
+        produce_list = [produce_map[s] for s in stone_list] + [other_produce]
+
+        # TOTAL
+        sell_total = sum(total_sell_list)
+        produce_total = sum(produce_list)
 
         context = { 
                     'previous_day':previous_day,

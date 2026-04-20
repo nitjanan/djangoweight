@@ -209,3 +209,15 @@ GRAPH_MODELS ={
 # Your LINE credentials
 LINE_CHANNEL_ACCESS_TOKEN = '+5nwfSwjvljTT5SobpYhacoTfRjbl+s/AcvunpB2jqfCcZszpyl0quTtzlO2EQzY6Jyq93gW0HIOGogTMT6PHsoWQiN4nftRjt2/MeNfgSdoXFxFpc04W70ju2HLrLK8yUG5jYRPjbPw+B0kBNMJjgdB04t89/1O/w1cDnyilFU='
 LINE_CHANNEL_SECRET = 'bf5a3c8bbb505bf3882e6ab7fcd6d1d5'
+
+# จำ login 30 วัน
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 days
+# ปิด browser แล้ว session ยังอยู่
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+# รีเฟรชอายุ session ทุก request (สำคัญ)
+SESSION_SAVE_EVERY_REQUEST = True
+
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False # เปิดเมื่อใช้ HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'

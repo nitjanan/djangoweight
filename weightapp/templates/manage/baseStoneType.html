@@ -47,7 +47,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     <section class="section">
       <div class="card">
         <div class="card-header">
-          <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseStoneType' %}">เพิ่ม ชนิดหิน <i class="fa-solid fa-circle-plus"></i></a>
+          {% if is_add_stone %}
+            <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseStoneType' %}">เพิ่ม ชนิดหิน <i class="fa-solid fa-circle-plus"></i></a>
+          {% else %}
+            <a type="button" class="btn btn-outline-secondary rounded-pill float-end" href="#">ไม่อนุญาติให้เพิ่มชนิดหิน กรุณาติดต่อผู้มีสิทธิ์</a>
+          {% endif %}
         </div>
         <div class="card-body">
           <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">

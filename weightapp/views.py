@@ -1173,6 +1173,9 @@ def is_edit_stock(user):
 def is_approve_weight(user):
     return user.groups.filter(name='approve_weight').exists()
 
+def is_add_stone(user):
+    return user.groups.filter(name='add_stone').exists()
+
 def loginPage(request):
     if request.method == 'POST':
         form = AuthenticationForm(data = request.POST)
@@ -4517,7 +4520,7 @@ def settingBaseStoneType(request):
     except:
         return redirect('logout')
 
-    data = BaseStoneType.objects.all().order_by('-base_stone_type_id')
+    data = BaseStoneType.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseStoneTypeFilter(request.GET, queryset = data)
@@ -4528,7 +4531,7 @@ def settingBaseStoneType(request):
     page = request.GET.get('page')
     base_stone_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), 'is_add_stone' : is_add_stone(request.user), active :"active",}
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):

@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
@@ -46,7 +46,7 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -1248,7 +1248,9 @@ def weightTable(request):
     elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
         data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
     '''
-    data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')
+    data = Weight.objects.filter(bws__company__code__in = company_in
+                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site__base_site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id'
+                ).order_by('-date','weight_id')
 
     #กรองข้อมูล
     myFilter = WeightFilter(request.GET, queryset = data)
@@ -1414,6 +1416,10 @@ def editWeight(request, mode, weight_id):
                     if weight_form.oil_content:
                         updateGasPrice(weight_form.bws.company.id, weight_form.date)
                         updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
+
+                if weight_form.customer_id == '09-V-001':
+                    updateCancelDeliveryOrder(weight_form.weight_id)
+
             #เครื่องผลิต
             if mode == 2:#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
                 if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
@@ -1447,6 +1453,61 @@ def editWeight(request, mode, weight_id):
 
     context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled'}
     return render(request, template_name, context)
+
+
+def updateCancelDeliveryOrder(weight_id):
+    try:
+        w_do = WeightDelivery.objects.get(
+            weight_id=weight_id
+        )
+
+        # update cancel
+        w_do.is_cancel = True
+        w_do.save()
+
+        sum_do = WeightDelivery.objects.filter(
+            do_doc_no=w_do.do_doc_no,
+            comp_code=w_do.comp_code,
+            delivery_date=w_do.delivery_date,
+            is_cancel=False,
+        ).aggregate(
+            sum_weight_ton=Sum("weight_ton"),
+            sum_weight_q=Sum("weight_q"),
+
+            car_customer=Count(
+                'id',
+                filter=Q(carry_type_name='รับเอง')
+            ),
+
+            car_company=Count(
+                'id',
+                filter=Q(carry_type_name='ส่งให้')
+            )
+        )
+
+        qty_tot = 0
+
+        if w_do.unit_name == 'ตัน':
+            qty_tot = sum_do['sum_weight_ton'] or 0
+
+        elif w_do.unit_name == 'คิว':
+            qty_tot = sum_do['sum_weight_q'] or 0
+
+        do = DeliveryOrder.objects.get(
+            doc_no=w_do.do_doc_no,
+            comp_code=w_do.comp_code,
+            delivery_date=w_do.delivery_date
+        )
+
+        do.car_company_rem = do.car_company - (sum_do['car_company'] or 0)
+        do.car_customer_rem = do.car_customer - (sum_do['car_customer'] or 0)
+        do.qty_tot = qty_tot
+        do.car_company_tot = sum_do['car_company'] or 0
+        do.car_customer_tot = sum_do['car_customer'] or 0
+        do.save()
+
+    except WeightDelivery.DoesNotExist:
+        pass
 
 def updateSellStockStoneItem(weight_id):
     tmp_ssn_id = None
@@ -1785,6 +1846,7 @@ def searchTeamFromCar(request):
     }
     return JsonResponse(data)
 
+''' ก่อนมี delivery_order
 def autocompalteCustomer(request):
     if 'term' in request.GET:
         term = request.GET.get('term')
@@ -1793,6 +1855,36 @@ def autocompalteCustomer(request):
         for obj in qs:
             titles.append(obj.customer_id +":"+ obj.customer_name)
     return JsonResponse(titles, safe=False)
+'''
+
+def autocompalteCustomer(request):
+    titles = []
+
+    if 'term' in request.GET:
+        term = request.GET.get('term')
+        do_doc_no = request.GET.get('do_doc_no')
+        old_customer = request.GET.get('old_customer')
+
+        qs = BaseCustomer.objects.all()
+
+        # ถ้ามี do_doc_no
+        if do_doc_no:
+            qs = qs.filter(
+                Q(customer_id='09-V-001') |
+                Q(customer_id=old_customer)
+            )
+
+        # search term
+        qs = qs.filter(
+            Q(customer_id__icontains=term) |
+            Q(customer_name__icontains=term)
+        )[:15]
+
+        for obj in qs:
+            titles.append(f"{obj.customer_id}:{obj.customer_name}")
+
+    return JsonResponse(titles, safe=False)
+
 
 def autocompalteSite(request):
     if 'term' in request.GET:
@@ -9023,3 +9115,200 @@ def exportLoadingRate(request):
     response["Content-Disposition"] = f'attachment; filename="loading_rate({active}).xlsx"'
     response["Content-Length"] = str(size)
     return response
+
+######## update or create WeightDelivery จาก จากตาชั่ง local เก็บข้อมูลตามรายการชั่งที่มีใบสั่งสินค้า ########
+@csrf_exempt
+def uc_weight_delivery(request):
+
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'invalid method'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body)
+        weight_id = data.get('weight_id')
+
+        if not weight_id:
+            return JsonResponse({
+                'status': 'fail',
+                'message': 'weight_id is required'
+            }, status=400)
+        
+        base_ws = BaseWeightStation.objects.get(id = data.get('bws'))
+
+        # UPDATE FIRST
+        updated = WeightDelivery.objects.filter(
+            weight_id=weight_id
+        ).update(
+            delivery_date=data.get('delivery_date'),
+            bws=data.get('bws'),
+            comp_code = base_ws.company.code,
+            do_id=data.get('do_id'),
+            do_doc_no=data.get('do_doc_no'),
+            carry_type_name=data.get('carry_type_name'),
+            weight_ton=data.get('weight_ton'),
+            weight_q=data.get('weight_q'),
+            unit_name=data.get('unit_name'),
+            is_cancel=data.get('is_cancel')
+        )
+
+        # CREATE IF NOT EXISTS
+        if not updated:
+            wd = WeightDelivery.objects.create(
+                weight_id=weight_id,
+                delivery_date=data.get('delivery_date'),
+                bws=data.get('bws'),
+                comp_code = base_ws.company.code,
+
+                do_id=data.get('do_id'),
+                do_doc_no=data.get('do_doc_no'),
+                carry_type_name=data.get('carry_type_name'),
+
+                weight_ton=data.get('weight_ton'),
+                weight_q=data.get('weight_q'),
+                unit_name=data.get('unit_name')
+            )
+
+            status = 'Create New Item'
+
+        else:
+            wd = WeightDelivery.objects.get(weight_id=weight_id)
+            status = 'Update Item'
+
+        uc_delivery_order(data) #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
+
+        return JsonResponse({
+            'status': status,
+            'weight_id': wd.weight_id,
+            'do_id': wd.do_id
+        })
+
+    except Exception as e:
+
+        return JsonResponse({
+            'status': 'fail',
+            'message': str(e)
+        }, status=500)
+
+
+#คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
+def uc_delivery_order(data):
+
+    try:
+        delivery_date = data.get('delivery_date')
+        bws = data.get('bws')
+        doc_no = data.get('do_doc_no')
+        unit_name = data.get('unit_name')
+        car_company  = data.get('car_company')
+        car_customer  = data.get('car_customer')
+
+        company = BaseWeightStation.objects.filter(
+            id=bws
+        ).values(
+            'company__id', 'company__code'
+        ).first()
+
+        # QUERY รอบเดียว
+        sum_do = WeightDelivery.objects.filter(
+            do_doc_no = doc_no,
+            comp_code = company['company__code'],
+            delivery_date = delivery_date,
+            is_cancel = False,
+        ).aggregate(
+            sum_weight_ton = Sum("weight_ton"),
+            sum_weight_q = Sum("weight_q"),
+
+            car_customer=Count(
+                'id',
+                filter=Q(carry_type_name='รับเอง')
+            ),
+
+            car_company=Count(
+                'id',
+                filter=Q(carry_type_name='ส่งให้')
+            )
+        )
+
+        qty_tot = 0
+
+        if unit_name == 'ตัน':
+            qty_tot = sum_do['sum_weight_ton'] or 0
+
+        elif unit_name == 'คิว':
+            qty_tot = sum_do['sum_weight_q'] or 0
+
+        DeliveryOrder.objects.update_or_create(
+            doc_no=doc_no,
+            comp_code=company['company__code'],
+            delivery_date=delivery_date,
+
+            defaults={
+                'unit_name': unit_name,
+                'car_company': car_company,
+                'car_customer': car_customer,
+
+                'car_company_rem': car_company - sum_do['car_company'],
+                'car_customer_rem': car_customer - sum_do['car_customer'],
+
+                'qty_tot': qty_tot,
+                'car_company_tot': sum_do['car_company'],
+                'car_customer_tot': sum_do['car_customer'],
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+
+################# api delivery Order สำหรับ update table ตาชั่ง local #####################################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def deliveryOrderSummaryByComp(request, date, comp_code):
+    queryset = DeliveryOrder.objects.filter(delivery_date = date, comp_code = comp_code)
+    serializer = DeliveryOrderSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+################# api weigh Delivery สำหรับ update table ตาชั่ง local ไว้เช็คจำนวนรถคงเหลือ #################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightDeliverySummaryByComp(request, date, comp_code):
+    queryset = WeightDelivery.objects.filter(delivery_date = date, comp_code = comp_code)
+    serializer = WeightDeliverySerializer(queryset, many = True)
+    return Response(serializer.data)
+
+################ api delivery Order to web ออกใบสั่งขาย K Kitti #################################################
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def deliveryOrderByComp(request):
+
+    date = request.query_params.get('date')
+    comp_code = request.query_params.get('comp_code')
+
+    queryset = DeliveryOrder.objects.filter(
+        delivery_date=date,
+        comp_code=comp_code
+    )
+
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+
+    serializer = DeliveryOrderSerializer(result_page, many=True)
+
+    return paginator.get_paginated_response(serializer.data)
+
+
+################# api delivery Order สำหรับ รายการแก้ไข weight บนหน้าเว็ป ##################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def deliveryOrderVStamp(request, v_stamp, comp_code):
+    queryset = DeliveryOrder.objects.filter(v_stamp__gte = v_stamp, comp_code = comp_code)
+    serializer = DeliveryOrderSerializer(queryset, many = True)
+    return Response(serializer.data)
+
+################# api weigh Delivery สำหรับ รายการแก้ไข weight บนหน้าเว็ป #################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def weightDeliveryVStamp(request, v_stamp, comp_code):
+    queryset = WeightDelivery.objects.filter(v_stamp__gte = v_stamp, comp_code = comp_code)
+    serializer = WeightDeliverySerializer(queryset, many = True)
+    return Response(serializer.data)

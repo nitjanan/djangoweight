@@ -517,6 +517,8 @@ class Weight(models.Model):
     #คำนวณราคาน้ำมัน
     oil_cost = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10)
     oil_sell = models.DecimalField(blank=True, null=True, decimal_places=4, max_digits=10)
+    #อ้างอิงใบส่งของ
+    do_doc_no = models.CharField(blank=True, null=True,max_length=120)
 
     class Meta:
         db_table = 'weight'
@@ -609,6 +611,9 @@ class WeightHistory(models.Model):
     exp_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
     exp_type = models.CharField(blank=True, null=True,max_length=255)#ประเภทชั่ง
     is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิก")#สถานะยกเลิก
+
+    #อ้างอิงใบส่งของ
+    do_doc_no = models.CharField(blank=True, null=True,max_length=120)
 
     class Meta:
         db_table = 'weight_history'
@@ -708,7 +713,8 @@ def save_weight_history(sender, instance, **kwargs):
                     exp_remission = old_weight.exp_remission,
                     exp_note = tmp_note, #ถ้ารหัสกับชื่อ local และ center ให้เก็บ error 03/03/2025
                     exp_type = old_weight.exp_type,
-                    user_update_id = tmp_user_update
+                    user_update_id = tmp_user_update,
+                    do_doc_no = old_weight.do_doc_no,
             )
         except Weight.DoesNotExist:
             pass
@@ -1199,3 +1205,84 @@ class LoadingRateItem(models.Model):
     
 ############# เรทค่าตัก/ขน #############
 ######################################
+class WeightDelivery(models.Model):
+    weight_id = models.IntegerField(unique=True, blank = True, null = True, db_index=True)
+    delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    bws = models.CharField(
+        max_length=20, blank=False, null=True, db_index=True
+    )
+    comp_code = models.CharField(
+        max_length=20, blank=False, null=True, db_index=True
+    )
+    do_id = models.IntegerField()
+    do_doc_no =  models.CharField(
+        max_length=30, blank=False, null=True, db_index=True
+    )
+    carry_type_name = models.CharField(blank=True, null=True,max_length=20)
+    weight_ton = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    weight_q = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    unit_name = models.CharField(
+        max_length=20, blank=False, null=True
+    )
+    is_cancel = models.BooleanField(default=False, verbose_name="สถานะยกเลิกรายการ")
+    v_stamp = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'weight_delivery'
+        indexes = [
+            models.Index(fields=['weight_id', 'bws']),
+            models.Index(fields=['weight_id', 'do_doc_no']),
+            models.Index(
+                fields=['do_doc_no', 'bws', 'delivery_date']
+            ),
+            models.Index(fields=['weight_id']),
+        ]
+
+    def __str__(self):
+        return str(self.id)
+	
+class DeliveryOrder(models.Model):
+    delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    doc_no = models.CharField(
+        max_length=30, blank=False, null=True, db_index=True
+    )
+
+    car_company = models.IntegerField(blank=True, null=True)
+    car_customer = models.IntegerField(blank=True, null=True)
+
+    car_company_tot = models.IntegerField(blank=True, null=True)
+    car_customer_tot = models.IntegerField(blank=True, null=True)
+
+    car_company_rem = models.IntegerField(blank=True, null=True)
+    car_customer_rem = models.IntegerField(blank=True, null=True)
+
+    qty_tot = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    
+    unit_name = models.CharField(
+        max_length=20, blank=False, null=True
+    )
+    comp_code = models.CharField(
+        max_length=20, blank=False, null=True, db_index=True
+    )
+    v_stamp = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'delivery_order'
+        indexes = [
+            models.Index(
+                fields=['doc_no', 'comp_code', 'delivery_date']
+            ),
+            models.Index(fields=['comp_code', 'doc_no']),
+            models.Index(fields=['doc_no',]),
+        ]
+
+    def __str__(self):
+        return str(self.id)

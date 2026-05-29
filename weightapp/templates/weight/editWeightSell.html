@@ -15,6 +15,24 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 input.del[type=checkbox] {
  display: none;
 }
+
+.col-md-1-5 {
+    flex: 0 0 12.5%;
+    max-width: 12.5%;
+}
+
+.col-md-2-5 {
+    flex: 0 0 20.833333%;
+    max-width: 20.833333%;
+}
+
+@media (max-width: 767px) {
+    .col-md-1-5,
+    .col-md-2-5 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
 </style>
 {% endblock %}
 
@@ -64,20 +82,28 @@ input.del[type=checkbox] {
               <div class="row">
                 {% csrf_token %}
                 <div class="row">
-                    <div class="col-md-2 form-group">
-                        <label for="first-name-horizontal">วันที่</label>
+                      <div class="col-md-2 form-group">
+                        <label for="date">วันที่</label>
                       </div>
                       <div class="col-md-2 form-group">
                         {{form.date |attr:"readonly"| add_class:"form-control" }}
                       </div>
-                      <div class="col-md-8 form-group">
-                        {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
-                    </div>
-
-                    <div class="col-md-2 form-group">
+                      <div class="col-md-1-5 form-group">
+                        <label for="do_doc_no">เลขที่เอกสาร</label>
+                      </div>
+                      <div class="col-md-2-5 form-group">
+                        {{form.doc_id |attr:"readonly"| add_class:"form-control fw-bold" }}
+                      </div>
+                      <div class="col-md-1-5  form-group">
+                        <label for="do_doc_no">เลขที่ใบส่งของ</label>
+                      </div>
+                      <div class="col-md-2-5 form-group">
+                        {{form.do_doc_no |attr:"readonly"| add_class:"form-control text-primary"}}
+                      </div>
+                    <div class="col-lg-2 form-group">
                       <label for="first-name-horizontal">จ่ายเงิน</label>
                     </div>
-                    <div class="col-md-4 form-group mt-2">
+                    <div class="col-lg-5 form-group mt-2">
                       <fieldset id="pay_group">
                         <div class="form-check form-check-primary form-check-inline me-4">
                           <input class="form-check-input" type="radio" name="pay_group" id="pg_1" checked="" value="เงินสด" onclick="radiostateP1(this)">
@@ -106,10 +132,10 @@ input.del[type=checkbox] {
                       </fieldset>
                       {{form.pay}}
                     </div>
-                    <div class="col-md-1 form-group">
+                    <div class="col-lg-1 form-group">
                       <label for="first-name-horizontal">S.</label>
                     </div>
-                    <div class="col-md-5 form-group">
+                    <div class="col-lg-4 form-group">
                       {{form.is_s}}
                       {{form.is_cancel| add_class:"d-none"}}
                     </div>
@@ -430,6 +456,7 @@ input.del[type=checkbox] {
         $('#id_weight_out').val('0.000');
         $('#id_weight_total').val('0.000');
         $('#id_is_cancel').prop( "checked", true );
+        $('#id_do_doc_no').val('');
     }else{
         $('#id_is_cancel').prop( "checked", false );
     }
@@ -542,12 +569,41 @@ input.del[type=checkbox] {
     $('input[name="vat_type_group"][value="{{weight.vat_type}}"]').prop("checked", true);
   }
 
+  /*
   $( function() {
       $( "#id-form-customer" ).autocomplete({
         source: '{% url "autocompalteCustomer" %}',
         minLength: 1,
       });
   } );
+  */
+
+$(function () {
+    $("#id-form-customer").autocomplete({
+        source: function(request, response) {
+
+            $.ajax({
+                url: '{% url "autocompalteCustomer" %}',
+                data: {
+                    term: request.term,
+                    do_doc_no: $("#id_do_doc_no").val(),
+                    old_customer: $("#id_customer").val()
+                },
+                success: function(data) {
+                    response(data);
+                }
+            });
+
+        },
+        minLength: 0,
+    });
+
+    // click แล้ว show dropdown ทันที
+    $("#id-form-customer").on("focus click", function () {
+        $(this).autocomplete("search", $(this).val());
+    });
+
+});
 
   function searchDataCustomer(){
         var tempSite = $("#id_site").val();

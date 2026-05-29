@@ -275,7 +275,7 @@ class WeightForm(forms.ModelForm):
 
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel')
+       fields = ('date', 'doc_id', 'do_doc_no', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'site_name' : forms.HiddenInput(),

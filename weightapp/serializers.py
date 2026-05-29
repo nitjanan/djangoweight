@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery
 from django.contrib.auth.models import User
 from rest_framework.validators import ValidationError
 from rest_framework.authtoken.models import Token
@@ -191,5 +191,17 @@ class BaseJobTypeSerializer(serializers.ModelSerializer):
 class BaseCustomerSiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseCustomerSite
+        fields = '__all__'
+        extra_fields = ['id']
+
+class DeliveryOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeliveryOrder
+        fields = '__all__'
+        extra_fields = ['id']
+
+class WeightDeliverySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeightDelivery
         fields = '__all__'
         extra_fields = ['id']

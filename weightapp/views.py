@@ -4734,7 +4734,7 @@ def settingBaseJobType(request):
     except:
         return redirect('logout')
 
-    data = BaseJobType.objects.all().order_by('base_job_type_id')
+    data = BaseJobType.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseJobTypeFilter(request.GET, queryset = data)
@@ -4903,7 +4903,7 @@ def settingBaseScoop(request):
     except:
         return redirect('logout')
 
-    data = BaseScoop.objects.all().order_by('-scoop_id')
+    data = BaseScoop.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseScoopFilter(request.GET, queryset = data)
@@ -4990,7 +4990,7 @@ def settingBaseCarTeam(request):
     except:
         return redirect('logout')
 
-    data = BaseCarTeam.objects.all().order_by('-car_team_id')
+    data = BaseCarTeam.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseCarTeamFilter(request.GET, queryset = data)
@@ -5078,7 +5078,7 @@ def settingBaseCar(request):
     except:
         return redirect('logout')
 
-    data = BaseCar.objects.all().order_by('-car_id')
+    data = BaseCar.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseCarFilter(request.GET, queryset = data)
@@ -5343,7 +5343,7 @@ def settingBaseDriver(request):
     except:
         return redirect('logout')
 
-    data = BaseDriver.objects.all().order_by('-driver_id')
+    data = BaseDriver.objects.all().order_by('-created')
 
     #กรองข้อมูล
     myFilter = BaseDriverFilter(request.GET, queryset = data)

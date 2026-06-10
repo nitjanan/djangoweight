@@ -553,7 +553,7 @@ class BaseScoopForm(forms.ModelForm):
 class BaseCarTeamForm(forms.ModelForm):
     class Meta:
        model = BaseCarTeam
-       fields = ('car_team_id' , 'car_team_name', 'user_created', 'oil_customer_id')
+       fields = ('car_team_id' , 'car_team_name', 'user_created') #, 'oil_customer_id'
        widgets = {
             'user_created': forms.HiddenInput(),
         }
@@ -580,8 +580,10 @@ class BaseCarTeamForm(forms.ModelForm):
 
         if not id or len(id) != len(fm) or not id.startswith(spc.pattern):
             raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        ''' ปิดรหัสลูกค้าน้ำมัน 10/06/2569
         if not oil_id or not pattern.match(oil_id):
-            raise forms.ValidationError(u"รหัสลูกค้าน้ำมันควรมี  format '92-V-xxx' กรุณาเปลี่ยนรหัสใหม่.")
+            raise forms.ValidationError(u"รหัสลูกค้าน้ำมันควรมี  format '92-V-xxx' กรุณาเปลี่ยนรหัสใหม่.")        
+        '''
         return cleaned_data
     
     def save(self, commit=True):

@@ -1141,9 +1141,10 @@ def index(request):
         uni_chart_data = getChartTransport(start_date, end_date, 'UNI')
         kt_chart_data = getChartTransport(start_date, end_date, 'KT')
         stps_chart_data = getChartTransport(start_date, end_date, 'STPS')
+        stpk_chart_data = getChartTransport(start_date, end_date, 'STPK')
         tym_chart_data = getChartTransport(start_date, end_date, 'TYM')
 
-        comp_list = ['SLC', 'SLT', 'CTM', 'UNI', 'KT', 'STPS', 'TYM']
+        comp_list = ['SLC', 'SLT', 'CTM', 'UNI', 'KT', 'STPS', 'STPK', 'TYM']
         ####################################
         ######## data weight stock #########
         ####################################
@@ -1173,6 +1174,7 @@ def index(request):
                     'uni_chart_data': json.dumps(uni_chart_data, ensure_ascii=False),
                     'kt_chart_data': json.dumps(kt_chart_data, ensure_ascii=False),
                     'stps_chart_data': json.dumps(stps_chart_data, ensure_ascii=False),
+                    'stpk_chart_data': json.dumps(stpk_chart_data, ensure_ascii=False),
                     'tym_chart_data': json.dumps(tym_chart_data, ensure_ascii=False),
                     'previous_day':previous_day,
                     'start_day':start_day,
@@ -8176,7 +8178,7 @@ def excelTransportByCompany(request, my_q, start_created, end_created):
     str_start = datetime.strptime(start_created, '%Y-%m-%d').strftime('%d/%m/%Y')
     str_end = datetime.strptime(end_created, '%Y-%m-%d').strftime('%d/%m/%Y')
 
-    transport_comp = ['SLC', 'SLT', 'CTM', 'KT', 'UNI', 'STPS', 'TYM']
+    transport_comp = ['SLC', 'SLT', 'CTM', 'KT', 'UNI', 'STPS', 'STPK', 'TYM']
     all_comp = BaseCompany.objects.filter(code__in=transport_comp).values('code', 'name')
 
     output = BytesIO()

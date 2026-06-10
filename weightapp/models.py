@@ -450,6 +450,7 @@ class Weight(models.Model):
     mill_name = models.CharField(blank=True, null=True,max_length=255)#โรงโม่
     stone_type = models.ForeignKey(BaseStoneType ,on_delete=models.CASCADE, related_name='weight_stone_type', blank=True, null = True)#รหัสหิน  iiiiiiiiiiiii  
     stone_type_name = models.CharField(blank=True, null=True,max_length=255)#ชนิดหิน
+    stone_desc = models.CharField(blank=True, null=True,max_length=255)
     pay = models.CharField(blank=True, null=True,max_length=255)#จ่ายเงิน
     scale_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้ชั่ง
@@ -545,6 +546,7 @@ class WeightHistory(models.Model):
     mill_name = models.CharField(blank=True, null=True,max_length=255)#โรงโม่
     stone_type = models.ForeignKey(BaseStoneType ,on_delete=models.CASCADE, related_name='weight_history_stone_type', blank=True, null = True)#รหัสหิน  iiiiiiiiiiiii
     stone_type_name = models.CharField(blank=True, null=True,max_length=255)#ชนิดหิน
+    stone_desc = models.CharField(blank=True, null=True,max_length=255)
     pay = models.CharField(blank=True, null=True,max_length=255)#จ่ายเงิน
     scale_id = models.CharField(blank=True, null=True,max_length=255)#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255)#ชื่อผู้ชั่ง
@@ -663,6 +665,7 @@ def save_weight_history(sender, instance, **kwargs):
                     mill_name = old_weight.mill_name,
                     stone_type = old_weight.stone_type,
                     stone_type_name = old_weight.stone_type_name,
+                    stone_desc = old_weight.stone_desc,
                     pay = old_weight.pay,
                     scale_id = old_weight.scale_id,
                     scale_name = old_weight.scale_name,

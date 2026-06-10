@@ -3194,6 +3194,103 @@ def formatHourMinute(time):
        result = f'{time}'[:-3]
     return result
 
+def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list):
+    """Bulk-load production, loss, machine, and weight data for one site sheet."""
+    zero_td = timedelta(0)
+    cache = {
+        'production_by_key': {},
+        'aggregates_by_key': {},
+        'accumulated_goals': {},
+        'wk_times': {},
+        'loss_by_production': defaultdict(dict),
+        'mc_by_production': defaultdict(dict),
+        'weight_by_date': {},
+        'accumulated_weight': {},
+    }
+    if not line_type_ids or not created_dates_list:
+        return cache
+
+    prods = list(
+        Production.objects.filter(
+            site=site,
+            line_type_id__in=line_type_ids,
+            created__in=created_dates_list,
+        ).order_by('id')
+    )
+    groups = defaultdict(list)
+    for p in prods:
+        groups[(p.created, p.line_type_id)].append(p)
+
+    goals_daily = defaultdict(lambda: defaultdict(lambda: Decimal('0')))
+    for key, group in groups.items():
+        cache['production_by_key'][key] = group[0]
+        sum_loss = sum((p.total_loss_time or zero_td for p in group), zero_td)
+        sum_actual = sum((p.actual_time or zero_td for p in group), zero_td)
+        sum_uncontrol = sum((p.uncontrol_time or zero_td for p in group), zero_td)
+        cache['aggregates_by_key'][key] = {
+            'sum_loss_n_un': sum_loss - sum_uncontrol,
+            'sum_work_real': sum_actual - sum_loss,
+        }
+        wk_total = 0
+        for p in group:
+            if p.actual_time is not None and p.total_loss_time is not None:
+                wk_total += int((p.actual_time - p.total_loss_time).total_seconds() * 1000000)
+            elif p.actual_time is not None:
+                wk_total += int(p.actual_time.total_seconds() * 1000000)
+        cache['wk_times'][key] = wk_total or None
+        for p in group:
+            if p.goal is not None:
+                goals_daily[p.line_type_id][p.created] += p.goal
+
+    for lt_id in line_type_ids:
+        for cd in created_dates_list:
+            month_start = datetime.strptime(startDateInMonth(cd), '%Y-%m-%d').date()
+            total = sum(
+                g for d, g in goals_daily[lt_id].items()
+                if month_start <= d <= cd
+            )
+            cache['accumulated_goals'][(lt_id, cd)] = total if total else None
+
+    min_date = min(created_dates_list)
+    max_date = max(created_dates_list)
+    earliest_month = datetime.strptime(startDateInMonth(min_date), '%Y-%m-%d').date()
+    cache['weight_by_date'] = {
+        row['date']: row['s']
+        for row in Weight.objects.filter(
+            site=site,
+            bws__weight_type=2,
+            date__gte=earliest_month,
+            date__lte=max_date,
+        ).values('date').annotate(s=Sum('weight_total'))
+    }
+    for cd in created_dates_list:
+        month_start = datetime.strptime(startDateInMonth(cd), '%Y-%m-%d').date()
+        total = sum(
+            v for d, v in cache['weight_by_date'].items()
+            if month_start <= d <= cd
+        )
+        cache['accumulated_weight'][cd] = total if total else None
+
+    production_ids = [p.id for p in prods]
+    if production_ids:
+        for row in ProductionLossItem.objects.filter(
+            production_id__in=production_ids,
+        ).values('production_id', 'mc_type__name', 'loss_type__name').annotate(s=Sum('loss_time')):
+            cache['loss_by_production'][row['production_id']][
+                (row['mc_type__name'], row['loss_type__name'])
+            ] = row['s']
+        for m in ProductionMachineItem.objects.filter(
+            production_id__in=production_ids,
+        ).select_related('mc_type'):
+            mc_name = m.mc_type.name if m.mc_type else None
+            cache['mc_by_production'][m.production_id][mc_name] = {
+                'mile_start': m.mile_start,
+                'mile_end': m.mile_end,
+                'diff_time': m.diff_time,
+            }
+
+    return cache
+
 def excelProductionAndLoss(request, my_q, sc_q):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -3207,54 +3304,56 @@ def excelProductionAndLoss(request, my_q, sc_q):
     if sites:
         for site in sites:
             #ดึงเวลาสูญเสีย
-            count_loss = ProductionLossItem.objects.filter(sc_q, production__site = site).order_by('mc_type__id', 'loss_type__id').values('production__site__base_site_id', 'mc_type__name', 'loss_type__name').annotate(sum_time = Sum('loss_time'))
+            count_loss_list = list(ProductionLossItem.objects.filter(sc_q, production__site=site).order_by('mc_type__id', 'loss_type__id').values('production__site__base_site_id', 'mc_type__name', 'loss_type__name').annotate(sum_time=Sum('loss_time')))
             #ดึงเวลาเครื่องจักร
-            count_mc = ProductionMachineItem.objects.filter(sc_q, production__site = site).order_by('mc_type__id').values('mc_type__name').distinct()
+            count_mc_list = list(ProductionMachineItem.objects.filter(sc_q, production__site=site).order_by('mc_type__id').values('mc_type__name').distinct())
+            count_loss_len = len(count_loss_list)
+            count_mc_len = len(count_mc_list)
+            block_width = count_loss_len + (count_mc_len * 3) + 17
 
             sheet = workbook.create_sheet(title=site.base_site_name)
 
             # Fetch distinct line types for the current mill
-            line_types = Production.objects.filter(my_q, site=site).values_list('line_type', flat=True).distinct()
-
-            line_type =  BaseLineType.objects.filter(id__in=line_types)
+            line_type_ids = list(Production.objects.filter(my_q, site=site).values_list('line_type', flat=True).distinct())
+            line_type_list = list(BaseLineType.objects.filter(id__in=line_type_ids))
 
             # Create a list of colors for each line_type
-            line_type_colors = [generate_pastel_color() for i  in range(len(line_type) + 1)]
+            line_type_colors = [generate_pastel_color() for _ in range(len(line_type_list) + 1)]
 
             column_index = 2
-            for line in line_type:
+            for line in line_type_list:
                 sheet.cell(row=1, column = column_index, value = line.name)
-                sheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column= (column_index + len(count_loss) + (len(count_mc) * 3) + 17) -1 )
+                sheet.merge_cells(start_row=1, start_column=column_index, end_row=1, end_column=(column_index + block_width) - 1)
                 sheet.cell(row=1, column=column_index).alignment = Alignment(horizontal='center')
-                column_index += len(count_loss) + (len(count_mc) * 3) + 17
+                column_index += block_width
 
             headers2 = ['Date']
-            for i in  range(len(line_type)):
+            for _ in range(len(line_type_list)):
                 headers2.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', 'ชั่วโมงตามแผน', 'ชั่วโมงตามแผน', 'ชั่วโมงทำงาน','ชั่วโมงกำหนดจริง', 'ชั่วโมงกำหนดจริง', 'ชั่วโมงกำหนดจริง', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง', 'ชั่วโมงเดินเครื่อง'])
-                headers2.extend([cl['mc_type__name'] for cl in count_loss])
+                headers2.extend([cl['mc_type__name'] for cl in count_loss_list])
                 headers2.extend(['รวมเวลาสูญเสีย','ชั่วโมงการทำงานจริง'])
                 headers2.extend([
                     item
-                    for cl in count_mc
+                    for cl in count_mc_list
                     for item in [
                         cl['mc_type__name'],
                         cl['mc_type__name'],
                         cl['mc_type__name']
                     ]
-                ])            
+                ])
                 headers2.extend(['ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
 
             sheet.append(headers2)
 
             merge_cells_num = 0
             headers3 = ['Date']
-            for i in  range(len(line_type)):
+            for _ in range(len(line_type_list)):
                 headers3.extend(['เป้าต่อวัน','เป้าสะสม(ตัน)', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงทำงาน', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงกำหนดจริง', '(เริ่ม)', '(สิ้นสุด)', 'ชั่วโมงเดินเครื่อง'])
-                headers3.extend([cl['loss_type__name'] for cl in count_loss])
+                headers3.extend([cl['loss_type__name'] for cl in count_loss_list])
                 headers3.extend(['รวมเวลาสูญเสีย','ชั่วโมงการทำงานจริง'])
                 headers3.extend([
                     item
-                    for cl in count_mc
+                    for cl in count_mc_list
                     for item in [
                         'เลขไมล์เริ่มต้น ' + cl['mc_type__name'],
                         'เลขไมล์สิ้นสุด ' + cl['mc_type__name'],
@@ -3264,133 +3363,112 @@ def excelProductionAndLoss(request, my_q, sc_q):
                 headers3.extend(['ยอดผลิต (ตัน)','ยอดผลิตสะสม','กำลังการผลิต (ตัน/ชั่วโมง)','หมายเหตุ',])
 
                 # merge_cells headers เป้าต่อวัน, เป้าสะสม(ตัน),ชั่วโมงทำงาน,ชั่วโมงเดินเครื่อง
-                sheet.merge_cells(start_row=2, start_column = 2 + merge_cells_num , end_row=3, end_column = 2 + merge_cells_num)
-                sheet.merge_cells(start_row=2, start_column = 3 + merge_cells_num , end_row=3, end_column = 3 + merge_cells_num)
-                sheet.merge_cells(start_row=2, start_column = 6 + merge_cells_num , end_row=3, end_column = 6 + merge_cells_num)
-                sheet.merge_cells(start_row=2, start_column = 9 + merge_cells_num , end_row=3, end_column = 9 + merge_cells_num)
-                sheet.merge_cells(start_row=2, start_column = 12 + merge_cells_num , end_row=3, end_column = 12 + merge_cells_num)
-                sheet.merge_cells(start_row = 2, start_column = 4 + merge_cells_num , end_row = 2, end_column = 5 + merge_cells_num)
-                sheet.merge_cells(start_row = 2, start_column = 7 + merge_cells_num , end_row = 2, end_column = 8 + merge_cells_num)
-                sheet.merge_cells(start_row = 2, start_column = 10 + merge_cells_num , end_row = 2, end_column = 11 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=2 + merge_cells_num, end_row=3, end_column=2 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=3 + merge_cells_num, end_row=3, end_column=3 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=6 + merge_cells_num, end_row=3, end_column=6 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=9 + merge_cells_num, end_row=3, end_column=9 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=12 + merge_cells_num, end_row=3, end_column=12 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=4 + merge_cells_num, end_row=2, end_column=5 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=7 + merge_cells_num, end_row=2, end_column=8 + merge_cells_num)
+                sheet.merge_cells(start_row=2, start_column=10 + merge_cells_num, end_row=2, end_column=11 + merge_cells_num)
 
                 #ช่องหลังจาก loos_item
-                sheet.merge_cells(start_row=2, start_column = 13 + merge_cells_num + len(count_loss) , end_row=3, end_column = 13 + merge_cells_num + len(count_loss))
-                sheet.merge_cells(start_row=2, start_column = 14 + merge_cells_num + len(count_loss) , end_row=3, end_column = 14 + merge_cells_num + len(count_loss))
+                sheet.merge_cells(start_row=2, start_column=13 + merge_cells_num + count_loss_len, end_row=3, end_column=13 + merge_cells_num + count_loss_len)
+                sheet.merge_cells(start_row=2, start_column=14 + merge_cells_num + count_loss_len, end_row=3, end_column=14 + merge_cells_num + count_loss_len)
 
                 #ช่องหลังจาก loos_item และ mc_item
-                sheet.merge_cells(start_row=2, start_column = 15 + merge_cells_num + len(count_loss) + (len(count_mc) * 3) , end_row=3, end_column = 15 + merge_cells_num + len(count_loss)+ (len(count_mc) * 3))            
-                sheet.merge_cells(start_row=2, start_column = 16 + merge_cells_num + len(count_loss) + (len(count_mc) * 3), end_row=3, end_column = 16 + merge_cells_num + len(count_loss)+ (len(count_mc) * 3))
-                sheet.merge_cells(start_row=2, start_column = 17 + merge_cells_num + len(count_loss) + (len(count_mc) * 3), end_row=3, end_column = 17 + merge_cells_num + len(count_loss)+ (len(count_mc) * 3))
-                sheet.merge_cells(start_row=2, start_column = 18 + merge_cells_num + len(count_loss) + (len(count_mc) * 3), end_row=3, end_column = 18 + merge_cells_num + len(count_loss)+ (len(count_mc) * 3))
+                sheet.merge_cells(start_row=2, start_column=15 + merge_cells_num + count_loss_len + (count_mc_len * 3), end_row=3, end_column=15 + merge_cells_num + count_loss_len + (count_mc_len * 3))
+                sheet.merge_cells(start_row=2, start_column=16 + merge_cells_num + count_loss_len + (count_mc_len * 3), end_row=3, end_column=16 + merge_cells_num + count_loss_len + (count_mc_len * 3))
+                sheet.merge_cells(start_row=2, start_column=17 + merge_cells_num + count_loss_len + (count_mc_len * 3), end_row=3, end_column=17 + merge_cells_num + count_loss_len + (count_mc_len * 3))
+                sheet.merge_cells(start_row=2, start_column=18 + merge_cells_num + count_loss_len + (count_mc_len * 3), end_row=3, end_column=18 + merge_cells_num + count_loss_len + (count_mc_len * 3))
 
-                merge_cells_num += len(count_loss) + (len(count_mc) * 3) + 17
+                merge_cells_num += block_width
 
             sheet.cell(row=1, column = 1, value = 'วัน/เดือน/ปี')
             sheet.merge_cells(start_row=1, start_column = 1, end_row=3, end_column=1)
             sheet.append(headers3)
 
             # Fetch distinct 'created' dates for the current mill
-            created_dates = Production.objects.filter(my_q, site=site).values_list('created', flat=True).order_by('created').distinct()
-            first_date = created_dates.first()
-            pd_year = datetime.strptime(str(first_date), '%Y-%m-%d').year
+            created_dates_list = list(
+                Production.objects.filter(my_q, site=site)
+                .values_list('created', flat=True)
+                .order_by('created')
+                .distinct()
+            )
+            pd_year = (
+                datetime.strptime(str(created_dates_list[0]), '%Y-%m-%d').year
+                if created_dates_list else datetime.today().year
+            )
+            site_cache = _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list)
 
-            for created_date in created_dates:
+            for created_date in created_dates_list:
                 row = [created_date]
                 row_sum = ['']
                 row_persent_loss = ['']
                 row_persent_accumulated_produc = ['']
                 sum_capacity_per_hour = Decimal('0.0')
-                
-                date_from_accumulated = startDateInMonth(created_date)
 
-                for line_type in BaseLineType.objects.filter(id__in=line_types):
-                    production = Production.objects.filter(site = site, line_type = line_type, created = created_date).annotate( count=Count('site__base_site_id') 
-                        , sum_loss = Sum('total_loss_time'), sum_actual = Sum('actual_time'), sum_uncontrol=Sum(Case(When(uncontrol_time__isnull=True, then=Value(timedelta(0))), default='uncontrol_time', output_field = models.DurationField()))
-                        , sum_loss_n_un = ExpressionWrapper(F('sum_loss') - F('sum_uncontrol'), output_field= models.DurationField()) 
-                        , sum_work_real =  ExpressionWrapper(F('sum_actual') - F('sum_loss'), output_field= models.DurationField()) ).first()
+                data_sum_produc = site_cache['weight_by_date'].get(created_date)
+                accumulated_produc = site_cache['accumulated_weight'].get(created_date)
 
-                    accumulated_goal = Production.objects.filter(site = site, line_type = line_type, created__range=(date_from_accumulated, created_date)).aggregate(s=Sum("goal"))["s"]
-
-                    data_sum_produc = Weight.objects.filter(site=site, date = created_date, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-                    wk_time = Production.objects.filter(site=site, line_type = line_type, created = created_date).annotate(working_time_de = ExpressionWrapper(F('actual_time') - F('total_loss_time') , output_field= models.DecimalField())).aggregate(total_working_time=Sum('working_time_de'))['total_working_time']
-
-                    accumulated_produc = Weight.objects.filter(site=site ,date__range=(date_from_accumulated, created_date) , bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-
-                    #3) sum_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().aggregate(Sum('plan_time'),Sum('run_time'),Sum('total_loss_time'))
-                    #4) cal_by_mill = Production.objects.filter(my_q, site=site, line_type = line_type).distinct().annotate(working_time = ExpressionWrapper(F('run_time') - F('total_loss_time'), output_field= models.DurationField())).aggregate(total_working_time=Sum('working_time'))['total_working_time']
+                for line in line_type_list:
+                    prod_key = (created_date, line.id)
+                    production = site_cache['production_by_key'].get(prod_key)
+                    aggregates = site_cache['aggregates_by_key'].get(prod_key, {})
+                    accumulated_goal = site_cache['accumulated_goals'].get((line.id, created_date))
+                    wk_time = site_cache['wk_times'].get(prod_key)
 
                     capacity_per_hour = (
-                        production.capacity_per_hour 
-                        if pd_year > 2024 and production is not None 
+                        production.capacity_per_hour
+                        if pd_year > 2024 and production is not None
                         else calculatCapacityPerHour(request, data_sum_produc, wk_time)
-                    ) #if ปี capacity_per_hour > 2024 ดึงแบบใหม่
-                        
+                    )
+
                     if production:
-                        row.extend([production.goal, accumulated_goal , formatHourMinute(production.plan_start_time), formatHourMinute(production.plan_end_time), formatHourMinute(production.plan_time), formatHourMinute(production.actual_start_time), formatHourMinute(production.actual_end_time) , formatHourMinute(production.actual_time), formatHourMinute(production.run_start_time) if production.run_start_time else production.mile_run_start_time  , formatHourMinute(production.run_end_time) if production.run_end_time else production.mile_run_end_time, formatHourMinute(production.run_time)])
+                        row.extend([
+                            production.goal,
+                            accumulated_goal,
+                            formatHourMinute(production.plan_start_time),
+                            formatHourMinute(production.plan_end_time),
+                            formatHourMinute(production.plan_time),
+                            formatHourMinute(production.actual_start_time),
+                            formatHourMinute(production.actual_end_time),
+                            formatHourMinute(production.actual_time),
+                            formatHourMinute(production.run_start_time) if production.run_start_time else production.mile_run_start_time,
+                            formatHourMinute(production.run_end_time) if production.run_end_time else production.mile_run_end_time,
+                            formatHourMinute(production.run_time),
+                        ])
                     else:
-                        row.extend(['' for i in range(17)])
+                        row.extend(['' for _ in range(17)])
 
-                    if  count_loss:
-                        for i in range(len(count_loss)):
-                            tmp_mc = sheet.cell(row=2, column = i+13).value
-                            tmp_loss = sheet.cell(row=3, column = i+13).value
-                            lss = ProductionLossItem.objects.filter(production = production, mc_type__name = tmp_mc, loss_type__name = tmp_loss).aggregate(s=Sum('loss_time'))['s']
-                            if lss:
-                                row.extend([formatHourMinute(lss)])
-                            else:
-                                row.extend(['-'])
+                    if count_loss_list:
+                        loss_map = site_cache['loss_by_production'].get(production.id, {}) if production else {}
+                        for cl in count_loss_list:
+                            lss = loss_map.get((cl['mc_type__name'], cl['loss_type__name']))
+                            row.extend([formatHourMinute(lss) if lss else '-'])
                     else:
-                        row.extend(['-' for i in range(len(count_loss))])
+                        row.extend(['-'] * count_loss_len)
 
-                    #รวม, ชั่วโมงการทำงานจริง
-                    if  production:
-                        row.extend([formatHourMinute(production.sum_loss_n_un), formatHourMinute(production.sum_work_real)])
+                    if production:
+                        row.extend([
+                            formatHourMinute(aggregates.get('sum_loss_n_un')),
+                            formatHourMinute(aggregates.get('sum_work_real')),
+                        ])
 
-                    if  count_mc:
-                        for i in range(len(count_mc)):
-                            tmp_mc = sheet.cell(row=2, column = 15 + len(count_loss) + (i * 3)).value
-                            mcc = (
-                                ProductionMachineItem.objects
-                                .filter(production=production, mc_type__name=tmp_mc)
-                                .values('mile_start', 'mile_end', 'diff_time')
-                                .first()
-                            )
-
+                    if count_mc_list:
+                        mc_map = site_cache['mc_by_production'].get(production.id, {}) if production else {}
+                        for cl in count_mc_list:
+                            mcc = mc_map.get(cl['mc_type__name'])
                             if mcc:
-                                row.extend([mcc['mile_start'],mcc['mile_end'],formatHourMinute(mcc['diff_time'])])
+                                row.extend([mcc['mile_start'], mcc['mile_end'], formatHourMinute(mcc['diff_time'])])
                             else:
                                 row.extend(['-', '-', '-'])
                     else:
-                        row.extend(['-' for i in range(len(count_mc) * 3)])
-                
+                        row.extend(['-'] * (count_mc_len * 3))
 
-                    # ยอดผลิต (ตัน), ยอดผลิตสะสม, กำลังการผลิต (ตัน/ชั่วโมง), หมายเหตุ
-                    if  production:
-                        row.extend([data_sum_produc, accumulated_produc, capacity_per_hour, production.note,])
-                        sum_capacity_per_hour += capacity_per_hour
-
-                    ''' 1) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด
-                    row_sum.extend([len(created_dates), '' , '', 'ชั่วโมงทำงานรวม', formatHourMinute(sum_by_mill['plan_time__sum']), '', '', formatHourMinute(sum_by_mill['run_time__sum'])])
-                    row_sum.extend(['eiei'+formatHourMinute(pd_loos_item['sum_loss_time']) for pd_loos_item in ProductionLossItem.objects.filter(production__site=site, production__line_type = line_type).order_by('mc_type__id', 'loss_type__id').values('loss_type__id').annotate(sum_loss_time=Coalesce(Sum('loss_time'), None))])
-
-                    row_sum.extend([formatHourMinute(sum_by_mill['total_loss_time__sum']), formatHourMinute(cal_by_mill), 'diff จากเป้า' , calculatorDiff(request, accumulated_goal , accumulated_produc) , sum_capacity_per_hour/len(created_dates),''])
-
-                    loss_items = ProductionLossItem.objects.filter(
-                        production__site=site,
-                        production__line_type=line_type
-                    ).order_by('loss_type__id').values('loss_type__id').annotate(
-                        sum_loss_time=Coalesce(Sum('loss_time'), None)
-                    )
-
-                    row_persent_accumulated_produc.extend(['', '' , '', '', '', '', '', ''])
-                    row_persent_accumulated_produc.extend(['C' for i in range(len(count_loss))])
-                    row_persent_accumulated_produc.extend(['', '', '' , str(round(calculatorDiff(request, accumulated_goal , accumulated_produc) / accumulated_goal, 2)) + "%" if accumulated_goal and accumulated_produc else None , '',''])
-
-                    row_persent_loss.extend(['', '' , '', '', '', '', '% ชม.สูญเสีย ต่อ ชม.ทำงานจริง', ''])
-                    row_persent_loss.extend([str(round(pd_loos_item['sum_loss_time'] / sum_by_mill['total_loss_time__sum'] * 100, 2)) + "%" if pd_loos_item['sum_loss_time'] else None for pd_loos_item in loss_items])
-                    row_persent_loss.extend(['100%', '', '' , '' , '',''])                
-                    '''
-
+                    if production:
+                        row.extend([data_sum_produc, accumulated_produc, capacity_per_hour, production.note])
+                        sum_capacity_per_hour += capacity_per_hour or Decimal('0.0')
 
                 sheet.append(row)
 
@@ -3399,64 +3477,69 @@ def excelProductionAndLoss(request, my_q, sc_q):
                     for cell in sheet[sheet.max_row]:
                         cell.fill = sunday_fill
 
-            if len(created_dates) > 0:
+            if created_dates_list:
                 sheet.append(row_sum)
                 sheet.append(row_persent_accumulated_produc)
                 sheet.append(row_persent_loss)
                 # 2) ล่างสุดตัวหนังสือสีแดง sum ทั้งหมด sheet.cell(row = len(created_dates) + 4, column = 1, value = f'จำนวนวันทำงาน' )        
 
             # Set column width and border for all columns
-            for column in sheet.columns:
-                max_length = 0
-                column_letter = get_column_letter(column[0].column)  # Get the letter of the current column
-                
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(cell.value)
-                    except:
-                        pass
+            thin_border = Border(
+                left=Side(style='thin'), right=Side(style='thin'),
+                top=Side(style='thin'), bottom=Side(style='thin'),
+            )
+            center_align = Alignment(horizontal='center')
+            blue_font = Font(color="0000FF")
+            red_font = Font(color="FF0000")
+            max_row = sheet.max_row
+            max_col = sheet.max_column
+            red_row_threshold = max_row - 3
+            blue_columns = set()
+            if line_type_ids:
+                blue_columns.add(count_loss_len + 14)
+            if len(line_type_ids) > 1:
+                blue_columns.add((count_loss_len * 2) + (count_mc_len * 3) + 31)
+            if len(line_type_ids) > 2:
+                blue_columns.add((count_loss_len * 3) + ((count_mc_len * 3) * 2) + 48)
 
-                adjusted_width = (max_length + 2) * 1.2  # Adjust the width based on content length
-                sheet.column_dimensions[column_letter].width = adjusted_width
-                
-                # Set border for each cell in the column
-                border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-                for cell in column:
-                    cell.alignment = Alignment(horizontal='center')
+            col_max_lengths = [0] * max_col
+            width_sample_end = min(max_row, 50)
+            for data_row in sheet.iter_rows(min_row=1, max_row=width_sample_end, min_col=1, max_col=max_col):
+                for cell in data_row:
+                    if cell.value is not None:
+                        col_max_lengths[cell.column - 1] = max(
+                            col_max_lengths[cell.column - 1],
+                            len(str(cell.value)),
+                        )
+            for col_idx, max_length in enumerate(col_max_lengths, start=1):
+                sheet.column_dimensions[get_column_letter(col_idx)].width = (max_length + 2) * 1.2
 
-                    # ชั่วโมงการทำงานจริง line 1
-                    if len(line_types) > 0 and cell.column == len(count_loss)  + 14:
-                        cell.font = Font(color="0000FF")  # Blue text
-                    # ชั่วโมงการทำงานจริง line 2
-                    if  len(line_types) > 1 and cell.column == (len(count_loss) * 2) + (len(count_mc) * 3) + 31:
-                        cell.font = Font(color="0000FF")  # Blue text
-                    # ชั่วโมงการทำงานจริง line 3
-                    if  len(line_types) > 2 and cell.column == (len(count_loss) * 3)+  ((len(count_mc) * 3) * 2) + 48:
-                        cell.font = Font(color="0000FF")  # Blue text
-
-                    # 2 row สุดท้าย ไม่ใส่ border และ set ตัวหนังสือสีแดง
-                    if cell.row > sheet.max_row - 3:
-                        cell.font = Font(color="FF0000")
+            for data_row in sheet.iter_rows(min_row=1, max_row=max_row, min_col=1, max_col=max_col):
+                for cell in data_row:
+                    cell.alignment = center_align
+                    if cell.column in blue_columns:
+                        cell.font = blue_font
+                    if cell.row > red_row_threshold:
+                        cell.font = red_font
                     else:
-                        cell.border = border
-            
-            column_index = 2
-            for line_index, line in enumerate(line_types):
-                # Set the background color for the current line_type
-                fill = PatternFill(start_color=line_type_colors[line_index % len(line_type_colors)], fill_type="solid")
-                sheet.cell(row=1, column=column_index).fill = fill
-                column_index += len(count_loss) + (len(count_mc) * 3) + 17
+                        cell.border = thin_border
 
-            for row in sheet.iter_rows(min_row=1, max_row=3):
-                # Set the background color for each cell in the column
-                for cell in row:
-                    cell.border = border
-                    cell.alignment = Alignment(horizontal='center')
-                    line_index = (cell.column - 2) // (len(count_loss) + (len(count_mc) * 3) + 17)
+            column_index = 2
+            for line_index, _line in enumerate(line_type_ids):
+                fill = PatternFill(
+                    start_color=line_type_colors[line_index % len(line_type_colors)],
+                    fill_type="solid",
+                )
+                sheet.cell(row=1, column=column_index).fill = fill
+                column_index += block_width
+
+            for header_row in sheet.iter_rows(min_row=1, max_row=3, min_col=1, max_col=max_col):
+                for cell in header_row:
+                    cell.border = thin_border
+                    cell.alignment = center_align
+                    line_index = (cell.column - 2) // block_width
                     fill_color = line_type_colors[line_index % len(line_type_colors)]
-                    fill = PatternFill(start_color=fill_color, fill_type="solid")
-                    cell.fill = fill
+                    cell.fill = PatternFill(start_color=fill_color, fill_type="solid")
 
             #1) merge_cells loos header mc_type
             num_loss = 0

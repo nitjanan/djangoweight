@@ -275,7 +275,7 @@ class WeightForm(forms.ModelForm):
 
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'do_doc_no', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel')
+       fields = ('date', 'doc_id', 'do_doc_no', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'stone_desc', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'site_name' : forms.HiddenInput(),
@@ -303,6 +303,7 @@ class WeightForm(forms.ModelForm):
             'mill': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
             'stone_type_name': _('ชื่อหิน'),
+            'stone_desc': _('รายละเอียดหิน'),
             'transport': _('ขนส่ง'),
        }
 
@@ -322,7 +323,7 @@ class WeightStockForm(forms.ModelForm):
 
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total', 'site', 'site_name', 'note', 'is_cancel')
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name','driver','driver_name', 'customer','customer_name','mill','mill_name','stone_type','stone_type_name', 'stone_desc', 'scoop', 'scoop_name', 'weight_in', 'weight_out', 'weight_total', 'site', 'site_name', 'note', 'is_cancel')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'customer_name': forms.HiddenInput(),
@@ -344,6 +345,7 @@ class WeightStockForm(forms.ModelForm):
             'mill': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
             'stone_type_name': _('ชื่อหิน'),
+            'stone_desc': _('รายละเอียดหิน'),
        }
 
 class WeightPortForm(forms.ModelForm):
@@ -355,7 +357,7 @@ class WeightPortForm(forms.ModelForm):
 
     class Meta:
        model = Weight
-       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel', 'origin_weight', 'origin_q', 'line_type')
+       fields = ('date', 'doc_id', 'car_registration', 'car_registration_name', 'province','driver','driver_name', 'customer','customer_name','site','site_name','mill','mill_name','stone_type', 'stone_type_name', 'stone_desc', 'transport','carry_type_name', 'car_team', 'car_team_name', 'stone_color', 'scoop', 'scoop_name', 'note', 'weight_in', 'weight_out', 'weight_total', 'q', 'price_per_ton', 'vat', 'amount', 'amount_vat', 'oil_content', 'pay', 'clean_type', 'vat_type', 'is_s', 'is_cancel', 'origin_weight', 'origin_q', 'line_type')
        widgets = {
         'date': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'site_name': forms.HiddenInput(),
@@ -383,6 +385,7 @@ class WeightPortForm(forms.ModelForm):
             'mill': _('รหัสโรงโม่'),
             'mill_name': _('ชื่อโรงโม่'),
             'stone_type_name': _('ชื่อหิน'),
+            'stone_desc': _('รายละเอียดหิน'),
             'transport': _('ขนส่ง'),
        }
 

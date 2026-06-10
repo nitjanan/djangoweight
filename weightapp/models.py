@@ -1267,14 +1267,22 @@ class DeliveryOrder(models.Model):
     car_company_rem = models.IntegerField(blank=True, null=True)
     car_customer_rem = models.IntegerField(blank=True, null=True)
 
-    qty_tot = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    customer_code = models.CharField(max_length=20, blank=False, null=True)
+    customer_name = models.CharField(max_length=255, blank=False, null=True)
+    customer_address = models.CharField(max_length=255, blank=False, null=True)
+
+    product_code = models.CharField(max_length=20, blank=False, null=True)
+    product_name = models.CharField(max_length=255, blank=False, null=True)
+
+    sale_name = models.CharField(max_length=255, blank=False, null=True)
+    note = models.CharField(max_length=255, blank=False, null=True)
+    status= models.CharField(max_length=255, blank=False, null=True)
     
-    unit_name = models.CharField(
-        max_length=20, blank=False, null=True
-    )
-    comp_code = models.CharField(
-        max_length=20, blank=False, null=True, db_index=True
-    )
+    qty = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+    qty_tot = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
+
+    unit_name = models.CharField(max_length=20, blank=False, null=True)
+    comp_code = models.CharField(max_length=20, blank=False, null=True, db_index=True)
     v_stamp = models.DateTimeField(auto_now=True)
     
     class Meta:
@@ -1286,6 +1294,22 @@ class DeliveryOrder(models.Model):
             models.Index(fields=['comp_code', 'doc_no']),
             models.Index(fields=['doc_no',]),
         ]
+
+    def __str__(self):
+        return str(self.id)
+    
+class BaseAPI(models.Model):
+    url = models.CharField(max_length=255, blank=True, null = True, verbose_name="url api data")
+    apiname = models.CharField(max_length=255, blank=True, null = True, verbose_name="api name")
+    username = models.CharField(max_length=255, blank=True, null = True, verbose_name="username get api")
+    password = models.CharField(max_length=255, blank=True, null = True, verbose_name="password get api")
+    token = models.CharField(max_length=255, blank=True, null = True, verbose_name="token")
+
+    class Meta:
+        db_table = 'base_api'
+        ordering=('id',)
+        verbose_name = 'ตั้งค่า API'
+        verbose_name_plural = 'ข้อมูลตั้งค่า API'
 
     def __str__(self):
         return str(self.id)

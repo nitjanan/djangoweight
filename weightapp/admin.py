@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -487,6 +487,10 @@ class LoadingRateItemAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         return obj.Lr.created if obj.Lr else '-'
     Lr_created.short_description = 'วันที่สร้าง'
 
+class BaseAPIAdmin(ImportExportModelAdmin):
+    list_display = ['id','url','apiname','username', 'password'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 admin.site.register(BaseVisible, BaseVisibleAdmin)
 admin.site.register(BaseCustomerSite, BaseCustomerSiteAdmin)
 admin.site.register(BaseVatType, BaseVatTypeAdmin)
@@ -540,6 +544,7 @@ admin.site.register(BaseWeightRange, BaseWeightRangeAdmin)
 admin.site.register(LoadingRate, LoadingRateAdmin)
 admin.site.register(LoadingRateLoc, LoadingRateLocAdmin)
 admin.site.register(LoadingRateItem, LoadingRateItemAdmin)
+admin.site.register(BaseAPI, BaseAPIAdmin)
 
 
 

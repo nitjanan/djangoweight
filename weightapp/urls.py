@@ -287,4 +287,6 @@ urlpatterns = [
       views.weightDeliveryVStamp,
       name='weightDeliveryVStamp'
       ),
+
+      path('get_api_delivery_order_3_30am/', views.get_api_delivery_order_3_30am, name="get_api_delivery_order_3_30am"),
 ]

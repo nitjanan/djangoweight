@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
@@ -207,6 +207,127 @@ def send_line_1pm(request):
 
     return HttpResponse("1PM summary sent (or skipped).")
 
+
+def get_base_api(mode):
+    b_api = BaseAPI.objects.get(apiname = "k2m_deliver_order")  # query เมื่อเรียกใช้งานจริง
+    if mode == 1:
+        return b_api.url
+    if mode == 2:
+        return b_api.username
+    if mode == 3:
+        return b_api.password
+    if mode == 4:
+        return b_api.token
+
+# api delivery order from k2m
+def get_api_delivery_order_3_30am(request):
+    previous_day = date.today() - timedelta(days=1)
+    result = insertDeliveryFromApiK2M(previous_day)
+    return HttpResponse(result)
+
+def insertDeliveryFromApiK2M(delivery_date):
+    headers = {
+        "Authorization": f"Bearer {get_base_api(4)}",
+        "Accept": "application/json"
+    }
+
+    insert_count = 0
+    update_count = 0
+    error_count = 0
+
+    companies = BaseCompany.objects.values_list('code', flat=True)
+
+    for company in companies:
+
+        page = 1
+
+        while True:
+
+            try:
+
+                response = requests.get(
+                    get_base_api(1),
+                    headers=headers,
+                    params={
+                        "company": company,
+                        "deliveryDate": delivery_date.strftime("%Y-%m-%d"),
+                        "page": page
+                    },
+                    timeout=30
+                )
+
+                response.raise_for_status()
+
+                result = response.json()
+
+                # ปรับตาม API จริง
+                rows = result.get("data", [])
+
+                if not rows:
+                    break
+
+                for row in rows:
+
+                    obj, created = DeliveryOrder.objects.update_or_create(
+                        doc_no=row.get("docNo"),
+                        comp_code=company,
+                        delivery_date=delivery_date,
+                        defaults={
+                            "qty": row.get("qty"),
+
+                            "car_company": row.get("carCompany"),
+                            "car_customer": row.get("carCustomer"),
+
+                            "car_company_rem": row.get("carCompany"),
+                            "car_customer_rem": row.get("carCustomer"),
+
+                            "customer_code": row.get("customerCode"),
+                            "customer_name": row.get("customerName"),
+                            "customer_address": row.get("customerAddress"),
+                            
+                            "product_code": row.get("productCode"),
+                            "product_name": row.get("productName"),
+
+                            "sale_name": row.get("saleName"),
+                            "note": row.get("note"),
+                            "status": row.get("status"),
+                            
+                            "unit_name": row.get("unitName"),
+
+                        }
+                    )
+
+                    if created:
+                        insert_count += 1
+                    else:
+                        update_count += 1
+
+                print(
+                    f"Company={company} "
+                    f"Page={page} "
+                    f"Rows={len(rows)}"
+                )
+
+                page += 1
+
+            except Exception as e:
+
+                error_count += 1
+
+                print(
+                    f"ERROR Company={company} "
+                    f"Page={page} "
+                    f"Message={str(e)}"
+                )
+
+                break
+
+    return (
+        f"Insert={insert_count}, "
+        f"Update={update_count}, "
+        f"Error={error_count}"
+    )
+    
 '''
 # Schedule the tasks
 scheduler = BackgroundScheduler()

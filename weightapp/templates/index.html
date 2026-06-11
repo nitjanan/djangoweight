@@ -910,7 +910,7 @@
 
     const py_url = "{% url 'exportExcelProductionAndLossDashboard' %}";
     const file_name = "production_record_("+'{{ request.session.company_code }}'+").xlsx";
-    const delay_time = 150;
+    const delay_time = 50;
     progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time);
   });
 

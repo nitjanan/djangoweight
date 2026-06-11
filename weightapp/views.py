@@ -46,7 +46,7 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -268,6 +268,25 @@ def insertDeliveryFromApiK2M(delivery_date):
 
                 for row in rows:
 
+                    status = row.get("status")
+                    if status == 'open':
+                        existing_do = DeliveryOrder.objects.filter(
+                            doc_no=row.get("docNo"),
+                            comp_code=company,
+                            delivery_date=delivery_date
+                        ).first()
+
+                        car_company_val = row.get("carCompany") or 0
+                        car_customer_val = row.get("carCustomer") or 0
+                        car_company_tot_val = (existing_do.car_company_tot or 0) if existing_do else 0
+                        car_customer_tot_val = (existing_do.car_customer_tot or 0) if existing_do else 0
+
+                        car_company_rem = car_company_val - car_company_tot_val
+                        car_customer_rem = car_customer_val - car_customer_tot_val
+                    else:
+                        car_company_rem = row.get("carCompany")
+                        car_customer_rem = row.get("carCustomer")
+
                     obj, created = DeliveryOrder.objects.update_or_create(
                         doc_no=row.get("docNo"),
                         comp_code=company,
@@ -278,8 +297,8 @@ def insertDeliveryFromApiK2M(delivery_date):
                             "car_company": row.get("carCompany"),
                             "car_customer": row.get("carCustomer"),
 
-                            "car_company_rem": row.get("carCompany"),
-                            "car_customer_rem": row.get("carCustomer"),
+                            "car_company_rem": car_company_rem,
+                            "car_customer_rem": car_customer_rem,
 
                             "customer_code": row.get("customerCode"),
                             "customer_name": row.get("customerName"),
@@ -290,7 +309,7 @@ def insertDeliveryFromApiK2M(delivery_date):
 
                             "sale_name": row.get("saleName"),
                             "note": row.get("note"),
-                            "status": row.get("status"),
+                            "status": status,
                             
                             "unit_name": row.get("unitName"),
 
@@ -9322,6 +9341,9 @@ def exportLoadingRate(request):
     response["Content-Length"] = str(size)
     return response
 
+class CapacityExceeded(Exception):
+    pass
+
 ######## update or create WeightDelivery จาก จากตาชั่ง local เก็บข้อมูลตามรายการชั่งที่มีใบสั่งสินค้า ########
 @csrf_exempt
 def uc_weight_delivery(request):
@@ -9342,53 +9364,113 @@ def uc_weight_delivery(request):
             }, status=400)
         
         base_ws = BaseWeightStation.objects.get(id = data.get('bws'))
+        comp_code = base_ws.company.code
 
-        # UPDATE FIRST
-        updated = WeightDelivery.objects.filter(
-            weight_id=weight_id
-        ).update(
-            delivery_date=data.get('delivery_date'),
-            bws=data.get('bws'),
-            comp_code = base_ws.company.code,
-            do_id=data.get('do_id'),
-            do_doc_no=data.get('do_doc_no'),
-            carry_type_name=data.get('carry_type_name'),
-            weight_ton=data.get('weight_ton'),
-            weight_q=data.get('weight_q'),
-            unit_name=data.get('unit_name'),
-            is_cancel=data.get('is_cancel')
-        )
+        do_doc_no = data.get('do_doc_no')
+        delivery_date = data.get('delivery_date')
+        carry_type_name = data.get('carry_type_name')
+        is_cancel = data.get('is_cancel') in [True, 'true', 'True', 1, '1']
 
-        # CREATE IF NOT EXISTS
-        if not updated:
-            wd = WeightDelivery.objects.create(
-                weight_id=weight_id,
-                delivery_date=data.get('delivery_date'),
+        from django.db import transaction
+
+        with transaction.atomic():
+            # Get or create DeliveryOrder to serialize concurrent requests for same DO
+            delivery_order, _ = DeliveryOrder.objects.get_or_create(
+                doc_no=do_doc_no,
+                comp_code=comp_code,
+                delivery_date=delivery_date
+            )
+            # Lock the DeliveryOrder row
+            DeliveryOrder.objects.select_for_update().filter(id=delivery_order.id).first()
+
+            if not is_cancel and carry_type_name in ['ส่งให้', 'รับเอง']:
+                car_company = data.get('car_company')
+                car_customer = data.get('car_customer')
+
+                if car_company is None:
+                    car_company = delivery_order.car_company
+                if car_customer is None:
+                    car_customer = delivery_order.car_customer
+
+                car_company = int(car_company or 0)
+                car_customer = int(car_customer or 0)
+
+                if carry_type_name == 'ส่งให้':
+                    other_count = WeightDelivery.objects.filter(
+                        do_doc_no=do_doc_no,
+                        comp_code=comp_code,
+                        delivery_date=delivery_date,
+                        carry_type_name='ส่งให้',
+                        is_cancel=False
+                    ).exclude(weight_id=weight_id).count()
+
+                    if other_count >= car_company:
+                        raise CapacityExceeded('car_company limit exceeded')
+
+                elif carry_type_name == 'รับเอง':
+                    other_count = WeightDelivery.objects.filter(
+                        do_doc_no=do_doc_no,
+                        comp_code=comp_code,
+                        delivery_date=delivery_date,
+                        carry_type_name='รับเอง',
+                        is_cancel=False
+                    ).exclude(weight_id=weight_id).count()
+
+                    if other_count >= car_customer:
+                        raise CapacityExceeded('car_customer limit exceeded')
+
+            # UPDATE FIRST
+            updated = WeightDelivery.objects.filter(
+                weight_id=weight_id
+            ).update(
+                delivery_date=delivery_date,
                 bws=data.get('bws'),
-                comp_code = base_ws.company.code,
-
+                comp_code=comp_code,
                 do_id=data.get('do_id'),
-                do_doc_no=data.get('do_doc_no'),
-                carry_type_name=data.get('carry_type_name'),
-
+                do_doc_no=do_doc_no,
+                carry_type_name=carry_type_name,
                 weight_ton=data.get('weight_ton'),
                 weight_q=data.get('weight_q'),
-                unit_name=data.get('unit_name')
+                unit_name=data.get('unit_name'),
+                is_cancel=data.get('is_cancel')
             )
 
-            status = 'Create New Item'
+            # CREATE IF NOT EXISTS
+            if not updated:
+                wd = WeightDelivery.objects.create(
+                    weight_id=weight_id,
+                    delivery_date=delivery_date,
+                    bws=data.get('bws'),
+                    comp_code=comp_code,
 
-        else:
-            wd = WeightDelivery.objects.get(weight_id=weight_id)
-            status = 'Update Item'
+                    do_id=data.get('do_id'),
+                    do_doc_no=do_doc_no,
+                    carry_type_name=carry_type_name,
 
-        uc_delivery_order(data) #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
+                    weight_ton=data.get('weight_ton'),
+                    weight_q=data.get('weight_q'),
+                    unit_name=data.get('unit_name')
+                )
+
+                status = 'Create New Item'
+
+            else:
+                wd = WeightDelivery.objects.get(weight_id=weight_id)
+                status = 'Update Item'
+
+            uc_delivery_order(data) #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
 
         return JsonResponse({
             'status': status,
             'weight_id': wd.weight_id,
             'do_id': wd.do_id
         })
+
+    except CapacityExceeded as e:
+        return JsonResponse({
+            'status': 'fail',
+            'message': str(e)
+        }, status=422)
 
     except Exception as e:
 
@@ -9398,22 +9480,28 @@ def uc_weight_delivery(request):
         }, status=500)
 
 
+
 #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
 def uc_delivery_order(data):
-
     try:
         delivery_date = data.get('delivery_date')
         bws = data.get('bws')
         doc_no = data.get('do_doc_no')
         unit_name = data.get('unit_name')
-        car_company  = data.get('car_company')
-        car_customer  = data.get('car_customer')
+        
+        # แก้ไขจุดที่ 1: บังคับให้ค่าที่รับเข้ามาเป็น Integer และถ้าไม่มีค่าให้เป็น 0
+        car_company = int(data.get('car_company') or 0)
+        car_customer = int(data.get('car_customer') or 0)
 
         company = BaseWeightStation.objects.filter(
             id=bws
         ).values(
             'company__id', 'company__code'
         ).first()
+
+        if not company:
+            print("ไม่พบข้อมูลบริษัท (Company not found)")
+            return
 
         # QUERY รอบเดียว
         sum_do = WeightDelivery.objects.filter(
@@ -9424,25 +9512,24 @@ def uc_delivery_order(data):
         ).aggregate(
             sum_weight_ton = Sum("weight_ton"),
             sum_weight_q = Sum("weight_q"),
-
-            car_customer=Count(
-                'id',
-                filter=Q(carry_type_name='รับเอง')
-            ),
-
-            car_company=Count(
-                'id',
-                filter=Q(carry_type_name='ส่งให้')
-            )
+            # เปลี่ยนชื่อเล่นตอน Aggregate ไม่ให้ซ้ำกับตัวแปรด้านบน
+            car_customer_count = Count('id', filter=Q(carry_type_name='รับเอง')),
+            car_company_count = Count('id', filter=Q(carry_type_name='ส่งให้'))
         )
 
-        qty_tot = 0
+        # แก้ไขจุดที่ 2: ป้องกันค่าจาก Database เป็น None โดยให้สลับเป็น 0 แทน
+        db_car_customer = sum_do['car_customer_count'] or 0
+        db_car_company = sum_do['car_company_count'] or 0
 
+        qty_tot = 0
         if unit_name == 'ตัน':
             qty_tot = sum_do['sum_weight_ton'] or 0
-
         elif unit_name == 'คิว':
             qty_tot = sum_do['sum_weight_q'] or 0
+
+        # แก้ไขจุดที่ 3: แยกคำนวณคณิตศาสตร์ออกมาให้ชัดเจนก่อนบันทึก
+        car_company_rem = car_company - db_car_company
+        car_customer_rem = car_customer - db_car_customer
 
         DeliveryOrder.objects.update_or_create(
             doc_no=doc_no,
@@ -9454,17 +9541,18 @@ def uc_delivery_order(data):
                 'car_company': car_company,
                 'car_customer': car_customer,
 
-                'car_company_rem': car_company - sum_do['car_company'],
-                'car_customer_rem': car_customer - sum_do['car_customer'],
+                'car_company_rem': car_company_rem,
+                'car_customer_rem': car_customer_rem,  # ผลลัพธ์จะเป็น 0 ตามที่ต้องการ
 
                 'qty_tot': qty_tot,
-                'car_company_tot': sum_do['car_company'],
-                'car_customer_tot': sum_do['car_customer'],
+                'car_company_tot': db_car_company,
+                'car_customer_tot': db_car_customer,
             }
         )
 
     except Exception as e:
-        print(str(e))
+        print(f"เกิดข้อผิดพลาดใน uc_delivery_order: {str(e)}")
+
 
 ################# api delivery Order สำหรับ update table ตาชั่ง local #####################################
 @api_view(['GET'])

@@ -9484,7 +9484,7 @@ def weightDeliverySummaryByComp(request, date, comp_code):
 
 ################ api delivery Order to web ออกใบสั่งขาย K Kitti #################################################
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsAuthenticated])
 def deliveryOrderByComp(request):
 
     date = request.query_params.get('date')

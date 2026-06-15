@@ -3336,7 +3336,7 @@ def formatHourMinute(time):
        result = f'{time}'[:-3]
     return result
 
-def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list):
+def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list, company_in):
     """Bulk-load production, loss, machine, and weight data for one site sheet."""
     zero_td = timedelta(0)
     cache = {
@@ -3396,20 +3396,20 @@ def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list
     min_date = min(created_dates_list)
     max_date = max(created_dates_list)
     earliest_month = datetime.strptime(startDateInMonth(min_date), '%Y-%m-%d').date()
-    cache['weight_by_date'] = {
-        row['date']: row['s']
-        for row in Weight.objects.filter(
-            site=site,
-            bws__weight_type=2,
-            date__gte=earliest_month,
-            date__lte=max_date,
-        ).values('date').annotate(s=Sum('weight_total'))
-    }
+    cache['weight_by_date'] = {}
+    for se in StoneEstimate.objects.filter(
+        site=site,
+        company__code__in=company_in,
+        created__gte=earliest_month,
+        created__lte=max_date,
+    ):
+        if se.created not in cache['weight_by_date']:
+            cache['weight_by_date'][se.created] = se.scale or Decimal('0.00')
     for cd in created_dates_list:
         month_start = datetime.strptime(startDateInMonth(cd), '%Y-%m-%d').date()
         total = sum(
             v for d, v in cache['weight_by_date'].items()
-            if month_start <= d <= cd
+            if month_start <= d <= cd and v is not None
         )
         cache['accumulated_weight'][cd] = total if total else None
 
@@ -3436,6 +3436,7 @@ def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list
 def excelProductionAndLoss(request, my_q, sc_q):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
+    company_in = findCompanyIn(request)
 
     pd_sites = Production.objects.filter(my_q).values_list('site', flat=True).distinct()
     sites = BaseSite.objects.filter(base_site_id__in = pd_sites)
@@ -3541,7 +3542,7 @@ def excelProductionAndLoss(request, my_q, sc_q):
                 datetime.strptime(str(created_dates_list[0]), '%Y-%m-%d').year
                 if created_dates_list else datetime.today().year
             )
-            site_cache = _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list)
+            site_cache = _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list, company_in)
 
             for created_date in created_dates_list:
                 row = [created_date]

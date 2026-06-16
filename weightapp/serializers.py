@@ -204,7 +204,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
 class K2MDSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryOrder
-        fields = ('docNo', 'deliveryDate', 'carCompany','carCustomer', 'carCompanyRem', 'carCustomerRem', 'carCompanyTot', 'carCustomerTot', 'customerCode', 'customerName', 'productCode', 'productName', 'qty', 'qtyTot', 'unitName', 'compCode', 'status')
+        fields = ('docNo', 'deliveryDate', 'carCompany','carCustomer', 'carCompanyRem', 'carCustomerRem', 'carCompanyTot', 'carCustomerTot', 'qty', 'qtyTot', 'unitName', 'compCode', 'status')
 
     # Define custom field names
     docNo = serializers.CharField(source='doc_no')
@@ -218,12 +218,6 @@ class K2MDSerializer(serializers.ModelSerializer):
 
     carCompanyTot = serializers.IntegerField(source='car_company_tot')
     carCustomerTot = serializers.IntegerField(source='car_customer_tot')
-
-    customerCode = serializers.CharField(source='customer_code')
-    customerName = serializers.CharField(source='customer_name')
-
-    productCode = serializers.CharField(source='product_code')
-    productName = serializers.CharField(source='product_name')
 
     qtyTot = serializers.DecimalField(source='qty_tot', max_digits=10, decimal_places=2)
 

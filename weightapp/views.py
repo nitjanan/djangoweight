@@ -6301,7 +6301,7 @@ def baseCarVStamp(request, dt):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def allCarPartner(request):
-    queryset = BaseCar.objects.all()
+    queryset = BaseCar.objects.all().order_by('car_id')
     paginator = SmallResultsSetPagination()
     result_page = paginator.paginate_queryset(queryset, request)
     serializer = CarPartnerSerializer(result_page, many=True)
@@ -9365,7 +9365,7 @@ def uc_weight_delivery(request):
             }, status=400)
         
         base_ws = BaseWeightStation.objects.get(id = data.get('bws'))
-        comp_code = base_ws.company.code
+        comp_code = data.get('comp_code') or (base_ws.company.code if base_ws and base_ws.company else None)
 
         do_doc_no = data.get('do_doc_no')
         delivery_date = data.get('delivery_date')
@@ -9379,7 +9379,7 @@ def uc_weight_delivery(request):
             delivery_order, _ = DeliveryOrder.objects.get_or_create(
                 doc_no=do_doc_no,
                 comp_code=comp_code,
-                delivery_date=delivery_date
+                delivery_date=delivery_date,
             )
             # Lock the DeliveryOrder row
             DeliveryOrder.objects.select_for_update().filter(id=delivery_order.id).first()
@@ -9481,33 +9481,56 @@ def uc_weight_delivery(request):
         }, status=500)
 
 
-
 #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
 def uc_delivery_order(data):
     try:
         delivery_date = data.get('delivery_date')
         bws = data.get('bws')
+        comp_code = data.get('comp_code')
+        '''
+        if not comp_code and bws:
+            company = BaseWeightStation.objects.filter(id=bws).values('company__code').first()
+            if company:
+                comp_code = company['company__code']
+        '''
         doc_no = data.get('do_doc_no')
         unit_name = data.get('unit_name')
-        
-        # แก้ไขจุดที่ 1: บังคับให้ค่าที่รับเข้ามาเป็น Integer และถ้าไม่มีค่าให้เป็น 0
-        car_company = int(data.get('car_company') or 0)
-        car_customer = int(data.get('car_customer') or 0)
+        qty = data.get('qty')
+        status = data.get('status')
 
-        company = BaseWeightStation.objects.filter(
-            id=bws
-        ).values(
-            'company__id', 'company__code'
+        # Fetch existing DeliveryOrder to preserve values if not provided in request
+        existing_do = DeliveryOrder.objects.filter(
+            doc_no=doc_no,
+            comp_code=comp_code,
+            delivery_date=delivery_date,
         ).first()
 
-        if not company:
-            print("ไม่พบข้อมูลบริษัท (Company not found)")
-            return
+        if status is None and existing_do is not None:
+            status = existing_do.status
+
+        if qty is None and existing_do is not None:
+            qty = existing_do.qty
+
+        if unit_name is None and existing_do is not None:
+            unit_name = existing_do.unit_name
+
+        # For car_company and car_customer, if not provided, try to preserve existing values
+        raw_car_company = data.get('car_company')
+        if raw_car_company is None and existing_do is not None:
+            car_company = existing_do.car_company or 0
+        else:
+            car_company = int(raw_car_company or 0)
+
+        raw_car_customer = data.get('car_customer')
+        if raw_car_customer is None and existing_do is not None:
+            car_customer = existing_do.car_customer or 0
+        else:
+            car_customer = int(raw_car_customer or 0)
 
         # QUERY รอบเดียว
         sum_do = WeightDelivery.objects.filter(
             do_doc_no = doc_no,
-            comp_code = company['company__code'],
+            comp_code = comp_code,
             delivery_date = delivery_date,
             is_cancel = False,
         ).aggregate(
@@ -9534,7 +9557,7 @@ def uc_delivery_order(data):
 
         DeliveryOrder.objects.update_or_create(
             doc_no=doc_no,
-            comp_code=company['company__code'],
+            comp_code=comp_code,
             delivery_date=delivery_date,
 
             defaults={
@@ -9548,12 +9571,62 @@ def uc_delivery_order(data):
                 'qty_tot': qty_tot,
                 'car_company_tot': db_car_company,
                 'car_customer_tot': db_car_customer,
+
+                'qty': qty,
+                'status': status
             }
         )
-
     except Exception as e:
         print(f"เกิดข้อผิดพลาดใน uc_delivery_order: {str(e)}")
 
+@csrf_exempt
+def uc_status_cancel_do(request):
+    try:
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+            except (json.JSONDecodeError, ValueError):
+                data = request.POST
+        else:
+            data = request.GET
+
+        if isinstance(data, list):
+            items = data
+        else:
+            items = [data]
+
+        updated_count_total = 0
+        for item in items:
+            if not hasattr(item, 'get'):
+                continue
+            delivery_date = item.get('delivery_date')
+            comp_code = item.get('comp_code')
+            doc_no = item.get('doc_no')
+            status = item.get('status')
+
+            #print(f"Parsed parameters - delivery_date: {delivery_date}, comp_code: {comp_code}, doc_no: {doc_no}, status: {status}")
+
+            if doc_no and comp_code and delivery_date:
+                updated_count = DeliveryOrder.objects.filter(
+                    doc_no=doc_no,
+                    comp_code=comp_code,
+                    delivery_date=delivery_date
+                ).update(status=status)
+                updated_count_total += updated_count
+                # print(f"Successfully updated status of doc_no {doc_no} to {status} ({updated_count} rows)")
+
+        return JsonResponse({
+            'status': 'success',
+            'updated_count': updated_count_total
+        })
+
+    except Exception as e:
+        # Print log in English to avoid UnicodeEncodeError on Windows console
+        # print(f"Error in uc_status_cancel_do: {str(e)}")
+        return JsonResponse({
+            'status': 'fail',
+            'message': str(e)
+        }, status=500)
 
 ################# api delivery Order สำหรับ update table ตาชั่ง local #####################################
 @api_view(['GET'])
@@ -9582,12 +9655,12 @@ def deliveryOrderByComp(request):
     queryset = DeliveryOrder.objects.filter(
         delivery_date=date,
         comp_code=comp_code
-    )
+    ).order_by('id')
 
     paginator = SmallResultsSetPagination()
     result_page = paginator.paginate_queryset(queryset, request)
 
-    serializer = DeliveryOrderSerializer(result_page, many=True)
+    serializer = K2MDSerializer(result_page, many=True)
 
     return paginator.get_paginated_response(serializer.data)
 

@@ -2,6 +2,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from weightapp.models import BaseCompany, BaseWeightStation, WeightDelivery, DeliveryOrder
 import json
+from unittest.mock import patch, MagicMock
 
 class UCWeightDeliveryTests(TestCase):
     def setUp(self):
@@ -289,3 +290,153 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do2.status, 'cancelled')
         do3 = DeliveryOrder.objects.get(doc_no='DOC_CANCEL_3', comp_code='TEST_COMP')
         self.assertEqual(do3.status, 'cancelled')
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_base_api')
+    def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_get_base_api, mock_requests_get):
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        # Setup mock responses for the first run (Insert)
+        mock_response_insert_1 = MagicMock()
+        mock_response_insert_1.json.return_value = {
+            "data": [
+                {
+                    "docNo": "DOC_K2M_001",
+                    "qty": 50.0,
+                    "carCompany": 3,
+                    "carCustomer": 1,
+                    "customerCode": "CUST01",
+                    "customerName": "Cust Name 1",
+                    "customerAddress": "Addr 1",
+                    "productCode": "PROD01",
+                    "productName": "Prod Name 1",
+                    "saleName": "Sale 1",
+                    "note": "Note 1",
+                    "status": "open",
+                    "unitName": "ตัน"
+                }
+            ]
+        }
+        mock_response_insert_1.raise_for_status = MagicMock()
+
+        mock_response_insert_2 = MagicMock()
+        mock_response_insert_2.json.return_value = {
+            "data": []
+        }
+        mock_response_insert_2.raise_for_status = MagicMock()
+
+        mock_requests_get.side_effect = [mock_response_insert_1, mock_response_insert_2]
+        
+        # Call the function for insert
+        delivery_date = date(2026, 6, 12)
+        result = insertDeliveryFromApiK2M(delivery_date)
+        self.assertIn("Insert=1", result)
+        self.assertIn("Update=0", result)
+
+        # Verify it was created in the database with all fields
+        do = DeliveryOrder.objects.get(doc_no="DOC_K2M_001", comp_code="TEST_COMP")
+        self.assertEqual(float(do.qty), 50.0)
+        self.assertEqual(do.car_company, 3)
+        self.assertEqual(do.car_customer, 1)
+        self.assertEqual(do.customer_code, "CUST01")
+        self.assertEqual(do.status, "open")
+
+        # Now, setup mock responses for the second run (Update on 'open' status)
+        # We simulate the API returning the same order but with updated status and other fields modified.
+        # Since the existing status is 'open' (not cancel/cancelled), all fields should be updated.
+        mock_response_update_1 = MagicMock()
+        mock_response_update_1.json.return_value = {
+            "data": [
+                {
+                    "docNo": "DOC_K2M_001",
+                    "qty": 100.0,            # Changed
+                    "carCompany": 10,         # Changed
+                    "carCustomer": 5,         # Changed
+                    "customerCode": "CUST02", # Changed
+                    "customerName": "Cust Name 2", # Changed
+                    "customerAddress": "Addr 2", # Changed
+                    "productCode": "PROD02",  # Changed
+                    "productName": "Prod Name 2", # Changed
+                    "saleName": "Sale 2",     # Changed
+                    "note": "Note 2",         # Changed
+                    "status": "closed",       # Changed
+                    "unitName": "ชิ้น"         # Changed
+                }
+            ]
+        }
+        mock_response_update_1.raise_for_status = MagicMock()
+
+        mock_response_update_2 = MagicMock()
+        mock_response_update_2.json.return_value = {
+            "data": []
+        }
+        mock_response_update_2.raise_for_status = MagicMock()
+
+        mock_requests_get.side_effect = [mock_response_update_1, mock_response_update_2]
+
+        # Call the function for update
+        result_update = insertDeliveryFromApiK2M(delivery_date)
+        self.assertIn("Insert=0", result_update)
+        self.assertIn("Update=1", result_update)
+
+        # Verify that only specified fields were updated
+        do.refresh_from_db()
+        self.assertEqual(do.status, "closed")
+        self.assertEqual(float(do.qty), 50.0) # Not updated! Remains 50.0
+        self.assertEqual(do.car_company, 3) # Not updated! Remains 3
+        self.assertEqual(do.car_customer, 1) # Not updated! Remains 1
+        self.assertEqual(do.customer_code, "CUST02") # Updated!
+        self.assertEqual(do.customer_name, "Cust Name 2") # Updated!
+        self.assertEqual(do.unit_name, "ชิ้น") # Updated!
+
+        # Now set the status to 'cancelled' in the DB to test the cancel logic
+        do.status = 'cancelled'
+        do.save()
+
+        # We simulate the API returning the order again but with status changed back to 'open'
+        # and other fields changed.
+        mock_response_cancel_1 = MagicMock()
+        mock_response_cancel_1.json.return_value = {
+            "data": [
+                {
+                    "docNo": "DOC_K2M_001",
+                    "qty": 200.0,            # Changed
+                    "carCompany": 20,         # Changed
+                    "carCustomer": 15,        # Changed
+                    "customerCode": "CUST03", # Changed
+                    "customerName": "Cust Name 3", # Changed
+                    "customerAddress": "Addr 3", # Changed
+                    "productCode": "PROD03",  # Changed
+                    "productName": "Prod Name 3", # Changed
+                    "saleName": "Sale 3",     # Changed
+                    "note": "Note 3",         # Changed
+                    "status": "open",         # Changed back to open
+                    "unitName": "กล่อง"        # Changed
+                }
+            ]
+        }
+        mock_response_cancel_1.raise_for_status = MagicMock()
+
+        mock_response_cancel_2 = MagicMock()
+        mock_response_cancel_2.json.return_value = {
+            "data": []
+        }
+        mock_response_cancel_2.raise_for_status = MagicMock()
+
+        mock_requests_get.side_effect = [mock_response_cancel_1, mock_response_cancel_2]
+
+        # Call the function for update on a cancelled order
+        result_cancel = insertDeliveryFromApiK2M(delivery_date)
+        self.assertIn("Insert=0", result_cancel)
+        self.assertIn("Update=1", result_cancel)
+
+        # Verify that only the specified fields were updated
+        do.refresh_from_db()
+        self.assertEqual(do.status, "open")             # Updated!
+        self.assertEqual(float(do.qty), 50.0)            # Kept original 50.0 (not updated to 200.0)
+        self.assertEqual(do.car_company, 3)              # Kept original 3
+        self.assertEqual(do.car_customer, 1)              # Kept original 1
+        self.assertEqual(do.customer_code, "CUST03")      # Updated!
+        self.assertEqual(do.customer_name, "Cust Name 3") # Updated!
+        self.assertEqual(do.unit_name, "กล่อง")             # Updated!

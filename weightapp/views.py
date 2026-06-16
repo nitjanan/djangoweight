@@ -267,59 +267,56 @@ def insertDeliveryFromApiK2M(delivery_date):
                     break
 
                 for row in rows:
-
                     status = row.get("status")
-                    if status == 'open':
-                        existing_do = DeliveryOrder.objects.filter(
-                            doc_no=row.get("docNo"),
-                            comp_code=company,
-                            delivery_date=delivery_date
-                        ).first()
 
-                        car_company_val = row.get("carCompany") or 0
-                        car_customer_val = row.get("carCustomer") or 0
-                        car_company_tot_val = (existing_do.car_company_tot or 0) if existing_do else 0
-                        car_customer_tot_val = (existing_do.car_customer_tot or 0) if existing_do else 0
-
-                        car_company_rem = car_company_val - car_company_tot_val
-                        car_customer_rem = car_customer_val - car_customer_tot_val
-                    else:
-                        car_company_rem = row.get("carCompany")
-                        car_customer_rem = row.get("carCustomer")
-
-                    obj, created = DeliveryOrder.objects.update_or_create(
+                    existing_do = DeliveryOrder.objects.filter(
                         doc_no=row.get("docNo"),
                         comp_code=company,
-                        delivery_date=delivery_date,
-                        defaults={
-                            "qty": row.get("qty"),
+                        delivery_date=delivery_date
+                    ).first()
 
-                            "car_company": row.get("carCompany"),
-                            "car_customer": row.get("carCustomer"),
-
-                            "car_company_rem": car_company_rem,
-                            "car_customer_rem": car_customer_rem,
-
-                            "customer_code": row.get("customerCode"),
-                            "customer_name": row.get("customerName"),
-                            "customer_address": row.get("customerAddress"),
-                            
-                            "product_code": row.get("productCode"),
-                            "product_name": row.get("productName"),
-
-                            "sale_name": row.get("saleName"),
-                            "note": row.get("note"),
-                            "status": status,
-                            
-                            "unit_name": row.get("unitName"),
-
-                        }
-                    )
-
-                    if created:
-                        insert_count += 1
-                    else:
+                    if existing_do:
+                        existing_do.status = status
+                        existing_do.customer_code = row.get("customerCode")
+                        existing_do.customer_name = row.get("customerName")
+                        existing_do.customer_address = row.get("customerAddress")
+                        existing_do.product_code = row.get("productCode")
+                        existing_do.product_name = row.get("productName")
+                        existing_do.sale_name = row.get("saleName")
+                        existing_do.note = row.get("note")
+                        existing_do.unit_name = row.get("unitName")
+                        existing_do.save()
                         update_count += 1
+                    else:
+                        car_company_val = row.get("carCompany") or 0
+                        car_customer_val = row.get("carCustomer") or 0
+                        if status == 'open':
+                            car_company_rem = car_company_val
+                            car_customer_rem = car_customer_val
+                        else:
+                            car_company_rem = row.get("carCompany")
+                            car_customer_rem = row.get("carCustomer")
+
+                        DeliveryOrder.objects.create(
+                            doc_no=row.get("docNo"),
+                            comp_code=company,
+                            delivery_date=delivery_date,
+                            qty=row.get("qty"),
+                            car_company=row.get("carCompany"),
+                            car_customer=row.get("carCustomer"),
+                            car_company_rem=car_company_rem,
+                            car_customer_rem=car_customer_rem,
+                            customer_code=row.get("customerCode"),
+                            customer_name=row.get("customerName"),
+                            customer_address=row.get("customerAddress"),
+                            product_code=row.get("productCode"),
+                            product_name=row.get("productName"),
+                            sale_name=row.get("saleName"),
+                            note=row.get("note"),
+                            status=status,
+                            unit_name=row.get("unitName")
+                        )
+                        insert_count += 1
 
                 print(
                     f"Company={company} "

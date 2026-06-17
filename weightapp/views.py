@@ -1030,6 +1030,8 @@ def index(request):
 
         if (3,) in store_id:
             ship_data = Weight.objects.filter(
+                bws__company__code__in=company_in,
+                bws__weight_type=1,
                 date__range=(start_date, end_date),
                 site__store=3
             ).values('date', 'site__base_site_name').order_by('date').distinct()
@@ -1049,6 +1051,8 @@ def index(request):
         for i, st_id in enumerate(store_id):
             if i == 0:  # สำหรับสายยาว
                 weights[st_id] = Weight.objects.filter(
+                    bws__company__code__in=company_in,
+                    bws__weight_type=1,
                     mill__isnull = True,
                     date__range=(start_date, end_date),
                     line_type="สายยาว"
@@ -1058,6 +1062,8 @@ def index(request):
             elif i == 1:  # สำหรับแต่ละ store เช่น ขายภายนอก
                 weights[st_id] = Weight.objects.filter(
                     Q(site__store = st_id) | Q(site__isnull = True),
+                    bws__company__code__in=company_in,
+                    bws__weight_type=1,
                     mill__isnull = False,
                     date__range=(start_date, end_date),
                     line_type="สายยาว"
@@ -1066,6 +1072,8 @@ def index(request):
                 ).order_by('date')
             elif i == 2:  # สำหรับแต่ละ store เช่น ขายลงเรือ
                 weights[st_id] = Weight.objects.filter(
+                    bws__company__code__in=company_in,
+                    bws__weight_type=1,
                     date__range=(start_date, end_date),
                     site__store=st_id
                 ).values('date').annotate(

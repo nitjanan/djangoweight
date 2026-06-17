@@ -103,7 +103,7 @@ class BaseStoneTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BaseStoneType
-        fields = ('รหัสหิน', 'ชื่อหิน', 'cal_q', 'v_stamp')
+        fields = ('รหัสหิน', 'ชื่อหิน', 'cal_q', 'v_stamp', 'inactive')
 
 class ThaiEnglishField(serializers.Field):
     def to_representation(self, obj):

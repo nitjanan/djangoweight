@@ -99,8 +99,8 @@ class BaseStoneTypeResource(resources.ModelResource):
 
 class BaseStoneTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = BaseStoneTypeResource
-    list_display = ('base_stone_type_id', 'base_stone_type_name',)
-    search_fields = ('base_stone_type_id', 'base_stone_type_name',)
+    list_display = ('base_stone_type_id', 'base_stone_type_name', 'cal_q', 'inactive')
+    search_fields = ('base_stone_type_id', 'base_stone_type_name', 'cal_q', 'inactive')
 
 class BaseWeightTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['id','name'] #แสดงรายการสินค้าในรูปแบบตาราง

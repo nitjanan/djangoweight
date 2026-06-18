@@ -255,12 +255,14 @@ StoneEstimateItemInlineFormset = inlineformset_factory(
 
 class WeightForm(forms.ModelForm):
 
-    ''' เอาออกเพราะ UNI ใช้ข้อมูลร่วมกับ SLC
     def __init__(self, *args, **kwargs):
-       super().__init__(*args, **kwargs)
-       if self.instance.bws.company is not None:
-           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)    
-    '''
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.stone_type_id:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(
+                Q(inactive=False) | Q(pk=self.instance.stone_type_id)
+            )
+        else:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(inactive=False)
 
     ''' hidden
     mill_name = forms.ModelChoiceField(label='โรงโม่', queryset = BaseMill.objects.all())
@@ -308,14 +310,14 @@ class WeightForm(forms.ModelForm):
        }
 
 class WeightStockForm(forms.ModelForm):
-    '''
     def __init__(self, *args, **kwargs):
-       super().__init__(*args, **kwargs)
-       if self.instance.bws.company is not None:
-           self.fields['scoop'] = forms.ModelChoiceField(label='ผู้ตัก', queryset = BaseScoop.objects.filter(company = self.instance.bws.company), required=False)
-           self.fields['driver'] = forms.ModelChoiceField(label='ผู้ขับ', queryset = BaseDriver.objects.filter(company = self.instance.bws.company), required=False)
-           self.fields['car_registration'] = forms.ModelChoiceField(label='ทะเบียนรถ', queryset = BaseCarRegistration.objects.filter(company = self.instance.bws.company), required=False)    
-    '''
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.stone_type_id:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(
+                Q(inactive=False) | Q(pk=self.instance.stone_type_id)
+            )
+        else:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(inactive=False)
 
     customer = forms.ModelChoiceField(label='ลูกค้า', queryset = BaseCustomer.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
     mill = forms.ModelChoiceField(label='ต้นทาง', queryset = BaseMill.objects.filter(Q(weight_type = 2) | Q(weight_type = 3)), required=False)
@@ -349,6 +351,15 @@ class WeightStockForm(forms.ModelForm):
        }
 
 class WeightPortForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.stone_type_id:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(
+                Q(inactive=False) | Q(pk=self.instance.stone_type_id)
+            )
+        else:
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(inactive=False)
+
     stone_color = forms.ModelChoiceField(label='สีของหิน', queryset = BaseStoneColor.objects.all(), required=False)
     transport = forms.ModelChoiceField(label='ขนส่ง', queryset = BaseTransport.objects.all() , required=False)
 

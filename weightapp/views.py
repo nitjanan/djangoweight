@@ -280,6 +280,8 @@ def insertDeliveryFromApiK2M(delivery_date):
                         existing_do.customer_code = row.get("customerCode")
                         existing_do.customer_name = row.get("customerName")
                         existing_do.customer_address = row.get("customerAddress")
+                        existing_do.site_id = row.get("siteId")
+                        existing_do.site_name = row.get("siteName")
                         existing_do.product_code = row.get("productCode")
                         existing_do.product_name = row.get("productName")
                         existing_do.sale_name = row.get("saleName")
@@ -309,6 +311,8 @@ def insertDeliveryFromApiK2M(delivery_date):
                             customer_code=row.get("customerCode"),
                             customer_name=row.get("customerName"),
                             customer_address=row.get("customerAddress"),
+                            site_id=row.get("siteId"),
+                            site_name=row.get("siteName"),
                             product_code=row.get("productCode"),
                             product_name=row.get("productName"),
                             sale_name=row.get("saleName"),
@@ -9464,6 +9468,8 @@ def uc_weight_delivery(request):
                 wd = WeightDelivery.objects.get(weight_id=weight_id)
                 status = 'Update Item'
 
+            if 'comp_code' not in data or not data['comp_code']:
+                data = {**data, 'comp_code': comp_code}
             uc_delivery_order(data) #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
 
         return JsonResponse({

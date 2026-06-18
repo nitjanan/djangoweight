@@ -1271,6 +1271,8 @@ class DeliveryOrder(models.Model):
     customer_code = models.CharField(max_length=20, blank=False, null=True)
     customer_name = models.CharField(max_length=255, blank=False, null=True)
     customer_address = models.CharField(max_length=255, blank=False, null=True)
+    site_id = models.CharField(max_length=20, blank=False, null=True)
+    site_name = models.CharField(max_length=255, blank=False, null=True)
 
     product_code = models.CharField(max_length=20, blank=False, null=True)
     product_name = models.CharField(max_length=255, blank=False, null=True)

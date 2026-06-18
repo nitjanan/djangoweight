@@ -493,8 +493,8 @@ class BaseAPIAdmin(ImportExportModelAdmin):
 
 
 class DeliveryOrderAdmin(ImportExportModelAdmin):
-    search_fields = ['doc_no', 'comp_code', 'delivery_date', 'customer_code', 'customer_name']
-    list_display = ['doc_no','comp_code','delivery_date','customer_code', 'customer_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['doc_no', 'comp_code', 'delivery_date', 'customer_code', 'customer_name', 'site_id', 'site_name']
+    list_display = ['doc_no','comp_code','delivery_date','customer_code', 'customer_name', 'site_id', 'site_name'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 class WeightDeliveryAdmin(ImportExportModelAdmin):

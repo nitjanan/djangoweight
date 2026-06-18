@@ -309,6 +309,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST01",
                     "customerName": "Cust Name 1",
                     "customerAddress": "Addr 1",
+                    "siteId": "SITE01",
+                    "siteName": "Site Name 1",
                     "productCode": "PROD01",
                     "productName": "Prod Name 1",
                     "saleName": "Sale 1",
@@ -340,6 +342,8 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.car_company, 3)
         self.assertEqual(do.car_customer, 1)
         self.assertEqual(do.customer_code, "CUST01")
+        self.assertEqual(do.site_id, "SITE01")
+        self.assertEqual(do.site_name, "Site Name 1")
         self.assertEqual(do.status, "open")
 
         # Now, setup mock responses for the second run (Update on 'open' status)
@@ -356,6 +360,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST02", # Changed
                     "customerName": "Cust Name 2", # Changed
                     "customerAddress": "Addr 2", # Changed
+                    "siteId": "SITE02",       # Changed
+                    "siteName": "Site Name 2", # Changed
                     "productCode": "PROD02",  # Changed
                     "productName": "Prod Name 2", # Changed
                     "saleName": "Sale 2",     # Changed
@@ -388,6 +394,8 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.car_customer, 1) # Not updated! Remains 1
         self.assertEqual(do.customer_code, "CUST02") # Updated!
         self.assertEqual(do.customer_name, "Cust Name 2") # Updated!
+        self.assertEqual(do.site_id, "SITE02") # Updated!
+        self.assertEqual(do.site_name, "Site Name 2") # Updated!
         self.assertEqual(do.unit_name, "ชิ้น") # Updated!
 
         # Now set the status to 'cancelled' in the DB to test the cancel logic
@@ -407,6 +415,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST03", # Changed
                     "customerName": "Cust Name 3", # Changed
                     "customerAddress": "Addr 3", # Changed
+                    "siteId": "SITE03",       # Changed
+                    "siteName": "Site Name 3", # Changed
                     "productCode": "PROD03",  # Changed
                     "productName": "Prod Name 3", # Changed
                     "saleName": "Sale 3",     # Changed
@@ -439,4 +449,6 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.car_customer, 1)              # Kept original 1
         self.assertEqual(do.customer_code, "CUST03")      # Updated!
         self.assertEqual(do.customer_name, "Cust Name 3") # Updated!
+        self.assertEqual(do.site_id, "SITE03")      # Updated!
+        self.assertEqual(do.site_name, "Site Name 3") # Updated!
         self.assertEqual(do.unit_name, "กล่อง")             # Updated!

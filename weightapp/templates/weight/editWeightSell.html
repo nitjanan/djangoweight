@@ -449,6 +449,11 @@ input.del[type=checkbox] {
 
   //select2 (dropdown & search)
   $(document).ready(function() {
+    if ($('#id_do_doc_no').val() && $('#id_do_doc_no').val().trim() !== "") {
+      $('#select_site').prop('disabled', true);
+      $('#id_stone_type').prop('disabled', true);
+    }
+
     $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_stone_type').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_scoop').select2({width: "100%",  theme: 'bootstrap-5'});
@@ -456,6 +461,9 @@ input.del[type=checkbox] {
 
   // BEFORE form submission
   $('form').submit(function() {
+    $('#select_site').prop('disabled', false);
+    $('#id_stone_type').prop('disabled', false);
+
     customer_id = $('#id_customer').val();
     if(customer_id == '09-V-001' || customer_id == '99'){
         $('#id_weight_in').val('0.000');

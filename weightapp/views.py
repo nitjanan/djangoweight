@@ -1521,7 +1521,7 @@ def editWeight(request, mode, weight_id):
         template_name = "weight/editWeightStock.html"
         tmp_form_post = WeightStockForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightStockForm(instance=weight_data)
-    elif company.biz.id == 2 and mode == 1: #ธุรกิจท่าเรือ
+    elif company.biz.id == 2 and (mode == 1 or mode == 4): #ธุรกิจท่าเรือ
         template_name = "weight/editWeightPort.html"
         tmp_form_post = WeightPortForm(request.POST, request.FILES, instance=weight_data)
         tmp_form = WeightPortForm(instance=weight_data)
@@ -1605,7 +1605,7 @@ def editWeight(request, mode, weight_id):
                 weight_history.save()
 
                 #เครื่องขาย
-                if mode == 1:
+                if mode == 1 and company.biz.id == 1:
                     if original_weight_total is not None and original_weight_total != weight_form.weight_total:
                         if weight_form.oil_content:
                             updateGasPrice(weight_form.bws.company.id, weight_form.date)
@@ -1630,7 +1630,7 @@ def editWeight(request, mode, weight_id):
                     if weight_form.stone_type:
                         updateSellStockStoneItem(weight_form.pk)
                 #ธุรกิจท่าเรือ
-                if mode == 1 and company.biz.id == 2:
+                if (mode == 1 or mode == 4) and company.biz.id == 2:
                     if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_cus is not None and original_weight_cus != weight_form.customer.customer_id or original_weight_stone is not None and original_weight_stone != weight_form.stone_type.base_stone_type_id:
                         updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, original_weight_cus, original_weight_stone)
                         updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, weight_form.customer.customer_id, weight_form.stone_type.base_stone_type_id)
@@ -9761,7 +9761,7 @@ def deliveryOrderSummaryByComp(request):
     date = request.query_params.get('date')
     comp_code = request.query_params.get('comp_code')
 
-    queryset = DeliveryOrder.objects.filter(delivery_date = date, comp_code = comp_code)
+    queryset = DeliveryOrder.objects.filter(delivery_date = date, comp_code = comp_code).order_by('id')
 
     paginator = SmallResultsSetPagination()
     result_page = paginator.paginate_queryset(queryset, request)
@@ -9776,7 +9776,7 @@ def weightDeliverySummaryByComp(request):
     date = request.query_params.get('date')
     comp_code = request.query_params.get('comp_code')
 
-    queryset = WeightDelivery.objects.filter(delivery_date = date, comp_code = comp_code)
+    queryset = WeightDelivery.objects.filter(delivery_date = date, comp_code = comp_code).order_by('id')
 
     paginator = SmallResultsSetPagination()
     result_page = paginator.paginate_queryset(queryset, request)

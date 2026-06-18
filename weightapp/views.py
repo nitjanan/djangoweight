@@ -9639,23 +9639,43 @@ def uc_status_cancel_do(request):
             'message': str(e)
         }, status=500)
 
-################# api delivery Order สำหรับ update table ตาชั่ง local #####################################
+########################################################################################
+###########################       รายการ คำนวน Do รายวัน   ###############################
+########################################################################################
+################# api delivery Order สำหรับ update table ตาชั่ง local #####################
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def deliveryOrderSummaryByComp(request, date, comp_code):
+def deliveryOrderSummaryByComp(request):
+    date = request.query_params.get('date')
+    comp_code = request.query_params.get('comp_code')
+
     queryset = DeliveryOrder.objects.filter(delivery_date = date, comp_code = comp_code)
-    serializer = DeliveryOrderSerializer(queryset, many = True)
-    return Response(serializer.data)
 
-################# api weigh Delivery สำหรับ update table ตาชั่ง local ไว้เช็คจำนวนรถคงเหลือ #################
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+    
+    serializer = DeliveryOrderSerializer(result_page, many = True)
+    return paginator.get_paginated_response(serializer.data)
+
+############ api weigh Delivery สำหรับ update table ตาชั่ง local ไว้เช็คจำนวนรถคงเหลือ ########
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def weightDeliverySummaryByComp(request, date, comp_code):
-    queryset = WeightDelivery.objects.filter(delivery_date = date, comp_code = comp_code)
-    serializer = WeightDeliverySerializer(queryset, many = True)
-    return Response(serializer.data)
+def weightDeliverySummaryByComp(request):
+    date = request.query_params.get('date')
+    comp_code = request.query_params.get('comp_code')
 
-################ api delivery Order to web ออกใบสั่งขาย K Kitti #################################################
+    queryset = WeightDelivery.objects.filter(delivery_date = date, comp_code = comp_code)
+
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+
+    serializer = WeightDeliverySerializer(result_page, many = True)
+    return paginator.get_paginated_response(serializer.data)
+
+########################################################################################
+###########################     คุณกิตติ รายการ DO จากตาชั่ง   #############################
+########################################################################################
+################ api delivery Order to web ออกใบสั่งขาย K Kitti ##########################
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def deliveryOrderByComp(request):
@@ -9675,19 +9695,35 @@ def deliveryOrderByComp(request):
 
     return paginator.get_paginated_response(serializer.data)
 
-
+########################################################################################
+#############  รายการแก้ไข weight python GUI download รายการแก้ไข  ########################
+########################################################################################
 ################# api delivery Order สำหรับ รายการแก้ไข weight บนหน้าเว็ป ##################
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def deliveryOrderVStamp(request, v_stamp, comp_code):
+def deliveryOrderVStamp(request):
+    v_stamp = request.query_params.get('v_stamp')
+    comp_code = request.query_params.get('comp_code')
+
     queryset = DeliveryOrder.objects.filter(v_stamp__gte = v_stamp, comp_code = comp_code)
-    serializer = DeliveryOrderSerializer(queryset, many = True)
-    return Response(serializer.data)
+
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+
+    serializer = DeliveryOrderSerializer(result_page, many = True)
+    return paginator.get_paginated_response(serializer.data)
 
 ################# api weigh Delivery สำหรับ รายการแก้ไข weight บนหน้าเว็ป #################
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def weightDeliveryVStamp(request, v_stamp, comp_code):
+def weightDeliveryVStamp(request):
+    v_stamp = request.query_params.get('v_stamp')
+    comp_code = request.query_params.get('comp_code')
+
     queryset = WeightDelivery.objects.filter(v_stamp__gte = v_stamp, comp_code = comp_code)
-    serializer = WeightDeliverySerializer(queryset, many = True)
-    return Response(serializer.data)
+
+    paginator = SmallResultsSetPagination()
+    result_page = paginator.paginate_queryset(queryset, request)
+
+    serializer = WeightDeliverySerializer(result_page, many = True)
+    return paginator.get_paginated_response(serializer.data)

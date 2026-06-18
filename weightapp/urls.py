@@ -271,8 +271,8 @@ urlpatterns = [
      path('exportExcelTranToSellInDashboard/', views.exportExcelTranToSellInDashboard,name="exportExcelTranToSellInDashboard"),
 
      path('api/uc_weight_delivery/', views.uc_weight_delivery),
-     path('deliveryorder/summary/api/by/comp/<str:date>/<str:comp_code>',views.deliveryOrderSummaryByComp,name="deliveryOrderSummaryByComp"), 
-     path('weightdelivery/summary/api/by/comp/<str:date>/<str:comp_code>',views.weightDeliverySummaryByComp,name="weightDeliverySummaryByComp"), 
+     path('deliveryorder/summary/api/by/comp/',views.deliveryOrderSummaryByComp,name="deliveryOrderSummaryByComp"), 
+     path('weightdelivery/summary/api/by/comp/',views.weightDeliverySummaryByComp,name="weightDeliverySummaryByComp"), 
 
      path('api/uc_status_cancel_do/', views.uc_status_cancel_do),
 
@@ -281,13 +281,13 @@ urlpatterns = [
      path('deliveryorder/api/by/comp/', views.deliveryOrderByComp, name="deliveryOrderByComp"),
 
       path(
-      'deliveryorder/api/vStamp/<str:v_stamp>/<str:comp_code>/',
+      'deliveryorder/api/vStamp/',
       views.deliveryOrderVStamp,
       name='deliveryOrderVStamp'
       ),
 
       path(
-      'weightdelivery/api/vStamp/<str:v_stamp>/<str:comp_code>/',
+      'weightdelivery/api/vStamp/',
       views.weightDeliveryVStamp,
       name='weightDeliveryVStamp'
       ),

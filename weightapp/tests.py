@@ -1,6 +1,6 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from weightapp.models import BaseCompany, BaseWeightStation, WeightDelivery, DeliveryOrder
+from weightapp.models import BaseCompany, BaseWeightStation, WeightDelivery, DeliveryOrder, BaseCarryType, BaseTransport
 import json
 from unittest.mock import patch, MagicMock
 
@@ -452,3 +452,112 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.site_id, "SITE03")      # Updated!
         self.assertEqual(do.site_name, "Site Name 3") # Updated!
         self.assertEqual(do.unit_name, "กล่อง")             # Updated!
+
+
+class UpdateWeightDeliveryAndDeliveryOrderTests(TestCase):
+    def setUp(self):
+        # Create a test company
+        self.company = BaseCompany.objects.create(
+            name="Test Company",
+            code="TEST_COMP"
+        )
+        # Create a test weight station
+        self.bws = BaseWeightStation.objects.create(
+            id="BWS_01",
+            des="Test Station 1",
+            company=self.company
+        )
+        
+        # Create carry types
+        self.carry_type_customer = BaseCarryType.objects.create(
+            base_carry_type_id="CUST_CARRY",
+            base_carry_type_name="รับเอง"
+        )
+        self.carry_type_company = BaseCarryType.objects.create(
+            base_carry_type_id="COMP_CARRY",
+            base_carry_type_name="ส่งให้"
+        )
+        
+        # Create transports
+        self.transport_customer = BaseTransport.objects.create(
+            base_transport_id="TRANS_CUST",
+            base_transport_name="Customer Transport",
+            base_carry_type=self.carry_type_customer
+        )
+        self.transport_company = BaseTransport.objects.create(
+            base_transport_id="TRANS_COMP",
+            base_transport_name="Company Transport",
+            base_carry_type=self.carry_type_company
+        )
+
+        # Create DeliveryOrder
+        self.do = DeliveryOrder.objects.create(
+            delivery_date="2026-06-18",
+            doc_no="DOC_002",
+            car_company=1,
+            car_customer=1,
+            car_company_tot=0,
+            car_customer_tot=0,
+            car_company_rem=1,
+            car_customer_rem=1,
+            comp_code="TEST_COMP",
+            unit_name="ตัน"
+        )
+
+    def test_update_weight_delivery_and_delivery_order_limit_exceeded(self):
+        from weightapp.views import updateWeightDeliveryAndDeliveryOrder
+        
+        # Create existing active deliveries to reach limit
+        WeightDelivery.objects.create(
+            weight_id=1,
+            delivery_date='2026-06-18',
+            bws='BWS_01',
+            comp_code='TEST_COMP',
+            do_id=self.do.id,
+            do_doc_no='DOC_002',
+            carry_type_name='รับเอง',
+            weight_ton=10.0,
+            weight_q=0.0,
+            unit_name='ตัน'
+        )
+        
+        # Now try to update another weight to 'รับเอง' which would exceed the customer car limit (max 1)
+        success, error_msg = updateWeightDeliveryAndDeliveryOrder(
+            weight_id=2,
+            new_transport=self.transport_customer,
+            do_doc_no='DOC_002',
+            delivery_date='2026-06-18',
+            comp_code='TEST_COMP',
+            weight_ton=5.0,
+            weight_q=0.0,
+            unit_name='ตัน',
+            bws_id='BWS_01',
+            is_cancel=False
+        )
+        self.assertFalse(success)
+        self.assertEqual(error_msg, "รถลูกค้ามากกว่าที่ plan ไว้ไม่สามารถแก้ไขข้อมูลได้")
+
+    def test_update_weight_delivery_and_delivery_order_success(self):
+        from weightapp.views import updateWeightDeliveryAndDeliveryOrder
+        
+        # We update weight 2 to 'ส่งให้' which is under the limit of 1
+        success, error_msg = updateWeightDeliveryAndDeliveryOrder(
+            weight_id=2,
+            new_transport=self.transport_company,
+            do_doc_no='DOC_002',
+            delivery_date='2026-06-18',
+            comp_code='TEST_COMP',
+            weight_ton=5.0,
+            weight_q=0.0,
+            unit_name='ตัน',
+            bws_id='BWS_01',
+            is_cancel=False
+        )
+        self.assertTrue(success)
+        self.assertIsNone(error_msg)
+        
+        # Check that DeliveryOrder was updated properly
+        self.do.refresh_from_db()
+        self.assertEqual(self.do.car_company_tot, 1)
+        self.assertEqual(self.do.car_company_rem, 0)
+

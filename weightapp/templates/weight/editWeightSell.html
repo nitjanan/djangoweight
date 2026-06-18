@@ -902,4 +902,10 @@ $(function () {
 
 
 </script>
+
+{% if alert_message %}
+<script type="text/javascript">
+  alert("{{ alert_message }}");
+</script>
+{% endif %}
 {% endblock %}

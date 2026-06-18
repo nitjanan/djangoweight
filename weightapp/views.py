@@ -1535,6 +1535,7 @@ def editWeight(request, mode, weight_id):
         if local_mill != center_mill:
             is_not_match_mill = True
 
+    alert_message = None
     if request.method == 'POST':
         form = tmp_form_post
         if form.is_valid():
@@ -1542,6 +1543,7 @@ def editWeight(request, mode, weight_id):
             try:
                 original_weight = Weight.objects.get(pk=form.instance.pk)
                 original_weight_total = original_weight.weight_total
+                original_transport = original_weight.transport
                 if original_weight.site:
                     original_weight_site = original_weight.site.base_site_id
                 if original_weight.customer:
@@ -1553,46 +1555,87 @@ def editWeight(request, mode, weight_id):
                 original_weight_site = None
                 original_weight_cus = None
                 original_weight_stone = None
+                original_transport = None
         
-            # log history เก็บข้อมูลก่อนแก้
-            weight_form = form.save()
+            do_doc_no = form.cleaned_data.get('do_doc_no')
+            new_transport = form.cleaned_data.get('transport')
+            new_transport_name = new_transport.base_transport_name if new_transport else None
 
-            weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
-            weight_history.user_update = request.user
-            weight_history.save()
+            if do_doc_no and ( original_transport != new_transport_name or original_weight_total != form.cleaned_data.get('weight_total')):
+                weight_id = weight_data.weight_id
+                delivery_date = form.cleaned_data.get('date') or weight_data.date
+                comp_code = company.code
+                weight_ton = form.cleaned_data.get('weight_total') or weight_data.weight_total
+                weight_q = form.cleaned_data.get('q') or weight_data.q
+                is_cancel = form.cleaned_data.get('is_cancel') or weight_data.is_cancel
+                bws_id = weight_data.bws.id if weight_data.bws else None
 
-            #เครื่องขาย
-            if mode == 1:
-                if original_weight_total is not None and original_weight_total != weight_form.weight_total:
-                    if weight_form.oil_content:
-                        updateGasPrice(weight_form.bws.company.id, weight_form.date)
-                        updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
+                delivery_order = DeliveryOrder.objects.filter(
+                    doc_no=do_doc_no,
+                    comp_code=comp_code,
+                    delivery_date=delivery_date
+                ).first()
+                unit_name = delivery_order.unit_name if delivery_order else 'ตัน'
 
-                if weight_form.customer_id == '09-V-001':
-                    updateCancelDeliveryOrder(weight_form.weight_id)
+                success, error_msg = updateWeightDeliveryAndDeliveryOrder(
+                    weight_id=weight_id,
+                    new_transport=new_transport,
+                    do_doc_no=do_doc_no,
+                    delivery_date=delivery_date,
+                    comp_code=comp_code,
+                    weight_ton=weight_ton,
+                    weight_q=weight_q,
+                    unit_name=unit_name,
+                    bws_id=bws_id,
+                    is_cancel=is_cancel
+                )
 
-            #เครื่องผลิต
-            if mode == 2:#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
-                if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
-                    # update new site
-                    updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
-                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
-                    # update old site
-                    updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, original_weight_site)
-                    updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
-                    if  weight_form.stone_type:
-                        updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
-            #ธุรกิจเหมือง
-            if mode == 1  and company.biz.id == 1:#กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
-                if weight_form.stone_type:
-                    updateSellStockStoneItem(weight_form.pk)
-            #ธุรกิจท่าเรือ
-            if mode == 1 and company.biz.id == 2:
-                if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_cus is not None and original_weight_cus != weight_form.customer.customer_id or original_weight_stone is not None and original_weight_stone != weight_form.stone_type.base_stone_type_id:
-                    updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, original_weight_cus, original_weight_stone)
-                    updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, weight_form.customer.customer_id, weight_form.stone_type.base_stone_type_id)
+                if not success:
+                    alert_message = error_msg
 
-            return redirect('weightTable')
+            if not alert_message:
+                if new_transport and new_transport.base_carry_type:
+                    form.instance.carry_type_name = new_transport.base_carry_type.base_carry_type_name
+
+                # log history เก็บข้อมูลก่อนแก้
+                weight_form = form.save()
+
+                weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
+                weight_history.user_update = request.user
+                weight_history.save()
+
+                #เครื่องขาย
+                if mode == 1:
+                    if original_weight_total is not None and original_weight_total != weight_form.weight_total:
+                        if weight_form.oil_content:
+                            updateGasPrice(weight_form.bws.company.id, weight_form.date)
+                            updateOilCostAndSell(weight_form.pk, weight_form.bws.company.id, weight_form.date)
+
+                    if weight_form.customer_id == '09-V-001':
+                        updateCancelDeliveryOrder(weight_form.weight_id)
+
+                #เครื่องผลิต
+                if mode == 2:#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
+                    if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_site is not None and original_weight_site != weight_form.site.base_site_id:
+                        # update new site
+                        updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, weight_form.site.base_site_id)
+                        # update old site
+                        updatePassScaleEstimate(weight_form.bws.company.id, weight_form.date, original_weight_site)
+                        updateProductionCapacity(weight_form.bws.company.id, weight_form.date, original_weight_site)#กรณีแก้ไขรายการชั่งผลิต update total StoneEstimateItem ด้วย และ capacity_per_hour
+                        if  weight_form.stone_type:
+                            updateProdStockStoneItem(weight_form.bws.company.id, weight_form.date)
+                #ธุรกิจเหมือง
+                if mode == 1  and company.biz.id == 1:#กรณีแก้ไขรายการชั่งขาย คำนวนราคาใหม่ด้วย
+                    if weight_form.stone_type:
+                        updateSellStockStoneItem(weight_form.pk)
+                #ธุรกิจท่าเรือ
+                if mode == 1 and company.biz.id == 2:
+                    if original_weight_total is not None and original_weight_total != weight_form.weight_total or original_weight_cus is not None and original_weight_cus != weight_form.customer.customer_id or original_weight_stone is not None and original_weight_stone != weight_form.stone_type.base_stone_type_id:
+                        updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, original_weight_cus, original_weight_stone)
+                        updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, weight_form.customer.customer_id, weight_form.stone_type.base_stone_type_id)
+
+                return redirect('weightTable')
     else:
         form = tmp_form
 
@@ -1602,8 +1645,77 @@ def editWeight(request, mode, weight_id):
     request.session['loade_page'] = 0 if loade_t < 0 else loade_t# Convert to milliseconds
     '''
 
-    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled'}
+    context = {'weightTable_page': 'active', 'form': form, 'weight': weight_data, 'is_edit_weight': is_edit_weight(request.user) , 'is_not_match_mill': is_not_match_mill, active :"active", 'disabledTab' : 'disabled', 'alert_message': alert_message}
     return render(request, template_name, context)
+
+
+def updateWeightDeliveryAndDeliveryOrder(weight_id, new_transport, do_doc_no, delivery_date, comp_code, weight_ton, weight_q, unit_name, bws_id, is_cancel):
+    new_carry_type_name = None
+    if new_transport and new_transport.base_carry_type:
+        new_carry_type_name = new_transport.base_carry_type.base_carry_type_name
+
+    # Get the DeliveryOrder plan
+    delivery_order = DeliveryOrder.objects.filter(
+        doc_no=do_doc_no,
+        comp_code=comp_code,
+        delivery_date=delivery_date
+    ).first()
+
+    if delivery_order:
+        car_customer = delivery_order.car_customer or 0
+        car_company = delivery_order.car_company or 0
+
+        # Calculate counts of OTHER weights
+        other_weights = WeightDelivery.objects.filter(
+            do_doc_no=do_doc_no,
+            comp_code=comp_code,
+            delivery_date=delivery_date,
+            is_cancel=False
+        ).exclude(weight_id=weight_id)
+
+        other_car_customer = other_weights.filter(carry_type_name='รับเอง').count()
+        other_car_company = other_weights.filter(carry_type_name='ส่งให้').count()
+
+        if new_carry_type_name == 'รับเอง':
+            target_car_customer_rem = car_customer - (other_car_customer + 1)
+            if target_car_customer_rem < 0:
+                return False, "รถลูกค้ามากกว่าที่ plan ไว้ไม่สามารถแก้ไขข้อมูลได้"
+        elif new_carry_type_name == 'ส่งให้':
+            target_car_company_rem = car_company - (other_car_company + 1)
+            if target_car_company_rem < 0:
+                return False, "รถบริษัทมากกว่าที่ plan ไว้ไม่สามารถแก้ไขข้อมูลได้"
+
+        # Update or create WeightDelivery record
+        WeightDelivery.objects.update_or_create(
+            weight_id=weight_id,
+            defaults={
+                'delivery_date': delivery_date,
+                'comp_code': comp_code,
+                'bws': bws_id,
+                'do_id': delivery_order.id,
+                'do_doc_no': do_doc_no,
+                'carry_type_name': new_carry_type_name,
+                'weight_ton': weight_ton,
+                'weight_q': weight_q,
+                'unit_name': unit_name,
+                'is_cancel': is_cancel
+            }
+        )
+
+        # Recalculate DeliveryOrder
+        data = {
+            'delivery_date': delivery_date,
+            'comp_code': comp_code,
+            'do_doc_no': do_doc_no,
+            'unit_name': unit_name,
+            'car_company': delivery_order.car_company,
+            'car_customer': delivery_order.car_customer,
+            'qty': delivery_order.qty,
+            'status': delivery_order.status
+        }
+        uc_delivery_order(data)
+
+    return True, None
 
 
 def updateCancelDeliveryOrder(weight_id):

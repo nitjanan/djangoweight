@@ -647,6 +647,11 @@ class BaseCarForm(forms.ModelForm):
         return instance
 
 class BaseSiteForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from weightapp.models import BaseSiteStore
+        self.fields['store'].queryset = BaseSiteStore.objects.exclude(id=1)
+
     class Meta:
        model = BaseSite
        fields = ('base_site_id' , 'base_site_name', 'weight_type', 'user_created', 'store')

@@ -219,7 +219,7 @@ def get_base_api(mode):
     if mode == 4:
         return b_api.token
 
-# api delivery order from k2m
+# api delivery order from k2m 3:30am
 def get_api_delivery_order_3_30am(request):
     previous_day = date.today() - timedelta(days=1)
     result = insertDeliveryFromApiK2M(previous_day)
@@ -280,8 +280,9 @@ def insertDeliveryFromApiK2M(delivery_date):
                         existing_do.customer_code = row.get("customerCode")
                         existing_do.customer_name = row.get("customerName")
                         existing_do.customer_address = row.get("customerAddress")
-                        existing_do.site_id = row.get("siteId")
-                        existing_do.site_name = row.get("siteName")
+                        delivery_code = row.get("deliveryCode")
+                        existing_do.site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
+                        existing_do.site_name = row.get("deliveryLocation")#diff api
                         existing_do.product_code = row.get("productCode")
                         existing_do.product_name = row.get("productName")
                         existing_do.sale_name = row.get("saleName")
@@ -299,6 +300,9 @@ def insertDeliveryFromApiK2M(delivery_date):
                             car_company_rem = row.get("carCompany")
                             car_customer_rem = row.get("carCustomer")
 
+                        delivery_code = row.get("deliveryCode")
+                        site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
+
                         DeliveryOrder.objects.create(
                             doc_no=row.get("docNo"),
                             comp_code=company,
@@ -311,8 +315,8 @@ def insertDeliveryFromApiK2M(delivery_date):
                             customer_code=row.get("customerCode"),
                             customer_name=row.get("customerName"),
                             customer_address=row.get("customerAddress"),
-                            site_id=row.get("siteId"),
-                            site_name=row.get("siteName"),
+                            site_id=site_id,#diff api
+                            site_name=row.get("deliveryLocation"),#diff api
                             product_code=row.get("productCode"),
                             product_name=row.get("productName"),
                             sale_name=row.get("saleName"),
@@ -1400,7 +1404,7 @@ def weightTable(request):
         data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
     '''
     data = Weight.objects.filter(bws__company__code__in = company_in
-                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site__base_site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id'
+                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site', 'site__base_site_name', 'site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id'
                 ).order_by('-date','weight_id')
 
     #กรองข้อมูล
@@ -6614,49 +6618,51 @@ def exportWeightToExpress(request):
             ),
             output_field=models.CharField()
         )
+    ).annotate(
+        docid=F('new_docid'),
+        docdat=F('date'),
+        datin=F('date_in'),
+        datout=F('date_out'),
+        tmin=F('time_in'),
+        tmout=F('time_out'),
+        truck=F('car_registration_name'),
+        cuscod=F('customer_id'),
+        cusname=F('customer_name'),
+        depcod=F('base_weight_station_name'),
+        stkcod=F('stone_type_id'),
+        stkdes=F('stone_type_name'),
+        trnqty=F('weight_total'),
+        unitpr=F('price_per_ton'),
+        stonenam=F('stone_color'),
+        oilcuscod=F('car_team__oil_customer_id'),
+        oilcusnam=F('car_team__car_team_name'),
+        oillt=F('oil_content'),
+        nillnam=F('mill_name'),
+        iscancle=F('is_cancel'),
+        sttcod=F('base_weight_station_name'),
+        scaleid=F('scale_id'),
+        scalenam=F('scale_name'),
+        scoopnam=F('scoop_name'),
+        siteid=F('site_id'),
+        sitenam=F('site_name'),
+        isvat=F('is_s'),
+        vattyp=F('vat_type'),
+        company=F('bws__company__code'),
     )
 
-    if queryset:
-        data = {'docid': queryset.values_list('new_docid', flat=True),
-                'docdat': queryset.values_list('date', flat=True),
-                'datin': queryset.values_list('date_in', flat=True),
-                'datout': queryset.values_list('date_out', flat=True),
-                'tmin': queryset.values_list('time_in', flat=True),
-                'tmout': queryset.values_list('time_out', flat=True),
-                'truck': queryset.values_list('car_registration_name', flat=True),
-                'cuscod': queryset.values_list('customer_id', flat=True),
-                'cusname': queryset.values_list('customer_name', flat=True),
-                'depcod': queryset.values_list('base_weight_station_name', flat=True),
-                'stkcod': queryset.values_list('stone_type_id', flat=True),
-                'stkdes': queryset.values_list('stone_type_name', flat=True),
-                'trnqty': queryset.values_list('weight_total', flat=True),
-                'unitpr': queryset.values_list('price_per_ton', flat=True),
-                'amount': queryset.values_list('amount', flat=True),
-                'vat': queryset.values_list('vat', flat=True),
-                'stonenam': queryset.values_list('stone_color', flat=True),
-                'transport': queryset.values_list('transport', flat=True),
-                'oilcuscod': queryset.values_list('car_team__oil_customer_id', flat=True),
-                'oilcusnam': queryset.values_list('car_team__car_team_name', flat=True),
-                'oillt': queryset.values_list('oil_content', flat=True),
-                'nillnam': queryset.values_list('mill_name', flat=True),
-                'iscancle': queryset.values_list('is_cancel', flat=True),
-                'sttcod': queryset.values_list('base_weight_station_name', flat=True),
-                'scaleid': queryset.values_list('scale_id', flat=True),
-                'scalenam': queryset.values_list('scale_name', flat=True),
-                'scoopnam': queryset.values_list('scoop_name', flat=True),
-                'siteid': queryset.values_list('site_id', flat=True),
-                'sitenam': queryset.values_list('site_name', flat=True),
-                'isvat': queryset.values_list('is_s', flat=True),
-                'vattyp': queryset.values_list('vat_type', flat=True),
-                'pay': queryset.values_list('pay', flat=True),
-                'company': queryset.values_list('bws__company__code', flat=True),
-                'bws': queryset.values_list('bws', flat=True),
-                'note': queryset.values_list('note', flat=True),
-                }
-    else:
-        data = "ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก"
+    fields = [
+        'docid', 'docdat', 'datin', 'datout', 'tmin', 'tmout', 'truck', 'cuscod',
+        'cusname', 'depcod', 'stkcod', 'stkdes', 'trnqty', 'unitpr', 'amount', 'vat',
+        'stonenam', 'transport', 'oilcuscod', 'oilcusnam', 'oillt', 'nillnam',
+        'iscancle', 'sttcod', 'scaleid', 'scalenam', 'scoopnam', 'siteid', 'sitenam',
+        'isvat', 'vattyp', 'pay', 'company', 'bws', 'note'
+    ]
 
-    df = pd.DataFrame(data)
+    data_list = list(queryset.values(*fields))
+    if data_list:
+        df = pd.DataFrame(data_list, columns=fields)
+    else:
+        df = pd.DataFrame([["ไม่มีข้อมูลรายการชั่งจาก วันที่เลือก"]], columns=["Message"])
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:

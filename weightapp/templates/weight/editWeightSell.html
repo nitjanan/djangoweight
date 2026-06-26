@@ -449,9 +449,19 @@ input.del[type=checkbox] {
 
   //select2 (dropdown & search)
   $(document).ready(function() {
-    if ($('#id_do_doc_no').val() && $('#id_do_doc_no').val().trim() !== "") {
-      $('#select_site').prop('disabled', true);
-      $('#id_stone_type').prop('disabled', true);
+    var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
+    var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
+    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+      $('#select_site').hide();
+      $('#id_site_name').attr('type', 'text').addClass('form-control').prop('readonly', true);
+      if ($('#id_do_doc_no').val() && $('#id_do_doc_no').val().trim() !== "") {
+        $('#id_stone_type').prop('disabled', true);
+      }
+    } else {
+      if ($('#id_do_doc_no').val() && $('#id_do_doc_no').val().trim() !== "") {
+        $('#select_site').prop('disabled', true);
+        $('#id_stone_type').prop('disabled', true);
+      }
     }
 
     $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
@@ -475,9 +485,15 @@ input.del[type=checkbox] {
         $('#id_is_cancel').prop( "checked", false );
     }
     //set data to id
-    $("#id_site").val($("#select_site").val());
+    var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
+    var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
+    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+      // Keep manual input of site_name, don't clear or copy from empty select_site
+    } else {
+      $("#id_site").val($("#select_site").val());
+      setDataEmptyName("#select_site", "#id_site_name");
+    }
     $("#id_car_team").val($("#select_team").val());
-    setDataEmptyName("#select_site", "#id_site_name");
     setDataEmptyName("#select_team", "#id_car_team_name");
 
     setDataEmptyName("#id_mill", "#id_mill_name");

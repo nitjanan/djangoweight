@@ -185,8 +185,8 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.car_registration_name}}</td>
                   <td>{{i.customer__customer_name}}</td>
                   <td>{{i.stone_type__base_stone_type_name}}</td>
-                  <td>{{i.mill.mill_name}}</td>
-                  <td>{% if i.site__base_site_name%}{{i.site__base_site_name}}{%endif%}</td>
+                  <td>{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}</td>
+                  <td>{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>

@@ -309,8 +309,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST01",
                     "customerName": "Cust Name 1",
                     "customerAddress": "Addr 1",
-                    "siteId": "SITE01",
-                    "siteName": "Site Name 1",
+                    "deliveryCode": "01-V-002___SITE01",
+                    "deliveryLocation": "Site Name 1",
                     "productCode": "PROD01",
                     "productName": "Prod Name 1",
                     "saleName": "Sale 1",
@@ -360,8 +360,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST02", # Changed
                     "customerName": "Cust Name 2", # Changed
                     "customerAddress": "Addr 2", # Changed
-                    "siteId": "SITE02",       # Changed
-                    "siteName": "Site Name 2", # Changed
+                    "deliveryCode": "01-V-002___SITE02",       # Changed
+                    "deliveryLocation": "Site Name 2", # Changed
                     "productCode": "PROD02",  # Changed
                     "productName": "Prod Name 2", # Changed
                     "saleName": "Sale 2",     # Changed
@@ -415,8 +415,8 @@ class UCWeightDeliveryTests(TestCase):
                     "customerCode": "CUST03", # Changed
                     "customerName": "Cust Name 3", # Changed
                     "customerAddress": "Addr 3", # Changed
-                    "siteId": "SITE03",       # Changed
-                    "siteName": "Site Name 3", # Changed
+                    "deliveryCode": "01-V-002___SITE03",       # Changed
+                    "deliveryLocation": "Site Name 3", # Changed
                     "productCode": "PROD03",  # Changed
                     "productName": "Prod Name 3", # Changed
                     "saleName": "Sale 3",     # Changed

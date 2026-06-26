@@ -448,16 +448,27 @@ input.del[type=checkbox] {
 
   //select2 (dropdown & search)
   $(document).ready(function() {
+    var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
     var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
-    if (doDocNo && doDocNo.trim() !== "") {
-      $('#id_site').prop('disabled', true);
-      $('#id_stone_type').prop('disabled', true);
-    }
 
     $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_stone_type').select2({width: "100%" ,  theme: 'bootstrap-5'});
     $('#id_scoop').select2({width: "100%",  theme: 'bootstrap-5'});
     $('#id_site').select2({width: "100%",  theme: 'bootstrap-5'});
+
+    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+      $('#id_site').hide();
+      $('#id_site').next('.select2-container').hide();
+      $('#id_site_name').attr('type', 'text').addClass('form-control').prop('readonly', true);
+      if (doDocNo && doDocNo.trim() !== "") {
+        $('#id_stone_type').prop('disabled', true);
+      }
+    } else {
+      if (doDocNo && doDocNo.trim() !== "") {
+        $('#id_site').prop('disabled', true);
+        $('#id_stone_type').prop('disabled', true);
+      }
+    }
   });
 
   // BEFORE form submission
@@ -481,7 +492,14 @@ input.del[type=checkbox] {
     setDataEmptyName("#id_mill", "#id_mill_name");
     setDataEmptyName("#id_stone_type", "#id_stone_type_name");
     setDataEmptyName("#id_scoop", "#id_scoop_name");
-    setDataEmptyName("#id_site", "#id_site_name");
+
+    var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
+    var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
+    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+      // Keep manual input of site_name, don't clear or copy from empty select/id_site
+    } else {
+      setDataEmptyName("#id_site", "#id_site_name");
+    }
 
     //set data radio
     //pay

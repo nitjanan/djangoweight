@@ -974,8 +974,18 @@ def index(request):
         ######## data weight stock #########
         ####################################
         # เปลี่ยนเป็นเลือกระหว่างวันที่ 2024-04-10 -> data_sum_produc_all = Weight.objects.filter(bws__company__code__in = company_in, site__in = s_comp_id, date = previous_day, bws__weight_type = 2).aggregate(s=Sum("weight_total"))["s"]
-        sum_line_long = Weight.objects.filter(bws__company__code__in = company_in, mill__isnull = True, line_type = "สายยาว", date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"]  or Decimal(0) # รับเข้า เป็นสายยาวทั้งหมด
-        sum_cus_ot = Weight.objects.filter(Q(site__store = 2) | Q(site__isnull = True), mill__isnull = False, line_type = "สายยาว", bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] or Decimal(0)#ขายภายนอก
+        sum_line_long = Weight.objects.filter(
+            bws__company__code__in=company_in,
+            date__range=(start_date, end_date),
+            bws__weight_type=1
+        ).exclude(
+            mill_name__contains='สต็อก'
+        ).exclude(
+            mill_name__contains='สต๊อก'
+        ).exclude(
+            mill_name__contains='สต็อค'
+        ).aggregate(s=Sum("weight_total"))["s"] or Decimal(0) # รับเข้า
+        sum_cus_ot = Weight.objects.filter(~Q(site__store = 1) | Q(site__isnull = True), mill__isnull = False, line_type = "สายยาว", bws__company__code__in = company_in, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] or Decimal(0)#ขายภายนอก
         sum_ship = Weight.objects.filter(bws__company__code__in = company_in, site__store = 3, date__range=(start_date, end_date), bws__weight_type = 1).aggregate(s=Sum("weight_total"))["s"] or Decimal(0) #ขายลงเรือ
 
         data_sum_produc_all = sum_line_long + sum_cus_ot + sum_ship
@@ -984,20 +994,24 @@ def index(request):
         data_sum_produc.append(('ยอดสะสมประจำเดือน', data_sum_produc_all))
 
         for i, st in enumerate(store):
-            if i == 0: #16-07-2025 กราฟ รับเข้า เปลี่ยนการดึงข้อมูล เป็นสายยาวทั้งหมด
+            if i == 0: #16-07-2025 กราฟ รับเข้า เปลี่ยนการดึงข้อมูล
                 aggregated_value = Weight.objects.filter(
-                    mill__isnull = True,
                     bws__company__code__in=company_in,
-                    line_type = "สายยาว",
                     date__range=(start_date, end_date),
                     bws__weight_type=1
+                ).exclude(
+                    mill_name__contains='สต็อก'
+                ).exclude(
+                    mill_name__contains='สต๊อก'
+                ).exclude(
+                    mill_name__contains='สต็อค'
                 ).aggregate(s=Sum("weight_total"))["s"]
             elif i == 1: #31-07-2025 ขายภายนอก
                 aggregated_value = Weight.objects.filter(
-                    Q(site__store = st['id']) | Q(site__isnull = True),
+                    ~Q(site__store = 1) | Q(site__isnull = True),
                     mill__isnull = False,
-                    bws__company__code__in=company_in,
                     line_type = "สายยาว",
+                    bws__company__code__in=company_in,
                     date__range=(start_date, end_date),
                     bws__weight_type=1
                 ).aggregate(s=Sum("weight_total"))["s"]
@@ -1061,15 +1075,19 @@ def index(request):
                 weights[st_id] = Weight.objects.filter(
                     bws__company__code__in=company_in,
                     bws__weight_type=1,
-                    mill__isnull = True,
-                    date__range=(start_date, end_date),
-                    line_type="สายยาว"
+                    date__range=(start_date, end_date)
+                ).exclude(
+                    mill_name__contains='สต็อก'
+                ).exclude(
+                    mill_name__contains='สต๊อก'
+                ).exclude(
+                    mill_name__contains='สต็อค'
                 ).values('date').annotate(
                     cumulative_total=Sum('weight_total')
                 ).order_by('date')
             elif i == 1:  # สำหรับแต่ละ store เช่น ขายภายนอก
                 weights[st_id] = Weight.objects.filter(
-                    Q(site__store = st_id) | Q(site__isnull = True),
+                    ~Q(site__store = 1) | Q(site__isnull = True),
                     bws__company__code__in=company_in,
                     bws__weight_type=1,
                     mill__isnull = False,
@@ -8074,7 +8092,19 @@ def searchDataWeightToPortStock(request):
             quot = PortStockStoneItem.objects.none()
 
         #รับเข้า
-        receive = Weight.objects.filter(mill__isnull = True, stone_type = stone, customer__in = cus_id, line_type = "สายยาว", bws__company = company, bws__weight_type = 1, date = created).values('customer__customer_id').annotate(total=Sum("weight_total"))
+        receive = Weight.objects.filter(
+            stone_type=stone,
+            customer__in=cus_id,
+            bws__company=company,
+            bws__weight_type=1,
+            date=created
+        ).exclude(
+            mill_name__contains='สต็อก'
+        ).exclude(
+            mill_name__contains='สต๊อก'
+        ).exclude(
+            mill_name__contains='สต็อค'
+        ).values('customer__customer_id').annotate(total=Sum("weight_total"))
 
         #จ่ายภายลงเรือ ดึงจำนวนที่ลงเรือทั้งหมดตามชนิดหิน
         pay = Weight.objects.filter(stone_type = stone, site__store = 3, bws__company = company, bws__weight_type = 1, date = created).aggregate(total=Sum("weight_total"))['total'] or Decimal('0.00')

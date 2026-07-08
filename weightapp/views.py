@@ -3055,6 +3055,20 @@ def monthlyProduction(request):
         data_cap_old_year = strToArrListOldYear(active, 'prod_cap', s_comp, current_year)
         data_hpd_old_year = strToArrListOldYear(active, 'prod_hpd', s_comp, current_year)
 
+    #เติม placeholder ให้ (โรงโม่, ชนิดหิน) ที่มีข้อมูลปีนี้แต่ไม่มีข้อมูลปีเก่า
+    #ไม่งั้น template จะไม่สร้าง td ของคอลัมน์ปีเก่า ทำให้ทั้งแถวเลื่อนซ้าย
+    if data_stone_old_year:
+        for site_name, stone_data in aggregated_results.items():
+            old_stone_data = data_stone_old_year.setdefault(site_name, {})
+            for stone_type_name in stone_data:
+                old_stone_data.setdefault(stone_type_name, {'A': '0', 'B': '0'})
+
+    for old_data in (data_run_old_year, data_work_old_year, data_cap_old_year, data_hpd_old_year):
+        if old_data:
+            for site_name in aggregated_results:
+                if site_name != 'Total':
+                    old_data.setdefault(site_name, {'A': '0'})
+
     context = {
                'aggregated_results':aggregated_results,
                'produc_run_results': produc_run_results,

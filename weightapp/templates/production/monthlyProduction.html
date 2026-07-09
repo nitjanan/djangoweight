@@ -456,7 +456,7 @@
   var avg = 0.0;
   var count = 0;
   "{% for month_year, est_weight in stone_type_data.items %}"
-  var tmp = $('#id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+  var tmp = $('#id_est_{{ forloop.parentloop.parentloop.counter0 }}_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '');
   sum += parseFloat(tmp);
 
   if (parseFloat(tmp) > 0)
@@ -479,7 +479,7 @@
   var avg = 0.0;
   var count = 0;
   "{% for m_y, sum_aggr in s_data.items %}"
-  var tmp = $('#id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+  var tmp = $('#id_all_est_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '');
   sum += parseFloat(tmp);
 
   if (parseFloat(tmp) > 0)
@@ -501,7 +501,7 @@
   var avg = 0.00;
   var count = 0;
   "{% for m_y, sum_run in s_data.items %}"
-  var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+  var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '');
   sum += parseFloat(tmp);
 
   if (parseFloat(tmp) > 0)
@@ -521,7 +521,7 @@
   var avg = 0.00;
   var count = 0;
   "{% for m_y, sum_run in s_data.items %}"
-  var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
+  var tmp = $('#id_run_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '').replace(':', '.');
   sum += parseFloat(tmp);
   if (parseFloat(tmp) > 0)
     count++;
@@ -540,7 +540,7 @@
   var avg = 0.00;
   var count = 0;
   "{% for m_y, capacity in s_data.items %}"
-  var tmp = $('#id_cap_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+  var tmp = $('#id_cap_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '');
   sum += parseFloat(tmp);
 
   if (parseFloat(tmp) > 0)
@@ -560,7 +560,7 @@
   var avg = 0.00;
   var count = 0;
   "{% for m_y, working_time in s_data.items %}"
-  var tmp = $('#id_work_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(':', '.');
+  var tmp = $('#id_work_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '').replace(':', '.');
   sum += parseFloat(tmp);
   if (parseFloat(tmp) > 0)
     count++;
@@ -579,7 +579,7 @@
   var avg = 0.00;
   var count = 0;
   "{% for m_y, hour_per_day in s_data.items %}"
-  var tmp = $('#id_hour_per_day_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(',', '');
+  var tmp = $('#id_hour_per_day_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}').text().replace(/,/g, '');
   sum += parseFloat(tmp);
 
   if (parseFloat(tmp) > 0)

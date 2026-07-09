@@ -246,8 +246,8 @@
                 {% endfor %}
                 {% endfor %}
                 {%else%}
-                <td class="text-end text-success"><b>0</b></td>
-                <td class="text-end text-success"><b>0</b></td>
+                <td class="text-end text-success"><b>-</b></td>
+                <td class="text-end text-success"><b>-</b></td>
                 {%endif%}
                 {% for month_year, est_weight in stone_type_data.items %}
                 <td
@@ -291,7 +291,7 @@
                 {% endfor %}
                 {% endfor %}
                 {%else%}
-                <th class="text-end">0</th>
+                <th class="text-end">-</th>
                 {%endif%}
                 <td></td>
                 {% for s, s_data in produc_run_results.items %}
@@ -317,7 +317,7 @@
                 {% endfor %}
                 {% endfor %}
                 {%else%}
-                <th class="text-end">0</th>
+                <th class="text-end">-</th>
                 {%endif%}
                 <td></td>
                 {% for s, s_data in produc_capacity_results.items %}
@@ -343,7 +343,7 @@
                 {% endfor %}
                 {% endfor %}
                 {%else%}
-                <th class="text-end">0</th>
+                <th class="text-end">-</th>
                 {%endif%}
                 <td></td>
                 {% for s, s_data in produc_work_results.items %}
@@ -369,7 +369,7 @@
                 {% endfor %}
                 {% endfor %}
                 {%else%}
-                <th class="text-end">0</th>
+                <th class="text-end">-</th>
                 {%endif%}
                 <td></td>
                 {% for s, s_data in produc_hour_per_day_results.items %}

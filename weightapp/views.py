@@ -3061,13 +3061,13 @@ def monthlyProduction(request):
         for site_name, stone_data in aggregated_results.items():
             old_stone_data = data_stone_old_year.setdefault(site_name, {})
             for stone_type_name in stone_data:
-                old_stone_data.setdefault(stone_type_name, {'A': '0', 'B': '0'})
+                old_stone_data.setdefault(stone_type_name, {'A': '-', 'B': '-'})
 
     for old_data in (data_run_old_year, data_work_old_year, data_cap_old_year, data_hpd_old_year):
         if old_data:
             for site_name in aggregated_results:
                 if site_name != 'Total':
-                    old_data.setdefault(site_name, {'A': '0'})
+                    old_data.setdefault(site_name, {'A': '-'})
 
     context = {
                'aggregated_results':aggregated_results,

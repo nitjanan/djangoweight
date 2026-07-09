@@ -3003,6 +3003,41 @@ def monthlyProduction(request):
         update_results(all_month_years, 2, produc_hour_per_day_results, site_name, month_year, sum_hour_per_day)
         ###################### end สรุปข้อมูลผลิต ####################
 
+    #ดึงข้อมูลปีเก่าก่อนคำนวณ Total เพื่อใช้เติมแถวหิน/โรงโม่ที่มีแต่ปีเก่า
+    data_stone_old_year = None
+    data_run_old_year = None
+    data_work_old_year = None
+    data_cap_old_year = None
+    data_hpd_old_year = None
+
+    if this_year == 2025:
+        data_stone_old_year = strToArrList(active, 'weight')
+        data_run_old_year = strToArrList(active, 'prod_run')
+        data_work_old_year = strToArrList(active, 'prod_work')
+        data_cap_old_year = strToArrList(active, 'prod_cap')
+        data_hpd_old_year = strToArrList(active, 'prod_hpd')
+    elif this_year > 2025:
+        data_stone_old_year = strToArrListOldYear(active, 'weight', s_comp, current_year)
+        data_run_old_year = strToArrListOldYear(active, 'prod_run', s_comp, current_year)
+        data_work_old_year = strToArrListOldYear(active, 'prod_work', s_comp, current_year)
+        data_cap_old_year = strToArrListOldYear(active, 'prod_cap', s_comp, current_year)
+        data_hpd_old_year = strToArrListOldYear(active, 'prod_hpd', s_comp, current_year)
+
+    #เติมแถวหิน/โรงโม่ที่มีข้อมูลปีเก่าแต่ปีนี้ยังไม่มี (เดือนเป็น 0 ทั้งหมด)
+    #ไม่งั้นค่าปีเก่าถูกซ่อนจากหน้าจอแต่ยังถูกนับรวมใน Total ทำให้บวกมือไม่ลงตัว
+    if data_stone_old_year:
+        site_name_by_clean = {clean_text(n): n for n in s_comp_name}
+        for old_site, old_stones in data_stone_old_year.items():
+            if old_site == 'Total':
+                continue
+            site_name = site_name_by_clean.get(old_site, old_site)
+            for stone_name, old_values in old_stones.items():
+                if not isinstance(old_values, dict) or old_values.get('A') in (None, '', '-', '0'):
+                    continue
+                site_data = aggregated_results.setdefault(site_name, {})
+                if stone_name not in site_data:
+                    site_data[stone_name] = {my: Decimal(0) for my in all_month_years}
+
     ################ start รวมทุกๆโรงโม่ ############################
     totals = {}  # Initialize a dictionary to hold totals for each stone type
     for site_name, stone_data in aggregated_results.items():
@@ -3036,24 +3071,6 @@ def monthlyProduction(request):
                     
                 sum_aggregated[site_name][month_year] += result
     ################ end รวมทุกชนิดหินในเดือนนั้นๆ ######################
-    data_stone_old_year = None
-    data_run_old_year = None
-    data_work_old_year = None
-    data_cap_old_year = None
-    data_hpd_old_year = None
-
-    if this_year == 2025:
-        data_stone_old_year = strToArrList(active, 'weight')
-        data_run_old_year = strToArrList(active, 'prod_run')
-        data_work_old_year = strToArrList(active, 'prod_work')
-        data_cap_old_year = strToArrList(active, 'prod_cap')
-        data_hpd_old_year = strToArrList(active, 'prod_hpd') 
-    elif this_year > 2025:
-        data_stone_old_year = strToArrListOldYear(active, 'weight', s_comp, current_year)
-        data_run_old_year = strToArrListOldYear(active, 'prod_run', s_comp, current_year)
-        data_work_old_year = strToArrListOldYear(active, 'prod_work', s_comp, current_year)
-        data_cap_old_year = strToArrListOldYear(active, 'prod_cap', s_comp, current_year)
-        data_hpd_old_year = strToArrListOldYear(active, 'prod_hpd', s_comp, current_year)
 
     #เติม placeholder ให้ (โรงโม่, ชนิดหิน) ที่มีข้อมูลปีนี้แต่ไม่มีข้อมูลปีเก่า
     #ไม่งั้น template จะไม่สร้าง td ของคอลัมน์ปีเก่า ทำให้ทั้งแถวเลื่อนซ้าย
@@ -3197,8 +3214,9 @@ def transform_queryset(queryset, active):
             'A': fmt(a),
             'B': fmt(b),
         }
-        total_A[stone] += a
-        total_B[stone] += b
+        #สะสมจากค่าที่ตัดเศษแบบเดียวกับที่แสดง เพื่อให้ Total = ผลบวกของตัวเลขบนหน้าจอ
+        total_A[stone] += int(a)
+        total_B[stone] += int(b)
 
     # ===== เรียงโรงโม่ตาม id =====
     sorted_result = OrderedDict(

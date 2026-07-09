@@ -74,6 +74,43 @@ class MonthlyProductionAlignmentTests(TestCase):
         for count in self.row_cell_counts(html, 'หินใหญ่ขนาด 30-80 มม.'):
             self.assertEqual(count, self.EXPECTED_CELLS, 'แถวหินที่ไม่มีข้อมูลปีเก่าต้องไม่เลื่อนคอลัมน์')
 
+    def test_old_year_only_stone_and_site_render_rows(self):
+        #หิน/โรงโม่ที่มีเฉพาะข้อมูลปีเก่า (2025) ต้องยังแสดงแถว ให้ Total บวกจากหน้าจอลงตัว
+        stone_legacy = BaseStoneType.objects.create(
+            base_stone_type_id="05ST", base_stone_type_name="หินเก่า")
+        site_legacy = BaseSite.objects.create(
+            base_site_id="S03", base_site_name="โรงโม่เก่า", s_comp=self.company)
+        add_estimate(self.company, self.site, '2026-01-15', self.stone_old, '10.000')
+        add_estimate(self.company, self.site, '2025-05-15', stone_legacy, '100.000')
+        add_estimate(self.company, site_legacy, '2025-06-15', self.stone_old, '200.000')
+
+        html = self.get_html()
+
+        #แถวหินที่มีแต่ปีเก่า ต้องโผล่ในตารางโรงโม่และ Total พร้อมคอลัมน์ครบ
+        for count in self.row_cell_counts(html, 'หินเก่า'):
+            self.assertEqual(count, self.EXPECTED_CELLS, 'แถวหินปีเก่าอย่างเดียวคอลัมน์ไม่ครบ')
+        #โรงโม่ที่มีแต่ข้อมูลปีเก่า ต้องแสดงตาราง
+        self.assertIn('โรงโม่เก่า', html, 'ตารางโรงโม่ที่มีแต่ปีเก่าหายไป')
+
+    def test_total_old_year_matches_sum_of_displayed_values(self):
+        #คอลัมน์ปีเก่าของ Total ต้องเท่ากับผลบวกของค่าที่แสดงรายโรงโม่ (ตัดเศษก่อนบวก)
+        site2 = BaseSite.objects.create(
+            base_site_id="S02", base_site_name="โรงโม่สอง", s_comp=self.company)
+        add_estimate(self.company, self.site, '2025-05-15', self.stone_old, '100.600')
+        add_estimate(self.company, site2, '2025-05-15', self.stone_old, '200.700')
+        add_estimate(self.company, self.site, '2026-01-15', self.stone_old, '10.000')
+        add_estimate(self.company, site2, '2026-01-15', self.stone_old, '20.000')
+
+        html = self.get_html()
+        greens = []
+        for row in re.findall(r'<tr[^>]*>.*?</tr>', html, re.S):
+            if 'หิน 3/4' in row:
+                greens.append(re.findall(r'text-success"><b>([^<]*)</b>', row))
+        self.assertEqual(len(greens), 3, 'ต้องมีแถวหิน 3/4 ในสองโรงโม่และ Total')
+        self.assertEqual(greens[0][0], '100')
+        self.assertEqual(greens[1][0], '200')
+        self.assertEqual(greens[2][0], '300', 'Total ต้องเท่ากับ 100+200 ที่แสดง ไม่ใช่ตัดเศษจากค่าเต็ม')
+
     def test_production_rows_for_site_without_old_year_keep_column_count(self):
         #ปีเก่ามี production เฉพาะโรงโม่หนึ่ง ส่วนโรงโม่สองเพิ่งเปิดปี 2026
         site2 = BaseSite.objects.create(

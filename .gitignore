@@ -1,0 +1,15 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+
+# Local settings / secrets
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Logs & local backups
+*.log
+backup_*.json

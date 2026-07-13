@@ -261,6 +261,16 @@ input.del[type=checkbox] {
                     <div class="col-md-10 form-group">
                       {{form.note | add_class:"form-control" }}
                     </div>
+                    
+                    {% comment %}  This part new input for reason  {% endcomment %}
+                    <div class="col-md-2 form-group">
+                      <label for="first-name-horizontal">หมายเหตุ ทางการเงิน</label>
+                    </div>
+                    <div class="col-md-10 form-group">
+                      {{form.financial_note | add_class:"form-control" }}
+                    </div>
+
+                    {% comment %} end of front end  {% endcomment %}
 
                   <hr class="my-3">
                   <div class="col-md-2 form-group">

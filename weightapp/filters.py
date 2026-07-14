@@ -1,4 +1,4 @@
-from django.db.models import fields, Q
+from django.db.models import fields
 from django.db.models.fields import DateField
 from django.forms.widgets import DateInput, TextInput
 import django_filters
@@ -20,20 +20,7 @@ class WeightFilter(django_filters.FilterSet):
     mill_name = django_filters.CharFilter(field_name="mill_name", lookup_expr='icontains')
     site_name = django_filters.CharFilter(field_name="site_name", lookup_expr='icontains')
     scale_name =  django_filters.ModelChoiceFilter(field_name="scale_name", queryset = User.objects.filter(groups__name='scale'))
-    financial_note = django_filters.ChoiceFilter(
-        choices=(('yes', 'มีหมายเหตุ'), ('no', 'ไม่มีหมายเหตุ')),
-        method='filter_financial_note',
-        empty_label='ทั้งหมด',
-    )
-
-    def filter_financial_note(self, queryset, name, value):
-        #กรองตามการมี/ไม่มีหมายเหตุทางบัญชี (null และค่าว่างถือว่าไม่มี)
-        no_note = Q(financial_note__isnull=True) | Q(financial_note__exact='')
-        if value == 'yes':
-            return queryset.exclude(no_note)
-        if value == 'no':
-            return queryset.filter(no_note)
-        return queryset
+    financial_note = django_filters.CharFilter(field_name="financial_note", lookup_expr='icontains')
 
     class Meta:
         model = Weight

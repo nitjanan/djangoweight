@@ -1422,7 +1422,7 @@ def weightTable(request):
         data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
     '''
     data = Weight.objects.filter(bws__company__code__in = company_in
-                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site', 'site__base_site_name', 'site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id'
+                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site', 'site__base_site_name', 'site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'financial_note', 'bws__weight_type__id', 'weight_id'
                 ).order_by('-date','weight_id')
 
     #กรองข้อมูล

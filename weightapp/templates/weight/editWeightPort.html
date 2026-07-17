@@ -6,202 +6,202 @@
 {% load widget_tweaks %}
 
 {% block css %}
-<link
-rel="stylesheet"
-href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
-/>
-<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<link rel="stylesheet" href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}" />
+<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}" />
 <style>
-input.del[type=checkbox] {
+  input.del[type=checkbox] {
     display: none;
-}
+  }
 
-.inline-radio .radio-inline {
+  .inline-radio .radio-inline {
     display: inline-block;
     margin-right: 15px;
-}
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <header class="mb-3">
-    <a href="#" class="burger-btn d-block d-xl-none">
-      <i class="bi bi-justify fs-3"></i>
-    </a>
-  </header>
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
 
-  <div class="page-heading">
-    <div class="page-title">
-      <div class="row">
-        <div class="col-12 col-md-6 order-md-1 order-last">
-          <h3>Edit Weight</h3>
-        </div>
-        <div class="col-12 col-md-6 order-md-2 order-first">
-          <nav
-            aria-label="breadcrumb"
-            class="breadcrumb-header float-start float-lg-end"
-          >
-            <ol class="breadcrumb">
-              <li class="breadcrumb-item">
-                <a href="{% url 'home' %}">Dashboard</a>
-              </li>
-              <li class="breadcrumb-item">
-                <a href="{% url 'viewProduction' %}">Weight</a>
-              </li>
-              <li class="breadcrumb-item active" aria-current="page">
-                Edit Weight
-              </li>
-            </ol>
-          </nav>
-        </div>
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>Edit Weight</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="{% url 'home' %}">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item">
+              <a href="{% url 'viewProduction' %}">Weight</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+              Edit Weight
+            </li>
+          </ol>
+        </nav>
       </div>
     </div>
+  </div>
 
-    <!-- Basic Tables start -->
-    <section class="section">
-      <div class="card">
-        <div class="card-header">
-          <h4 class="card-title">แก้ไขบันทึกการชั่งท่าเรือ</h4>
-        </div>
-        <div class="card-content">
-          <div class="card-body">
-            <form class="form" method="post" enctype="multipart/form-data">
+  <!-- Basic Tables start -->
+  <section class="section">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="card-title">แก้ไขบันทึกการชั่งท่าเรือ</h4>
+      </div>
+      <div class="card-content">
+        <div class="card-body">
+          <form class="form" method="post" enctype="multipart/form-data">
+            <div class="row">
+              {% csrf_token %}
               <div class="row">
-                {% csrf_token %}
-                <div class="row">
-                    <div class="col-md-2 form-group">
-                        <label for="first-name-horizontal">วันที่</label>
-                      </div>
-                      <div class="col-md-2 form-group">
-                        {{form.date |attr:"readonly"| add_class:"form-control" }}
-                      </div>
-                      <div class="col-md-8 form-group">
-                        {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">วันที่</label>
+                </div>
+                <div class="col-md-2 form-group">
+                  {{form.date |attr:"readonly"| add_class:"form-control" }}
+                </div>
+                <div class="col-md-8 form-group">
+                  {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
+                </div>
+
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">จ่ายเงิน</label>
+                </div>
+                <div class="col-md-4 form-group mt-2">
+                  <fieldset id="pay_group">
+                    <div class="form-check form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="pay_group" id="pg_1" checked="" value="เงินสด"
+                        onclick="radiostateP1(this)">
+                      <label class="form-check-label" for="Primary">
+                        เงินสด
+                      </label>
+                    </div>
+                    <div class="form-check form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="pay_group" id="pg_2" checked=""
+                        value="เงินเชื่อ" onclick="radiostateP2(this)">
+                      <label class="form-check-label" for="Primary">
+                        เงินเชื่อ
+                      </label>
+                    </div>
+                    <div class="form-check form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="pay_group" id="pg_3" checked="" value="เงินโอน"
+                        onclick="radiostateP3(this)">
+                      <label class="form-check-label" for="Primary">
+                        เงินโอน
+                      </label>
+                    </div>
+                    <div class="d-none form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="pay_group" id="pg_4" checked="" value="">
+                      <label class="form-check-label" for="Primary">
+                        ว่าง
+                      </label>
+                    </div>
+                  </fieldset>
+                  {{form.pay}}
+                </div>
+                <div class="col-md-1 form-group">
+                  <label for="first-name-horizontal">ประเภทสาย</label>
+                </div>
+                <div class="col-md-4 form-group mt-2">
+                  <fieldset id="line_group">
+                    <div class="form-check form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="line_group" id="ln_1" checked=""
+                        value="สายสั้น" onclick="radiostateL1(this)">
+                      <label class="form-check-label" for="Primary">
+                        สายสั้น
+                      </label>
+                    </div>
+                    <div class="form-check form-check-primary form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="line_group" id="ln_2" checked="" value="สายยาว"
+                        onclick="radiostateL2(this)">
+                      <label class="form-check-label" for="Primary">
+                        สายยาว
+                      </label>
                     </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">จ่ายเงิน</label>
-                    </div>
-                    <div class="col-md-4 form-group mt-2">
-                      <fieldset id="pay_group">
-                        <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="pg_1" checked="" value="เงินสด" onclick="radiostateP1(this)">
-                          <label class="form-check-label" for="Primary">
-                            เงินสด
-                          </label>
-                        </div>
-                        <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="pg_2" checked="" value="เงินเชื่อ" onclick="radiostateP2(this)">
-                          <label class="form-check-label" for="Primary">
-                            เงินเชื่อ
-                          </label>
-                        </div>
-                        <div class="form-check form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="pg_3" checked="" value="เงินโอน" onclick="radiostateP3(this)">
-                          <label class="form-check-label" for="Primary">
-                            เงินโอน
-                          </label>
-                        </div>
-                        <div class="d-none form-check-primary form-check-inline me-4">
-                          <input class="form-check-input" type="radio" name="pay_group" id="pg_4" checked="" value="">
-                          <label class="form-check-label" for="Primary">
-                            ว่าง
-                          </label>
-                        </div>
-                      </fieldset>
-                      {{form.pay}}
-                    </div>
-                    <div class="col-md-1 form-group">
-                      <label for="first-name-horizontal">ประเภทสาย</label>
-                    </div>
-                    <div class="col-md-4 form-group mt-2">
-                        <fieldset id="line_group">
-                            <div class="form-check form-check-primary form-check-inline me-4">
-                                <input class="form-check-input" type="radio" name="line_group" id="ln_1" checked="" value="สายสั้น" onclick="radiostateL1(this)">
-                                <label class="form-check-label" for="Primary">
-                                    สายสั้น
-                                </label>
-                            </div>
-                            <div class="form-check form-check-primary form-check-inline me-4">
-                                <input class="form-check-input" type="radio" name="line_group" id="ln_2" checked="" value="สายยาว" onclick="radiostateL2(this)">
-                                <label class="form-check-label" for="Primary">
-                                    สายยาว
-                                </label>
-                            </div>
-                            
-                        </fieldset>
-                        {{form.line_type}}
-                    </div>
-                    {{form.is_cancel| add_class:"d-none"}}
+                  </fieldset>
+                  {{form.line_type}}
+                </div>
+                {{form.is_cancel| add_class:"d-none"}}
 
-                    <div class="col-md-2 form-group">
-                        <label for="first-name-horizontal">ลูกค้า</label>
-                    </div>
-                    <div class="col-md-10 form-group">
-                        {{form.customer | add_class:"d-none"}}{{form.customer_name| add_class:"d-none"}}
-                        <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="searchDataCustomer()">
-                    </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ลูกค้า</label>
+                </div>
+                <div class="col-md-10 form-group">
+                  {{form.customer | add_class:"d-none"}}{{form.customer_name| add_class:"d-none"}}
+                  <input type="text" name="form-customer" id="id-form-customer" class="form-control"
+                    Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="searchDataCustomer()">
+                </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">ปลายทาง</label>
-                    </div>
-                    <div class="col-md-8 form-group">
-                      {{form.site |attr:"readonly" | add_class:"form-control"}}
-                      {{form.site_name | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-2 form-group">
-                      {{form.transport  | add_class:"form-control"}}
-                      {{form.carry_type_name}}
-                    </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ปลายทาง</label>
+                </div>
+                <div class="col-md-8 form-group">
+                  {{form.site |attr:"readonly" | add_class:"form-control"}}
+                  {{form.site_name | add_class:"form-control"}}
+                </div>
+                <div class="col-md-2 form-group">
+                  {{form.transport | add_class:"form-control"}}
+                  {{form.carry_type_name}}
+                </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">ทะเบียนรถ</label>
-                    </div>
-                    <div class="col-md-8 form-group">
-                      {{form.car_registration_name | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-2 form-group">
-                      {{form.province  | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">ผู้ขับ</label>
-                    </div>
-                    <div class="col-md-4 form-group">
-                      {{form.driver_name | add_class:"form-control"}}
-                    </div>
-                    <div class="col-md-1 form-group">
-                      <label for="first-name-horizontal">ทีม</label>
-                    </div>
-                    <div class="col-md-5 form-group">
-                      <select id="select_team" name="select_team_list" class="form-control">
-                        <option value>---------</option>
-                      </select>
-                      {{form.car_team  | add_class:"form-control"}}                      
-                      {{form.car_team_name  | add_class:"form-control"}}
-                    </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ทะเบียนรถ</label>
+                </div>
+                <div class="col-md-8 form-group">
+                  {{form.car_registration_name | add_class:"form-control"}}
+                </div>
+                <div class="col-md-2 form-group">
+                  {{form.province | add_class:"form-control"}}
+                </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ผู้ขับ</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  {{form.driver_name | add_class:"form-control"}}
+                </div>
+                <div class="col-md-1 form-group">
+                  <label for="first-name-horizontal">ทีม</label>
+                </div>
+                <div class="col-md-5 form-group">
+                  <select id="select_team" name="select_team_list" class="form-control">
+                    <option value>---------</option>
+                  </select>
+                  {{form.car_team | add_class:"form-control"}}
+                  {{form.car_team_name | add_class:"form-control"}}
+                </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">ต้นทาง</label>
-                    </div>
-                    <div class="col-md-10 form-group">
-                      {{form.mill |attr:"readonly" | add_class:"form-control"}}
-                      {{form.mill_name | add_class:"form-control"}}
-                    </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ต้นทาง</label>
+                </div>
+                <div class="col-md-10 form-group">
+                  {{form.mill |attr:"readonly" | add_class:"form-control"}}
+                  {{form.mill_name | add_class:"form-control"}}
+                </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">ชนิดหิน</label>
-                    </div>
-                    <div class="col-md-5 form-group">
-                      {{form.stone_type |attr:"readonly" | add_class:"form-control"}}
-                      {{form.stone_type_name | add_class:"form-control"}}
-                    </div>
-                    <!--div class="col-md-2 form-group">
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ชนิดหิน</label>
+                </div>
+                <div class="col-md-5 form-group">
+                  {{form.stone_type |attr:"readonly" | add_class:"form-control"}}
+                  {{form.stone_type_name | add_class:"form-control"}}
+                </div>
+                <!--div class="col-md-2 form-group">
                       <label for="first-name-horizontal">รายละเอียดหิน</label>
                     </!--div-->
-                    <div class="col-md-5 form-group">
-                      {{form.stone_desc | add_class:"form-control"}}
-                    </div>
-                    <!-- 
+                <div class="col-md-5 form-group">
+                  {{form.stone_desc | add_class:"form-control"}}
+                </div>
+                <!-- 
                    <div class="col-md-2 form-group">
                       <label for="first-name-horizontal">ประเภทหิน</label>
                     </div>
@@ -245,154 +245,156 @@ input.del[type=checkbox] {
                       {{form.scoop_name | add_class:"form-control" }}
                     </div>                                        
                     -->
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">หมายเหตุ</label>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">หมายเหตุ</label>
+                </div>
+                <div class="col-md-10 form-group">
+                  {{form.note | add_class:"form-control" }}
+                </div>
+
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">หมายเหตุ ทางบัญชี</label>
+                </div>
+                <div class="col-md-10 form-group">
+                  {{form.financial_note | add_class:"form-control" }}
+                </div>
+
+                <hr class="my-3">
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal" class="text-success">น้ำหนักเข้า</label>
+                </div>
+                <div class="col-md-9 form-group">
+                  {{form.weight_in | add_class:"form-control" }}
+                </div>
+                <div class="col-md-1">
+                  <label for="first-name-horizontal" class="text-success">ตัน</label>
+                </div>
+
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal" class="text-success">น้ำหนักออก</label>
+                </div>
+                <div class="col-md-9 form-group">
+                  {{form.weight_out | add_class:"form-control" }}
+                </div>
+                <div class="col-md-1">
+                  <label for="first-name-horizontal" class="text-success">ตัน</label>
+                </div>
+
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิปลายทาง</label>
+                </div>
+                <div class="col-md-7 form-group">
+                  {{form.weight_total |attr:"readonly"| add_class:"form-control" }}
+                </div>
+                <div class="col-md-2 form-group">
+                  {{form.q |attr:"readonly"| add_class:"form-control" }}
+                </div>
+                <div class="col-md-1">
+                  <label for="first-name-horizontal" class="text-success">ตัน</label>
+                </div>
+
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิต้นทาง</label>
+                </div>
+                <div class="col-md-7 form-group">
+                  {{form.origin_weight | add_class:"form-control" }}
+                </div>
+                <div class="col-md-2 form-group">
+                  {{form.origin_q |attr:"readonly"| add_class:"form-control" }}
+                </div>
+                <div class="col-md-1">
+                  <label for="first-name-horizontal" class="text-success">ตัน</label>
+                </div>
+
+                <hr class="my-3">
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ภาษี</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  <fieldset id="vat_type_group">
+                    <div class="form-check form-check-warning form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked=""
+                        value="รวมภาษี">
+                      <label class="form-check-label" for="Primary">
+                        รวมภาษี
+                      </label>
                     </div>
-                    <div class="col-md-10 form-group">
-                      {{form.note | add_class:"form-control" }}
+                    <div class="form-check form-check-warning form-check-inline me-4">
+                      <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked=""
+                        value="ไม่รวมภาษี">
+                      <label class="form-check-label" for="Primary">
+                        ไม่รวมภาษี
+                      </label>
                     </div>
+                  </fieldset>
+                  {{form.vat_type}}
+                </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal" class="text-danger">น้ำมัน</label>
+                </div>
+                <div class="col-md-3 form-group">
+                  {{form.oil_content | add_class:"form-control"}}
+                </div>
+                <div class="col-md-1">
+                  <label for="first-name-horizontal" class="text-danger">ลิตร</label>
+                </div>
 
-                    <div class="col-md-2 form-group">
-                      <label for="first-name-horizontal">หมายเหตุ ทางการเงิน</label>
-                    </div>
-                    <div class="col-md-10 form-group">
-                      {{form.financial_note | add_class:"form-control" }}
-                    </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">ราคา/ตัน</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  {{form.price_per_ton | add_class:"form-control"}}
+                </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">จำนวนเงิน</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  {{form.amount | add_class:"form-control"}}
+                </div>
 
-                  <hr class="my-3">
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-success">น้ำหนักเข้า</label>
-                  </div>
-                  <div class="col-md-9 form-group">
-                    {{form.weight_in | add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-1">
-                    <label for="first-name-horizontal" class="text-success">ตัน</label>
-                  </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">vat 7%</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  {{form.vat | add_class:"form-control"}}
+                </div>
+                <div class="col-md-2 form-group">
+                  <label for="first-name-horizontal">จำนวนเงินสุทธิ</label>
+                </div>
+                <div class="col-md-4 form-group">
+                  {{form.amount_vat | add_class:"form-control"}}
+                </div>
 
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-success">น้ำหนักออก</label>
-                  </div>
-                  <div class="col-md-9 form-group">
-                    {{form.weight_out | add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-1">
-                    <label for="first-name-horizontal" class="text-success">ตัน</label>
-                  </div>
-
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิปลายทาง</label>
-                  </div>
-                  <div class="col-md-7 form-group">
-                    {{form.weight_total |attr:"readonly"| add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-2 form-group">
-                    {{form.q |attr:"readonly"| add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-1">
-                    <label for="first-name-horizontal" class="text-success">ตัน</label>
-                  </div>
-
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-success">น้ำหนักสุทธิต้นทาง</label>
-                  </div>
-                  <div class="col-md-7 form-group">
-                    {{form.origin_weight | add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-2 form-group">
-                    {{form.origin_q |attr:"readonly"| add_class:"form-control" }}
-                  </div>
-                  <div class="col-md-1">
-                    <label for="first-name-horizontal" class="text-success">ตัน</label>
-                  </div>
-
-                  <hr class="my-3">
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal">ภาษี</label>
-                  </div>
-                  <div class="col-md-4 form-group">
-                    <fieldset id="vat_type_group">
-                      <div class="form-check form-check-warning form-check-inline me-4">
-                        <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked="" value="รวมภาษี">
-                        <label class="form-check-label" for="Primary">
-                          รวมภาษี
-                        </label>
-                      </div>
-                      <div class="form-check form-check-warning form-check-inline me-4">
-                        <input class="form-check-input" type="radio" name="vat_type_group" id="Primary" checked="" value="ไม่รวมภาษี">
-                        <label class="form-check-label" for="Primary">
-                          ไม่รวมภาษี
-                        </label>
-                      </div>
-                    </fieldset>
-                    {{form.vat_type}}
-                  </div>
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal" class="text-danger">น้ำมัน</label>
-                  </div>
-                  <div class="col-md-3 form-group">
-                    {{form.oil_content | add_class:"form-control"}}
-                  </div>
-                  <div class="col-md-1">
-                    <label for="first-name-horizontal" class="text-danger">ลิตร</label>
-                  </div>
-
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal">ราคา/ตัน</label>
-                  </div>
-                  <div class="col-md-4 form-group">
-                    {{form.price_per_ton | add_class:"form-control"}}
-                  </div>
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal">จำนวนเงิน</label>
-                  </div>
-                  <div class="col-md-4 form-group">
-                    {{form.amount | add_class:"form-control"}}
-                  </div>
-
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal">vat 7%</label>
-                  </div>
-                  <div class="col-md-4 form-group">
-                    {{form.vat | add_class:"form-control"}}
-                  </div>
-                  <div class="col-md-2 form-group">
-                    <label for="first-name-horizontal">จำนวนเงินสุทธิ</label>
-                  </div>
-                  <div class="col-md-4 form-group">
-                    {{form.amount_vat | add_class:"form-control"}}
-                  </div>
-                  
-                  <div class="col-12 d-flex justify-content-end">
-                    <button type="submit" class="btn btn-primary me-1 mb-1">
-                      บันทึก
-                    </button>
-                  </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary me-1 mb-1">
+                    บันทึก
+                  </button>
+                </div>
               </div>
-            </form>
-          </div>
+          </form>
         </div>
       </div>
-    </section>
-    <!-- Basic Tables end -->
-  </div>
+    </div>
+  </section>
+  <!-- Basic Tables end -->
+</div>
 
-  <footer>
-    <div class="footer clearfix mb-0 text-muted">
-      <div class="float-start">
-        <p>2023 &copy; Nitjanan</p>
-      </div>
-      <div class="float-end">
-        <!-- p>
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+    <div class="float-end">
+      <!-- p>
           Crafted with
           <span class="text-danger"
             ><i class="bi bi-heart-fill icon-mid"></i
           ></span>
           by <a href="https://saugi.me">Saugi</a>
         </p -->
-      </div>
     </div>
-  </footer>
+  </div>
+</footer>
 {% endblock %}
 {% block script %}
 <script src="{% static 'js/components/dark.js' %}"></script>
@@ -406,37 +408,38 @@ input.del[type=checkbox] {
 <!-- select2 Styles -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
 
 <script type="text/javascript">
   //ปิดปุ่ม submit หากมีการกดซ้ำ
-  document.addEventListener("DOMContentLoaded", function() {
+  document.addEventListener("DOMContentLoaded", function () {
     const form = document.querySelector("form");
-      form.addEventListener("submit", function() {
-        const submitButton = form.querySelector("[type='submit']");
-        submitButton.disabled = true;
+    form.addEventListener("submit", function () {
+      const submitButton = form.querySelector("[type='submit']");
+      submitButton.disabled = true;
     });
   });
 
   $('#id_date').val('{{weight.date|date:"Y-m-d"}}');
 
-  if('{{weight.car_team}}' != 'None'){
+  if ('{{weight.car_team}}' != 'None') {
     $("#select_team").append(new Option('{{weight.car_team.car_team_name}}', '{{weight.car_team.car_team_id}}'));
     $('#select_team option:contains("{{weight.car_team.car_team_name}}")').prop('selected', true);
   }
 
   //ถ้ารหัสกับชื่อ local และ center ไม่ตรงกันให้เลือกจากชื่อ 03/03/2025
   '{% if is_not_match_mill %}'
-    $('#id_mill option:contains("{{weight.mill_name}}")').prop('selected', true);
+  $('#id_mill option:contains("{{weight.mill_name}}")').prop('selected', true);
   '{% else %}'
-    $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
+  $('#id_mill_name option:contains("{{weight.mill_name}}")').prop('selected', true);
   '{% endif %}'
 
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
   $('#id_site_name option:contains("{{weight.site_name}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
   $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);
-  if("{{weight.stone_color}}" != "")
+  if ("{{weight.stone_color}}" != "")
     $('#id_stone_color option:contains("{{weight.stone_color}}")').prop('selected', true);
 
   setDataRadio();
@@ -444,24 +447,24 @@ input.del[type=checkbox] {
   searchNumCalQ();
 
   "{% if is_edit_weight %}"
-    $("#id_car_registration_name").attr('readonly', false);
-    $("#id_weight_in").attr('readonly', false);
-    $("#id_weight_out").attr('readonly', false);
+  $("#id_car_registration_name").attr('readonly', false);
+  $("#id_weight_in").attr('readonly', false);
+  $("#id_weight_out").attr('readonly', false);
   "{% else %}"
-    $("#id_car_registration_name").attr('readonly', true);
-    $("#id_weight_in").attr('readonly', true);
-    $("#id_weight_out").attr('readonly', true);
+  $("#id_car_registration_name").attr('readonly', true);
+  $("#id_weight_in").attr('readonly', true);
+  $("#id_weight_out").attr('readonly', true);
   "{% endif %}"
 
   //select2 (dropdown & search)
-  $(document).ready(function() {
+  $(document).ready(function () {
     var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
     var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
 
-    $('#id_mill').select2({width: "100%" ,  theme: 'bootstrap-5'});
-    $('#id_stone_type').select2({width: "100%" ,  theme: 'bootstrap-5'});
-    $('#id_scoop').select2({width: "100%",  theme: 'bootstrap-5'});
-    $('#id_site').select2({width: "100%",  theme: 'bootstrap-5'});
+    $('#id_mill').select2({ width: "100%", theme: 'bootstrap-5' });
+    $('#id_stone_type').select2({ width: "100%", theme: 'bootstrap-5' });
+    $('#id_scoop').select2({ width: "100%", theme: 'bootstrap-5' });
+    $('#id_site').select2({ width: "100%", theme: 'bootstrap-5' });
 
     if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
       $('#id_site').hide();
@@ -479,18 +482,18 @@ input.del[type=checkbox] {
   });
 
   // BEFORE form submission
-  $('form').submit(function() {
+  $('form').submit(function () {
     $('#id_site').prop('disabled', false);
     $('#id_stone_type').prop('disabled', false);
 
     customer_id = $('#id_customer').val();
-    if(customer_id == '09-V-001' || customer_id == '99'){
-        $('#id_weight_in').val('0.000');
-        $('#id_weight_out').val('0.000');
-        $('#id_weight_total').val('0.000');
-        $('#id_is_cancel').prop( "checked", true );
-    }else{
-        $('#id_is_cancel').prop( "checked", false );
+    if (customer_id == '09-V-001' || customer_id == '99') {
+      $('#id_weight_in').val('0.000');
+      $('#id_weight_out').val('0.000');
+      $('#id_weight_total').val('0.000');
+      $('#id_is_cancel').prop("checked", true);
+    } else {
+      $('#id_is_cancel').prop("checked", false);
     }
     //set data to id
     $("#id_car_team").val($("#select_team").val());
@@ -511,21 +514,21 @@ input.del[type=checkbox] {
     //set data radio
     //pay
     var pay_val = $('input[name="pay_group"]:checked').val();
-    if(pay_val == undefined)
+    if (pay_val == undefined)
       $("#id_pay").val("");
     else
       $("#id_pay").val(pay_val);
 
     //clean
     var clean_val = $('input[name="clean_group"]:checked').val();
-    if(clean_val == undefined)
+    if (clean_val == undefined)
       $("#id_clean_type").val("");
     else
       $("#id_clean_type").val(clean_val);
 
     //clean
     var line_val = $('input[name="line_group"]:checked').val();
-    if(line_val == undefined)
+    if (line_val == undefined)
       $("#id_line_type").val("");
     else
       $("#id_line_type").val(line_val);
@@ -535,223 +538,223 @@ input.del[type=checkbox] {
   });
 
   var stateP1 = false;
-  function radiostateP1(element){
-    if(stateP1 == false) {
+  function radiostateP1(element) {
+    if (stateP1 == false) {
       element.checked = true;
       stateP1 = true;
-    }else{
+    } else {
       element.checked = false;
       stateP1 = false;
     }
   }
 
   var stateP2 = false;
-  function radiostateP2(element){
-    if(stateP2 == false) {
+  function radiostateP2(element) {
+    if (stateP2 == false) {
       element.checked = true;
       stateP2 = true;
-    }else{
+    } else {
       element.checked = false;
       stateP2 = false;
     }
   }
 
   var stateP3 = false;
-  function radiostateP3(element){
-    if(stateP3 == false) {
+  function radiostateP3(element) {
+    if (stateP3 == false) {
       element.checked = true;
       stateP3 = true;
-    }else{
+    } else {
       element.checked = false;
       stateP3 = false;
     }
   }
 
   var stateCg1 = false;
-  function radiostateCg1(element){
-    if(stateCg1 == false) {
+  function radiostateCg1(element) {
+    if (stateCg1 == false) {
       element.checked = true;
       stateCg1 = true;
-    }else{
+    } else {
       element.checked = false;
       stateCg1 = false;
     }
   }
 
   var stateCg2 = false;
-  function radiostateCg2(element){
-    if(stateCg2 == false) {
+  function radiostateCg2(element) {
+    if (stateCg2 == false) {
       element.checked = true;
       stateCg2 = true;
-    }else{
+    } else {
       element.checked = false;
       stateCg2 = false;
     }
   }
 
   var stateCg3 = false;
-  function radiostateCg3(element){
-    if(stateCg3 == false) {
+  function radiostateCg3(element) {
+    if (stateCg3 == false) {
       element.checked = true;
       stateCg3 = true;
-    }else{
+    } else {
       element.checked = false;
       stateCg3 = false;
     }
   }
 
   var stateL1 = false;
-  function radiostateL1(element){
-    if(stateL1 == false) {
+  function radiostateL1(element) {
+    if (stateL1 == false) {
       element.checked = true;
       stateL1 = true;
-    }else{
+    } else {
       element.checked = false;
       stateL1 = false;
     }
   }
 
   var stateL2 = false;
-  function radiostateL2(element){
-    if(stateL2 == false) {
+  function radiostateL2(element) {
+    if (stateL2 == false) {
       element.checked = true;
       stateL2 = true;
-    }else{
+    } else {
       element.checked = false;
       stateL2 = false;
     }
   }
 
-  function setDataEmptyName(fk, name){
-    if($(fk+" option:selected").index() > 0) {
+  function setDataEmptyName(fk, name) {
+    if ($(fk + " option:selected").index() > 0) {
       $(name).val($(fk).find(":selected").text());
-    }else{
+    } else {
       $(name).val("");
     }
   }
 
-  function setDataRadio(){
+  function setDataRadio() {
     $('input[name="pay_group"][value="{{weight.pay}}"]').prop("checked", true);
     $('input[name="clean_group"][value="{{weight.clean_type}}"]').prop("checked", true);
     $('input[name="vat_type_group"][value="{{weight.vat_type}}"]').prop("checked", true);
     $('input[name="line_group"][value="{{weight.line_type}}"]').prop("checked", true);
   }
 
-  $( function() {
-      $( "#id-form-customer" ).autocomplete({
-        source: '{% url "autocompalteCustomer" %}',
-        minLength: 1,
-      });
-  } );
+  $(function () {
+    $("#id-form-customer").autocomplete({
+      source: '{% url "autocompalteCustomer" %}',
+      minLength: 1,
+    });
+  });
 
-  function searchDataCustomer(){
-        var tempSite = $("#id_site").val();
+  function searchDataCustomer() {
+    var tempSite = $("#id_site").val();
 
-        if($('#id-form-customer').val() != ""){
-          var str = $('#id-form-customer').val();
-          var items = str.split( ":" );
-          var idInput = items[0];
-            // Create Ajax Call
-            if(idInput){
-                $('#id_customer').val(items[0]);
-                $('#id_customer_name').val(items[1]);
-                //set id_distributor
-                $.ajax({
-                url: '{% url "searchDataCustomer" %}',
-                data: {
-                        'customer_id': idInput,
-                        'weight_id': "{{weight.weight_id}}",
-                    },
-                dataType: 'json',
-                success: function (data) {
-                  /*
-                    if (data.site_list) {
-                            $("#select_site").find('option').not(':first').remove();
-                            //set option 
-                            for(var i = 0; i < data.site_list.length; i++){
-                                $("#select_site").append(new Option(data.site_list[i].site__base_site_name, data.site_list[i].site__base_site_id));
-                            }
-                    }
-                    $('#select_site option[value="'+tempSite +'"]').attr('selected','selected');
-                  */
-                }
-                });
+    if ($('#id-form-customer').val() != "") {
+      var str = $('#id-form-customer').val();
+      var items = str.split(":");
+      var idInput = items[0];
+      // Create Ajax Call
+      if (idInput) {
+        $('#id_customer').val(items[0]);
+        $('#id_customer_name').val(items[1]);
+        //set id_distributor
+        $.ajax({
+          url: '{% url "searchDataCustomer" %}',
+          data: {
+            'customer_id': idInput,
+            'weight_id': "{{weight.weight_id}}",
+          },
+          dataType: 'json',
+          success: function (data) {
+            /*
+              if (data.site_list) {
+                      $("#select_site").find('option').not(':first').remove();
+                      //set option 
+                      for(var i = 0; i < data.site_list.length; i++){
+                          $("#select_site").append(new Option(data.site_list[i].site__base_site_name, data.site_list[i].site__base_site_id));
+                      }
+              }
+              $('#select_site option[value="'+tempSite +'"]').attr('selected','selected');
+            */
+          }
+        });
+      }
+      return false;
+    } else {
+      //$("#select_site").find('option').not(':first').remove();
+    }
+  }
+
+  function searchNumCalQ() {
+    if ($('#id_stone_type').val() != "") {
+      var idInput = $('#id_stone_type').val();
+
+      // Create Ajax Call
+      if (idInput) {
+        $.ajax({
+          url: '{% url "searchNumCalQ" %}',
+          data: {
+            'stone_type_id': idInput,
+          },
+          dataType: 'json',
+          success: function (data) {
+            if (data.val) {
+              calculateQ(data.val);
+              calculateOriginQ(data.val);
+            } else {
+              calculateQ(0.0);
+              calculateOriginQ(0.0);
             }
-            return false;
-        }else{
-            //$("#select_site").find('option').not(':first').remove();
-        }
-  }
-
-  function searchNumCalQ(){
-    if($('#id_stone_type').val() != ""){
-        var idInput = $('#id_stone_type').val();
-
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "searchNumCalQ" %}',
-                data: {
-                    'stone_type_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                      calculateQ(data.val);
-                      calculateOriginQ(data.val);
-                    }else{
-                      calculateQ(0.0);
-                      calculateOriginQ(0.0);
-                    }
-                }
-            });
-        }
-        return false;
+          }
+        });
+      }
+      return false;
     }
   }
 
-  function setDataCustomer(){
-    if($('#id_customer').val() != ""){
-        var idInput = $('#id_customer').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "setDataCustomer" %}',
-                data: {
-                    'customer_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                        $('#id-form-customer').val(data.val);
-                    }
-                }
-            });
-        }
-        return false;
+  function setDataCustomer() {
+    if ($('#id_customer').val() != "") {
+      var idInput = $('#id_customer').val();
+      // Create Ajax Call
+      if (idInput) {
+        $.ajax({
+          url: '{% url "setDataCustomer" %}',
+          data: {
+            'customer_id': idInput,
+          },
+          dataType: 'json',
+          success: function (data) {
+            if (data.val) {
+              $('#id-form-customer').val(data.val);
+            }
+          }
+        });
+      }
+      return false;
     }
   }
 
-  function setDataCarryType(){
-    if($('#id_transport').val() != ""){
-        var idInput = $('#id_transport').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "setDataCarryType" %}',
-                data: {
-                    'transport_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                        $('#id_carry_type_name').val(data.val);
-                    }
-                }
-            });
-        }
-        return false;
-    }else{
+  function setDataCarryType() {
+    if ($('#id_transport').val() != "") {
+      var idInput = $('#id_transport').val();
+      // Create Ajax Call
+      if (idInput) {
+        $.ajax({
+          url: '{% url "setDataCarryType" %}',
+          data: {
+            'transport_id': idInput,
+          },
+          dataType: 'json',
+          success: function (data) {
+            if (data.val) {
+              $('#id_carry_type_name').val(data.val);
+            }
+          }
+        });
+      }
+      return false;
+    } else {
       $('#id_carry_type_name').val("");
     }
   }
@@ -763,66 +766,66 @@ input.del[type=checkbox] {
   });
   */
 
-  $("#id_stone_type").change(function(){
+  $("#id_stone_type").change(function () {
     searchNumCalQ();
   });
 
-  $("#id_transport").change(function(){
+  $("#id_transport").change(function () {
     setDataCarryType();
   });
 
-  $('input[name="vat_type_group"]').change(function(){
+  $('input[name="vat_type_group"]').change(function () {
     calculateVatAndAmountVat();
   });
-  
-  $("#id_price_per_ton").on( "keyup", function() {
-    calculateAll();
-  } );
 
-  $("#id_price_per_ton").blur(function(){
+  $("#id_price_per_ton").on("keyup", function () {
+    calculateAll();
+  });
+
+  $("#id_price_per_ton").blur(function () {
     tmp = parseFloat($(this).val());
     $(this).val(tmp.toFixed(2));
   });
 
-  $("#id_weight_total").blur(function(){
+  $("#id_weight_total").blur(function () {
     tmp = parseFloat($(this).val());
     $(this).val(tmp.toFixed(3));
 
     calculateAll();
   });
 
-  $("#id_origin_weight").blur(function(){
+  $("#id_origin_weight").blur(function () {
     tmp = parseFloat($(this).val());
     $(this).val(tmp.toFixed(3));
 
     searchNumCalQ();
   });
 
-  $("#id_weight_in, #id_weight_out").blur(function(){
+  $("#id_weight_in, #id_weight_out").blur(function () {
     calculateWeightTotal();
     calculateAll();
     searchNumCalQ();
   });
 
-  function twoDecimal(number){
+  function twoDecimal(number) {
     return Math.round(number * 100) / 100;
   }
 
-  function getAmount(){
+  function getAmount() {
     var amount = 0;
     var total = parseFloat($('#id_weight_total').val());
-    var price =  parseFloat($('#id_price_per_ton').val());
+    var price = parseFloat($('#id_price_per_ton').val());
     amount = total * price;
     return amount;
   }
 
-  function calculateVatAndAmountVat(){
+  function calculateVatAndAmountVat() {
     vat_type = $('input[name="vat_type_group"]:checked').val();
 
     var amount = getAmount();
-    if(amount){
+    if (amount) {
 
-      if(vat_type == 'รวมภาษี'){
+      if (vat_type == 'รวมภาษี') {
         var vat = amount - (amount / 107) * 100;
         var amount_vat = amount - vat;
 
@@ -830,7 +833,7 @@ input.del[type=checkbox] {
         $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
         $('#id_vat').val(twoDecimal(vat).toFixed(2));
 
-      }else if(vat_type == 'ไม่รวมภาษี'){
+      } else if (vat_type == 'ไม่รวมภาษี') {
         var vat = (amount * 7) / 100;
         var amount_vat = vat + amount;
 
@@ -841,23 +844,23 @@ input.del[type=checkbox] {
     }
   }
 
-  function calculateAll(){
+  function calculateAll() {
     vat_type = $('input[name="vat_type_group"]:checked').val();
 
     var weight_total = $('#id_weight_total').val();
     var price_per_ton = $('#id_price_per_ton').val();
-    if(weight_total && price_per_ton){
+    if (weight_total && price_per_ton) {
       var amount = getAmount();
 
-      if(vat_type == 'รวมภาษี'){
+      if (vat_type == 'รวมภาษี') {
         var vat = amount - (amount / 107) * 100;
         var amount_vat = amount - vat;
 
         $('#id_amount').val(twoDecimal(amount_vat).toFixed(2));
         $('#id_amount_vat').val(twoDecimal(amount).toFixed(2));
         $('#id_vat').val(twoDecimal(vat).toFixed(2));
-      }else if(vat_type == 'ไม่รวมภาษี'){
-        var vat = (amount * 7)/100;
+      } else if (vat_type == 'ไม่รวมภาษี') {
+        var vat = (amount * 7) / 100;
         var amount_vat = vat + amount;
 
         $('#id_amount').val(twoDecimal(amount).toFixed(2));
@@ -867,95 +870,95 @@ input.del[type=checkbox] {
     }
   }
 
-  function calculateWeightTotal(){
-    if($('#id_weight_in').val() && $('#id_weight_out').val()){
+  function calculateWeightTotal() {
+    if ($('#id_weight_in').val() && $('#id_weight_out').val()) {
       weight_in = parseFloat($('#id_weight_in').val());
       weight_out = parseFloat($('#id_weight_out').val());
       weight_total = weight_out - weight_in;
       weight_total = Math.abs(weight_total);//01-08-2025 ถอดติดลบ weight total 
-        $('#id_weight_in').val(weight_in.toFixed(3));
-        $('#id_weight_out').val(weight_out.toFixed(3));
-        $('#id_weight_total').val(weight_total.toFixed(3));
+      $('#id_weight_in').val(weight_in.toFixed(3));
+      $('#id_weight_out').val(weight_out.toFixed(3));
+      $('#id_weight_total').val(weight_total.toFixed(3));
     }
   }
 
-  $("#id_stone_type").change(function(){
+  $("#id_stone_type").change(function () {
     searchNumCalQ();
   });
 
-  function calculateQ(num_cal_q){
-    if (num_cal_q == 0.0){
+  function calculateQ(num_cal_q) {
+    if (num_cal_q == 0.0) {
       $("#id_q").val('0.00');
-    }else{
-      var weight_total =  parseFloat($("#id_weight_total").val());
+    } else {
+      var weight_total = parseFloat($("#id_weight_total").val());
       var num_q = weight_total / num_cal_q;
       $("#id_q").val(num_q.toFixed(2));
     }
   }
 
-  function calculateOriginQ(num_cal_q){
-    if (num_cal_q == 0.0){
+  function calculateOriginQ(num_cal_q) {
+    if (num_cal_q == 0.0) {
       $("#id_origin_q").val('0.00');
-    }else{
-      var weight_total =  parseFloat($("#id_origin_weight").val());
+    } else {
+      var weight_total = parseFloat($("#id_origin_weight").val());
       var num_q = weight_total / num_cal_q;
       $("#id_origin_q").val(num_q.toFixed(2));
     }
   }
 
 
-  $("#id_scoop").change(function(){
+  $("#id_scoop").change(function () {
     $("#id_scoop_name").val($(this).find(":selected").text());
   });
 
-  $("#id_mill").change(function(){
+  $("#id_mill").change(function () {
     $("#id_mill_name").val($(this).find(":selected").text());
   });
 
-  $("#id_stone_type").change(function(){
+  $("#id_stone_type").change(function () {
     $("#id_stone_type_name").val($(this).find(":selected").text());
   });
 
-  $("#id_site").change(function(){
+  $("#id_site").change(function () {
     $("#id_site_name").val($(this).find(":selected").text());
   });
 
 
-  $("#id_car_registration_name").on( "keyup", function() {
-    searchTeamFromCar();
-  } );
-
-  $("#id_car_registration_name").blur(function(){
+  $("#id_car_registration_name").on("keyup", function () {
     searchTeamFromCar();
   });
 
-  function searchTeamFromCar(){
+  $("#id_car_registration_name").blur(function () {
+    searchTeamFromCar();
+  });
+
+  function searchTeamFromCar() {
     var tempTeam = $("#id_car_team").val();
 
-    if($('#id_car_registration_name').val() != ""){
-        var idInput = $('#id_car_registration_name').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "searchTeamFromCar" %}',
-                data: {
-                    'car_registration_name': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.team_list) {
-                            $("#select_team").find('option').not(':first').remove();
-                            //set option 
-                            for(var i = 0; i < data.team_list.length; i++){
-                                $("#select_team").append(new Option(data.team_list[i].base_car_team__car_team_name, data.team_list[i].base_car_team__car_team_id));
-                            }
-                    }
-                    $('#select_team option[value="'+tempTeam +'"]').attr('selected','selected');
-                }
-            });
-        }
-        return false;
-    }else{
+    if ($('#id_car_registration_name').val() != "") {
+      var idInput = $('#id_car_registration_name').val();
+      // Create Ajax Call
+      if (idInput) {
+        $.ajax({
+          url: '{% url "searchTeamFromCar" %}',
+          data: {
+            'car_registration_name': idInput,
+          },
+          dataType: 'json',
+          success: function (data) {
+            if (data.team_list) {
+              $("#select_team").find('option').not(':first').remove();
+              //set option 
+              for (var i = 0; i < data.team_list.length; i++) {
+                $("#select_team").append(new Option(data.team_list[i].base_car_team__car_team_name, data.team_list[i].base_car_team__car_team_id));
+              }
+            }
+            $('#select_team option[value="' + tempTeam + '"]').attr('selected', 'selected');
+          }
+        });
+      }
+      return false;
+    } else {
       $("#select_team").find('option').not(':first').remove();
     }
   }

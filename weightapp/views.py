@@ -1566,12 +1566,9 @@ def editWeight(request, mode, weight_id):
                 original_weight = Weight.objects.get(pk=form.instance.pk)
                 original_weight_total = original_weight.weight_total
                 original_transport = original_weight.transport
-                if original_weight.site:
-                    original_weight_site = original_weight.site.base_site_id
-                if original_weight.customer:
-                    original_weight_cus = original_weight.customer.customer_id
-                if original_weight.stone_type:
-                    original_weight_stone = original_weight.stone_type.base_stone_type_id
+                original_weight_site = original_weight.site.base_site_id if original_weight.site else None
+                original_weight_cus = original_weight.customer.customer_id if original_weight.customer else None
+                original_weight_stone = original_weight.stone_type.base_stone_type_id if original_weight.stone_type else None
             except Weight.DoesNotExist:
                 original_weight_total = None
                 original_weight_site = None

@@ -1227,6 +1227,11 @@ class WeightDelivery(models.Model):
     do_doc_no =  models.CharField(
         max_length=30, blank=False, null=True, db_index=True
     )
+    #เลขที่ชั่ง จาก ตาชั่ง local
+    weight_doc_id =  models.CharField(
+        max_length=30, blank=False, null=True, db_index=True
+    )
+
     carry_type_name = models.CharField(blank=True, null=True,max_length=20)
     weight_ton = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
     weight_q = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)

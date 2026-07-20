@@ -276,8 +276,6 @@ urlpatterns = [
 
      path('api/uc_status_cancel_do/', views.uc_status_cancel_do),
 
-      path('api/uc_weight_delivery/', views.uc_weight_delivery),
-
      path('deliveryorder/api/by/comp/', views.deliveryOrderByComp, name="deliveryOrderByComp"),
 
       path(

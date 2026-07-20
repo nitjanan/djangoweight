@@ -9554,6 +9554,7 @@ def uc_weight_delivery(request):
         comp_code = data.get('comp_code') or (base_ws.company.code if base_ws and base_ws.company else None)
 
         do_doc_no = data.get('do_doc_no')
+        weight_doc_id = data.get('weight_doc_id')
         delivery_date = data.get('delivery_date')
         carry_type_name = data.get('carry_type_name')
         is_cancel = data.get('is_cancel') in [True, 'true', 'True', 1, '1']
@@ -9615,6 +9616,7 @@ def uc_weight_delivery(request):
                 comp_code=comp_code,
                 do_id=data.get('do_id'),
                 do_doc_no=do_doc_no,
+                weight_doc_id=weight_doc_id,
                 carry_type_name=carry_type_name,
                 weight_ton=data.get('weight_ton'),
                 weight_q=data.get('weight_q'),
@@ -9632,6 +9634,7 @@ def uc_weight_delivery(request):
 
                     do_id=data.get('do_id'),
                     do_doc_no=do_doc_no,
+                    weight_doc_id=weight_doc_id,
                     carry_type_name=carry_type_name,
 
                     weight_ton=data.get('weight_ton'),

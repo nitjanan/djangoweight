@@ -888,17 +888,17 @@ def index(request):
 
 
         # STOCK (type 2)
-        latest_stock = StockStone.objects.filter(
-            stone=OuterRef('stone'),
-            stk__company__code__in=company_in,
-            stk__created__range=(start_date, end_date)
-        ).order_by('-stk__created')
+        # ใช้ข้อมูลจากการตรวจนับสต็อกครั้งล่าสุด (stk) ภายในช่วงวันที่เท่านั้น
+        # ห้ามหา "ล่าสุด" แยกทีละชนิดหิน เพราะจะไปผสมค่าจากคนละรอบตรวจนับ ทำให้ยอดรวมสูงเกินจริง
+        latest_stk_id = Stock.objects.filter(
+            company__code__in=company_in,
+            created__range=(start_date, end_date)
+        ).order_by('-created').values_list('id', flat=True).first()
 
         stock_qs = StockStone.objects.filter(
-            stk__company__code__in=company_in,
-            stk__created__range=(start_date, end_date)
+            stk_id=latest_stk_id
         ).values('stone').annotate(
-            total=Subquery(latest_stock.values('total')[:1])
+            total=Sum('total')
         )
 
         stock_map = defaultdict(float)

@@ -7137,9 +7137,9 @@ def excelStockStone(request, my_q, list_date):
     company = BaseCompany.objects.get(code = active)
 
     if company.biz.id == 1: #ธุรกิจเหมือง
-        data = StockStoneItem.objects.filter(my_q).order_by('ssn__stk__created', 'source__id', 'ssn__stone__base_stone_type_id').values_list('ssn__stk__created', 'ssn__stone__base_stone_type_name', 'source__name', 'quantity', 'ssn__total')
+        data = StockStoneItem.objects.filter(my_q).order_by('ssn__stk__created', 'source__id', 'ssn__stone__base_stone_type_id').values_list('ssn__stk__created', 'ssn__stone__base_stone_type_name', 'source__name', 'quantity', 'ssn__total', 'ssn__note')
     elif company.biz.id == 2: #ธุรกิจท่าเรือ
-        data = PortStockStoneItem.objects.filter(my_q).order_by('pss__ps__created', 'cus__customer_id', 'pss__stone__base_stone_type_id').values_list('pss__ps__created', 'pss__stone__base_stone_type_name', 'cus__customer_name', 'total', 'pss__total')
+        data = PortStockStoneItem.objects.filter(my_q).order_by('pss__ps__created', 'cus__customer_id', 'pss__stone__base_stone_type_id').values_list('pss__ps__created', 'pss__stone__base_stone_type_name', 'cus__customer_name', 'total', 'pss__total', 'pss__note')
 
     # Create a new workbook and get the active worksheet
     workbook = openpyxl.Workbook()
@@ -7166,7 +7166,7 @@ def excelStockStone(request, my_q, list_date):
         column_index = 2
         for st in stones:
             worksheet.cell(row=1, column=column_index, value=f'Stock {st}')
-            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources) + 1) -1 )
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources) + 2) - 1 )
             
             cell = worksheet.cell(row=1, column=column_index)
             cell.alignment = Alignment(horizontal='center')
@@ -7174,11 +7174,11 @@ def excelStockStone(request, my_q, list_date):
             info = {}
             info['st'] = st
             info['strat_col'] = column_index
-            info['end_col'] = column_index + len(sources) + 1
+            info['end_col'] = column_index + len(sources) + 2
             stone_col_list.append(info)
 
             #อัพเดทจำนวน col ตามที่มา
-            column_index += len(sources) + 1
+            column_index += len(sources) + 2
 
         #set color in header in row 1-2
         for row in worksheet.iter_rows(min_row=1, max_row=2):
@@ -7186,7 +7186,7 @@ def excelStockStone(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 2) // (len(sources) + 1 )
+                line_index = (cell.column - 2) // (len(sources) + 2 )
                 fill_color = stone_colors[line_index % len(stone_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -7202,6 +7202,9 @@ def excelStockStone(request, my_q, list_date):
             worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="FF0000")
             column_index += 1
 
+            worksheet.cell(row=2, column=column_index, value= 'หมายเหตุ').alignment = Alignment(horizontal='center')
+            column_index += 1
+
 
         # Create a dictionary to store data by date, mill, and stone
         date_data = {}
@@ -7213,15 +7216,18 @@ def excelStockStone(request, my_q, list_date):
             source = item[2]
             quantity = item[3]
             total = item[4]  # Assuming the 5th column is ssn__total
+            note = item[5] if len(item) > 5 and item[5] else ''
 
             if date not in date_data:
                 date_data[date] = {}
 
             if stone not in date_data[date]:
-                date_data[date][stone] = {'sources': {}, 'total': 0}
+                date_data[date][stone] = {'sources': {}, 'total': 0, 'note': ''}
 
             date_data[date][stone]['sources'][source] = quantity
             date_data[date][stone]['total'] = total  # Store the total for this stone
+            if note:
+                date_data[date][stone]['note'] = note
 
         row_index = 3
         for idl, ldate in enumerate(list_date):
@@ -7236,6 +7242,7 @@ def excelStockStone(request, my_q, list_date):
                     for st in stones:
                         source_data = stone_data.get(st, {}).get('sources', {})
                         total_value = stone_data.get(st, {}).get('total', '')
+                        note_value = stone_data.get(st, {}).get('note', '')
 
                         # Write quantities by source
                         for sou in sources:
@@ -7247,17 +7254,26 @@ def excelStockStone(request, my_q, list_date):
                         worksheet.cell(row=idl + 3, column=column_index, value=total_value).number_format = '#,##0.00'
                         worksheet.cell(row=idl + 3, column=column_index).font = Font(bold=True, color="FF0000")
                         column_index += 1
+
+                        # Write the note value for the stone
+                        worksheet.cell(row=idl + 3, column=column_index, value=note_value).alignment = Alignment(horizontal='left')
+                        column_index += 1
             row_index += 1
 
         worksheet.cell(row=row_index, column=1, value='รวมทั้งสิ้น')
         sum_by_col = Decimal('0.00')
         for col in range(2, column_index):
-            for row in range(3, row_index):
-                sum_by_col = sum_by_col + Decimal( worksheet.cell(row=row, column=col).value or '0.00' )
             col_header = worksheet.cell(row=2, column=col).value
-            if col_header == 'ยกมา' or col_header == 'Total':#ยกมา และ Total ไม่ต้อง show ใน รวมทั้งสิ้น
+            if col_header == 'ยกมา' or col_header == 'Total' or col_header == 'หมายเหตุ':#ยกมา, Total, และ หมายเหตุ ไม่ต้อง show ใน รวมทั้งสิ้น
                 worksheet.cell(row=row_index, column=col, value="")
             else:
+                for row in range(3, row_index):
+                    val = worksheet.cell(row=row, column=col).value
+                    if val is not None and val != '':
+                        try:
+                            sum_by_col = sum_by_col + Decimal(str(val))
+                        except Exception:
+                            pass
                 worksheet.cell(row=row_index, column=col, value=sum_by_col).number_format = '#,##0.00'
                 worksheet.cell(row=row_index, column=col).font = Font(bold=True, color="FF0000")
             sum_by_col = Decimal('0.00')

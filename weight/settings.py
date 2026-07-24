@@ -102,6 +102,8 @@ DATABASES = {
         'NAME': 'djangoweightdb',
         'USER': 'root',
         'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': '13306',
     }
 }
 

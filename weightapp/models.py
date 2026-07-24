@@ -927,7 +927,6 @@ class Stock(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ stock
     update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
-    note = models.TextField(blank=True, null=True, verbose_name="หมายเหตุ")
 
     class Meta:
         db_table = 'stock'
@@ -940,6 +939,7 @@ class StockStone(models.Model):
     stone = models.ForeignKey(BaseStoneType, on_delete=models.CASCADE, null=True, blank=True, max_length=120, verbose_name="ชนิดหิน", to_field='base_stone_type_id')
     total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="รวมทั้งหมด")
     stk = models.ForeignKey(Stock, on_delete=models.CASCADE,null=True, blank=True, verbose_name="stock")
+    note = models.TextField(blank=True, null=True, verbose_name="หมายเหตุ")
 
     class Meta:
         db_table = 'stock_stone'

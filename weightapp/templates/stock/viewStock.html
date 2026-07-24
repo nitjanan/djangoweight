@@ -84,7 +84,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <th>วันที่</th>
                     <th>ชนิดหิน</th>
-                    <th>หมายเหตุ</th>
                     <th>แก้ไข</th>
                     <th>ลบ</th>
                   </tr>
@@ -96,11 +95,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <td>
                       <ul style="list-style-type:circle">
                         {% for item in i.stockstone_set.all %}
-                          <li>{{ item.stone.base_stone_type_name }} : {{ item.total | intcomma }}</li>
+                          <li>{{ item.stone.base_stone_type_name }} : {{ item.total | intcomma }} {% if item.note %}<span class="text-muted">({{ item.note }})</span>{% endif %}</li>
                         {% endfor %}
                       </ul>
                     </td>
-                    <td>{{ i.note | default_if_none:"----" }}</td>
                     <td>
                       <a href="{% url 'editStep2Stock' i.id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
                     </td>

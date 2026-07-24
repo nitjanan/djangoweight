@@ -466,7 +466,6 @@ class Weight(models.Model):
     clean_type = models.CharField(blank=True, null=True,max_length=255)#ล้าง
     transport = models.CharField(blank=True, null=True,max_length=255)#ขนส่ง
     note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ
-    financial_note = models.CharField(blank=True, null=True,max_length=255)#หมายเหตุ ทางบัญชี
     ship_cost = models.CharField(blank=True, null=True,max_length=255)#ค่าขนส่ง
     carry_type_name = models.CharField(blank=True, null=True,max_length=255)#รับเอง-ส่งให้
     line_type = models.CharField(blank=True, null=True,max_length=255)

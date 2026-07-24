@@ -69,7 +69,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <div class="form-group col-md-1 mb-0">
               {{ filter.form.car_registration_name|as_crispy_field }}
             </div>
-            <div class="form-group col-md-1 mb-0">
+            <div class="form-group col-md-2 mb-0">
               {{ filter.form.customer_name|as_crispy_field }}
             </div>
             <div class="form-group col-md-1 mb-0">
@@ -81,9 +81,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <div class="form-group col-md-1 mb-0">
               {{ filter.form.weight_type|as_crispy_field }}
             </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.financial_note|as_crispy_field }}
-            </div>
+
             <div class="form-group col-md-1 mb-0">
               <div>
                 <label for=""></label>
@@ -168,7 +166,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>นน.สุทธิ</th>
                   <th>lc.</th>
                   <th>ผู้ชั่ง</th>
-                  <th>หมายเหตุทางบัญชี</th>
+
                   <th>แก้ไข</th>
                 </tr>
               </thead>
@@ -189,14 +187,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.car_registration_name}}</td>
                   <td>{{i.customer__customer_name}}</td>
                   <td>{{i.stone_type__base_stone_type_name}}</td>
-                  <td>{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}<span class="text-muted">&mdash;</span>{%endif%}</td>
-                  <td>{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}<span class="text-muted">&mdash;</span>{%endif%}</td>
+                  <td>{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}</td>
+                  <td>{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
                   <td>{{i.base_weight_station_name}}</td>
                   <td>{{i.scale_name}}</td>
-                  <td>{% if i.financial_note %}<i class="fa-solid fa-note-sticky text-warning"></i> {{i.financial_note}}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+
                   <td>
                     {% if is_scale and request.user.first_name == i.scale_name  or request.user.is_superuser or is_account %} <!-- superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ -->
                       <a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>

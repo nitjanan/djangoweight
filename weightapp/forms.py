@@ -853,18 +853,20 @@ class StockForm(forms.ModelForm):
 
     class Meta:
        model = Stock
-       fields = ('created', 'company')
+       fields = ('created', 'company', 'note')
        widgets = {
         'created': forms.DateInput(attrs={'class':'form-control','size': 3 , 'placeholder':'Select a date', 'type':'date'}),
         'company': forms.HiddenInput(),
+        'note': forms.Textarea(attrs={'class':'form-control', 'rows': 2, 'placeholder':'หมายเหตุ (ถ้ามี)'}),
         }
        labels = {
             'created': _('วันที่ stock'),
+            'note': _('หมายเหตุ'),
        }
 
 #ชนิดหินและจำนวนหินทั้งหมดใน stock
 class StockStoneForm(forms.ModelForm):
-    #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
+    stone = forms.ModelChoiceField(label='ชนิดหิน', queryset=BaseStoneType.objects.all(), required=True)
     class Meta:
        model = StockStone
        fields = ('stone', 'total', 'stk')

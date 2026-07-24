@@ -927,6 +927,7 @@ class Stock(models.Model):
     created = models.DateField(default = timezone.now, verbose_name="วันที่ผลิต") #เก็บวันที่ stock
     update = models.DateField(auto_now=True, verbose_name="วันที่อัพเดท") #เก็บวันเวลาที่แก้ไขอัตโนมัติล่าสุด
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True , verbose_name="บริษัท")
+    note = models.TextField(blank=True, null=True, verbose_name="หมายเหตุ")
 
     class Meta:
         db_table = 'stock'

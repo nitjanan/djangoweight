@@ -423,9 +423,20 @@ def generateCodeId(model_name, type, wt, middle):
 
     return missing_id
 
-def generateOilCustomerId(car_team_id):
-    run_number = car_team_id[1:]
-    return f"{'90-V-' + str(run_number).zfill(3)}"
+def generateOilCustomerId():
+    prefix = '92-V-'
+    existing = BaseCarTeam.objects.filter(oil_customer_id__startswith = prefix).values_list('oil_customer_id', flat = True)
+
+    max_number = 0
+    for oil_customer_id in existing:
+        try:
+            number = int(oil_customer_id[len(prefix):])
+        except (TypeError, ValueError):
+            continue
+        if number > max_number:
+            max_number = number
+
+    return f"{prefix}{str(max_number + 1).zfill(3)}"
 
 def findCompanyIn(request):
     code = request.session['company_code']
@@ -5205,7 +5216,7 @@ def createBaseCarTeam(request):
     form = BaseCarTeamForm(request.POST or None, initial={'car_team_id': generateCodeId('BaseCarTeam', 2, None, None), 'user_created': request.user}) 
     if form.is_valid(): 
         new_contact = form.save(commit = False)
-        #new_contact.oil_customer_id = generateOilCustomerId(new_contact.pk) #สร้างรหัสลูกค้าน้ำมัน auto
+        new_contact.oil_customer_id = generateOilCustomerId() #สร้างรหัสลูกค้าน้ำมัน auto
         duplicate = BaseCarTeam.objects.filter(car_team_id = new_contact.pk).exists()
         if duplicate:
             form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')

@@ -938,6 +938,7 @@ class StockStone(models.Model):
     stone = models.ForeignKey(BaseStoneType, on_delete=models.CASCADE, null=True, blank=True, max_length=120, verbose_name="ชนิดหิน", to_field='base_stone_type_id')
     total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="รวมทั้งหมด")
     stk = models.ForeignKey(Stock, on_delete=models.CASCADE,null=True, blank=True, verbose_name="stock")
+    note = models.TextField(blank=True, null=True, verbose_name="หมายเหตุ")
 
     class Meta:
         db_table = 'stock_stone'
@@ -1094,6 +1095,7 @@ class PortStockStone(models.Model):
     stone = models.ForeignKey(BaseStoneType, on_delete=models.CASCADE, null=True, blank=True, max_length=120, verbose_name="ชนิดหิน", to_field='base_stone_type_id')
     total = models.DecimalField(blank=True, null=True, decimal_places=2, max_digits=10 , verbose_name="รวมทั้งหมด")
     ps = models.ForeignKey(PortStock, on_delete=models.CASCADE,null=True, blank=True, verbose_name="port stock")
+    note = models.TextField(blank=True, null=True, verbose_name="หมายเหตุ")
 
     class Meta:
         db_table = 'port_stock_stone'

@@ -864,16 +864,17 @@ class StockForm(forms.ModelForm):
 
 #ชนิดหินและจำนวนหินทั้งหมดใน stock
 class StockStoneForm(forms.ModelForm):
-    #stone = forms.ModelChoiceField(label='ชนิดหิน', queryset = BaseStoneType.objects.all(), required=True)
+    stone = forms.ModelChoiceField(label='ชนิดหิน', queryset=BaseStoneType.objects.all(), required=True)
     class Meta:
        model = StockStone
-       fields = ('stone', 'total', 'stk')
+       fields = ('stone', 'total', 'stk', 'note')
        widgets = {
-
+           'note': forms.TextInput(attrs={'class':'form-control', 'placeholder':'หมายเหตุ'}),
         }
        labels = {
             'stone': _('ชนิดหิน'),
             'total': _('total stock'),
+            'note': _('หมายเหตุ'),
        }
 
 #ที่มาของ stock และจำนวนหินใน stock

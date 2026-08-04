@@ -95,7 +95,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <td>
                       <ul style="list-style-type:circle">
                         {% for item in i.stockstone_set.all %}
-                          <li>{{ item.stone.base_stone_type_name }} : {{ item.total | intcomma }}</li>
+                          <li>{{ item.stone.base_stone_type_name }} : {{ item.total | intcomma }} {% if item.note %}<span class="text-muted">({{ item.note }})</span>{% endif %}</li>
                         {% endfor %}
                       </ul>
                     </td>

@@ -109,6 +109,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     {{ssn.total | intcomma}} ตัน
                   </th>
                 </tr>
+                <tr>
+                  <th scope="row">
+                    หมายเหตุ
+                  </th>
+                  <td colspan="2">
+                    {{ssn.note | default_if_none:""}}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -132,6 +140,19 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   </div>
                   <div class="col-md-1">
                     <a href="{% url 'editStep2Stock' stock_data.id %}" class="btn btn-secondary float-right"><i class="fas fa-brush"></i> ล้าง</a>
+                  </div>
+                </div>
+                <div class="row my-2">
+                  <div class="col-md-2">
+                    <p class="fw-bolder">{{ss_form.note.label}}</p>
+                  </div>
+                  <div class="col-md-9">
+                    <div class="form-group">
+                      {{ss_form.note| add_class:"form-control"}}
+                    </div>
+                  </div>
+                  <div class="col-md-1">
+                    <!-- -->
                   </div>
                 </div>
                 <hr class="my-3">

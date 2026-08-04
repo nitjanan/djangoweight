@@ -291,4 +291,7 @@ urlpatterns = [
       ),
 
       path('get_api_delivery_order_3_30am/', views.get_api_delivery_order_3_30am, name="get_api_delivery_order_3_30am"),
+
+      path('api/updates/latest/', views.appReleaseLatest, name="appReleaseLatest"),
+      path('api/updates/log/', views.appUpdateLog, name="appUpdateLog"),
 ]

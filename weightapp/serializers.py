@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog
 from django.contrib.auth.models import User
 from rest_framework.validators import ValidationError
 from rest_framework.authtoken.models import Token
@@ -231,3 +231,30 @@ class WeightDeliverySerializer(serializers.ModelSerializer):
         model = WeightDelivery
         fields = '__all__'
         extra_fields = ['id']
+
+class AppReleaseSerializer(serializers.ModelSerializer):
+    download_url = serializers.SerializerMethodField()
+    sql_script_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppRelease
+        fields = ['product_code', 'version', 'channel', 'release_notes', 'download_url', 'file_hash_sha256',
+                  'sql_script_url', 'sql_script_hash_sha256', 'is_mandatory', 'released_at']
+
+    def get_download_url(self, obj):
+        request = self.context.get('request')
+        if obj.installer_file and request:
+            return request.build_absolute_uri(obj.installer_file.url)
+        return obj.installer_file.url if obj.installer_file else None
+
+    def get_sql_script_url(self, obj):
+        request = self.context.get('request')
+        if obj.sql_script and request:
+            return request.build_absolute_uri(obj.sql_script.url)
+        return obj.sql_script.url if obj.sql_script else None
+
+
+class ClientUpdateLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClientUpdateLog
+        fields = ['company', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']

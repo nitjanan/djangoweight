@@ -2,7 +2,8 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog
+from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
@@ -297,11 +298,49 @@ class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['name', 'code', 'biz', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+PASSWORD_PLACEHOLDER = '●' * 8  # ●●●●●●●● shown when a password is already set
+
+class UserScaleForm(forms.ModelForm):
+    password = forms.CharField(label="รหัสผ่าน", required=False, widget=forms.PasswordInput(render_value=True))
+    permission = forms.ChoiceField(label="สิทธิ์การใช้งาน", choices=UserScale.PERMISSION_CHOICES, required=False, initial=UserScale.PERMISSION_WEIGHT)
+
+    class Meta:
+        model = UserScale
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = kwargs.get('instance')
+        if instance and instance.pk and instance.password:
+            self.initial['password'] = PASSWORD_PLACEHOLDER
+        if instance and instance.pk and instance.permission:
+            for value, _label in UserScale.PERMISSION_CHOICES:
+                if hash_password_sha1(value) == instance.permission:
+                    self.initial['permission'] = value
+                    break
+
 class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    form = UserScaleForm
     autocomplete_fields = ['user']
-    
-    list_display = ['user', 'scale_id', 'scale_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+
+    list_display = ['user', 'scale_id', 'scale_name', 'password', 'permission'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
+    def save_model(self, request, obj, form, change):
+        new_password = form.cleaned_data.get('password')
+        if new_password and new_password != PASSWORD_PLACEHOLDER:
+            obj.password = hash_password_sha1(new_password)
+        elif change:
+            obj.password = UserScale.objects.get(pk=obj.pk).password
+
+        new_permission = form.cleaned_data.get('permission')
+        if new_permission:
+            obj.permission = hash_password_sha1(new_permission)
+        elif change:
+            obj.permission = UserScale.objects.get(pk=obj.pk).permission
+        else:
+            obj.permission = None
+        super().save_model(request, obj, form, change)
 
 class BaseVisibleAdmin(ImportExportModelAdmin):
     list_display = ('name','step')
@@ -558,6 +597,23 @@ admin.site.register(LoadingRateItem, LoadingRateItemAdmin)
 admin.site.register(BaseAPI, BaseAPIAdmin)
 admin.site.register(DeliveryOrder, DeliveryOrderAdmin)
 admin.site.register(WeightDelivery, WeightDeliveryAdmin)
+
+@admin.register(AppRelease)
+class AppReleaseAdmin(admin.ModelAdmin):
+    list_display = ('product_code', 'version', 'channel', 'is_mandatory', 'is_active', 'has_sql_script', 'released_at')
+    list_filter = ('product_code', 'channel', 'is_active')
+    ordering = ('-released_at',)
+
+    def has_sql_script(self, obj):
+        return bool(obj.sql_script)
+    has_sql_script.boolean = True
+    has_sql_script.short_description = 'มี SQL'
+
+@admin.register(ClientUpdateLog)
+class ClientUpdateLogAdmin(admin.ModelAdmin):
+    list_display = ('machine_name', 'product_code', 'weight_station', 'from_version', 'to_version', 'update_applied', 'sql_applied', 'checked_at')
+    list_filter = ('product_code', 'weight_station', 'update_applied')
+    ordering = ('-checked_at',)
 
 
 

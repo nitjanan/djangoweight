@@ -138,6 +138,7 @@ urlpatterns = [
     path('baseScoop/api/create/', CreateBaseScoop.as_view(), name="createBaesScoop"),
     path('baseScoop/api/detail/<str:pk>/',views.baseScoopDetail,name="baseScoopDetail"),
     path('baseScoop/api/vStamp/<str:dt>/',views.baseScoopVStamp,name="baseScoopVStamp"),
+    path('userScale/api/vStamp/<str:dt>/',views.userScaleVStamp,name="userScaleVStamp"),
 
      path('baseMill/api/',views.apiBaseMillOverview,name="apiBaseMillOverview"),
      path('baseMill/api/list/',views.baseMillList,name="baseMillList"),
@@ -291,4 +292,7 @@ urlpatterns = [
       ),
 
       path('get_api_delivery_order_3_30am/', views.get_api_delivery_order_3_30am, name="get_api_delivery_order_3_30am"),
+
+      path('api/updates/latest/', views.appReleaseLatest, name="appReleaseLatest"),
+      path('api/updates/log/', views.appUpdateLog, name="appUpdateLog"),
 ]

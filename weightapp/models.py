@@ -9,7 +9,16 @@ from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 import datetime
+import hashlib
+import base64
 from django.apps import apps
+
+def hash_password_sha1(password):
+    sha1_bytes = hashlib.sha1(password.encode('ascii')).digest()
+    return base64.b64encode(sha1_bytes).decode('ascii')
+
+def default_userscale_permission():
+    return hash_password_sha1('weight')
 
 def get_first_name(self):
     return self.first_name
@@ -990,6 +999,22 @@ class UserScale(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
     scale_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผู้ชั่ง")#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255, verbose_name="ชื่อผู้ชั่ง")#ชื่อผู้ชั่ง
+    password = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผ่าน")#รหัสผ่าน (เก็บแบบ hash)
+    v_stamp = models.DateTimeField(auto_now=True)
+
+    PERMISSION_ADMIN = 'admin'
+    PERMISSION_EDIT_WEIGHT = 'edit_weight'
+    PERMISSION_SALE = 'sale'
+    PERMISSION_ADD_SETTING = 'add_setting'
+    PERMISSION_WEIGHT = 'weight'
+    PERMISSION_CHOICES = [
+        (PERMISSION_ADMIN, 'admin'),
+        (PERMISSION_EDIT_WEIGHT, 'edit_weight'),
+        (PERMISSION_SALE, 'sale'),
+        (PERMISSION_WEIGHT, 'weight'),
+        (PERMISSION_ADD_SETTING, 'add_setting'),
+    ]
+    permission = models.CharField(blank=True, null=True, max_length=255, default=default_userscale_permission, verbose_name="สิทธิ์การใช้งาน")#สิทธิ์การใช้งาน (เก็บแบบ hash, ค่าเริ่มต้น weight)
 
     class Meta:
         verbose_name = 'ผู้ชั่ง'
@@ -1244,6 +1269,7 @@ class WeightDelivery(models.Model):
     
     class Meta:
         db_table = 'weight_delivery'
+        ordering = ['id']
         indexes = [
             models.Index(fields=['weight_id', 'bws']),
             models.Index(fields=['weight_id', 'do_doc_no']),
@@ -1297,6 +1323,7 @@ class DeliveryOrder(models.Model):
     
     class Meta:
         db_table = 'delivery_order'
+        ordering = ['id']
         indexes = [
             models.Index(
                 fields=['doc_no', 'comp_code', 'delivery_date']
@@ -1323,3 +1350,60 @@ class BaseAPI(models.Model):
 
     def __str__(self):
         return str(self.id)
+
+class AppRelease(models.Model):
+    CHANNEL_CHOICES = [
+        ('stable', 'Stable'),
+        ('beta', 'Beta'),
+    ]
+
+    product_code = models.CharField(max_length=50, default='Blue.SLC.W1.IN.Server', verbose_name="รหัสโปรแกรม")
+    version = models.CharField(max_length=20, verbose_name="เวอร์ชัน")
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='stable', verbose_name="ช่องทาง")
+    release_notes = models.TextField(blank=True, null=True, verbose_name="รายละเอียดอัพเดท")
+    installer_file = models.FileField(upload_to='releases/%Y/%m/', verbose_name="ไฟล์ติดตั้ง")
+    file_hash_sha256 = models.CharField(max_length=64, verbose_name="SHA256")
+    # สคริปต์ SQL (PostgreSQL) ที่ต้องรันกับ DB local ของ client ก่อนติดตั้งเวอร์ชันใหม่ (ถ้ามี)
+    sql_script = models.FileField(upload_to='releases/sql/%Y/%m/', blank=True, null=True, verbose_name="สคริปต์ SQL (ถ้ามี)")
+    sql_script_hash_sha256 = models.CharField(max_length=64, blank=True, null=True, verbose_name="SHA256 ของสคริปต์ SQL")
+    is_mandatory = models.BooleanField(default=False, verbose_name="บังคับอัพเดท")
+    is_active = models.BooleanField(default=True, verbose_name="เปิดใช้งาน")
+    released_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่ปล่อยเวอร์ชัน")
+    created_by = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL, verbose_name="สร้างโดย")
+
+    class Meta:
+        db_table = 'app_release'
+        unique_together = ('product_code', 'version')
+        ordering = ['-released_at']
+        verbose_name = 'เวอร์ชันโปรแกรม'
+        verbose_name_plural = 'ข้อมูลเวอร์ชันโปรแกรม'
+
+    def clean(self):
+        import re
+        from django.core.exceptions import ValidationError
+        if not re.fullmatch(r'[0-9a-fA-F]{64}', self.file_hash_sha256 or ''):
+            raise ValidationError({'file_hash_sha256': 'ต้องเป็นค่า SHA256 แบบ hex 64 ตัวอักษร'})
+        if self.sql_script and not re.fullmatch(r'[0-9a-fA-F]{64}', self.sql_script_hash_sha256 or ''):
+            raise ValidationError({'sql_script_hash_sha256': 'ถ้าอัพโหลดสคริปต์ SQL ต้องระบุ SHA256 แบบ hex 64 ตัวอักษรด้วย'})
+
+    def __str__(self):
+        return f"{self.product_code} v{self.version} ({self.channel})"
+
+class ClientUpdateLog(models.Model):
+    product_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="โปรดักส์")
+    weight_station = models.ForeignKey(BaseWeightStation, null=True, blank=True, on_delete=models.SET_NULL, db_constraint=False, verbose_name="ตาชั่ง")
+    machine_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="ชื่อเครื่อง")
+    from_version = models.CharField(max_length=20, blank=True, null=True, verbose_name="เวอร์ชันเดิม")
+    to_version = models.CharField(max_length=20, verbose_name="เวอร์ชันใหม่")
+    checked_at = models.DateTimeField(auto_now_add=True, verbose_name="เวลาที่เช็ค")
+    update_applied = models.BooleanField(default=False, verbose_name="อัพเดทสำเร็จ")
+    sql_applied = models.BooleanField(default=False, verbose_name="รันสคริปต์ SQL สำเร็จ")
+
+    class Meta:
+        db_table = 'client_update_log'
+        ordering = ['-checked_at']
+        verbose_name = 'ประวัติการอัพเดทเครื่อง'
+        verbose_name_plural = 'ประวัติการอัพเดทเครื่อง'
+
+    def __str__(self):
+        return f"{self.machine_name} -> {self.to_version}"

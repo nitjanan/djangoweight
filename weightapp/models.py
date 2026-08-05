@@ -9,7 +9,16 @@ from django.contrib.auth.models import Group, User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 import datetime
+import hashlib
+import base64
 from django.apps import apps
+
+def hash_password_sha1(password):
+    sha1_bytes = hashlib.sha1(password.encode('ascii')).digest()
+    return base64.b64encode(sha1_bytes).decode('ascii')
+
+def default_userscale_permission():
+    return hash_password_sha1('weight')
 
 def get_first_name(self):
     return self.first_name
@@ -990,6 +999,22 @@ class UserScale(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,null=True, blank=True, verbose_name="ผู้ใช้")
     scale_id = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผู้ชั่ง")#รหัสผู้ชั่ง
     scale_name = models.CharField(blank=True, null=True,max_length=255, verbose_name="ชื่อผู้ชั่ง")#ชื่อผู้ชั่ง
+    password = models.CharField(blank=True, null=True,max_length=255, verbose_name="รหัสผ่าน")#รหัสผ่าน (เก็บแบบ hash)
+    v_stamp = models.DateTimeField(auto_now=True)
+
+    PERMISSION_ADMIN = 'admin'
+    PERMISSION_EDIT_WEIGHT = 'edit_weight'
+    PERMISSION_SALE = 'sale'
+    PERMISSION_ADD_SETTING = 'add_setting'
+    PERMISSION_WEIGHT = 'weight'
+    PERMISSION_CHOICES = [
+        (PERMISSION_ADMIN, 'admin'),
+        (PERMISSION_EDIT_WEIGHT, 'edit_weight'),
+        (PERMISSION_SALE, 'sale'),
+        (PERMISSION_WEIGHT, 'weight'),
+        (PERMISSION_ADD_SETTING, 'add_setting'),
+    ]
+    permission = models.CharField(blank=True, null=True, max_length=255, default=default_userscale_permission, verbose_name="สิทธิ์การใช้งาน")#สิทธิ์การใช้งาน (เก็บแบบ hash, ค่าเริ่มต้น weight)
 
     class Meta:
         verbose_name = 'ผู้ชั่ง'
@@ -1331,7 +1356,7 @@ class AppRelease(models.Model):
         ('beta', 'Beta'),
     ]
 
-    product_code = models.CharField(max_length=50, default='slcblue', verbose_name="รหัสโปรแกรม")
+    product_code = models.CharField(max_length=50, default='Blue.SLC.W1.IN.Server', verbose_name="รหัสโปรแกรม")
     version = models.CharField(max_length=20, verbose_name="เวอร์ชัน")
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='stable', verbose_name="ช่องทาง")
     release_notes = models.TextField(blank=True, null=True, verbose_name="รายละเอียดอัพเดท")
@@ -1364,6 +1389,7 @@ class AppRelease(models.Model):
         return f"{self.product_code} v{self.version} ({self.channel})"
 
 class ClientUpdateLog(models.Model):
+    product_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="โปรดักส์")
     company = models.ForeignKey(BaseCompany, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="บริษัท")
     weight_station = models.ForeignKey(BaseWeightStation, null=True, blank=True, on_delete=models.SET_NULL, db_constraint=False, verbose_name="ตาชั่ง")
     machine_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="ชื่อเครื่อง")

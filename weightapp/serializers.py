@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale
 from django.contrib.auth.models import User
 from rest_framework.validators import ValidationError
 from rest_framework.authtoken.models import Token
@@ -71,6 +71,12 @@ class WeightSerializer(serializers.ModelSerializer):
                 data[field_name] = None
 
         return data
+
+class UserScaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserScale
+        #exclude = ('password',)
+        fields = '__all__'
 
 class BaseScoopSerializer(serializers.ModelSerializer):
     class Meta:
@@ -255,6 +261,8 @@ class AppReleaseSerializer(serializers.ModelSerializer):
 
 
 class ClientUpdateLogSerializer(serializers.ModelSerializer):
+    product = serializers.CharField(source='product_code', required=False, allow_blank=True, default='slcblue')
+
     class Meta:
         model = ClientUpdateLog
-        fields = ['company', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']
+        fields = ['product', 'company', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']

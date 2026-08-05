@@ -46,7 +46,7 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer, UserScaleSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -5985,7 +5985,14 @@ def baseScoopVStamp(request, dt):
     queryset = BaseScoop.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
     serializer = BaseScoopSerializer(queryset, many = True)
     return Response(serializer.data)
-        
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def userScaleVStamp(request, dt):
+    queryset = UserScale.objects.filter(v_stamp__gte = dt).order_by('v_stamp')
+    serializer = UserScaleSerializer(queryset, many = True)
+    return Response(serializer.data)
+
 ############# BaseMill API ###############
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

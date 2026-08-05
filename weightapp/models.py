@@ -1390,7 +1390,6 @@ class AppRelease(models.Model):
 
 class ClientUpdateLog(models.Model):
     product_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="โปรดักส์")
-    company = models.ForeignKey(BaseCompany, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="บริษัท")
     weight_station = models.ForeignKey(BaseWeightStation, null=True, blank=True, on_delete=models.SET_NULL, db_constraint=False, verbose_name="ตาชั่ง")
     machine_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="ชื่อเครื่อง")
     from_version = models.CharField(max_length=20, blank=True, null=True, verbose_name="เวอร์ชันเดิม")

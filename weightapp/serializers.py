@@ -265,4 +265,4 @@ class ClientUpdateLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClientUpdateLog
-        fields = ['product', 'company', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']
+        fields = ['product', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']

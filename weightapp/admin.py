@@ -611,8 +611,8 @@ class AppReleaseAdmin(admin.ModelAdmin):
 
 @admin.register(ClientUpdateLog)
 class ClientUpdateLogAdmin(admin.ModelAdmin):
-    list_display = ('machine_name', 'product_code', 'company', 'weight_station', 'from_version', 'to_version', 'update_applied', 'sql_applied', 'checked_at')
-    list_filter = ('product_code', 'company', 'weight_station', 'update_applied')
+    list_display = ('machine_name', 'product_code', 'weight_station', 'from_version', 'to_version', 'update_applied', 'sql_applied', 'checked_at')
+    list_filter = ('product_code', 'weight_station', 'update_applied')
     ordering = ('-checked_at',)
 
 

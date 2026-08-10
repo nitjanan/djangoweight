@@ -1351,6 +1351,12 @@ def is_view_weight(user):
 def is_edit_base_id(user):
     return user.groups.filter(name='edit_base_id').exists()
 
+def set_port_stock_cus_choices(formset, cus_objs):
+    #ตั้งค่า choices ของ field cus แบบ list คงที่ ครั้งเดียว กัน query ซ้ำต่อฟอร์ม (N+1)
+    choices = [('', '---------')] + [(c.customer_id, str(c)) for c in cus_objs]
+    for form in formset.forms:
+        form.fields['cus'].choices = choices
+
 def is_edit_stock(user):
     return user.groups.filter(name='edit_stock').exists()
 
@@ -1869,7 +1875,7 @@ def updatePortStockStoneItem(company, date, cus, stone):
         updateTotalPortStockInMonth(psi.id)#คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 
 def updateTotalPortStockInMonth(ps_id):
-    psi = PortStockStoneItem.objects.get(id = ps_id)
+    psi = PortStockStoneItem.objects.select_related('pss__ps__company', 'pss__stone', 'cus').get(id = ps_id)
 
     created = psi.pss.ps.created
     last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
@@ -1877,25 +1883,34 @@ def updateTotalPortStockInMonth(ps_id):
     company = psi.pss.ps.company.id
     cus = psi.cus.customer_id
 
-    all_stone = PortStockStoneItem.objects.filter(pss__ps__created__range=(created, last_date), pss__stone = stone, pss__ps__company = company, cus = cus).order_by('pss__ps__created')
+    all_stone = list(PortStockStoneItem.objects.select_related('pss').filter(pss__ps__created__range=(created, last_date), pss__stone = stone, pss__ps__company = company, cus = cus).order_by('pss__ps__created'))
     old_quot = None
+    items_to_update = []
+    touched_pss = {} #pss ที่ต้องคำนวน total ใหม่ เก็บไว้ทำทีเดียวตอนจบ กัน query ซ้ำต่อแถว
 
     for i in all_stone:
         if old_quot is not None:#2
             i.quoted = old_quot
             i.total = old_quot + i.receive - (i.pay + i.loss + i.sell_cus + i.other)
             old_total = i.total
-            i.save()
-
-            #update total stock ของชนิดหินนี้
-            pss = PortStockStone.objects.get(id = i.pss.id)
-            pss.total = PortStockStoneItem.objects.filter(pss = i.pss.id).aggregate(s=Sum("total"))["s"] or Decimal('0.0')
-            pss.save()
+            items_to_update.append(i)
+            touched_pss[i.pss_id] = i.pss
 
         if old_quot is not None:#3
             old_quot = old_total #ดึงรายการ total ของวันหน้ามาเป็นยกมาของอีกวันนึง
         elif i.total is not None:#1
             old_quot = i.total
+
+    if items_to_update:
+        PortStockStoneItem.objects.bulk_update(items_to_update, ['quoted', 'total'])
+
+    if touched_pss:
+        #update total stock ของชนิดหินนี้ คำนวนรวมทีเดียวแทนการ query ทีละ pss
+        totals = PortStockStoneItem.objects.filter(pss_id__in = touched_pss.keys()).values('pss_id').annotate(s = Sum('total'))
+        totals_map = {t['pss_id']: t['s'] or Decimal('0.0') for t in totals}
+        for pss_id, pss in touched_pss.items():
+            pss.total = totals_map.get(pss_id, Decimal('0.0'))
+        PortStockStone.objects.bulk_update(touched_pss.values(), ['total'])
 
 #คำนวนยอดยกมา จากวันก่อนและคำนวน total stock ใหม่
 def updateTotalPortStockInMonthByDate(previous_day, company):
@@ -7953,14 +7968,16 @@ def createPortStock(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
+    cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+    cus_qs = cus_objs
 
     PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
-    
+
     if request.method == 'POST':
         form = PortStockForm(request.POST)
         ss_form = PortStockStoneForm(request.POST)
         formset = PortStockStoneItemFormSet(request.POST)
+        set_port_stock_cus_choices(formset, cus_objs)
         if form.is_valid() and ss_form.is_valid() and formset.is_valid():
             form = form.save()
 
@@ -7982,6 +7999,7 @@ def createPortStock(request):
         form = PortStockForm(initial={'company': company})
         ss_form = PortStockStoneForm()
         formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
+        set_port_stock_cus_choices(formset, cus_objs)
 
     context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
     return render(request, "portStock/createPortStock.html", context)
@@ -7989,24 +8007,26 @@ def createPortStock(request):
 @login_required(login_url='login')
 def editStep2PortStock(request, stock_id):
     active = request.session['company_code']
-    company = BaseCompany.objects.get(code = active)
-
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
+    cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+    cus_qs = cus_objs
 
     PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
-    
+
     try:
         stock_data = PortStock.objects.get(id=stock_id)
     except PortStock.DoesNotExist:
         return redirect('viewPortStock')
 
-    ssn_data = PortStockStone.objects.filter(ps=stock_data)
+    ssn_data = PortStockStone.objects.filter(ps=stock_data).select_related('stone').prefetch_related(
+        Prefetch('portstockstoneitem_set', queryset=PortStockStoneItem.objects.select_related('cus'))
+    )
 
     if request.method == 'POST':
         form = PortStockForm(request.POST, instance=stock_data)
         ss_form = PortStockStoneForm(request.POST)
         formset = PortStockStoneItemFormSet(request.POST)
-        
+        set_port_stock_cus_choices(formset, cus_objs)
+
         if form.is_valid() and ss_form.is_valid() and formset.is_valid():
             form = form.save()
 
@@ -8029,6 +8049,7 @@ def editStep2PortStock(request, stock_id):
         form = PortStockForm(instance=stock_data)
         ss_form = PortStockStoneForm()
         formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
+        set_port_stock_cus_choices(formset, cus_objs)
 
     context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, 'ssn_data': ssn_data,'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
     return render(request, "portStock/editStep2PortStock.html",context)
@@ -8038,15 +8059,18 @@ def editPortStockStoneItem(request, stock_id, pss_id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_qs = BaseCustomer.objects.filter(is_port_stock = True).values('customer_id')
-    
+    cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+    cus_qs = cus_objs
+
     try:
         stock_data = PortStock.objects.get(id=stock_id)
     except PortStock.DoesNotExist:
         return redirect('viewPortStock')
 
-    ssn_data = PortStockStone.objects.filter(ps = stock_id)#ssn all in stock id
-    data = PortStockStone.objects.get(id = pss_id)#id edit
+    ssn_data = PortStockStone.objects.filter(ps = stock_id).select_related('stone').prefetch_related(
+        Prefetch('portstockstoneitem_set', queryset=PortStockStoneItem.objects.select_related('cus'))
+    )#ssn all in stock id
+    data = PortStockStone.objects.select_related('stone', 'ps').get(id = pss_id)#id edit
 
     old_pay = Weight.objects.filter(stone_type = data.stone, site__store = 3, bws__company = company, bws__weight_type = 1, date = data.ps.created).aggregate(total=Sum("weight_total"))['total'] or Decimal('0.00')
 
@@ -8054,7 +8078,8 @@ def editPortStockStoneItem(request, stock_id, pss_id):
         form = PortStockForm(request.POST, instance=stock_data)
         ss_form = PortStockStoneForm(request.POST, instance=data)
         formset = PortStockStoneItemInlineFormset(request.POST, instance=data)
-        
+        set_port_stock_cus_choices(formset, cus_objs)
+
         if form.is_valid() and ss_form.is_valid() and formset.is_valid():
             form = form.save()
 
@@ -8078,6 +8103,7 @@ def editPortStockStoneItem(request, stock_id, pss_id):
         form = PortStockForm(instance=stock_data)
         ss_form = PortStockStoneForm(instance=data)
         formset = PortStockStoneItemInlineFormset(instance=data)
+        set_port_stock_cus_choices(formset, cus_objs)
 
     context = {'stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'base_stock_source': cus_qs, 'ssn_data': ssn_data, 'ss_id': data.id, 'ss_stone_id': data.stone.base_stone_type_id, 'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user), 'old_pay': old_pay}
     return render(request, "portStock/editPortStockStoneItem.html",context)

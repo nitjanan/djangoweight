@@ -6,11 +6,6 @@
 {% load widget_tweaks %}
 
 {% block css %}
-<link
-rel="stylesheet"
-href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
-/>
-<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
 <style>
   .div-shadow{
     box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
@@ -248,8 +243,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 <script src="{% static 'compiled/js/app.js' %}"></script>
 
 <script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
-<script src="https://cdn.datatables.net/v/bs5/dt-1.12.1/datatables.min.js"></script>
-<script src="{% static 'js/pages/datatables.js' %}"></script>
 
  <!-- select2 Styles -->
  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />

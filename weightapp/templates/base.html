@@ -182,6 +182,14 @@
                       <span>Transport</span>
                     </a>
                   </li>
+
+                  <!-- ค่าขนส่งต่างประเทศ : ผูกไว้กับ tab Transport ถ้าจะย้ายให้ย้ายทั้ง <li> ก้อนนี้ -->
+                  <li class="sidebar-item {{ifr_page}}">
+                    <a href="{% url 'viewInternationalFreightRate' %}" class="sidebar-link">
+                      <i class="fa-solid fa-ship"></i>
+                      <span>Freight Rate</span>
+                    </a>
+                  </li>
                   {% endif %}
                   {% if 'Relocate' in tab.name %}
                   <li class="sidebar-item {{ldr_page}}">

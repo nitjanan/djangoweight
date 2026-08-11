@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, CarryingweightTeam , InternationalFreightRate
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
@@ -46,10 +46,10 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer, UserScaleSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer, UserScaleSerializer, BaseCompanyMapBaseCustomerSerializer, InternationalFreightRateSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from .tokens import create_jwt_pair_for_user
 import csv
 from io import StringIO
@@ -10025,3 +10025,162 @@ def appUpdateLog(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([])
+def baseCompanyCustomerMapCreate(request):
+    serializer = BaseCompanyMapBaseCustomerSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])    
+@permission_classes([])
+def baseCompanyCustomerMapDelete(request, id):
+    try:
+        obj = BaseCompanyMapBaseCustomer.objects.get(id=id)
+        obj.delete() # ลบข้อมูลจาก id นั้น
+        return Response({"message": "ลบสำเร็จ"}, status=status.HTTP_200_OK)
+    except BaseCompanyMapBaseCustomer.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+@permission_classes([])
+def internationalFreightRateCreate(request):
+    try:
+        serializer = InternationalFreightRateSerializer(data=request.data)
+        if serializer.is_valid():
+            # atomic : ถ้าทีมใดทีมหนึ่งสร้างไม่สำเร็จ ให้ rollback รายการหลักด้วย
+            # กันไม่ให้เหลือรายการค่าขนส่งที่ไม่มีทีมค้างอยู่ใน db
+            with transaction.atomic():
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([])
+def internationalFreightRateUpdate(request, id):
+    try:
+        obj = InternationalFreightRate.objects.get(id=id)
+    except InternationalFreightRate.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        # PATCH = แก้เฉพาะฟิลด์ที่ส่งมา / PUT = ต้องส่งมาให้ครบทุกฟิลด์
+        serializer = InternationalFreightRateSerializer(
+            obj, data=request.data, partial=(request.method == 'PATCH')
+        )
+        if serializer.is_valid():
+            # atomic : ถ้าทีมใดทีมหนึ่งพัง ให้ย้อนกลับทั้งหมด ไม่ให้ทีมเดิมถูกลบทิ้งฟรีๆ
+            with transaction.atomic():
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+@permission_classes([])
+def internationalFreightRateDelete(request, id):
+    try:
+        obj = InternationalFreightRate.objects.get(id=id)
+        obj.delete() # ลบข้อมูลจาก id นั้น
+        return Response({"message": "ลบสำเร็จ"}, status=status.HTTP_200_OK)
+    except InternationalFreightRate.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+
+################# หน้าเว็ป อัตราค่าขนส่งไปนอกประเทศ (ใช้ api create/delete ด้านบน) #################
+@login_required(login_url='login')
+def viewInternationalFreightRate(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    # prefetch ทีม (พร้อมข้อมูล base_car_team) มาในทีเดียว ไม่งั้นตารางจะยิง query ต่อ 1 แถว
+    data = InternationalFreightRate.objects.prefetch_related('teams__team')
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    ifr = p.get_page(page)
+
+    # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
+    # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
+    for row in ifr:
+        row.has_specific_team = any(t.team_id for t in row.teams.all())
+
+    context = {'ifr_page':'active', 'ifr': ifr, active :"active",}
+    return render(request, "internationalFreightRate/viewInternationalFreightRate.html", context)
+
+@login_required(login_url='login')
+def internationalFreightRate(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    context = {
+        'ifr_page': 'active',
+        # ส่ง choices ไปให้ template render dropdown ประเภทการแบกน้ำหนัก
+        'weight_carried_choices': CarryingweightTeam.choices,
+        'ifr_obj': None,
+        'ifr_teams_json': [],
+        active: "active",
+    }
+    return render(request, "internationalFreightRate/viewInternationalFreightRateCreate.html", context)
+
+
+@login_required(login_url='login')
+def editInternationalFreightRate(request, id):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    obj = get_object_or_404(InternationalFreightRate, id=id)
+
+    # ส่งทีมเดิมไปให้ JS สร้างแถวรอไว้ตอนเปิดหน้า
+    teams = list(obj.teams.values(
+        'team_id', 'weight_carried', 'freight_rate',
+        'discount_per_ton', 'freight_rate_per_ton_km', 'note',
+    ))
+
+    context = {
+        'ifr_page': 'active',
+        'weight_carried_choices': CarryingweightTeam.choices,
+        'ifr_obj': obj,
+        'ifr_teams_json': teams,
+        active: "active",
+    }
+    return render(request, "internationalFreightRate/viewInternationalFreightRateCreate.html", context)
+
+
+################# api dropdown สำหรับฟอร์มสร้างอัตราค่าขนส่งไปนอกประเทศ #################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCarTeamOptions(request):
+    data = BaseCarTeam.objects.all().order_by('car_team_id').values('car_team_id', 'car_team_name')
+    return Response(list(data))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCompanyCustomerMapOptions(request):
+    # ต้นทาง/ปลายทาง เลือกจากรายชื่อบริษัทลูกค้าที่ผูกไว้ในตาราง map ไม่ใช่ base_customer ทั้งก้อน
+    data = (BaseCompanyMapBaseCustomer.objects
+            .select_related('base_company', 'base_customer')
+            .order_by('name')
+            .values('id', 'name'))
+    return Response(list(data))

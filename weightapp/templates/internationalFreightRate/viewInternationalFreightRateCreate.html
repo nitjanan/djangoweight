@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'extensions/choices.js/public/assets/styles/choices.min.css' %}" />
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>{% if ifr_obj %}แก้ไข{% else %}เพิ่ม{% endif %}ค่าขนส่งต่างประเทศ</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item">
+              <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่งต่างประเทศ</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">{% if ifr_obj %}แก้ไขรายการ{% else %}เพิ่มรายการ{% endif %}</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  {{ weight_carried_choices|json_script:"ifr_weight_carried_choices" }}
+  {{ ifr_teams_json|json_script:"ifr_existing_teams" }}
+
+  <section class="section">
+    <div id="ifr_alert" class="alert d-none" role="alert"></div>
+
+    <form id="ifr_form" novalidate>
+      <!-- ข้อมูลค่าขนส่ง -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">ข้อมูลค่าขนส่ง</h5>
+        </div>
+        <div class="card-body">
+          <div class="row gx-3 gy-2">
+            <div class="form-group col-md-3">
+              <label for="ifr_origin">ต้นทาง <span class="text-danger">*</span></label>
+              <select class="form-select" id="ifr_origin" name="origin" data-selected="{{ ifr_obj.origin|default_if_none:'' }}">
+                <option value="">-- กำลังโหลด --</option>
+              </select>
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_destination">ปลายทาง <span class="text-danger">*</span></label>
+              <select class="form-select" id="ifr_destination" name="destination" data-selected="{{ ifr_obj.destination|default_if_none:'' }}">
+                <option value="">-- กำลังโหลด --</option>
+              </select>
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_base_fuel_price">ราคาน้ำมันฐาน (บาท/ลิตร) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price" placeholder="เช่น 32.50" value="{{ ifr_obj.base_fuel_price|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_distance">ระยะทาง (กม.) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_distance" placeholder="เช่น 450.00" value="{{ ifr_obj.distance|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_payload_weight">น้ำหนักบรรทุก (ตัน/เที่ยว) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_payload_weight" placeholder="เช่น 25.00" value="{{ ifr_obj.payload_weight|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_fuel_used_per_trip">ใช้น้ำมัน (ลิตร/เที่ยว) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_used_per_trip" placeholder="เช่น 120.00" value="{{ ifr_obj.fuel_used_per_trip|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_fuel_freight_adjustment">ปรับค่าขนส่งตามน้ำมัน (ลิตรละ 1 บาท) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_freight_adjustment" placeholder="เช่น 1.00" value="{{ ifr_obj.fuel_freight_adjustment|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="ifr_average_fuel_price">ราคาน้ำมันเฉลี่ย (บาท/ลิตร) <span class="text-danger">*</span></label>
+              <input type="text" inputmode="decimal" class="form-control" id="ifr_average_fuel_price" placeholder="เช่น 33.20" value="{{ ifr_obj.average_fuel_price|default_if_none:'' }}" />
+            </div>
+            <div class="form-group col-md-6">
+              <label for="ifr_note">หมายเหตุ</label>
+              <input type="text" class="form-control" id="ifr_note" maxlength="255" placeholder="ไม่บังคับ" value="{{ ifr_obj.note|default_if_none:'' }}" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ทีมขนส่ง -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">ทีมขนส่ง</h5>
+          <button type="button" id="ifr_add_team" class="btn btn-primary btn-sm rounded-pill">
+            เพิ่มทีม <i class="fa-solid fa-circle-plus"></i>
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+              <thead class="table-dark">
+                <tr>
+                  <th style="min-width: 180px;">ทีม <span class="text-danger">*</span></th>
+                  <th style="min-width: 200px;">ประเภทการแบกน้ำหนัก <span class="text-danger">*</span></th>
+                  <th style="min-width: 120px;">ค่าขนส่ง</th>
+                  <th style="min-width: 120px;">ลดบาท/ตัน</th>
+                  <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.</th>
+                  <th style="min-width: 160px;">หมายเหตุ</th>
+                  <th style="width: 60px;">ลบ</th>
+                </tr>
+              </thead>
+              <tbody id="ifr_team_rows"></tbody>
+            </table>
+          </div>
+          <div id="ifr_team_empty" class="alert alert-light-warning color-warning">
+            <i class="bi bi-exclamation-triangle"></i> ยังไม่มีทีม กด "เพิ่มทีม" เพื่อเพิ่มแถว (จะไม่ใส่ทีมเลยก็ได้)
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-5">
+        <button type="submit" id="ifr_submit" class="btn btn-info btn-lg rounded-pill">
+          {% if ifr_obj %}บันทึกการแก้ไข <i class="fa-solid fa-floppy-disk"></i>{% else %}บันทึกรายการ <i class="fa-solid fa-circle-plus"></i>{% endif %}
+        </button>
+        <a href="{% url 'viewInternationalFreightRate' %}" class="btn btn-secondary btn-lg rounded-pill">ยกเลิก</a>
+      </div>
+    </form>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start"><p>2023 &copy; Nitjanan</p></div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+<script src="{% static 'extensions/choices.js/public/assets/scripts/choices.min.js' %}"></script>
+
+<script>
+  const IFR_CSRF = "{{ csrf_token }}";
+  const IFR_LIST_URL = "{% url 'viewInternationalFreightRate' %}";
+  const IFR_TEAM_OPTIONS_URL = "{% url 'baseCarTeamOptions' %}";
+  const IFR_CUSTOMER_OPTIONS_URL = "{% url 'baseCompanyCustomerMapOptions' %}";
+
+  // หน้าเดียวใช้ทั้งสร้างและแก้ไข ต่างกันที่ปลายทางกับ HTTP method
+  // ต้องเลือกด้วย {% templatetag openblock %} if {% templatetag closeblock %} ของ Django ไม่ใช่ ternary ของ JS
+  // เพราะ {% templatetag openblock %} url {% templatetag closeblock %} ถูก render ตั้งแต่ฝั่ง server ทั้งสองกิ่ง
+  {% if ifr_obj %}
+  const IFR_IS_EDIT = true;
+  const IFR_SUBMIT_URL = "{% url 'internationalFreightRateUpdate' ifr_obj.id %}";
+  const IFR_SUBMIT_METHOD = 'PUT';
+  {% else %}
+  const IFR_IS_EDIT = false;
+  const IFR_SUBMIT_URL = "{% url 'internationalFreightRateCreate' %}";
+  const IFR_SUBMIT_METHOD = 'POST';
+  {% endif %}
+
+  // ค่าเดิมของ dropdown ต้นทาง/ปลายทาง ใช้เลือกกลับหลัง options โหลดเสร็จ
+  const IFR_CURRENT_ORIGIN = "{{ ifr_obj.origin|default_if_none:''|escapejs }}";
+  const IFR_CURRENT_DESTINATION = "{{ ifr_obj.destination|default_if_none:''|escapejs }}";
+
+  // [[value, label], ...] จาก CarryingweightTeam.choices
+  const WEIGHT_CARRIED_CHOICES = JSON.parse(
+    document.getElementById('ifr_weight_carried_choices').textContent
+  );
+
+  // ทีมเดิมของรายการที่กำลังแก้ไข (ว่างเปล่าตอนสร้างใหม่)
+  const EXISTING_TEAMS = JSON.parse(
+    document.getElementById('ifr_existing_teams').textContent
+  );
+
+  let TEAM_OPTIONS = [];   // [{car_team_id, car_team_name}, ...]
+  // ลูกค้ามีหลายพันรายการ ใช้ choices.js ทำ dropdown ที่พิมพ์ค้นหาได้
+  const CUSTOMER_PICKERS = {};
+
+  function showAlert(message, isError) {
+    const box = document.getElementById('ifr_alert');
+    box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    box.textContent = message;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text == null ? '' : text;
+    return d.innerHTML;
+  }
+
+  // ค่าว่าง -> null เพราะฟิลด์ฝั่งทีมอนุญาตให้ว่างได้
+  function orNull(value) {
+    const v = (value || '').trim();
+    return v === '' ? null : v;
+  }
+
+  // ---------- โหลด dropdown ----------
+  function fillCustomerSelect(select, rows) {
+    // รายการมาจากตาราง base_company_map_base_customer ใช้คอลัมน์ name
+    // origin / destination ใน model เป็น CharField จึงเก็บ name ลงไปตรงๆ
+    let html = '<option value="">-- เลือก --</option>';
+    rows.forEach(function (r) {
+      html += '<option value="' + escapeHtml(r.name) + '">' + escapeHtml(r.name) + '</option>';
+    });
+    select.innerHTML = html;
+
+    // ตอนแก้ไข : เลือกค่าเดิมกลับ ต้องทำก่อน init choices.js ไม่งั้นมันจะไม่เห็นค่าที่เลือกไว้
+    const current = select.dataset.selected || '';
+    if (current) {
+      select.value = current;
+      // ค่าเดิมอาจเป็นชื่อที่ถูกลบออกจากตาราง map ไปแล้ว จึงไม่มีใน options ที่โหลดมา
+      // ถ้าไม่เติมกลับเข้าไป การกดบันทึกจะทำให้ค่าเดิมหายโดยไม่มีใครรู้
+      if (select.value !== current) {
+        select.insertAdjacentHTML('afterbegin',
+          '<option value="' + escapeHtml(current) + '">' + escapeHtml(current) + ' (ค่าเดิม)</option>');
+        select.value = current;
+      }
+    }
+
+    // ทำให้พิมพ์ค้นหาชื่อลูกค้าได้ ไม่ต้องเลื่อนหาในลิสต์หลายพันรายการ
+    if (window.Choices) {
+      if (CUSTOMER_PICKERS[select.id]) {
+        CUSTOMER_PICKERS[select.id].destroy();
+      }
+      CUSTOMER_PICKERS[select.id] = new Choices(select, {
+        searchEnabled: true,
+        searchResultLimit: 50,
+        shouldSort: false,
+        itemSelectText: '',
+        noResultsText: 'ไม่พบรายการ',
+        noChoicesText: 'ไม่มีรายการ',
+        searchPlaceholderValue: 'พิมพ์เพื่อค้นหา',
+      });
+    }
+  }
+
+  // ค่าพิเศษของ dropdown ทีม : ALL_TEAMS จะถูกแปลงเป็น null ตอนส่ง (= ทุกทีม)
+  // ต่างจาก '' ที่แปลว่า "ยังไม่ได้เลือก" ซึ่งจะถูกดักไว้ก่อนส่ง
+  const ALL_TEAMS = '__ALL__';
+
+  // ถ้ายังไม่มีแถวไหนระบุทีมเจาะจง แถว ALL_TEAMS ครอบคลุมทุกทีมจริงๆ
+  // แต่พอมีแถวที่ระบุทีมแล้ว มันจะเหลือแค่ "ทีมที่เหลือ" เพราะทีมที่ระบุไปใช้ราคาของตัวเอง
+  function allTeamsLabel() {
+    const hasSpecific = Array.prototype.some.call(
+      document.querySelectorAll('.ifr-team-select'),
+      function (sel) { return sel.value !== '' && sel.value !== ALL_TEAMS; }
+    );
+    return hasSpecific ? 'ทีมที่เหลือ (นอกจากทีมที่ระบุไว้)' : 'ทุกทีม (เหมาเรทเดียว)';
+  }
+
+  function refreshAllTeamsLabel() {
+    const label = allTeamsLabel();
+    document.querySelectorAll('.ifr-team-select option[value="' + ALL_TEAMS + '"]')
+      .forEach(function (opt) { opt.textContent = label; });
+  }
+
+  function teamOptionsHtml() {
+    let html = '<option value="">-- เลือกทีม --</option>';
+    html += '<option value="' + ALL_TEAMS + '">' + escapeHtml(allTeamsLabel()) + '</option>';
+    TEAM_OPTIONS.forEach(function (t) {
+      html += '<option value="' + escapeHtml(t.car_team_id) + '">'
+            + escapeHtml(t.car_team_id) + ' : ' + escapeHtml(t.car_team_name || '') + '</option>';
+    });
+    return html;
+  }
+
+  function weightCarriedOptionsHtml() {
+    let html = '<option value="">-- เลือก --</option>';
+    WEIGHT_CARRIED_CHOICES.forEach(function (pair) {
+      html += '<option value="' + escapeHtml(pair[0]) + '">' + escapeHtml(pair[1]) + '</option>';
+    });
+    return html;
+  }
+
+  function loadDropdowns() {
+    fetch(IFR_CUSTOMER_OPTIONS_URL, { headers: { 'Accept': 'application/json' } })
+      .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+      .then(function (rows) {
+        fillCustomerSelect(document.getElementById('ifr_origin'), rows);
+        fillCustomerSelect(document.getElementById('ifr_destination'), rows);
+      })
+      .catch(function (err) {
+        console.error(err);
+        showAlert('โหลดรายชื่อบริษัทลูกค้า (ต้นทาง/ปลายทาง) ไม่สำเร็จ', true);
+      });
+
+    fetch(IFR_TEAM_OPTIONS_URL, { headers: { 'Accept': 'application/json' } })
+      .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+      .then(function (rows) {
+        TEAM_OPTIONS = rows;
+        // แถวทีมของรายการที่แก้ไขถูกสร้างไว้ตั้งแต่ก่อน options มาถึง
+        // ต้อง render options ใหม่แล้วเลือกค่าเดิมกลับจาก data-selected
+        document.querySelectorAll('.ifr-team-select').forEach(function (sel) {
+          const wanted = sel.dataset.selected || sel.value;
+          sel.innerHTML = teamOptionsHtml();
+          sel.value = wanted;
+        });
+        refreshAllTeamsLabel();
+      })
+      .catch(function (err) {
+        console.error(err);
+        showAlert('โหลดรายชื่อทีมไม่สำเร็จ', true);
+      });
+  }
+
+  // ---------- แถวทีม ----------
+  function syncTeamEmptyState() {
+    const hasRows = document.querySelectorAll('#ifr_team_rows tr').length > 0;
+    document.getElementById('ifr_team_empty').classList.toggle('d-none', hasRows);
+  }
+
+  // data : แถวเดิมตอนแก้ไข (ไม่ส่งมา = แถวเปล่าที่กดปุ่ม "เพิ่มทีม")
+  function addTeamRow(data) {
+    const row = data || {};
+    // team_id เป็น null ใน db แปลว่า "ทุกทีม" ต้องแปลงกลับเป็นค่าพิเศษของ dropdown
+    const teamValueForSelect = row.team_id === null || row.team_id === undefined
+      ? (data ? ALL_TEAMS : '')
+      : row.team_id;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select class="form-select ifr-team-select" data-selected="' + escapeHtml(teamValueForSelect) + '">'
+        + teamOptionsHtml() + '</select></td>' +
+      '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-rate-per-ton-km" /></td>' +
+      '<td><input type="text" class="form-control ifr-team-note" /></td>' +
+      '<td class="text-center">' +
+        '<button type="button" class="btn btn-danger btn-sm ifr-remove-team">' +
+          '<i class="fas fa-trash-alt"></i>' +
+        '</button>' +
+      '</td>';
+
+    tr.querySelector('.ifr-team-select').value = teamValueForSelect;
+    tr.querySelector('.ifr-weight-carried').value = row.weight_carried || '';
+    tr.querySelector('.ifr-freight-rate').value = row.freight_rate == null ? '' : row.freight_rate;
+    tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
+    tr.querySelector('.ifr-rate-per-ton-km').value = row.freight_rate_per_ton_km == null ? '' : row.freight_rate_per_ton_km;
+    tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
+
+    // เปลี่ยนทีมในแถวไหนก็ตาม อาจทำให้แถว "ทุกทีม" กลายเป็น "ทีมที่เหลือ" หรือกลับกัน
+    tr.querySelector('.ifr-team-select').addEventListener('change', refreshAllTeamsLabel);
+
+    tr.querySelector('.ifr-remove-team').addEventListener('click', function () {
+      tr.remove();
+      syncTeamEmptyState();
+      refreshAllTeamsLabel();
+    });
+
+    document.getElementById('ifr_team_rows').appendChild(tr);
+    syncTeamEmptyState();
+    refreshAllTeamsLabel();
+  }
+
+  // คืน null ถ้าเลือก "ทุกทีม" (backend เก็บเป็น team = NULL)
+  function teamValue(select) {
+    const v = select.value;
+    return (v === '' || v === ALL_TEAMS) ? null : v;
+  }
+
+  // แถวที่ยังไม่ได้เลือกทีมเลย ต้องดักไว้เอง เพราะฝั่ง backend มองว่า null = ทุกทีม
+  // ถ้าปล่อยผ่าน แถวที่ผู้ใช้ลืมเลือกจะกลายเป็น "ทุกทีม" โดยไม่รู้ตัว
+  function findRowsWithoutTeam() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      if (tr.querySelector('.ifr-team-select').value === '') rows.push(index + 1);
+    });
+    return rows;
+  }
+
+  function findRowsWithoutWeightCarried() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      if (tr.querySelector('.ifr-weight-carried').value === '') rows.push(index + 1);
+    });
+    return rows;
+  }
+
+  function collectTeams() {
+    const teams = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
+      teams.push({
+        team_id: teamValue(tr.querySelector('.ifr-team-select')),
+        weight_carried: orNull(tr.querySelector('.ifr-weight-carried').value),
+        freight_rate: orNull(tr.querySelector('.ifr-freight-rate').value),
+        discount_per_ton: orNull(tr.querySelector('.ifr-discount-per-ton').value),
+        freight_rate_per_ton_km: orNull(tr.querySelector('.ifr-rate-per-ton-km').value),
+        note: orNull(tr.querySelector('.ifr-team-note').value),
+      });
+    });
+    return teams;
+  }
+
+  // ---------- แปลง error ของ DRF เป็นข้อความอ่านง่าย ----------
+  function formatErrors(data) {
+    const lines = [];
+    Object.keys(data).forEach(function (key) {
+      const value = data[key];
+      if (key === 'teams' && Array.isArray(value)) {
+        value.forEach(function (item, index) {
+          if (item && Object.keys(item).length) {
+            Object.keys(item).forEach(function (field) {
+              lines.push('ทีมแถวที่ ' + (index + 1) + ' : ' + field + ' - ' + item[field]);
+            });
+          }
+        });
+      } else {
+        lines.push(key + ' : ' + value);
+      }
+    });
+    return lines.length ? lines.join(' | ') : JSON.stringify(data);
+  }
+
+  // ---------- submit ----------
+  document.getElementById('ifr_form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('ifr_submit');
+
+    const rowsWithoutTeam = findRowsWithoutTeam();
+    if (rowsWithoutTeam.length > 0) {
+      showAlert('กรุณาเลือกทีมในแถวที่ ' + rowsWithoutTeam.join(', ')
+                + ' (ถ้าใช้ราคาเดียวกัน ให้เลือก "' + allTeamsLabel() + '")', true);
+      return;
+    }
+
+    const rowsWithoutWeight = findRowsWithoutWeightCarried();
+    if (rowsWithoutWeight.length > 0) {
+      showAlert('กรุณาเลือกประเภทการแบกน้ำหนักในแถวที่ ' + rowsWithoutWeight.join(', '), true);
+      return;
+    }
+
+    btn.disabled = true;
+
+    const payload = {
+      origin: orNull(document.getElementById('ifr_origin').value),
+      destination: orNull(document.getElementById('ifr_destination').value),
+      base_fuel_price: orNull(document.getElementById('ifr_base_fuel_price').value),
+      distance: orNull(document.getElementById('ifr_distance').value),
+      payload_weight: orNull(document.getElementById('ifr_payload_weight').value),
+      fuel_used_per_trip: orNull(document.getElementById('ifr_fuel_used_per_trip').value),
+      fuel_freight_adjustment: orNull(document.getElementById('ifr_fuel_freight_adjustment').value),
+      average_fuel_price: orNull(document.getElementById('ifr_average_fuel_price').value),
+      note: orNull(document.getElementById('ifr_note').value),
+      teams: collectTeams(),
+    };
+
+    fetch(IFR_SUBMIT_URL, {
+      method: IFR_SUBMIT_METHOD,
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': IFR_CSRF },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (result.ok) {
+          showAlert('บันทึกสำเร็จ กำลังกลับไปหน้ารายการ...', false);
+          window.location.href = IFR_LIST_URL;
+        } else {
+          showAlert('บันทึกไม่สำเร็จ : ' + formatErrors(result.data), true);
+          btn.disabled = false;
+        }
+      })
+      .catch(function (err) {
+        console.error(err);
+        showAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+        btn.disabled = false;
+      });
+  });
+
+  // ห่อไว้ ไม่ส่ง addTeamRow ตรงๆ ไม่งั้น Event object จะถูกส่งเข้าไปเป็น data
+  document.getElementById('ifr_add_team').addEventListener('click', function () {
+    addTeamRow();
+  });
+
+  if (IFR_IS_EDIT) {
+    // สร้างแถวทีมเดิมรอไว้ก่อน (dropdown ทีมจะถูกเติม option ทีหลังเมื่อ API มาถึง)
+    EXISTING_TEAMS.forEach(function (row) {
+      addTeamRow(row);
+    });
+  } else {
+    // สร้างใหม่ : ตั้งต้นด้วยแถว "ทุกทีม" ให้เลย เพราะเป็นเคสที่ใช้บ่อยที่สุด
+    // ถ้าไม่ต้องการก็กดถังขยะลบแถวทิ้งได้
+    addTeamRow({ team_id: null });
+  }
+
+  loadDropdowns();
+  syncTeamEmptyState();
+</script>
+{% endblock %}

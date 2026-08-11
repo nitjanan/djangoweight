@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateTeam
 from django.contrib.auth.models import User
 from rest_framework.validators import ValidationError
 from rest_framework.authtoken.models import Token
@@ -266,3 +266,75 @@ class ClientUpdateLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientUpdateLog
         fields = ['product', 'weight_station', 'machine_name', 'from_version', 'to_version', 'update_applied', 'sql_applied']
+
+class BaseCompanyMapBaseCustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BaseCompanyMapBaseCustomer
+        fields = '__all__'
+
+class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
+    # ฟิลด์ในโมเดลชื่อ team แต่รับ/ส่ง JSON ด้วยคีย์ team_id ให้ตรงกับชื่อคอลัมน์ใน db
+    # ส่ง null หรือไม่ส่งมาเลย = แถวนี้ใช้กับ "ทุกทีม"
+    team_id = serializers.PrimaryKeyRelatedField(
+        source='team',
+        queryset=BaseCarTeam.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+    class Meta:
+        model = InternationalFreightRateTeam
+        # ไม่รับ international_freight_rate จาก client เพราะตัวแม่เป็นคนใส่ให้ตอนสร้าง
+        exclude = ['international_freight_rate', 'team']
+        extra_kwargs = {
+            'weight_carried': {'required': True, 'allow_null': False, 'allow_blank': False},
+        }
+
+
+class InternationalFreightRateSerializer(serializers.ModelSerializer):
+    teams = InternationalFreightRateTeamSerializer(many=True, required=False)
+
+    class Meta:
+        model = InternationalFreightRate
+        fields = '__all__'
+        # โมเดลอนุญาต null/blank ไว้เผื่อกรณีอื่น (เช่นแถว log) แต่ตอนสร้างรายการใหม่
+        # ต้องกรอกให้ครบทุกช่อง ห้ามสร้างรายการที่มีค่าว่าง/null
+        extra_kwargs = {
+            'origin': {'required': True, 'allow_null': False, 'allow_blank': False},
+            'destination': {'required': True, 'allow_null': False, 'allow_blank': False},
+            'base_fuel_price': {'required': True, 'allow_null': False},
+            'distance': {'required': True, 'allow_null': False},
+            'payload_weight': {'required': True, 'allow_null': False},
+            'fuel_freight_adjustment': {'required': True, 'allow_null': False},
+            'fuel_used_per_trip': {'required': True, 'allow_null': False},
+            'average_fuel_price': {'required': True, 'allow_null': False},
+            # ระบบเป็นคนใส่เวลาเอง ไม่ให้ client ส่งมาทับ
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
+
+    def create(self, validated_data):
+        # สร้างรายการหลัก + ทีมทั้งหมดในครั้งเดียว
+        teams_data = validated_data.pop('teams', [])
+        rate = InternationalFreightRate.objects.create(**validated_data)
+        for team_data in teams_data:
+            InternationalFreightRateTeam.objects.create(international_freight_rate=rate, **team_data)
+        return rate
+
+    def update(self, instance, validated_data):
+        # teams : ถ้าส่งมา จะแทนที่ของเดิมทั้งชุด (ลบทิ้งแล้วสร้างใหม่ตามที่ส่งมา)
+        # เพราะฟอร์มฝั่งหน้าเว็บส่งรายการทีมมาทั้งหมดทุกครั้งอยู่แล้ว
+        # ถ้าไม่ส่งคีย์ teams มาเลย = ไม่แตะทีมเดิม (ใช้กับ PATCH ที่แก้เฉพาะข้อมูลหลัก)
+        teams_data = validated_data.pop('teams', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if teams_data is not None:
+            instance.teams.all().delete()
+            for team_data in teams_data:
+                InternationalFreightRateTeam.objects.create(international_freight_rate=instance, **team_data)
+
+        return instance

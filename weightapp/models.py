@@ -1407,3 +1407,109 @@ class ClientUpdateLog(models.Model):
 
     def __str__(self):
         return f"{self.machine_name} -> {self.to_version}"
+
+class BaseCompanyMapBaseCustomer(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=120, verbose_name="ชื่อ")
+    base_company = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, verbose_name="บริษัท")
+    base_customer = models.ForeignKey(BaseCustomer, on_delete=models.CASCADE, verbose_name="ลูกค้า")
+    
+    class Meta:
+        db_table = 'base_company_map_base_customer'
+        ordering = ['id']
+        unique_together = ('base_company', 'base_customer')
+        verbose_name = 'บริษัทลูกค้า'
+        verbose_name_plural = 'ข้อมูลบริษัทลูกค้า'
+
+    def __str__(self):
+        return f"{self.base_company.name} - {self.base_customer.customer_name}"
+
+class InternationalFreightRate(models.Model):
+    id = models.AutoField(primary_key=True) #
+    origin = models.CharField(max_length=255, null=True, blank=True, verbose_name="ต้นทาง")#
+    destination = models.CharField(max_length=255, null=True, blank=True, verbose_name="ปลายทาง")#
+    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")#
+    distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
+    payload_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="น้ำหนักบรรทุก")#
+    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมันที่ใช้ ลิตรละ 1 บาท")#
+    fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")#
+    average_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาเฉลี่ย")#
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")#
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+
+    class Meta:
+        db_table = 'international_freight_rate'
+        ordering = ['id']
+        verbose_name = 'อัตราค่าขนส่งไปนอกประเทศ'
+        verbose_name_plural = 'อัตราค่าขนส่งไปนอกประเทศ'
+
+    def __str__(self):
+        return f"{self.origin} - {self.destination}"
+
+class CarryingweightTeam(models.TextChoices):
+    # เก็บลง db เป็นข้อความไทยตรงๆ และแสดงผลเป็นข้อความเดียวกัน
+    weight_carried_1 = "แบก นน.", "แบก นน."
+    weight_carried_2 = "ไม่แบก นน.", "ไม่แบก นน."
+    weight_carried_3 = "ตาม นน.", "ตาม นน."
+    weight_carried_4 = "นน. 35.01-40 ตัน", "นน. 35.01-40 ตัน"
+    weight_carried_5 = "นน. 40.01-50 ตันขึ้นไป", "นน. 40.01-50 ตันขึ้นไป"
+    weight_carried_6 = "น้อยกว่าหรือเท่ากับ 35 ตัน", "น้อยกว่าหรือเท่ากับ 35 ตัน"
+    weight_carried_7 = "น้ำหนัก 35.01-50 ตัน", "น้ำหนัก 35.01-50 ตัน"
+    weight_carried_8 = "นน 50 ตันขึ้นไป", "นน 50 ตันขึ้นไป"
+    weight_carried_9 = "นน 40-50 ตัน", "นน 40-50 ตัน"
+    weight_carried_10 = "เหมาเรทเดียว", "เหมาเรทเดียว"
+
+class InternationalFreightRateTeam(models.Model):
+    id = models.AutoField(primary_key=True)
+    international_freight_rate = models.ForeignKey(InternationalFreightRate, on_delete=models.CASCADE, related_name='teams', verbose_name="อัตราค่าขนส่งไปนอกประเทศ")
+    # base_car_team เป็นตารางเก่าจาก phpMyAdmin dump คอลัมน์ car_team_id ใช้ collation utf8mb4_general_ci
+    # ต่างจาก default ของ DB (utf8mb4_unicode_ci) ที่ Django ใช้สร้างคอลัมน์ใหม่
+    # MySQL 8 จะ error 3780 ถ้าสร้าง FK ข้าม collation จึงต้องบังคับ collation ของคอลัมน์ฝั่งนี้ให้ตรงกัน
+    # ดู migration 0274 ที่แปลง collation แล้วค่อยสร้าง constraint จริง
+    # team = NULL หมายถึง "ทุกทีม" (เคสเหมาเรทเดียวที่ทุกทีมคิดราคาเท่ากัน) เก็บแถวเดียวพอ
+    # ถ้าทีมไหนคิดไม่เท่ากัน ค่อยเพิ่มแถวที่ระบุทีมนั้นมาทับ
+    # การหาราคา : หาแถวที่ตรงทีมก่อน ไม่เจอค่อย fallback ไปแถว team = NULL
+    team = models.ForeignKey(BaseCarTeam, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ทีมขนส่ง (ว่าง = ทุกทีม)")
+    weight_carried = models.CharField(max_length=50, choices=CarryingweightTeam.choices, verbose_name="ประเภทการแบกน้ำหนัก")
+    freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ค่าขนส่ง")
+    discount_per_ton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ลดบาท/ตัน")
+    freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")
+    note = models.TextField(null=True, blank=True, verbose_name="หมายเหตุ")
+
+    class Meta:
+        db_table = 'international_freight_rate_team'
+        ordering = ['id']
+        verbose_name = 'อัตราค่าขนส่งไปนอกประเทศ (ทีม)'
+        verbose_name_plural = 'อัตราค่าขนส่งไปนอกประเทศ (ทีม)'
+
+    def __str__(self):
+        team_name = self.team.car_team_name if self.team else "ทุกทีม"
+        return f"{team_name} - {self.weight_carried}"
+
+
+
+class InternationalFreightRateLog(models.Model):
+    id = models.AutoField(primary_key=True)
+    version = models.IntegerField(default=1, verbose_name="เวอร์ชัน")
+    international_freight_rate = models.ForeignKey(InternationalFreightRate, on_delete=models.CASCADE, verbose_name="อัตราค่าขนส่งไปนอกประเทศ")
+    origin = models.CharField(max_length=255, null=True, blank=True, verbose_name="ต้นทาง")
+    destination = models.CharField(max_length=255, null=True, blank=True, verbose_name="ปลายทาง")
+    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")
+    distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")
+    payload_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="น้ำหนักบรรทุก")
+    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมันที่ใช้ ลิตรละ 1 บาท")
+    fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")
+    average_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาเฉลี่ย")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่อัพเดท")
+
+    class Meta:
+        db_table = 'international_freight_rate_log'
+        ordering = ['-version']
+        verbose_name = 'ประวัติอัตราค่าขนส่งไปนอกประเทศ'
+        verbose_name_plural = 'ประวัติอัตราค่าขนส่งไปนอกประเทศ'
+
+    def __str__(self):
+        return f"Version {self.version} - {self.origin} to {self.destination}"
+    

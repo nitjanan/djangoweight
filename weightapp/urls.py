@@ -295,4 +295,22 @@ urlpatterns = [
 
       path('api/updates/latest/', views.appReleaseLatest, name="appReleaseLatest"),
       path('api/updates/log/', views.appUpdateLog, name="appUpdateLog"),
+
+
+
+
+
+
+
+      path('baseCompanyCustomerMap/api/create/', views.baseCompanyCustomerMapCreate, name="baseCompanyCustomerMapCreate"),
+      path('baseCompanyCustomerMap/api/delete/<int:id>/' , views.baseCompanyCustomerMapDelete,name="baseCompanyCustomerMapDelete"),
+      path('internationalFreightRate/api/create/', views.internationalFreightRateCreate, name="internationalFreightRateCreate"),
+      path('internationalFreightRate/create', views.internationalFreightRate, name="createInternationalFreightRate"),
+      path('internationalFreightRate/api/update/<int:id>/' , views.internationalFreightRateUpdate,name="internationalFreightRateUpdate"),
+      path('internationalFreightRate/api/delete/<int:id>/' , views.internationalFreightRateDelete,name="internationalFreightRateDelete"),
+      path('internationalFreightRate/edit/<int:id>/', views.editInternationalFreightRate, name="editInternationalFreightRate"),
+      path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
+      path('baseCarTeam/api/options/', views.baseCarTeamOptions, name="baseCarTeamOptions"),
+      path('baseCompanyCustomerMap/api/options/', views.baseCompanyCustomerMapOptions, name="baseCompanyCustomerMapOptions"),
+
 ]

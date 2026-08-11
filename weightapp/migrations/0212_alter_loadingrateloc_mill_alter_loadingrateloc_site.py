@@ -11,7 +11,6 @@ class Migration(migrations.Migration):
     ]
 
     '''
-    
     operations = [
         migrations.AlterField(
             model_name='loadingrateloc',
@@ -24,5 +23,4 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(blank=True, db_column='site_id', max_length=120, null=True, on_delete=django.db.models.deletion.CASCADE, to='weightapp.basesite', verbose_name='รหัสปลายทาง'),
         ),
     ]
-
     '''

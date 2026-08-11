@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<style>
+  /* คอลัมน์ตัวเลข : ชิดขวาให้อ่านเทียบกันง่าย และห้ามตัวเลขตกบรรทัด
+     ส่วนหัวตารางยอมให้ขึ้นบรรทัดใหม่ได้ (ใช้ <br> คุมจุดตัดเอง) */
+  .ifr-col-num {
+    text-align: right;
+    white-space: nowrap;
+  }
+  thead .ifr-col-num {
+    white-space: normal;
+    line-height: 1.25;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ค่าขนส่งต่างประเทศ</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="{% url 'home' %}">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+              ค่าขนส่งต่างประเทศ
+            </li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+     <div class="card">
+      {% comment %} <div class="card-header">
+        <h5 class="card-title mb-0">เพิ่มรายการค่าขนส่งใหม่</h5>
+      </div> %
+      <div class="card-body">
+        <div id="ifr_alert" class="alert d-none" role="alert"></div>
+
+        <form id="ifr_form" class="row gx-3 gy-2" novalidate>
+          <div class="form-group col-md-3">
+            <label for="ifr_origin">ต้นทาง</label>
+            <input type="text" class="form-control" id="ifr_origin" name="origin" placeholder="เช่น ท่าเรือสงขลา" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_destination">ปลายทาง</label>
+            <input type="text" class="form-control" id="ifr_destination" name="destination" placeholder="เช่น สิงคโปร์" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_base_fuel_price">ราคาน้ำมันฐาน (บาท)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_base_fuel_price" name="base_fuel_price" placeholder="เช่น 32.50" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_distance">ระยะทาง (กม.)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_distance" name="distance" placeholder="เช่น 450.00" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_payload_weight">น้ำหนักบรรทุก (ตัน)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_payload_weight" name="payload_weight" placeholder="เช่น 25.00" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_used_payload_weight">ใช้น้ำหนักบรรทุกเท่าไหร่ (ตัน)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_used_payload_weight" name="used_payload_weight" placeholder="เช่น 22.50" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_fuel_freight_adjustment">ปรับค่าขนส่งตามน้ำมัน (ลิตรละ 1 บาท)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_fuel_freight_adjustment" name="fuel_freight_adjustment" placeholder="เช่น 1.00" />
+          </div>
+          <div class="form-group col-md-3">
+            <label for="ifr_average_price">ราคาเฉลี่ย (บาท)</label>
+            <input type="text" inputmode="decimal" class="form-control ifr-decimal" id="ifr_average_price" name="average_price" placeholder="เช่น 18500.00" />
+          </div>
+
+          <div class="col-12 mt-3">
+            <button type="submit" id="ifr_submit" class="btn btn-info btn-lg rounded-pill">
+              บันทึกรายการ <i class="fa-solid fa-circle-plus"></i>
+            </button>
+          </div>
+        </form>
+      </div> {% endcomment %}
+    </div> 
+
+    <div id="ifr_alert" class="alert d-none" role="alert"></div>
+
+    <div class="card">
+
+      <div class="card-header">
+        <a href="{% url 'createInternationalFreightRate' %}" class="btn btn-primary rounded-pill">เพิ่มรายการ <i class="fa-solid fa-circle-plus"></i></a>
+      </div>
+
+      <div class="card-body">
+        <div class="table-responsive my-3">
+          <table class="table table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th style="width: 110px;">ทีม</th>
+                <th>เส้นทาง</th>
+                <th class="ifr-col-num">ระยะทาง</th>
+                <th class="ifr-col-num">ราคาน้ำมันฐาน<br />(บาท/ลิตร)</th>
+                <th class="ifr-col-num">ราคาน้ำมันเฉลี่ย<br />(บาท/ลิตร)</th>
+                <th class="ifr-col-num">น้ำหนักบรรทุก<br />(ตัน/เที่ยว)</th>
+                <th class="ifr-col-num">ใช้น้ำมัน<br />(ลิตร/เที่ยว)</th>
+                <th class="ifr-col-num">ปรับค่าขนส่งตามน้ำมัน<br />ลิตรละ 1 บาท</th>
+                <th>วันที่สร้าง</th>
+                <th>วันที่อัปเดต<br />ล่าสุด</th>
+                <th>แก้ไข</th>
+                <th>ลบ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in ifr %}
+              <tr>
+                <td>
+                  <button type="button" class="btn btn-outline-primary btn-sm ifr-toggle-teams" data-target="ifr-teams-{{ i.id }}">
+                    <i class="fas fa-users"></i> {{ i.teams.all|length }} ทีม
+                  </button>
+                </td>
+                <td>{{ i.origin|default_if_none:"-" }} <i class="fa-solid fa-arrow-right text-muted"></i> {{ i.destination|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.distance|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.base_fuel_price|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.average_fuel_price|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.payload_weight|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.fuel_used_per_trip|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">{{ i.fuel_freight_adjustment|default_if_none:"-" }}</td>
+                <td>{{ i.created_at|date:"d/m/Y" }}</td>
+                <td>{{ i.updated_at|date:"d/m/Y"|default:"-" }}</td>
+                <td>
+                  <a href="{% url 'editInternationalFreightRate' i.id %}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-edit"></i> แก้ไข
+                  </a>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-danger btn-sm ifr-delete-btn" data-id="{{ i.id }}">
+                    <i class="fas fa-trash-alt"></i> ลบ
+                  </button>
+                </td>
+              </tr>
+
+              <!-- แถวรายละเอียดทีมของรายการนี้ ซ่อนไว้ กดปุ่มจำนวนทีมเพื่อเปิด -->
+              <tr id="ifr-teams-{{ i.id }}" class="d-none">
+                <td colspan="12" class="bg-light">
+                  {% if i.teams.all %}
+                  <table class="table table-sm table-bordered mb-0">
+                    <thead>
+                      <tr>
+                        <th>ทีม</th>
+                        <th>ประเภทการแบกน้ำหนัก</th>
+                        <th>ค่าขนส่ง</th>
+                        <th>ลดบาท/ตัน</th>
+                        <th>บาท/ตัน/กม.</th>
+                        <th>หมายเหตุ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for t in i.teams.all %}
+                      <tr>
+                        <td>
+                          {% if t.team %}
+                            {{ t.team.car_team_id }} : {{ t.team.car_team_name|default_if_none:"-" }}
+                          {% else %}
+                            {% if i.has_specific_team %}
+                              <span class="badge bg-warning">ทีมที่เหลือ</span>
+                            {% else %}
+                              <span class="badge bg-info">ทุกทีม</span>
+                            {% endif %}
+                          {% endif %}
+                        </td>
+                        <td>{{ t.weight_carried|default_if_none:"-" }}</td>
+                        <td>{{ t.freight_rate|default_if_none:"-" }}</td>
+                        <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
+                        <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
+                        <td>{{ t.note|default_if_none:"-" }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  {% else %}
+                  <div class="alert alert-light-warning color-warning mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> รายการนี้ยังไม่มีทีม
+                  </div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <th scope="row" colspan="12" class="text-center">
+                  <div class="alert alert-light-warning color-warning">
+                    <i class="bi bi-exclamation-triangle"></i> ไม่มีรายการค่าขนส่งต่างประเทศ
+                  </div>
+                </th>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <!--Pagination-->
+          <nav aria-label="Page navigation">
+            <ul class="pagination float-end">
+              {% if ifr.has_previous %}
+                <li class="page-item">
+                  <a class="page-link" href="{% my_url ifr.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                </li>
+              {% endif %}
+
+              {% if ifr.number|add:'-4' > 1 %}
+                <li class="page-item"><a class="page-link" href="{% my_url ifr.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+              {% endif %}
+
+              {% for i in ifr.paginator.page_range %}
+                {% if ifr.number == i %}
+                  <li class="page-item active" aria-current="page">
+                    <span class="page-link">{{ i }}<span class="sr-only">(current)</span></span>
+                  </li>
+                {% elif i > ifr.number|add:'-5' and i < ifr.number|add:'5' %}
+                  <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+                {% endif %}
+              {% endfor %}
+
+              {% if ifr.paginator.num_pages > ifr.number|add:'4' %}
+                <li class="page-item"><a class="page-link" href="{% my_url ifr.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+              {% endif %}
+
+              {% if ifr.has_next %}
+                <li class="page-item">
+                  <a class="page-link" href="{% my_url ifr.next_page_number 'page' request.GET.urlencode %}">Next</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
+                </li>
+              {% endif %}
+            </ul>
+          </nav>
+          <!--end of Pagination-->
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script>
+  const IFR_CSRF = "{{ csrf_token }}";
+  const IFR_CREATE_URL = "{% url 'internationalFreightRateCreate' %}";
+  const IFR_DELETE_URL = "{% url 'internationalFreightRateDelete' 0 %}";
+
+  function ifrShowAlert(message, isError) {
+    const box = document.getElementById('ifr_alert');
+    box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    box.textContent = message;
+  }
+
+  function ifrValue(id) {
+    const v = document.getElementById(id).value.trim();
+    return v === '' ? null : v;
+  }
+
+  // ช่องตัวเลขเป็น type="text" (ไม่ใช้ type="number") เพราะ browser จะบล็อกการ submit
+  // ทั้งฟอร์มแบบเงียบ ๆ ถ้าพิมพ์อะไรที่ browser มองว่าไม่ใช่เลข (เช่น คอมมาคั่นหลักพัน) —
+  // ที่นี่เรารับ string มา ตัดคอมมาคั่นหลักพันออกเอง แล้วค่อย validate เอง จะได้ error ที่เห็นชัดเจน
+  function ifrDecimalValue(id) {
+    const raw = document.getElementById(id).value.trim();
+    if (raw === '') return { value: null, invalid: false };
+    const cleaned = raw.replace(/,/g, '');
+    if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return { value: null, invalid: true };
+    return { value: cleaned, invalid: false };
+  }
+
+  const IFR_FIELD_LABELS = {
+    origin: 'ต้นทาง',
+    destination: 'ปลายทาง',
+    base_fuel_price: 'ราคาน้ำมันฐาน',
+    distance: 'ระยะทาง',
+    payload_weight: 'น้ำหนักบรรทุก',
+    fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
+    fuel_freight_adjustment: 'ปรับค่าขนส่งตามน้ำมัน',
+    average_fuel_price: 'ราคาเฉลี่ย',
+  };
+
+  var ifrForm = document.getElementById('ifr_form');
+  if (ifrForm) ifrForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('ifr_submit');
+
+    const payload = { origin: ifrValue('ifr_origin'), destination: ifrValue('ifr_destination') };
+    const decimalFields = ['base_fuel_price', 'distance', 'payload_weight', 'fuel_used_per_trip', 'fuel_freight_adjustment', 'average_fuel_price'];
+    const invalidFields = [];
+
+    decimalFields.forEach(function (field) {
+      const result = ifrDecimalValue('ifr_' + field);
+      if (result.invalid) invalidFields.push(IFR_FIELD_LABELS[field] + ' (รูปแบบตัวเลขไม่ถูกต้อง)');
+      payload[field] = result.value;
+    });
+
+    // ทุกฟิลด์บังคับกรอก (ตรงกับที่ backend บังคับ) เช็คก่อนส่งเพื่อให้เห็น error ชัดเจน ไม่เงียบ
+    Object.keys(IFR_FIELD_LABELS).forEach(function (field) {
+      if (payload[field] === null && invalidFields.indexOf(IFR_FIELD_LABELS[field] + ' (รูปแบบตัวเลขไม่ถูกต้อง)') === -1) {
+        invalidFields.push(IFR_FIELD_LABELS[field] + ' (ห้ามเว้นว่าง)');
+      }
+    });
+
+    if (invalidFields.length > 0) {
+      ifrShowAlert('กรุณาตรวจสอบ: ' + invalidFields.join(', '), true);
+      return;
+    }
+
+    btn.disabled = true;
+
+    fetch(IFR_CREATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': IFR_CSRF },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (result.ok) {
+          ifrShowAlert('บันทึกสำเร็จ กำลังโหลดหน้าใหม่...', false);
+          window.location.reload();
+        } else {
+          ifrShowAlert('บันทึกไม่สำเร็จ: ' + JSON.stringify(result.data), true);
+          btn.disabled = false;
+        }
+      })
+      .catch(function (err) {
+        console.error(err);
+        ifrShowAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+        btn.disabled = false;
+      });
+  });
+
+  document.querySelectorAll('.ifr-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!confirm('คุณต้องการลบรายการค่าขนส่งนี้หรือไม่ ?')) return;
+      btn.disabled = true;
+
+      const url = IFR_DELETE_URL.replace(/0\/$/, btn.dataset.id + '/');
+
+      fetch(url, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': IFR_CSRF },
+      })
+        .then(function (res) {
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            ifrShowAlert('ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', true);
+            btn.disabled = false;
+          }
+        })
+        .catch(function (err) {
+          console.error(err);
+          ifrShowAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+          btn.disabled = false;
+        });
+    });
+  });
+
+  // เปิด/ปิดแถวรายละเอียดทีม
+  document.querySelectorAll('.ifr-toggle-teams').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const row = document.getElementById(btn.dataset.target);
+      if (row) row.classList.toggle('d-none');
+    });
+  });
+</script>
+{% endblock %}

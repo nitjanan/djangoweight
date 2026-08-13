@@ -10107,7 +10107,10 @@ def viewInternationalFreightRate(request):
         return redirect('logout')
 
     # prefetch ทีม (พร้อมข้อมูล base_car_team) มาในทีเดียว ไม่งั้นตารางจะยิง query ต่อ 1 แถว
-    data = InternationalFreightRate.objects.prefetch_related('teams__team')
+    # select_related ต้นทาง/ปลายทาง ด้วย เพราะตารางเรียก .name ทุกแถว
+    data = (InternationalFreightRate.objects
+            .select_related('origin', 'destination')
+            .prefetch_related('teams__team'))
 
     #สร้าง page
     p = Paginator(data, 10)

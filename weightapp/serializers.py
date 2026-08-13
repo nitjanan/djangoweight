@@ -301,8 +301,10 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         # โมเดลอนุญาต null/blank ไว้เผื่อกรณีอื่น (เช่นแถว log) แต่ตอนสร้างรายการใหม่
         # ต้องกรอกให้ครบทุกช่อง ห้ามสร้างรายการที่มีค่าว่าง/null
         extra_kwargs = {
-            'origin': {'required': True, 'allow_null': False, 'allow_blank': False},
-            'destination': {'required': True, 'allow_null': False, 'allow_blank': False},
+            # origin/destination เป็น FK แล้ว รับเป็น id ของ BaseCompanyMapBaseCustomer
+            # ห้ามใส่ allow_blank เพราะเป็น option ของฟิลด์ข้อความเท่านั้น จะ error ตอนสร้าง serializer
+            'origin': {'required': True, 'allow_null': False},
+            'destination': {'required': True, 'allow_null': False},
             'base_fuel_price': {'required': True, 'allow_null': False},
             'distance': {'required': True, 'allow_null': False},
             'payload_weight': {'required': True, 'allow_null': False},

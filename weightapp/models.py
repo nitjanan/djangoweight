@@ -1426,8 +1426,11 @@ class BaseCompanyMapBaseCustomer(models.Model):
 
 class InternationalFreightRate(models.Model):
     id = models.AutoField(primary_key=True) #
-    origin = models.CharField(max_length=255, null=True, blank=True, verbose_name="ต้นทาง")#
-    destination = models.CharField(max_length=255, null=True, blank=True, verbose_name="ปลายทาง")#
+    # ผูกกับคู่บริษัท-ลูกค้าที่ map ไว้แล้ว แทนการเก็บชื่อเป็นข้อความ
+    # PROTECT : ห้ามลบแถว map ที่ยังมีอัตราค่าขนส่งอ้างอยู่ ไม่งั้นจะเหลือรายการที่ไม่รู้ต้นทาง/ปลายทาง
+    # ชื่อดึงจาก origin.name เอา ไม่เก็บซ้ำในตารางนี้ กันข้อมูลขัดกันเองเวลามีคนแก้ชื่อในตาราง map
+    origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_origins', null=True, blank=True, verbose_name="ต้นทาง")
+    destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_destinations', null=True, blank=True, verbose_name="ปลายทาง")
     base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")#
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
     payload_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="น้ำหนักบรรทุก")#
@@ -1445,7 +1448,9 @@ class InternationalFreightRate(models.Model):
         verbose_name_plural = 'อัตราค่าขนส่งไปนอกประเทศ'
 
     def __str__(self):
-        return f"{self.origin} - {self.destination}"
+        origin = self.origin.name if self.origin else "-"
+        destination = self.destination.name if self.destination else "-"
+        return f"{origin} - {destination}"
 
 class CarryingweightTeam(models.TextChoices):
     # เก็บลง db เป็นข้อความไทยตรงๆ และแสดงผลเป็นข้อความเดียวกัน

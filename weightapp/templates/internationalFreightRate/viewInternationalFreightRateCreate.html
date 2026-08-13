@@ -48,13 +48,13 @@
           <div class="row gx-3 gy-2">
             <div class="form-group col-md-3">
               <label for="ifr_origin">ต้นทาง <span class="text-danger">*</span></label>
-              <select class="form-select" id="ifr_origin" name="origin" data-selected="{{ ifr_obj.origin|default_if_none:'' }}">
+              <select class="form-select" id="ifr_origin" name="origin" data-selected="{{ ifr_obj.origin_id|default_if_none:'' }}">
                 <option value="">-- กำลังโหลด --</option>
               </select>
             </div>
             <div class="form-group col-md-3">
               <label for="ifr_destination">ปลายทาง <span class="text-danger">*</span></label>
-              <select class="form-select" id="ifr_destination" name="destination" data-selected="{{ ifr_obj.destination|default_if_none:'' }}">
+              <select class="form-select" id="ifr_destination" name="destination" data-selected="{{ ifr_obj.destination_id|default_if_none:'' }}">
                 <option value="">-- กำลังโหลด --</option>
               </select>
             </div>
@@ -163,10 +163,6 @@
   const IFR_SUBMIT_METHOD = 'POST';
   {% endif %}
 
-  // ค่าเดิมของ dropdown ต้นทาง/ปลายทาง ใช้เลือกกลับหลัง options โหลดเสร็จ
-  const IFR_CURRENT_ORIGIN = "{{ ifr_obj.origin|default_if_none:''|escapejs }}";
-  const IFR_CURRENT_DESTINATION = "{{ ifr_obj.destination|default_if_none:''|escapejs }}";
-
   // [[value, label], ...] จาก CarryingweightTeam.choices
   const WEIGHT_CARRIED_CHOICES = JSON.parse(
     document.getElementById('ifr_weight_carried_choices').textContent
@@ -202,25 +198,20 @@
 
   // ---------- โหลด dropdown ----------
   function fillCustomerSelect(select, rows) {
-    // รายการมาจากตาราง base_company_map_base_customer ใช้คอลัมน์ name
-    // origin / destination ใน model เป็น CharField จึงเก็บ name ลงไปตรงๆ
+    // รายการมาจากตาราง base_company_map_base_customer
+    // origin / destination เป็น FK แล้ว จึงส่ง id ไปให้ backend ส่วนที่แสดงคือ name
     let html = '<option value="">-- เลือก --</option>';
     rows.forEach(function (r) {
-      html += '<option value="' + escapeHtml(r.name) + '">' + escapeHtml(r.name) + '</option>';
+      html += '<option value="' + r.id + '">' + escapeHtml(r.name) + '</option>';
     });
     select.innerHTML = html;
 
     // ตอนแก้ไข : เลือกค่าเดิมกลับ ต้องทำก่อน init choices.js ไม่งั้นมันจะไม่เห็นค่าที่เลือกไว้
+    // ไม่ต้องมี fallback เติม option ย้อนหลังแล้ว เพราะ FK ตั้ง PROTECT ไว้
+    // แถว map ที่ถูกอ้างอยู่จะลบไม่ได้ ค่าเดิมจึงมีใน options เสมอ
     const current = select.dataset.selected || '';
     if (current) {
       select.value = current;
-      // ค่าเดิมอาจเป็นชื่อที่ถูกลบออกจากตาราง map ไปแล้ว จึงไม่มีใน options ที่โหลดมา
-      // ถ้าไม่เติมกลับเข้าไป การกดบันทึกจะทำให้ค่าเดิมหายโดยไม่มีใครรู้
-      if (select.value !== current) {
-        select.insertAdjacentHTML('afterbegin',
-          '<option value="' + escapeHtml(current) + '">' + escapeHtml(current) + ' (ค่าเดิม)</option>');
-        select.value = current;
-      }
     }
 
     // ทำให้พิมพ์ค้นหาชื่อลูกค้าได้ ไม่ต้องเลื่อนหาในลิสต์หลายพันรายการ

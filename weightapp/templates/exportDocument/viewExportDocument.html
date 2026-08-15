@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block css %}
+<style>
+  /* ตารางกว้างกว่าจอ ให้เลื่อนในกล่องตัวเองไม่ใช่ทั้งหน้า และหัวตารางค้างไว้ตอนเลื่อน */
+  .trip-scroll {
+    overflow-x: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .trip-table {
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+  .trip-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    vertical-align: middle;
+  }
+  /* แถบตัวอักษรคอลัมน์ A-M ให้เทียบกับไฟล์ excel ได้ทันทีว่าช่องไหนคือช่องไหน */
+  .trip-table thead .col-letter th {
+    top: 38px;
+    font-weight: 400;
+    font-size: 0.7rem;
+    color: #6c757d;
+    border-bottom: 2px solid #dee2e6;
+  }
+  .trip-num {
+    text-align: right;
+  }
+  /* ธีมมี 2 กฎที่ทับสไตล์ของ cell ต้องเขียนให้ specificity สูงกว่าถึงจะชนะ
+       .table-striped>tbody>tr:nth-of-type(odd)>*  กำหนด color ทับ เฉพาะแถวคี่ (0,2,2)
+         ถ้าเขียนสั้นกว่านี้ สีจะติดแค่แถวคู่ กลายเป็นแดงสลับเทา
+       .table>:not(caption)>*>*  วาดพื้นแถวด้วย box-shadow inset ทับ background อีกชั้น
+         ต้องสั่ง box-shadow: none เฉพาะช่องที่อยากทาสีเอง
+     ตัวเลือก a > b > c ข้างล่างนี้คือ (0,2,3) ซึ่งชนะทั้งคู่ */
+
+  /* ช่องที่ db ยังไม่มีข้อมูล ทำให้เห็นชัดว่าเว้นไว้ตั้งใจ ไม่ใช่ลืม */
+  .trip-table > tbody > tr > td.trip-todo {
+    background-color: #fff8e1;
+    box-shadow: none;
+  }
+  /* ทีมที่เราเติม "ไม่ระบุทีม" ให้ : แดงเฉพาะตัวอักษรในคอลัมน์ทีม ไม่ทาพื้น ไม่ทาทั้งแถว */
+  .trip-table > tbody > tr > td.trip-no-team {
+    color: #d32f2f;
+    font-weight: 700;
+    opacity: 1;
+  }
+  .trip-cancel td {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  /* ปุ่มที่กำลังทำงานอยู่ กันกดซ้ำและบอกผู้ใช้ว่ายังไม่เสร็จ */
+  .btn.is-busy {
+    pointer-events: none;
+    opacity: 0.75;
+  }
+  .btn-spinner {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    margin-right: 0.4em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    animation: btn-spin 0.7s linear infinite;
+  }
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>บันทึกรายเที่ยว (เคส 1 ลงท่าเรือของตัวเอง)</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Export เอกสาร</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">ตัวกรอง</h5>
+      </div>
+      <div class="card-body">
+        <form method="get" class="row gx-3 gy-2 align-items-end">
+          <div class="form-group col-md-3">
+            <label for="month">ประจำเดือน</label>
+            <select class="form-select" id="month" name="month">
+              {% for m in month_list %}
+                <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="bws">ท่าปลายทาง</label>
+            <select class="form-select" id="bws" name="bws">
+              <option value="">ทั้งหมด</option>
+              {% for b in bws_options %}
+                <option value="{{ b.id }}" {% if b.id == selected_bws %}selected{% endif %}>
+                  {{ b.id }} - {{ b.company.name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="team">ทีมรถร่วม</label>
+            <select class="form-select" id="team" name="team">
+              <option value="">ทั้งหมด</option>
+              {% for t in team_options %}
+                <option value="{{ t.car_team_id }}" {% if t.car_team_id == selected_team %}selected{% endif %}>
+                  {{ t.car_team_name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="stone">ชนิดแร่/หิน</label>
+            <select class="form-select" id="stone" name="stone">
+              <option value="">ทั้งหมด</option>
+              {% for s in stone_options %}
+                <option value="{{ s }}" {% if s == selected_stone %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
+                     value="1" {% if include_cancel %}checked{% endif %}>
+              <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
+            </div>
+            <button type="submit" class="btn btn-primary" data-busy="กำลังโหลด...">
+              <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
+            </button>
+            <!-- ปุ่ม export ส่งตัวกรองชุดเดียวกับที่หน้าจอใช้อยู่ ไฟล์จะได้ตรงกับที่เห็น
+                 ส่งต่อทั้ง query string ไม่ไล่ระบุทีละตัว เพิ่มตัวกรองใหม่ทีหลังจะได้ไม่ลืมแก้ตรงนี้ -->
+            <a class="btn btn-success {% if over_limit %}disabled{% endif %}" data-busy-download="กำลังสร้างไฟล์รายงาน..."
+               href="{% url 'exportExcelExportDocument' %}?{{ request.GET.urlencode }}">
+              <i class="fa-solid fa-file-excel"></i> Export Excel
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if over_limit %}
+    <div class="alert alert-danger">
+      เดือนนี้มี {{ summary.trip_count|intcomma }} เที่ยว เกินที่ไฟล์ template รองรับ ({{ max_trips|intcomma }} เที่ยว)
+      กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่ม เพื่อลดจำนวนแถวก่อน export
+    </div>
+    {% endif %}
+
+    <!-- แก้ไขข้อมูลผ่าน Excel : แยกจากปุ่ม Export รายงานด้านบนคนละไฟล์คนละเรื่อง -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">แก้ไขข้อมูลผ่าน Excel</h5>
+        <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
+          โหลดไฟล์ไปแก้ → อัปกลับ → ระบบให้ดูก่อนว่าจะเปลี่ยนอะไร → กดยืนยันถึงจะบันทึกลงฐานข้อมูล |
+          แก้ได้ 3 ช่อง <strong>นน.ต้นทาง / นน.ปลายทาง / ทีมรถร่วม</strong> | คนละไฟล์กับปุ่ม Export รายงานด้านบน
+        </p>
+      </div>
+      <div class="card-body">
+        <div class="row gy-2 align-items-end">
+          <div class="col-md-5">
+            <a class="btn btn-outline-primary" data-busy-download="กำลังสร้างไฟล์..."
+               href="{% url 'exportExcelTripEdit' %}?{{ request.GET.urlencode }}">
+              <i class="fa-solid fa-download"></i> Export ไฟล์สำหรับแก้ไข
+            </a>
+          </div>
+          <div class="col-md-7">
+            <form method="post" action="{% url 'uploadTripEdit' %}" enctype="multipart/form-data"
+                  class="d-flex gap-2">
+              {% csrf_token %}
+              <input type="file" name="trip_edit_file" accept=".xlsx" class="form-control" required>
+              <button type="submit" class="btn btn-primary text-nowrap" data-busy="กำลังอัปโหลดและตรวจไฟล์...">
+                <i class="fa-solid fa-upload"></i> อัปโหลด
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {% if pending_edit %}
+        <hr>
+        <h6 class="mb-2">
+          รายการรอยืนยัน จากไฟล์ <code>{{ pending_edit.filename }}</code>
+        </h6>
+
+        {% if pending_edit.error_count %}
+        <div class="alert alert-light-danger color-danger">
+          มีปัญหา {{ pending_edit.error_count }} แถว (แถวเหล่านี้จะถูกข้าม)
+          <ul class="mb-0 mt-1">
+            {% for e in pending_edit.errors %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if pending_edit.changes %}
+        <div class="trip-scroll mb-3" style="max-height: 40vh;">
+          <table class="table table-sm table-striped trip-table">
+            <thead>
+              <tr>
+                <th>weight_id</th><th>วันที่</th><th>เลขที่ชั่ง</th>
+                <th>ช่อง</th><th>ค่าเดิม</th><th>ค่าใหม่</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in pending_edit.changes %}
+                {% for f in c.fields %}
+                <tr>
+                  {% if forloop.first %}
+                  <td rowspan="{{ c.fields|length }}">{{ c.weight_id }}</td>
+                  <td rowspan="{{ c.fields|length }}">{{ c.date }}</td>
+                  <td rowspan="{{ c.fields|length }}">{{ c.doc_id }}</td>
+                  {% endif %}
+                  <td>{{ f.label }}</td>
+                  <td class="text-muted">{{ f.old }}</td>
+                  <td><strong>{{ f.new }}</strong></td>
+                </tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="d-flex gap-2">
+          <form method="post" action="{% url 'confirmTripEdit' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success" data-busy="กำลังบันทึกลงฐานข้อมูล...">
+              <i class="fa-solid fa-check"></i>
+              ยืนยันบันทึก {{ pending_edit.changes|length }} เที่ยว
+            </button>
+          </form>
+          <form method="post" action="{% url 'cancelTripEdit' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-light-secondary">ยกเลิก</button>
+          </form>
+        </div>
+        {% else %}
+        <div class="alert alert-light-secondary mb-0">
+          ไม่มีรายการที่ต้องเปลี่ยน (ข้อมูลในไฟล์ตรงกับฐานข้อมูลอยู่แล้ว)
+          <form method="post" action="{% url 'cancelTripEdit' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-light-secondary ms-2">ปิด</button>
+          </form>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-light-danger color-danger{% else %}alert-light-success color-success{% endif %}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if summary.no_team_count %}
+    <div class="alert alert-light-danger color-danger">
+      เดือนนี้มี <strong>{{ summary.no_team_count|intcomma }} เที่ยว</strong> ที่ไม่มีทีมรถร่วมใน db
+      ระบบเติมคำว่า <strong class="text-danger">ไม่ระบุทีม</strong> ให้แทน และไฮไลต์สีแดงไว้ทั้งในตารางนี้และในไฟล์ excel
+      โดยในไฟล์จะดันขึ้นเป็น<strong>บล็อกแรกของหน้าสรุปจ่ายรถร่วมและปะหน้าจ่ายรถร่วม</strong>
+      ส่วน sheet บันทึกรายเที่ยว ยังเรียงตามวันที่เก่าไปใหม่ตามปกติ
+      <br>
+      ถ้าปล่อยว่างไว้ หน้า "สรุปจ่ายรถร่วม" กับ "ปะหน้าจ่ายรถร่วม" ในไฟล์จะว่างทั้งหน้า ไม่ใช่ว่างแค่แถวที่ทีมหาย
+      เพราะสูตรจัดกลุ่มของ sheet นั้นเจอช่องว่างแล้วพังทั้งตาราง
+    </div>
+    {% endif %}
+
+    <div class="alert {% if rate_stats.wc_filled %}alert-light-warning color-warning{% else %}alert-light-danger color-danger{% endif %}">
+      <strong>sheet อัตราค่าขนส่ง</strong> — ดึงจากตาราง <code>international_freight_rate</code>
+      ({{ rate_stats.rate_in_db|intcomma }} ชุดราคาใน db |
+      ตรงกับเส้นทางที่วิ่งเดือนนี้ {{ rate_stats.route_matched }} ชุด |
+      เขียนลง sheet ได้ {{ rate_stats.sheet_rows|intcomma }} แถว{% if rate_stats.truncated %}
+      <span class="text-danger">เกินที่ sheet รับได้ ตัดทิ้ง {{ rate_stats.truncated|intcomma }} แถว</span>{% endif %})
+      <br>
+      คอลัมน์ E (แบก นน.) คิดจาก นน.ต้นทาง เทียบช่วงที่สัญญากำหนด ได้ <strong>{{ rate_stats.wc_filled|intcomma }}</strong> เที่ยว
+      (ไม่เก็บลง db คิดสดทุกครั้ง) |
+      หาอัตราไม่เจอ <strong>{{ rate_stats.wc_missing|intcomma }}</strong> เที่ยว
+      {% if rate_stats.wc_unresolved %}| เจออัตราแต่เทียบช่วงน้ำหนักไม่ลงตัว
+      <strong>{{ rate_stats.wc_unresolved|intcomma }}</strong> เที่ยว{% endif %}
+      {% if not rate_stats.wc_filled %}
+      <br>
+      <strong>ตอนนี้ยังไม่มีเที่ยวไหนหาอัตราเจอเลย ไฟล์ที่ export ออกมาจะมีรายได้เป็น 0 ทุกแถว</strong>
+      ต้องไปเพิ่มข้อมูลในหน้า Freight Rate ให้ตรงกับเส้นทางที่วิ่งจริงก่อน
+      {% endif %}
+    </div>
+
+    <div class="alert alert-light-warning color-warning">
+      ไฟล์ที่ export จะเติมคอลัมน์ A-K ลง sheet "บันทึกรายเที่ยว" และเติม sheet "อัตราค่าขนส่ง" ให้
+      ส่วนคอลัมน์ L/M กับ sheet สรุปเหมือง / ปะหน้าจ่ายรถร่วม / สรุปจ่ายรถร่วม เป็นสูตรในไฟล์ที่คิดให้เอง |
+      <strong>คอลัมน์ G (นามที่จ่าย) ยังเว้นว่าง</strong> เพราะไม่มีที่เก็บใน db
+      ช่องตรวจ O7 / O11 ในไฟล์จึงจะขึ้นว่า "มีแถวกรอกไม่ครบ" จนกว่าจะเติมช่องนี้ |
+      sheet "oil" ยังต้องกรอกมือตามเดิม
+    </div>
+
+    <div class="row">
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">จำนวนเที่ยว</h6>
+            <h4 class="mb-0">{{ summary.trip_count|default:0|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.ต้นทาง (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.origin_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.ปลายทาง (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.dest_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.จ่ายค่าบรรทุก (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.pay_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">รายเที่ยว</h5>
+        <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
+          หัวตารางเรียงตามคอลัมน์ A-M ของ sheet "บันทึกรายเที่ยว" ในไฟล์ รายเที่ยว_template_v11.xlsx |
+          ช่องพื้นเหลืองคือช่องที่ยังไม่มีข้อมูลใน db
+        </p>
+      </div>
+      <div class="card-body">
+        <div class="trip-scroll">
+          <table class="table table-striped table-hover trip-table">
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>เหมืองต้นทาง</th>
+                <th>ท่าปลายทาง</th>
+                <th>ชนิดแร่/หิน</th>
+                <th>แบก นน.</th>
+                <th>ทีมรถร่วม</th>
+                <th>ทะเบียนรถ</th>
+                <th>เลขที่ชั่ง</th>
+                <th class="trip-num">นน.ต้นทาง</th>
+                <th class="trip-num">นน.ปลายทาง</th>
+                <th class="trip-num">นน.ส่วนต่าง</th>
+                <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
+                <th>weight_id</th>
+              </tr>
+              <tr class="col-letter">
+                {# ข้าม G (นามที่จ่าย) เพราะเอาคอลัมน์นั้นออกจากตารางแล้ว แต่ในไฟล์ยังมีอยู่ #}
+                <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
+                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
+                <th>นอกไฟล์ template</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr {% if r.is_cancel %}class="trip-cancel"{% endif %}>
+                <td>{{ r.date|date:"d/m/Y" }}</td>
+                <td title="{{ r.origin_raw }} ({{ r.customer_id }})">{{ r.origin|default:"-" }}</td>
+                <td title="{{ r.bws_id }}">{{ r.destination|default:"-" }}</td>
+                <td>{{ r.stone|default:"-" }}</td>
+                <td class="trip-todo"></td>
+                <td class="{% if r.team_missing %}trip-no-team{% endif %}">{{ r.team }}</td>
+                <td>{{ r.car_registration|default:"-" }}</td>
+                <td>{{ r.doc_id|default:"-" }}</td>
+                <td class="trip-num">{{ r.origin_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
+                <td>{{ r.weight_id }}</td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="13" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if trips.paginator.num_pages > 1 %}
+        <nav class="mt-3">
+          <ul class="pagination">
+            {% if trips.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?month={{ selected_month }}&bws={{ selected_bws }}&team={{ selected_team }}{% if include_cancel %}&include_cancel=1{% endif %}&page={{ trips.previous_page_number }}">ก่อนหน้า</a>
+              </li>
+            {% endif %}
+            <li class="page-item disabled">
+              <span class="page-link">หน้า {{ trips.number }} / {{ trips.paginator.num_pages }}</span>
+            </li>
+            {% if trips.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?month={{ selected_month }}&bws={{ selected_bws }}&team={{ selected_team }}{% if include_cancel %}&include_cancel=1{% endif %}&page={{ trips.next_page_number }}">ถัดไป</a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  (function () {
+    // ใส่วงกลมหมุนหน้าปุ่มแล้วปิดปุ่มไว้ กันกดซ้ำและบอกผู้ใช้ว่ากำลังทำงานอยู่
+    function setBusy(btn, label) {
+      if (btn.classList.contains('is-busy')) return false;
+      btn.dataset.originalHtml = btn.innerHTML;
+      btn.classList.add('is-busy');
+      btn.setAttribute('aria-busy', 'true');
+      btn.innerHTML = '<span class="btn-spinner"></span>' + label;
+      return true;
+    }
+
+    function clearBusy(btn) {
+      if (!btn.classList.contains('is-busy')) return;
+      btn.classList.remove('is-busy');
+      btn.removeAttribute('aria-busy');
+      if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+    }
+
+    // ฟอร์มธรรมดา : กดแล้วหน้าจะเปลี่ยน ปล่อยให้หมุนไปจนโหลดหน้าใหม่
+    document.querySelectorAll('form').forEach(function (form) {
+      form.addEventListener('submit', function () {
+        var btn = form.querySelector('[data-busy]');
+        if (btn) setBusy(btn, btn.dataset.busy);
+      });
+    });
+
+    // ลิงก์ดาวน์โหลด : หน้าไม่เปลี่ยน เลยไม่รู้ว่าเสร็จเมื่อไหร่
+    // ให้ฝั่ง server ส่ง cookie ที่มี token เดียวกันกลับมาตอนไฟล์พร้อม แล้วคอยเช็ค cookie นั้น
+    document.querySelectorAll('[data-busy-download]').forEach(function (link) {
+      link.addEventListener('click', function () {
+        if (link.classList.contains('disabled')) return;
+        var token = 'dl' + Date.now();
+        var url = new URL(link.href, window.location.origin);
+        url.searchParams.set('dl', token);
+        link.href = url.pathname + url.search;
+
+        if (!setBusy(link, link.dataset.busyDownload)) return;
+
+        var deadline = Date.now() + 180000;   // เผื่อไฟล์ใหญ่ ถ้าเกินนี้ค่อยคืนปุ่ม
+        var timer = setInterval(function () {
+          var done = document.cookie.indexOf('exportDownloadToken=' + token) !== -1;
+          if (done || Date.now() > deadline) {
+            clearInterval(timer);
+            clearBusy(link);
+            document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
+          }
+        }, 300);
+      });
+    });
+
+    // กลับมาหน้านี้ด้วยปุ่ม back ของเบราว์เซอร์ ต้องคืนปุ่มให้กดได้
+    window.addEventListener('pageshow', function () {
+      document.querySelectorAll('.btn.is-busy').forEach(clearBusy);
+    });
+  })();
+</script>
+{% endblock %}

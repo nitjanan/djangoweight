@@ -3,6 +3,35 @@
 
 {% block css %}
 <link rel="stylesheet" href="{% static 'extensions/choices.js/public/assets/styles/choices.min.css' %}" />
+<style>
+  /* .table-responsive ตั้ง overflow-x: auto ซึ่งทำให้แกน y กลายเป็น auto ตามไปด้วย
+     รายการ dropdown ของ choices.js ที่กางลงมาจึงโดนตัดขาด
+     จอใหญ่ปล่อยให้ล้นออกมาได้ ส่วนจอเล็กคงการเลื่อนแนวนอนไว้เหมือนเดิม */
+  @media (min-width: 992px) {
+    .ifr-team-table-wrap { overflow: visible; }
+  }
+  /* choices.js ใส่ margin-bottom มาให้เอง ในตารางไม่ต้องการ */
+  .ifr-team-table-wrap .choices { margin-bottom: 0; }
+
+  /* จัดกลุ่มทีม : เส้นหนาคั่นระหว่างทีม ส่วนแถวที่เป็นทีมเดิมต่อจากด้านบนทำให้จางลง
+     ยังคงให้แก้ทีมในทุกแถวได้ตามเดิม แค่ทำให้เห็นด้วยตาว่าแถวไหนเป็นทีมเดียวกัน */
+  #ifr_team_rows tr.ifr-team-group-start > td {
+    border-top: 2px solid rgba(0, 0, 0, .18);
+  }
+  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell {
+    position: relative;
+    padding-left: 2rem;
+    opacity: .55;
+  }
+  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell::before {
+    content: "↳";
+    position: absolute;
+    left: .75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(0, 0, 0, .45);
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -99,7 +128,7 @@
           </button>
         </div>
         <div class="card-body">
-          <div class="table-responsive">
+          <div class="table-responsive ifr-team-table-wrap">
             <table class="table table-bordered align-middle">
               <thead class="table-dark">
                 <tr>
@@ -180,6 +209,8 @@
   function showAlert(message, isError) {
     const box = document.getElementById('ifr_alert');
     box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    // ข้อความ error มีหลายบรรทัด ต้องให้ขึ้นบรรทัดใหม่จริง ไม่งั้นไหลติดกันเป็นพืด
+    box.style.whiteSpace = 'pre-line';
     box.textContent = message;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -245,10 +276,90 @@
     return hasSpecific ? 'ทีมที่เหลือ (นอกจากทีมที่ระบุไว้)' : 'ทุกทีม (เหมาเรทเดียว)';
   }
 
-  function refreshAllTeamsLabel() {
+  // ทีมมีเป็นร้อยรายการ ทำ dropdown ให้พิมพ์ค้นหาได้เหมือนช่องต้นทาง/ปลายทาง
+  // เก็บ instance ไว้เพื่อ destroy ให้ถูกจังหวะ ไม่งั้น DOM ที่ choices.js สร้างจะค้างซ้อนกัน
+  const TEAM_PICKERS = new Map();
+
+  function destroyTeamPicker(select) {
+    const picker = TEAM_PICKERS.get(select);
+    if (picker) {
+      picker.destroy();
+      TEAM_PICKERS.delete(select);
+    }
+  }
+
+  // วาด options ใหม่ทั้งชุดแล้วเลือกค่าเดิมกลับ
+  // ต้อง destroy ก่อนแตะ innerHTML เสมอ เพราะตอนมี choices.js ครอบอยู่
+  // ตัว <select> จริงถูกซ่อนไว้ การแก้ innerHTML เฉยๆ จะไม่มีผลกับสิ่งที่ผู้ใช้เห็น
+  function renderTeamSelect(select) {
+    const wanted = select.value || select.dataset.selected || '';
+    destroyTeamPicker(select);
+    select.innerHTML = teamOptionsHtml();
+    select.value = wanted;
+    select.dataset.selected = wanted;
+
+    if (window.Choices) {
+      TEAM_PICKERS.set(select, new Choices(select, {
+        searchEnabled: true,
+        searchResultLimit: 50,
+        shouldSort: false,
+        itemSelectText: '',
+        noResultsText: 'ไม่พบรายการ',
+        noChoicesText: 'ไม่มีรายการ',
+        searchPlaceholderValue: 'พิมพ์เพื่อค้นหา',
+      }));
+    }
+  }
+
+  // เลือกทีมในแถวไหนก็ตาม อาจทำให้คำในแถว "ทุกทีม" เปลี่ยนเป็น "ทีมที่เหลือ" หรือกลับกัน
+  // จึงต้องวาดใหม่ทุกแถว ไม่ใช่แค่แก้ข้อความใน <option>
+  // แต่ถ้าคำไม่เปลี่ยน วาดเฉพาะแถวที่ยังไม่มี picker พอ จะได้ไม่กระพริบทั้งตารางทุกครั้งที่เลือก
+  let CURRENT_ALL_TEAMS_LABEL = null;
+
+  function refreshAllTeamsLabel(force) {
     const label = allTeamsLabel();
-    document.querySelectorAll('.ifr-team-select option[value="' + ALL_TEAMS + '"]')
-      .forEach(function (opt) { opt.textContent = label; });
+    const needsFullRender = force || label !== CURRENT_ALL_TEAMS_LABEL;
+    CURRENT_ALL_TEAMS_LABEL = label;
+
+    document.querySelectorAll('.ifr-team-select').forEach(function (sel) {
+      if (needsFullRender || !TEAM_PICKERS.has(sel)) renderTeamSelect(sel);
+    });
+    groupTeamRows();
+  }
+
+  // จัดแถวของทีมเดียวกันให้อยู่ติดกัน แล้วทำเครื่องหมายว่าแถวไหนเป็นหัวกลุ่ม/แถวต่อ
+  // เป็นการจัดหน้าตาอย่างเดียว ทุกแถวยังเป็นรายการอิสระเหมือนเดิม
+  // payload ที่ส่งไป backend ไม่เปลี่ยนรูปแบบเลย (collectTeams ยังไล่อ่านทีละ <tr> เหมือนเดิม)
+  function teamSortKey(select) {
+    const v = select.value;
+    if (v === ALL_TEAMS) return ' ';   // แถว "ทุกทีม/ทีมที่เหลือ" ไว้บนสุด ให้ตรงกับหน้ารายการ
+    if (v === '') return '￿';          // แถวที่ยังไม่เลือก ดันไปท้ายสุด จะได้ไม่แทรกกลางกลุ่ม
+    return v;
+  }
+
+  function groupTeamRows() {
+    const tbody = document.getElementById('ifr_team_rows');
+    const rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    if (!rows.length) return;
+
+    // sort ของ JS เป็น stable อยู่แล้ว ลำดับเดิมภายในทีมเดียวกันจึงไม่สลับ
+    rows.sort(function (a, b) {
+      const ka = teamSortKey(a.querySelector('.ifr-team-select'));
+      const kb = teamSortKey(b.querySelector('.ifr-team-select'));
+      return ka < kb ? -1 : (ka > kb ? 1 : 0);
+    });
+
+    let previousKey = null;
+    rows.forEach(function (tr) {
+      // ย้าย <tr> ทั้งก้อน instance ของ choices.js ที่อยู่ข้างในจึงไม่ถูกทำลาย
+      tbody.appendChild(tr);
+
+      const key = teamSortKey(tr.querySelector('.ifr-team-select'));
+      const isContinuation = key === previousKey && key !== '￿';
+      tr.classList.toggle('ifr-team-cont', isContinuation);
+      tr.classList.toggle('ifr-team-group-start', !isContinuation);
+      previousKey = key;
+    });
   }
 
   function teamOptionsHtml() {
@@ -285,14 +396,9 @@
       .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
       .then(function (rows) {
         TEAM_OPTIONS = rows;
-        // แถวทีมของรายการที่แก้ไขถูกสร้างไว้ตั้งแต่ก่อน options มาถึง
-        // ต้อง render options ใหม่แล้วเลือกค่าเดิมกลับจาก data-selected
-        document.querySelectorAll('.ifr-team-select').forEach(function (sel) {
-          const wanted = sel.dataset.selected || sel.value;
-          sel.innerHTML = teamOptionsHtml();
-          sel.value = wanted;
-        });
-        refreshAllTeamsLabel();
+        // แถวทีมถูกสร้างไว้ตั้งแต่ก่อน options มาถึง ต้องบังคับวาดใหม่ทั้งหมด
+        // แม้คำว่า "ทุกทีม/ทีมที่เหลือ" จะไม่เปลี่ยน เพราะรายชื่อทีมเพิ่งมี
+        refreshAllTeamsLabel(true);
       })
       .catch(function (err) {
         console.error(err);
@@ -316,8 +422,8 @@
 
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td><select class="form-select ifr-team-select" data-selected="' + escapeHtml(teamValueForSelect) + '">'
-        + teamOptionsHtml() + '</select></td>' +
+      '<td class="ifr-team-cell"><select class="form-select ifr-team-select" data-selected="'
+        + escapeHtml(teamValueForSelect) + '">' + teamOptionsHtml() + '</select></td>' +
       '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
@@ -328,7 +434,7 @@
           '<i class="fas fa-trash-alt"></i>' +
         '</button>' +
       '</td>';
-
+    
     tr.querySelector('.ifr-team-select').value = teamValueForSelect;
     tr.querySelector('.ifr-weight-carried').value = row.weight_carried || '';
     tr.querySelector('.ifr-freight-rate').value = row.freight_rate == null ? '' : row.freight_rate;
@@ -337,14 +443,20 @@
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
 
     // เปลี่ยนทีมในแถวไหนก็ตาม อาจทำให้แถว "ทุกทีม" กลายเป็น "ทีมที่เหลือ" หรือกลับกัน
-    tr.querySelector('.ifr-team-select').addEventListener('change', refreshAllTeamsLabel);
+    // ห่อไว้ ไม่ส่งฟังก์ชันตรงๆ ไม่งั้น Event object จะกลายเป็นพารามิเตอร์ force
+    tr.querySelector('.ifr-team-select').addEventListener('change', function () {
+      refreshAllTeamsLabel();
+    });
 
     tr.querySelector('.ifr-remove-team').addEventListener('click', function () {
+      // ปล่อย instance ของ choices.js ก่อนทิ้งแถว ไม่งั้น DOM ที่มันสร้างจะค้างใน Map
+      destroyTeamPicker(tr.querySelector('.ifr-team-select'));
       tr.remove();
       syncTeamEmptyState();
       refreshAllTeamsLabel();
     });
 
+    // ต้องต่อ DOM ก่อน แล้วค่อย init choices.js ไม่งั้นมันหา parent ไม่เจอ
     document.getElementById('ifr_team_rows').appendChild(tr);
     syncTeamEmptyState();
     refreshAllTeamsLabel();
@@ -390,23 +502,66 @@
   }
 
   // ---------- แปลง error ของ DRF เป็นข้อความอ่านง่าย ----------
+  // DRF ส่ง error ของ nested field มาได้ 2 แบบ
+  //   1. รายแถว  -> [{}, {field: [msg]}, ...]   ต้องบอกว่าแถวไหนผิดตรงไหน
+  //   2. ทั้งชุด  -> ["ข้อความเดียว"]            เช่นกฎที่ตรวจข้ามแถว
+  // ของเดิมรองรับแค่แบบ 1 พอเจอแบบ 2 เลยเอา String ไปวน Object.keys() แล้วแตกเป็นตัวอักษร
+  const FIELD_LABEL = {
+    origin: 'ต้นทาง',
+    destination: 'ปลายทาง',
+    distance: 'ระยะทาง',
+    base_fuel_price: 'ราคาน้ำมันฐาน',
+    average_fuel_price: 'ราคาน้ำมันเฉลี่ย',
+    fuel_freight_adjustment: 'ปรับค่าขนส่งต่อน้ำมัน 1 บาท',
+    fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
+    payload_weight: 'น้ำหนักบรรทุก',
+    weight_carried: 'ประเภทการแบกน้ำหนัก',
+    freight_rate: 'ค่าขนส่ง',
+    team_id: 'ทีมขนส่ง',
+    teams: 'ทีมขนส่ง',
+    non_field_errors: 'ข้อมูลไม่ถูกต้อง',
+    detail: 'ข้อผิดพลาด'
+  };
+
+  function labelOf(key) {
+    return FIELD_LABEL[key] || key;
+  }
+
+  function flattenMessage(value) {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.map(flattenMessage).join(' ');
+    if (typeof value === 'object') {
+      return Object.keys(value)
+        .map(function (k) { return labelOf(k) + ' ' + flattenMessage(value[k]); })
+        .join(' ');
+    }
+    return String(value);
+  }
+
   function formatErrors(data) {
     const lines = [];
+    if (typeof data === 'string') return data;
+
     Object.keys(data).forEach(function (key) {
       const value = data[key];
       if (key === 'teams' && Array.isArray(value)) {
         value.forEach(function (item, index) {
-          if (item && Object.keys(item).length) {
+          if (!item) return;
+          if (typeof item === 'string') {
+            // กฎที่ตรวจข้ามแถว ไม่ได้ผูกกับแถวใดแถวหนึ่ง แสดงข้อความตรง ๆ
+            lines.push(item);
+          } else if (Object.keys(item).length) {
             Object.keys(item).forEach(function (field) {
-              lines.push('ทีมแถวที่ ' + (index + 1) + ' : ' + field + ' - ' + item[field]);
+              lines.push('ทีมแถวที่ ' + (index + 1) + ' : ' + labelOf(field)
+                         + ' - ' + flattenMessage(item[field]));
             });
           }
         });
       } else {
-        lines.push(key + ' : ' + value);
+        lines.push(labelOf(key) + ' : ' + flattenMessage(value));
       }
     });
-    return lines.length ? lines.join(' | ') : JSON.stringify(data);
+    return lines.length ? lines.join('\n') : JSON.stringify(data);
   }
 
   // ---------- submit ----------

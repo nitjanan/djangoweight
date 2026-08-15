@@ -310,6 +310,13 @@ urlpatterns = [
       path('internationalFreightRate/api/delete/<int:id>/' , views.internationalFreightRateDelete,name="internationalFreightRateDelete"),
       path('internationalFreightRate/edit/<int:id>/', views.editInternationalFreightRate, name="editInternationalFreightRate"),
       path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
+      path('internationalFreightRate/excel/', views.exportExcelInternationalFreightRate, name="exportExcelInternationalFreightRate"),
+      path('exportDocument/', views.viewExportDocument, name="viewExportDocument"),
+      path('exportDocument/excel/', views.exportExcelExportDocument, name="exportExcelExportDocument"),
+      path('exportDocument/edit/excel/', views.exportExcelTripEdit, name="exportExcelTripEdit"),
+      path('exportDocument/edit/upload/', views.uploadTripEdit, name="uploadTripEdit"),
+      path('exportDocument/edit/confirm/', views.confirmTripEdit, name="confirmTripEdit"),
+      path('exportDocument/edit/cancel/', views.cancelTripEdit, name="cancelTripEdit"),
       path('baseCarTeam/api/options/', views.baseCarTeamOptions, name="baseCarTeamOptions"),
       path('baseCompanyCustomerMap/api/options/', views.baseCompanyCustomerMapOptions, name="baseCompanyCustomerMapOptions"),
 

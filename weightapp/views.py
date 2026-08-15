@@ -4,12 +4,13 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, CarryingweightTeam , InternationalFreightRate
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, CarryingweightRate
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
+from weightapp import xlsx_template
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
 from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
@@ -18,13 +19,14 @@ import stripe, logging, datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Font, Color, NamedStyle, Side, Border
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from datetime import date, timedelta, datetime, time
 from django.views import generic
 from django.forms import formset_factory, modelformset_factory, inlineformset_factory, Select
 from django import forms
 from django.db.models import Sum, Subquery
 import random
-from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
+from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear, Least, NullIf
 from django.db.models import F, ExpressionWrapper, Case, When, OuterRef, Exists, Prefetch
 from django.db import models
 import pandas as pd
@@ -10051,6 +10053,7 @@ def baseCompanyCustomerMapDelete(request, id):
 @permission_classes([])
 def internationalFreightRateCreate(request):
     try:
+        print(request.data)
         serializer = InternationalFreightRateSerializer(data=request.data)
         if serializer.is_valid():
             # atomic : ถ้าทีมใดทีมหนึ่งสร้างไม่สำเร็จ ให้ rollback รายการหลักด้วย
@@ -10108,22 +10111,269 @@ def viewInternationalFreightRate(request):
 
     # prefetch ทีม (พร้อมข้อมูล base_car_team) มาในทีเดียว ไม่งั้นตารางจะยิง query ต่อ 1 แถว
     # select_related ต้นทาง/ปลายทาง ด้วย เพราะตารางเรียก .name ทุกแถว
+    # เรียงตามทีม เพราะ template ใช้ {% regroup %} จับกลุ่ม ซึ่งจับได้เฉพาะแถวที่ติดกันเท่านั้น
+    # ถ้าไม่เรียงมาก่อน ทีมเดียวกันที่อยู่คนละที่ในลิสต์จะกลายเป็นคนละกลุ่ม
     data = (InternationalFreightRate.objects
             .select_related('origin', 'destination')
-            .prefetch_related('teams__team'))
+            .prefetch_related(Prefetch(
+                'teams',
+                queryset=InternationalFreightRateTeam.objects
+                    .select_related('team', 'weight_carried')
+                    .order_by('team_id', 'id'),
+            )))
 
     #สร้าง page
     p = Paginator(data, 10)
     page = request.GET.get('page')
     ifr = p.get_page(page)
 
-    # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
-    # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
     for row in ifr:
-        row.has_specific_team = any(t.team_id for t in row.teams.all())
+        teams = list(row.teams.all())
+        # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
+        # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
+        row.has_specific_team = any(t.team_id for t in teams)
+        # นับจำนวน "ทีม" ไม่ใช่จำนวนแถว เพราะทีมเดียวอาจมีหลายช่วงน้ำหนัก
+        row.team_group_count = len({t.team_id for t in teams})
 
     context = {'ifr_page':'active', 'ifr': ifr, active :"active",}
     return render(request, "internationalFreightRate/viewInternationalFreightRate.html", context)
+
+################# export ตารางอัตราค่าขนส่งส่งออก เป็นรูปแบบบันทึกขออนุมัติ #################
+# ทำตามหน้าตาไฟล์ "ค่าขนส่ง ส่งออก 2568.xlsx" ของฝ่ายโลจิสติกส์ (sheet กันยายน 68)
+# หัวเป็นบันทึกถึงประธาน แล้วตามด้วยตารางที่แตกคอลัมน์ตามช่วงน้ำหนัก ช่วงละ 3 คอลัมน์
+# (เดิม / ใหม่ / น้ำมัน ± 1) ปิดท้ายด้วยบาทต่อตันต่อกม. กับหมายเหตุ
+
+IFR_EXPORT_SHEET = 'อัตราค่าขนส่งส่งออก'
+IFR_EXPORT_HEAD_ROW = 8          # แถวหัวกลุ่มช่วงน้ำหนัก
+IFR_EXPORT_SUBHEAD_ROW = 9       # แถวหัวย่อย เดิม/ใหม่/น้ำมัน
+IFR_EXPORT_FIRST_DATA_ROW = 10
+IFR_EXPORT_FIXED_COLS = 4        # ที่ / ต้นทาง / ปลายทาง / ระยะทาง
+IFR_EXPORT_BAND_WIDTH = 3        # เดิม / ใหม่ / น้ำมัน ± 1
+
+IFR_EXPORT_SUBJECT = '( ****ใส่เรื่อง**** )'
+IFR_EXPORT_TO = '( ****ใส่ชื่อผู้รับบันทึก**** )       ( ****ใส่ตำแหน่ง**** )'
+IFR_EXPORT_INTRO = '( ****ใส่เนื้อหาบันทึก**** )'
+IFR_EXPORT_SIGNER = '( ****ใส่ชื่อผู้มีอำนาจอนุมัติ**** )'
+IFR_EXPORT_SIGNER_TITLE = '( ****ใส่ตำแหน่งผู้ลงนาม**** )'
+IFR_EXPORT_FOOTNOTE = '( ****ใส่หมายเหตุ**** )'
+
+
+def _ifrExportBands(rates):
+    """คืนช่วงน้ำหนักที่ใช้จริงในข้อมูล เรียงจากเบาไปหนัก
+
+    ไม่ fix คอลัมน์ไว้ในโค้ด เพราะช่วงมาจากตาราง carryingweight_rate ที่เพิ่มลบได้
+    ถ้า fix ไว้จะมีทั้งคอลัมน์ว่างและช่วงที่ตกหล่นเวลาบัญชีแก้ตาราง
+    """
+    bands = {}
+    for rate in rates:
+        for team_rate in rate.teams.all():
+            band = team_rate.weight_carried
+            if band is not None:
+                bands[band.id] = band
+    used = sorted(bands.values(), key=lambda b: (b.min_weight, b.max_weight, b.name))
+
+    # ช่วงแบบเหมา (เช่น 0 ถึง 999999.99) ครอบช่วงย่อยอื่นไว้ทั้งหมด ไม่ควรได้คอลัมน์ของตัวเอง
+    # ราคาของมันจะถูกกระจายไปลงทุกคอลัมน์ย่อยแทน ตอนเขียนแถว
+    columns = [b for b in used
+               if not any(o.id != b.id and b.min_weight <= o.min_weight
+                          and o.max_weight <= b.max_weight for o in used)]
+    return columns or used
+
+
+@login_required(login_url='login')
+def exportExcelInternationalFreightRate(request):
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    rates = list(InternationalFreightRate.objects
+                 .select_related('origin', 'destination')
+                 .prefetch_related('teams__team', 'teams__weight_carried')
+                 .order_by('id'))
+    if not rates:
+        return HttpResponse("ยังไม่มีข้อมูลอัตราค่าขนส่งให้ export")
+
+    bands = _ifrExportBands(rates)
+    band_col = {}   # CarryingweightRate -> คอลัมน์เริ่มต้นของกลุ่ม (เดิม/ใหม่/น้ำมัน)
+    col = IFR_EXPORT_FIXED_COLS + 1
+    for band in bands:
+        band_col[band] = col
+        col += IFR_EXPORT_BAND_WIDTH
+    if not bands:
+        col += IFR_EXPORT_BAND_WIDTH
+    rate_per_km_col = col
+    note_col = col + 1
+    last_col = note_col
+
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = IFR_EXPORT_SHEET
+
+    thin = Side(style='thin')
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    head_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+
+    # ---- หัวบันทึก ----
+    worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+    title = worksheet.cell(row=1, column=1)
+    title.value = 'บันทึก'
+    title.font = Font(bold=True, size=16)
+    title.alignment = Alignment(horizontal='center')
+
+    today = date.today()
+    worksheet.cell(row=2, column=1).value = 'ที่ LT. ........./%s' % (today.year + 543)
+    worksheet.cell(row=2, column=max(1, last_col - 5)).value = 'วันที่ %s %s %s' % (
+        today.day, EXPORT_DOC_THAI_MONTHS[today.month - 1], today.year + 543)
+    worksheet.cell(row=3, column=1).value = 'เรื่อง       %s' % IFR_EXPORT_SUBJECT
+    worksheet.cell(row=4, column=1).value = 'เรียน      %s' % IFR_EXPORT_TO
+    worksheet.cell(row=5, column=2).value = IFR_EXPORT_INTRO
+
+    # ราคาน้ำมันอ้างอิง ถ้าทุกเส้นทางใช้ราคาเดียวกันก็เขียนตัวเลขให้เลย
+    fuel_prices = {r.average_fuel_price for r in rates if r.average_fuel_price is not None}
+    worksheet.cell(row=6, column=2).value = 'ราคานี้มีผลตั้งแต่วันที่ ................'
+    if len(fuel_prices) == 1:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ %.2f บาท' % fuel_prices.pop()
+    else:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ ............ บาท'
+
+    # ---- หัวตาราง 2 ชั้น ----
+    for band in bands:
+        start = band_col[band]
+        worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=start,
+                              end_row=IFR_EXPORT_HEAD_ROW,
+                              end_column=start + IFR_EXPORT_BAND_WIDTH - 1)
+        cell = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=start)
+        # ใช้คำอธิบายที่บัญชีเขียนไว้ในตาราง จะได้อ่านรู้เรื่องเป็นประโยค ไม่ต้องต่อคำเอง
+        cell.value = band.description or ('นน. %s ตัน' % band.name)
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        cell.fill = head_fill
+        for i, sub in enumerate(('เดิม', 'ใหม่', 'น้ำมัน\n± 1')):
+            sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW, column=start + i)
+            sub_cell.value = sub
+            sub_cell.font = Font(bold=True)
+            sub_cell.alignment = center
+            sub_cell.fill = head_fill
+
+    fixed_heads = [(1, 'ที่'), (2, 'ต้นทาง'), (3, 'ปลายทาง'), (4, 'ระยะทาง (กม.)')]
+    for column, text in fixed_heads + [(rate_per_km_col, 'ค่าขนส่ง\nบาท/ตัน/กม.'),
+                                       (note_col, 'หมายเหตุ')]:
+        worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=column,
+                              end_row=IFR_EXPORT_SUBHEAD_ROW, end_column=column)
+        cell = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=column)
+        cell.value = text
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        cell.fill = head_fill
+
+    # ---- ตัวตาราง ----
+    row = IFR_EXPORT_FIRST_DATA_ROW
+    for index, rate in enumerate(rates, start=1):
+        team_rows = list(rate.teams.all())
+        # แถวหลักของเส้นทาง ใส่อัตราของแถว "ทุกทีม" (team = NULL)
+        shared = [t for t in team_rows if not t.team_id]
+        specific = [t for t in team_rows if t.team_id]
+
+        worksheet.cell(row=row, column=1).value = index
+        worksheet.cell(row=row, column=2).value = rate.origin.name if rate.origin else None
+        worksheet.cell(row=row, column=3).value = rate.destination.name if rate.destination else None
+        worksheet.cell(row=row, column=4).value = float(rate.distance) if rate.distance is not None else None
+        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, rate_per_km_col, note_col, rate)
+        for cell in worksheet[row][:last_col]:
+            cell.font = Font(bold=True)
+        row += 1
+
+        # ทีมเดียวกันที่มีหลายช่วงน้ำหนัก ต้องยุบเป็นแถวเดียวแล้วกระจายค่าไปตามคอลัมน์ช่วง
+        # ไม่ใช่แตกเป็นแถวละ record ไม่งั้นชื่อทีมจะซ้ำหลายบรรทัดในตารางเดียว
+        by_team = OrderedDict()
+        for team_rate in specific:
+            by_team.setdefault(team_rate.team_id, []).append(team_rate)
+
+        for team_index, team_rates in enumerate(by_team.values(), start=1):
+            worksheet.cell(row=row, column=2).value = '%d. %s' % (
+                team_index, team_rates[0].team.car_team_name)
+            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col,
+                                   rate_per_km_col, note_col, rate)
+            row += 1
+
+    last_data_row = row - 1
+    for r in range(IFR_EXPORT_HEAD_ROW, last_data_row + 1):
+        for c in range(1, last_col + 1):
+            worksheet.cell(row=r, column=c).border = box
+
+    # ---- ท้ายบันทึก ----
+    row += 1
+    worksheet.cell(row=row, column=2).value = 'จึงเรียนมาเพื่อโปรดพิจารณา'
+    sign_col = max(1, last_col - 5)
+    worksheet.cell(row=row + 1, column=sign_col).value = 'ขอแสดงความนับถือ'
+    worksheet.cell(row=row + 3, column=sign_col).value = IFR_EXPORT_SIGNER
+    worksheet.cell(row=row + 4, column=sign_col).value = IFR_EXPORT_SIGNER_TITLE
+    worksheet.cell(row=row + 6, column=1).value = IFR_EXPORT_FOOTNOTE
+
+    worksheet.column_dimensions['A'].width = 5
+    worksheet.column_dimensions['B'].width = 38
+    worksheet.column_dimensions['C'].width = 22
+    worksheet.column_dimensions['D'].width = 12
+    for c in range(IFR_EXPORT_FIXED_COLS + 1, rate_per_km_col):
+        worksheet.column_dimensions[get_column_letter(c)].width = 9
+    worksheet.column_dimensions[get_column_letter(rate_per_km_col)].width = 12
+    worksheet.column_dimensions[get_column_letter(note_col)].width = 34
+    worksheet.row_dimensions[IFR_EXPORT_HEAD_ROW].height = 32
+    worksheet.row_dimensions[IFR_EXPORT_SUBHEAD_ROW].height = 32
+    worksheet.freeze_panes = 'A%d' % IFR_EXPORT_FIRST_DATA_ROW
+    worksheet.page_setup.orientation = 'landscape'
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+    stream = BytesIO()
+    workbook.save(stream)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="freight_rate_export_%s_%s.xlsx"' % (
+        active, today.strftime('%Y%m%d'))
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col, note_col, rate):
+    """ลงอัตราของทีมหนึ่ง (หรือของแถว "ทุกทีม") ลงในแถวเดียว กระจายไปตามคอลัมน์ช่วงน้ำหนัก
+
+    team_rates คือทุก record ของทีมนั้นในเส้นทางนี้ ทีมเดียวอาจมีหลายช่วงน้ำหนัก
+    ช่อง "เดิม" เว้นว่างเสมอ เพราะตาราง log ในระบบเก็บเฉพาะข้อมูลระดับเส้นทาง
+    ไม่ได้เก็บอัตรารายทีมของเวอร์ชันก่อน จึงไม่มีข้อมูลอัตราเก่าให้ดึง
+    """
+    notes = []
+    per_km = None
+    for team_rate in team_rates:
+        band = team_rate.weight_carried
+        if band is None:
+            continue
+        # เติมลงทุกคอลัมน์ที่ช่วงของ record นี้ครอบคลุม
+        # ช่วงปกติจะครอบแค่คอลัมน์ตัวเอง ส่วนช่วงแบบเหมาจะครอบทุกคอลัมน์ ราคาเลยเท่ากันทั้งแถว
+        targets = [start for column_band, start in band_col.items()
+                   if band.min_weight <= column_band.min_weight
+                   and column_band.max_weight <= band.max_weight]
+        for start in targets:
+            if team_rate.freight_rate is not None:
+                worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
+            if rate.fuel_freight_adjustment is not None:
+                worksheet.cell(row=row, column=start + 2).value = (
+                    '± %.2f' % rate.fuel_freight_adjustment)
+        # บาท/ตัน/กม. มีคอลัมน์เดียวแต่แต่ละช่วงมีค่าของตัวเอง เอาช่วงแรกที่กรอกไว้
+        # เขียนตายตัวแบบนี้เพื่อให้ผลคงที่ ไม่ใช่แล้วแต่ว่า record ไหนวนมาทีหลัง
+        if per_km is None and team_rate.freight_rate_per_ton_km is not None:
+            per_km = float(team_rate.freight_rate_per_ton_km)
+        if team_rate.note and team_rate.note not in notes:
+            notes.append(team_rate.note)
+    if per_km is not None:
+        worksheet.cell(row=row, column=rate_per_km_col).value = per_km
+    if not notes and rate.note:
+        notes.append(rate.note)
+    if notes:
+        worksheet.cell(row=row, column=note_col).value = ' | '.join(notes)
+
 
 @login_required(login_url='login')
 def internationalFreightRate(request):
@@ -10132,11 +10382,12 @@ def internationalFreightRate(request):
         active = request.session['company_code']
     except:
         return redirect('logout')
+    
 
     context = {
         'ifr_page': 'active',
         # ส่ง choices ไปให้ template render dropdown ประเภทการแบกน้ำหนัก
-        'weight_carried_choices': CarryingweightTeam.choices,
+        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
         'ifr_obj': None,
         'ifr_teams_json': [],
         active: "active",
@@ -10159,10 +10410,12 @@ def editInternationalFreightRate(request, id):
         'team_id', 'weight_carried', 'freight_rate',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note',
     ))
+    
+
 
     context = {
         'ifr_page': 'active',
-        'weight_carried_choices': CarryingweightTeam.choices,
+        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
         'ifr_obj': obj,
         'ifr_teams_json': teams,
         active: "active",
@@ -10187,3 +10440,885 @@ def baseCompanyCustomerMapOptions(request):
             .order_by('name')
             .values('id', 'name'))
     return Response(list(data))
+
+################# หน้า export เอกสาร : บันทึกรายเที่ยว (เคส 1 ลงท่าเรือของตัวเอง) #################
+# หน้านี้ทำตารางให้ตรงกับ sheet "บันทึกรายเที่ยว" ของไฟล์ รายเที่ยว_template_v11.xlsx
+# คอลัมน์ A-K เป็นข้อมูลดิบ ส่วน L (ส่วนต่าง) และ M (จ่ายค่าบรรทุก) เป็นค่าที่คิดจาก J/K ตามสูตรในไฟล์
+# ตอน export จะไม่เขียน L/M ลงไฟล์ ปล่อยให้สูตรในไฟล์คิดเอง หน้าเว็บคำนวณให้ดูเฉย ๆ
+
+# ท่าเรือของตัวเอง : bws ที่บริษัทเจ้าของมี biz = 2 (ขายหินส่งออก) ตอนนี้ได้ K1V กับ P1V
+# เก็บเป็นค่าคงที่ไว้เผื่อมีท่าใหม่ จะได้ไม่ต้องไล่แก้หลายที่
+EXPORT_DOC_OWN_PORT_BIZ_ID = 2
+EXPORT_DOC_CARRY_TYPE = 'ส่งให้'
+
+# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 3000 เที่ยว (แถว 6-3005)
+EXPORT_DOC_FIRST_DATA_ROW = 6
+EXPORT_DOC_MAX_TRIPS = 3000
+
+# ทีมรถร่วมห้ามเว้นว่างเด็ดขาด ต้องใส่ชื่อแทนเสมอ
+# sheet สรุปจ่ายรถร่วม จัดกลุ่มด้วย MATCH ชื่อทีม ถ้าเจอช่องว่าง INDEX จะคืน 0 แล้ว MATCH เป็น #N/A
+# ตัว #N/A ตัวเดียวจะไหลเข้า SMALL() ที่ใช้เรียงลำดับทั้งตาราง ทำให้ทั้ง sheet ว่างหมด
+# ไม่ใช่ว่างแค่แถวที่ทีมหาย และหน้าปะหน้าที่ดึงยอดจาก sheet นั้นก็เป็น 0 ตามไปด้วย
+EXPORT_DOC_NO_TEAM = 'ไม่ระบุทีม'
+
+# sheet รายการมาตรฐาน : dropdown อ้างช่วงแถว 2-302 ชื่อที่เราสร้างเองต้องไปลงทะเบียนในนี้
+EXPORT_DOC_STD_LIST_SHEET = 'รายการมาตรฐาน'
+EXPORT_DOC_STD_TEAM_COL = 6
+EXPORT_DOC_STD_LAST_ROW = 302
+
+# sheet อัตราค่าขนส่ง : ข้อมูลแถว 5-204 (200 ชุดราคา)
+# เขียนแค่ A-J ส่วน K (ส่วนปรับน้ำมัน) L (อัตราสุทธิ) M (คีย์ค้นหา) เป็นสูตรที่มีอยู่แล้ว
+# คีย์ที่ sheet สรุปจ่ายรถร่วมใช้จับคู่คือ M = ทีม|ต้นทาง - ปลายทาง(แบก นน.)|ชนิดหิน
+EXPORT_DOC_RATE_SHEET = 'อัตราค่าขนส่ง'
+EXPORT_DOC_RATE_FIRST_ROW = 5
+EXPORT_DOC_RATE_MAX_ROWS = 200
+
+# ช่วงน้ำหนักของประเภทแบก นน. อ่านจากตาราง carryingweight_rate ไม่ hardcode ในโค้ด
+# เพิ่มช่วงใหม่ = เพิ่มแถวในตาราง ไม่ต้องแก้โค้ดและไม่ต้อง migrate
+# ขอบเขตนับแบบรวมปลายทั้งสองข้าง (min <= นน.ต้นทาง <= max) ตามที่ชื่อช่วงเขียนไว้
+
+# ไฟล์แก้ไขรายเที่ยว : เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ๆ ไม่มีสูตร
+# จะได้แก้แล้วอัปกลับได้โดยไม่เสี่ยงไปทับสูตรของไฟล์รายงาน
+EXPORT_DOC_EDIT_SHEET = 'แก้ไขรายเที่ยว'
+EXPORT_DOC_EDIT_TEAM_LIST_SHEET = 'รายชื่อทีม'
+EXPORT_DOC_EDIT_HEADER_ROW = 2
+EXPORT_DOC_EDIT_FIRST_ROW = 3
+EXPORT_DOC_EDIT_MAX_ROWS = 5000
+EXPORT_DOC_EDIT_ID_COL = 1       # A weight_id ห้ามแก้ ใช้เป็นตัว map ตอนอัปกลับ
+EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม
+EXPORT_DOC_EDIT_ORIGIN_COL = 6   # F นน.ต้นทาง
+EXPORT_DOC_EDIT_DEST_COL = 7     # G นน.ปลายทาง
+EXPORT_DOC_EDIT_COLUMNS = [
+    'weight_id (ห้ามแก้)', 'วันที่', 'เหมืองต้นทาง', 'ท่าปลายทาง', 'ชนิดแร่/หิน',
+    'นน.ต้นทาง (ตัน)', 'นน.ปลายทาง (ตัน) *แก้ได้', 'ทะเบียนรถ', 'เลขที่ชั่ง',
+    'ทีมรถร่วม *แก้ได้',
+]
+
+# ช่องที่แก้แล้วมีผลจริง : (คอลัมน์, ป้ายที่โชว์ตอนพรีวิว, ฟิลด์ใน Weight, ชนิด)
+# ชื่อฟิลด์น้ำหนักในตารางสลับกับความหมาย weight_total = ต้นทาง / origin_weight = ปลายทาง
+#
+# นน.ต้นทาง (คอลัมน์ F) ตั้งใจไม่ให้แก้ เพราะเป็นค่าที่ชั่งจากเหมืองต้นทางซึ่งถือเป็นต้นฉบับ
+# ฝั่งที่ต้องแก้จริงคือปลายทางที่ท่าเรือ ถ้าอยากให้แก้ต้นทางได้อีก ให้เพิ่มบรรทัดกลับเข้ามา
+# แล้วเปลี่ยนสีช่องในตัว export ให้เป็น edit_fill ด้วย
+EXPORT_DOC_EDIT_FIELDS = [
+    (EXPORT_DOC_EDIT_DEST_COL, 'นน.ปลายทาง', 'origin_weight', 'ton'),
+    (EXPORT_DOC_EDIT_TEAM_COL, 'ทีมรถร่วม', 'car_team', 'team'),
+]
+# กันพิมพ์ตกจุดทศนิยม (เช่น 5885 แทน 58.85) รถบรรทุกจริงหนักสุดที่เคยเจอ 76.82 ตัน
+EXPORT_DOC_EDIT_MAX_TON = Decimal('500')
+# เก็บรายการที่จะแก้ไว้ใน session ระหว่างพรีวิวกับกดยืนยัน
+EXPORT_DOC_EDIT_SESSION_KEY = 'export_document_pending_team_changes'
+EXPORT_DOC_EDIT_MAX_CHANGES = 2000
+
+EXPORT_DOC_THAI_MONTHS = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+]
+
+
+def _exportDocumentRatePlan(trip_rows):
+    """เตรียมข้อมูลสำหรับ sheet อัตราค่าขนส่ง จากตาราง international_freight_rate
+
+    ปัญหาที่ต้องแก้ตอน map : ตารางในระบบเก็บอัตราด้วยคีย์ 4 ช่อง
+    (ต้นทาง + ปลายทาง + ทีม + ประเภทแบก นน.) แต่ sheet ใช้คีย์ 5 ช่อง คือมี "ชนิดหิน" เพิ่มมาด้วย
+    เลยต้องขยายแถว 1 อัตรา ออกเป็นหลายแถวตามชนิดหินที่วิ่งจริงในเส้นทางนั้น
+    ไม่งั้นคีย์ M จะไม่ตรงกับคีย์ฝั่งรายเที่ยว แล้วอัตราขึ้น 0 ทุกแถว
+
+    team = NULL ในตารางแปลว่า "ทุกทีม" ขยายเป็นทุกทีมที่วิ่งเส้นทางนั้นในรอบที่ export
+
+    การจับคู่ทำด้วย id ล้วน (รหัสลูกค้า / id บริษัท / id ทีม) ไม่ใช้ชื่อ
+    เพราะ base_company_map_base_customer มี unique แค่ (base_company_id, base_customer_id)
+    ชื่อไม่ได้ unique และบริษัทเดียวมีได้หลายแถว ถ้าจับคู่ด้วยชื่อจะพังเงียบ ๆ วันที่มีชื่อซ้ำ
+    ส่วนชื่อที่เขียนลง sheet ดึงจากแถวรายเที่ยวโดยตรง จึงตรงกับ sheet บันทึกรายเที่ยวเสมอ
+    (ไฟล์ excel ผูกกันด้วยข้อความอย่างเดียว เลี่ยงไม่ได้ แต่บังคับให้สองฝั่งใช้ข้อความเดียวกันได้)
+
+    คืน (rate_rows, weight_carried_by_key, stats)
+      weight_carried_by_key ใช้ย้อนไปเติมคอลัมน์ E ของ sheet บันทึกรายเที่ยว
+    """
+    # เก็บว่าเส้นทางไหนมีทีมอะไรวิ่ง และมีหินอะไรบ้าง ใช้ขยายแถว — คีย์ทั้งหมดเป็น id
+    teams_by_route = defaultdict(set)
+    stones_by_route = defaultdict(set)
+    # id -> ข้อความที่ sheet บันทึกรายเที่ยวใช้จริง เอาไว้เขียนลง sheet อัตราให้ตรงกันเป๊ะ
+    origin_label = {}
+    dest_label = {}
+    team_label = {}
+    for r in trip_rows:
+        route = (r['customer_id'], r['port_company_id'])
+        origin_label[r['customer_id']] = r['origin']
+        dest_label[r['port_company_id']] = r['destination']
+        team_label[r['team_id']] = r['team']
+        teams_by_route[route].add(r['team_id'])
+        if r['stone']:
+            stones_by_route[route].add(r['stone'])
+
+    rates = (InternationalFreightRate.objects
+             .select_related('origin', 'destination')
+             .prefetch_related('teams__team', 'teams__weight_carried'))
+
+    rate_rows = []
+    # (รหัสลูกค้าต้นทาง, id บริษัทปลายทาง, id ทีม) -> ชุดประเภทแบก นน. ที่เจอ
+    weight_carried_by_key = defaultdict(set)
+    stats = {'rate_in_db': 0, 'route_matched': 0, 'route_unmatched': 0, 'truncated': 0}
+
+    for rate in rates:
+        stats['rate_in_db'] += 1
+        # ต้นทางจับด้วยรหัสลูกค้า ปลายทางจับด้วย id บริษัท ให้ตรงกับวิธีที่รายเที่ยวหาชื่อมา
+        origin_id = rate.origin.base_customer_id if rate.origin else None
+        dest_id = rate.destination.base_company_id if rate.destination else None
+        route = (origin_id, dest_id)
+        stones = stones_by_route.get(route)
+        if origin_id is None or dest_id is None or not stones:
+            # อัตราของเส้นทางที่ไม่มีเที่ยววิ่งในรอบนี้ ไม่ต้องใส่ลง sheet ให้เปลืองแถว
+            stats['route_unmatched'] += 1
+            continue
+        stats['route_matched'] += 1
+
+        for team_rate in rate.teams.all():
+            if team_rate.weight_carried is None:
+                # แถวที่ยังไม่ได้เลือกประเภทแบก นน. เอาไปทำอะไรต่อไม่ได้ คีย์ของ sheet ต้องมีช่องนี้
+                continue
+            if team_rate.team_id:
+                team_ids = [team_rate.team_id]
+            else:
+                # ทุกทีม : ขยายเป็นทุกทีมที่วิ่งเส้นทางนี้ รวมแถวที่ไม่มีทีม (team_id = None) ด้วย
+                team_ids = sorted(teams_by_route.get(route, set()), key=lambda x: (x is None, x))
+
+            for team_id in team_ids:
+                if team_id not in team_label:
+                    continue
+                weight_carried_by_key[(origin_id, dest_id, team_id)].add(team_rate.weight_carried)
+                for stone in sorted(stones):
+                    rate_rows.append({
+                        'team': team_label[team_id],                # A
+                        'origin': origin_label[origin_id],          # B
+                        'destination': dest_label[dest_id],         # C
+                        'weight_carried': team_rate.weight_carried.name,  # D
+                        'stone': stone,                             # E
+                        'distance': rate.distance,                  # F
+                        'freight_rate': team_rate.freight_rate,     # G
+                        'base_fuel_price': rate.base_fuel_price,    # H
+                        'average_fuel_price': rate.average_fuel_price,        # I
+                        'fuel_freight_adjustment': rate.fuel_freight_adjustment,  # J
+                    })
+
+    if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
+        stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
+        rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
+
+    return rate_rows, weight_carried_by_key, stats
+
+
+def _exportDocumentPickWeightCarried(options, origin_weight):
+    """เลือกประเภทแบก นน. ให้เที่ยวหนึ่ง จากช่วงที่สัญญาเส้นทาง+ทีมนั้นมี
+
+    options เป็น CarryingweightRate ที่ผูกอยู่กับสัญญานั้น เทียบ นน.ต้นทาง ว่าตกช่วงไหน
+    ปกติช่วงในตารางต่อกันพอดีไม่ทับกัน แต่กันไว้เผื่อมีคนเพิ่มช่วงที่ทับกันทีหลัง
+    ถ้าเข้าได้หลายช่วงให้เลือกช่วงที่แคบที่สุด ผลลัพธ์จะได้คงที่ ไม่แล้วแต่ลำดับ
+    คืนชื่อช่วง (ข้อความที่ต้องเขียนลง excel) หรือ None ถ้าตัดสินไม่ได้
+    """
+    if origin_weight is None:
+        return None
+
+    matched = [o for o in options
+               if o.min_weight <= origin_weight <= o.max_weight]
+    if not matched:
+        return None
+    return min(matched, key=lambda o: o.max_weight - o.min_weight).name
+
+
+def _exportDocumentFillWeightCarried(trip_rows, weight_carried_by_key):
+    """เติมคอลัมน์ E (แบก นน.) ของรายเที่ยว จากประเภทแบกที่ผูกไว้ในตารางอัตรา
+
+    คีย์เป็น id ล้วน ตรงกับที่ _exportDocumentRatePlan สร้างไว้
+    """
+    filled = 0
+    unresolved = 0
+    for r in trip_rows:
+        options = weight_carried_by_key.get((r['customer_id'], r['port_company_id'], r['team_id']))
+        if not options:
+            continue
+        picked = _exportDocumentPickWeightCarried(options, r['origin_weight'])
+        if picked:
+            r['weight_carried'] = picked
+            filled += 1
+        else:
+            unresolved += 1
+    return filled, unresolved
+
+
+def _exportDocumentWriteRateSheet(workbook, rate_rows):
+    """เขียน sheet อัตราค่าขนส่ง เฉพาะคอลัมน์ A-J (K/L/M เป็นสูตรในไฟล์ ห้ามทับ)"""
+    worksheet = workbook[EXPORT_DOC_RATE_SHEET]
+
+    # แถว 5 ในไฟล์ template เป็นแถวตัวอย่างสีเหลือง ต้องล้างก่อนตามที่หน้า "วิธีกรอก" บอก
+    for row in range(EXPORT_DOC_RATE_FIRST_ROW,
+                     EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+        for col in range(1, 11):
+            worksheet.cell(row=row, column=col).value = None
+
+    for i, r in enumerate(rate_rows):
+        row = EXPORT_DOC_RATE_FIRST_ROW + i
+        worksheet.cell(row=row, column=1).value = r['team']
+        worksheet.cell(row=row, column=2).value = r['origin']
+        worksheet.cell(row=row, column=3).value = r['destination']
+        worksheet.cell(row=row, column=4).value = r['weight_carried']
+        worksheet.cell(row=row, column=5).value = r['stone']
+        for col, key in ((6, 'distance'), (7, 'freight_rate'), (8, 'base_fuel_price'),
+                         (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment')):
+            value = r[key]
+            worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
+
+
+def _exportDocumentHoistNoTeam(workbook):
+    """ดันกลุ่ม "ไม่ระบุทีม" ขึ้นเป็นบล็อกแรกของ sheet สรุปจ่ายรถร่วม (ปะหน้าไล่ตามลำดับนี้เอง)
+
+    sheet นั้นเรียงบล็อกด้วยคอลัมน์ช่วย U = AL*10000000 + T*1000 + ลำดับกลุ่ม
+      AL = กลุ่มจ่าย (ปกติ = 1, ร้อยเกาะ = 2)
+      T  = MATCH(ชื่อทีม, บันทึกรายเที่ยว!F) คือเลขแถวแรกที่ทีมนั้นโผล่ใน sheet ดิบ
+    บังคับให้ทีม "ไม่ระบุทีม" ใช้ T = 0 คีย์จึงต่ำสุดในกลุ่มจ่ายของตัวเอง แล้วขึ้นก่อนทุกทีม
+
+    แก้ตอน export ไม่ได้แก้ลงไฟล์ template ที่เก็บไว้ ไฟล์นั้นจะได้เหมือนที่ฝ่ายบัญชีใช้เป๊ะ
+    เวลาเขาส่ง v12 มาก็วางทับได้เลย
+    """
+    worksheet = workbook['สรุปจ่ายรถร่วม']
+    for row in range(5, 405):
+        seq = row - 4
+        worksheet.cell(row=row, column=21).value = (
+            '=IF($Q{r}="","",$AL{r}*10000000+IF($S{r}="{no_team}",0,$T{r})*1000+{seq})'
+            .format(r=row, no_team=EXPORT_DOC_NO_TEAM, seq=seq)
+        )
+
+
+def _exportDocumentMarkDownloadDone(request, response):
+    """ส่ง cookie บอกฝั่งหน้าเว็บว่าไฟล์พร้อมแล้ว
+
+    การกดลิงก์ดาวน์โหลดไม่ทำให้หน้าเปลี่ยน หน้าเว็บเลยไม่มีทางรู้เองว่าเสร็จเมื่อไหร่
+    จึงให้ js แนบ token มากับ query string แล้วเราส่ง token เดิมกลับไปเป็น cookie
+    js คอยดู cookie นี้เพื่อหยุดวงกลมหมุนตอนไฟล์เริ่มโหลดจริง
+    """
+    token = request.GET.get('dl')
+    if token:
+        response.set_cookie('exportDownloadToken', token, max_age=300, samesite='Lax')
+    return response
+
+
+def _exportDocumentThaiMonth(month_str):
+    # '2026-07' -> 'กรกฎาคม 2569' ตามที่ไฟล์ template ใช้ในช่อง B3
+    try:
+        y, m = month_str.split('-')
+        return '%s %s' % (EXPORT_DOC_THAI_MONTHS[int(m) - 1], int(y) + 543)
+    except (ValueError, TypeError, IndexError):
+        return month_str
+
+
+def _exportDocumentOwnPortBwsIds():
+    # คืน bws ของท่าเรือตัวเอง อ่านจาก biz ของบริษัทเจ้าของตาชั่ง ไม่ hardcode รหัสตาชั่ง
+    return list(BaseWeightStation.objects
+                .filter(company__biz_id=EXPORT_DOC_OWN_PORT_BIZ_ID)
+                .values_list('id', flat=True))
+
+
+def _exportDocumentNameMaps():
+    # base_company_map_base_customer คือตัวแปลงจากรหัสลูกค้า/บริษัท เป็นชื่อสั้นที่ใช้ในไฟล์ excel
+    # เช่น 06-V-011 -> "ศิลาชัย", บริษัท STPS -> "ท่าเรือสุราษฏร์" ซึ่งตรงกับ dropdown ในไฟล์ template
+    #
+    # ตารางนี้ใช้เป็นคอลัมน์ G (นามที่จ่าย) ไม่ได้ เพราะ map.name กับ base_company.name
+    # มีค่าเท่ากันทุกแถว คอลัมน์ G จึงจะกลายเป็นคอลัมน์ B ซ้ำ ไม่ได้ข้อมูลใหม่
+    # ของจริงเป็นการยุบหลายเหมืองเข้านิติบุคคลเดียว (กงตาก 1 / กงตาก 3 / ทุ่งใหญ่ -> โชคพนาไมนิ่ง)
+    # ซึ่งยังไม่มีที่เก็บใน db จึงเว้นว่างไว้
+    rows = (BaseCompanyMapBaseCustomer.objects
+            .values('base_customer_id', 'base_company_id', 'name'))
+
+    origin_by_customer = {}   # รหัสลูกค้า -> ชื่อเหมืองต้นทาง (คอลัมน์ B)
+    port_by_company = {}      # id บริษัท -> ชื่อท่าปลายทาง (คอลัมน์ C)
+    for r in rows:
+        origin_by_customer[r['base_customer_id']] = r['name']
+        port_by_company[r['base_company_id']] = r['name']
+    return origin_by_customer, port_by_company
+
+
+def _exportDocumentQuerySet(request):
+    """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
+    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    base_qs = Weight.objects.filter(bws_id__in=own_port_bws, carry_type_name=EXPORT_DOC_CARRY_TYPE)
+
+    # เดือนที่มีข้อมูล ใช้ทำ dropdown และหาเดือนตั้งต้น
+    month_rows = (base_qs.exclude(date__isnull=True)
+                  .annotate(m=TruncMonth('date'))
+                  .values_list('m', flat=True)
+                  .distinct()
+                  .order_by('-m'))
+    month_list = [m.strftime('%Y-%m') for m in month_rows]
+
+    selected_month = request.GET.get('month') or (month_list[0] if month_list else '')
+    selected_bws = request.GET.get('bws') or ''
+    selected_team = request.GET.get('team') or ''
+    # ชนิดหินเก็บเป็นชื่อใน Weight ไม่มีตารางอ้างอิง จึงกรองด้วยชื่อตรง ๆ
+    selected_stone = request.GET.get('stone') or ''
+    # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
+    include_cancel = request.GET.get('include_cancel') == '1'
+
+    qs = base_qs
+    if selected_month:
+        try:
+            y, m = selected_month.split('-')
+            qs = qs.filter(date__year=int(y), date__month=int(m))
+        except (ValueError, TypeError):
+            selected_month = ''
+    if selected_bws:
+        qs = qs.filter(bws_id=selected_bws)
+    if selected_team:
+        qs = qs.filter(car_team_id=selected_team)
+    if selected_stone:
+        qs = qs.filter(stone_type_name=selected_stone)
+    if not include_cancel:
+        qs = qs.filter(is_cancel=False)
+
+    # เรียงวันที่ล่าสุดขึ้นก่อน ทั้งหน้าเว็บและ sheet บันทึกรายเที่ยว
+    # การดันกลุ่ม "ไม่ระบุทีม" ขึ้นก่อน ทำที่หน้าสรุปจ่ายรถร่วมแทน (ดู _exportDocumentHoistNoTeam)
+    # ไม่ทำด้วยการสลับลำดับแถวใน sheet ดิบ ลำดับตรงนี้จึงเปลี่ยนได้อิสระ
+    qs = (qs.select_related('bws', 'bws__company')
+            .order_by('-date', '-weight_id'))
+
+    filters = {
+        'selected_month': selected_month,
+        'selected_bws': selected_bws,
+        'selected_team': selected_team,
+        'selected_stone': selected_stone,
+        'include_cancel': include_cancel,
+        'base_qs': base_qs,
+    }
+    return qs, filters, month_list
+
+
+def _exportDocumentRows(weights):
+    """ปั้นแถวให้ตรงคอลัมน์ A-M ของ sheet บันทึกรายเที่ยว"""
+    origin_by_customer, port_by_company = _exportDocumentNameMaps()
+
+    rows = []
+    for w in weights:
+        # ชื่อคอลัมน์ในตารางชั่งสลับกับความหมายที่ใช้ในรายงาน
+        # weight_total = นน.ต้นทาง | origin_weight = นน.ปลายทาง
+        # และฝั่งที่ไม่ได้ชั่งจะเก็บเป็น 0 ไม่ใช่ NULL ต้องมองว่าเป็น "ไม่มีค่า"
+        # ให้ตรงกับไฟล์ excel ที่เว้นช่องว่าง ไม่งั้น M จะกลายเป็น MIN(0, อีกฝั่ง) = 0 แล้วยอดหายทั้งแถว
+        origin_weight = w.weight_total or None
+        dest_weight = w.origin_weight or None
+
+        # คอลัมน์ L = J - K | คอลัมน์ M = ค่าที่น้อยกว่าระหว่าง J กับ K
+        # ถ้ากรอกมาข้างเดียว M ใช้ข้างที่มี ถ้าไม่มีทั้งคู่ปล่อยว่าง (ตามสูตรในไฟล์ template)
+        diff_weight = None
+        pay_weight = None
+        if origin_weight is not None or dest_weight is not None:
+            diff_weight = (origin_weight or 0) - (dest_weight or 0)
+            if origin_weight is not None and dest_weight is not None:
+                pay_weight = min(origin_weight, dest_weight)
+            else:
+                pay_weight = origin_weight if origin_weight is not None else dest_weight
+
+        port_company_id = w.bws.company_id if w.bws else None
+
+        rows.append({
+            'weight_id': w.weight_id,
+            'date': w.date,                                                   # A วันที่
+            'origin': origin_by_customer.get(w.customer_id) or w.customer_name,  # B เหมืองต้นทาง
+            'origin_raw': w.customer_name,
+            'customer_id': w.customer_id,
+            'destination': port_by_company.get(port_company_id) or w.bws_id,  # C ท่าปลายทาง
+            'port_company_id': port_company_id,   # ใช้จับคู่กับ rate.destination.base_company_id
+            'bws_id': w.bws_id,
+            'stone': w.stone_type_name,                                       # D ชนิดแร่/หิน
+            'weight_carried': '',                                             # E แบก นน. : ยังไม่มีใน db เว้นว่าง
+            'team': w.car_team_name or EXPORT_DOC_NO_TEAM,                    # F ทีมรถร่วม : ห้ามว่าง
+            'team_missing': not w.car_team_name,
+            'team_id': w.car_team_id,
+            'payer': '',                                                      # G นามที่จ่าย : ยังไม่มีใน db เว้นว่าง
+            'car_registration': w.car_registration_name,                      # H ทะเบียนรถ
+            'doc_id': w.doc_id,                                               # I เลขที่ชั่ง
+            'origin_weight': origin_weight,                                   # J นน.ต้นทาง
+            'dest_weight': dest_weight,                                       # K นน.ปลายทาง
+            'diff_weight': diff_weight,                                       # L นน.ส่วนต่าง
+            'pay_weight': pay_weight,                                         # M นน.จ่ายค่าบรรทุก
+            'pay_group': 'ร้อยเกาะ' if (w.transport or '').startswith('ร้อยเกาะ') else 'ปกติ',
+            'site_name': w.site_name,
+            'is_cancel': w.is_cancel,
+        })
+    return rows
+
+
+@login_required(login_url='login')
+def viewExportDocument(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    qs, filters, month_list = _exportDocumentQuerySet(request)
+    base_qs = filters['base_qs']
+    selected_month = filters['selected_month']
+    selected_bws = filters['selected_bws']
+    selected_team = filters['selected_team']
+    selected_stone = filters['selected_stone']
+    include_cancel = filters['include_cancel']
+
+    # ยอดรวมคิดจากทั้งเดือน ไม่ใช่เฉพาะหน้าที่เปิดอยู่ จะได้เทียบกับช่อง O5/O6 ในไฟล์ excel ได้
+    # NullIf(...,0) : ฝั่งที่ไม่ได้ชั่งเก็บเป็น 0 ต้องตัดออกก่อน ไม่งั้นยอดจ่ายค่าบรรทุกจะเพี้ยน
+    # ชื่อคอลัมน์ในตารางชั่งสลับกับความหมายที่ใช้ในรายงาน
+    # weight_total = นน.ต้นทาง (คอลัมน์ J) | origin_weight = นน.ปลายทาง (คอลัมน์ K)
+    ton_field = models.DecimalField(max_digits=10, decimal_places=3)
+    origin_val = NullIf('weight_total', Value(0), output_field=ton_field)
+    dest_val = NullIf('origin_weight', Value(0), output_field=ton_field)
+    pay_val = Least(Coalesce(origin_val, dest_val), Coalesce(dest_val, origin_val))
+
+    summary = qs.aggregate(
+        trip_count=Count('weight_id'),
+        origin_sum=Sum(origin_val),
+        dest_sum=Sum(dest_val),
+        pay_sum=Sum(pay_val),
+        no_team_count=Count('weight_id', filter=Q(car_team_name__isnull=True) | Q(car_team_name='')),
+    )
+
+    p = Paginator(qs, 100)
+    page = request.GET.get('page')
+    trips = p.get_page(page)
+
+    rows = _exportDocumentRows(trips)
+
+    # เช็คความครอบคลุมของตารางอัตราค่าขนส่ง จากทั้งเดือน ไม่ใช่แค่หน้าที่เปิดอยู่
+    # จะได้รู้ก่อนกดปุ่มว่าไฟล์ที่ได้จะมีตัวเงินหรือจะขึ้น 0
+    all_rows = _exportDocumentRows(qs)
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(all_rows)
+    wc_filled, wc_unresolved = _exportDocumentFillWeightCarried(all_rows, weight_carried_by_key)
+    rate_stats.update({
+        'sheet_rows': len(rate_rows),
+        'wc_filled': wc_filled,
+        'wc_unresolved': wc_unresolved,
+        'wc_missing': len(all_rows) - wc_filled - wc_unresolved,
+    })
+    # หน้าเว็บก็ต้องโชว์ประเภทแบก นน. ที่เติมได้ด้วย จะได้ตรงกับไฟล์
+    _exportDocumentFillWeightCarried(rows, weight_carried_by_key)
+
+    # ไฟล์ template รับได้ 3000 เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
+    over_limit = (summary['trip_count'] or 0) > EXPORT_DOC_MAX_TRIPS
+
+    bws_options = (BaseWeightStation.objects
+                   .filter(id__in=_exportDocumentOwnPortBwsIds())
+                   .select_related('company')
+                   .order_by('id'))
+    team_options = (base_qs.exclude(car_team_id__isnull=True)
+                    .values('car_team_id', 'car_team_name')
+                    .distinct()
+                    .order_by('car_team_name'))
+    # ตัวเลือกชนิดหิน ดึงจากข้อมูลที่มีจริงในขอบเขตของหน้านี้
+    # ไม่ดึงจากตาราง master ทั้งก้อน จะได้ไม่มีตัวเลือกที่เลือกแล้วไม่เจอข้อมูลเลย
+    stone_options = (base_qs.exclude(stone_type_name__isnull=True)
+                     .exclude(stone_type_name='')
+                     .values_list('stone_type_name', flat=True)
+                     .distinct()
+                     .order_by('stone_type_name'))
+
+    context = {
+        'export_document_page': 'active',
+        active: "active",
+        'rows': rows,
+        'trips': trips,
+        'summary': summary,
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'selected_bws': selected_bws,
+        'selected_team': selected_team,
+        'selected_stone': selected_stone,
+        'include_cancel': include_cancel,
+        'bws_options': bws_options,
+        'team_options': team_options,
+        'stone_options': stone_options,
+        'over_limit': over_limit,
+        'max_trips': EXPORT_DOC_MAX_TRIPS,
+        'rate_stats': rate_stats,
+        # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
+        'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
+    }
+    return render(request, "exportDocument/viewExportDocument.html", context)
+
+
+@login_required(login_url='login')
+def exportExcelTripEdit(request):
+    """ไฟล์สำหรับแก้ไขรายเที่ยว แล้วอัปกลับมาอัปเดต db
+
+    เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ไม่มีสูตรและมีแค่ sheet เดียว
+    คอลัมน์ A เก็บ weight_id ไว้ map ตอนอัปกลับ ช่องอื่นเป็นข้อมูลประกอบให้ดูว่าเป็นเที่ยวไหน
+    แก้ได้จริงช่องเดียวคือ J ทีมรถร่วม
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    rows = _exportDocumentRows(qs)
+    if not rows:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้แก้ไข")
+    if len(rows) > EXPORT_DOC_EDIT_MAX_ROWS:
+        return HttpResponse("มี %s เที่ยว เกิน %s ที่ไฟล์แก้ไขรองรับ กรุณากรองให้แคบลงก่อน"
+                            % (len(rows), EXPORT_DOC_EDIT_MAX_ROWS))
+
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = EXPORT_DOC_EDIT_SHEET
+
+    worksheet.cell(row=1, column=1).value = (
+        'แก้ได้เฉพาะช่องพื้นเหลือง : G นน.ปลายทาง / J ทีมรถร่วม (เลือกจาก dropdown) | '
+        'ช่องอื่นรวมถึง F นน.ต้นทาง แก้แล้วระบบจะไม่นำไปใช้ | '
+        'ห้ามแก้หรือลบคอลัมน์ A (weight_id) เพราะใช้เป็นตัวอ้างอิงตอนอัปกลับ | '
+        'ห้ามสลับหรือแทรกคอลัมน์ | ช่องที่เว้นว่างไว้ = ไม่เปลี่ยนแปลง')
+    worksheet.cell(row=1, column=1).font = Font(color='C00000', italic=True)
+
+    header_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    locked_fill = PatternFill(start_color='E7E6E6', end_color='E7E6E6', fill_type='solid')
+    edit_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+
+    for i, title in enumerate(EXPORT_DOC_EDIT_COLUMNS, start=1):
+        cell = worksheet.cell(row=EXPORT_DOC_EDIT_HEADER_ROW, column=i)
+        cell.value = title
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+
+    for i, r in enumerate(rows):
+        row = EXPORT_DOC_EDIT_FIRST_ROW + i
+        worksheet.cell(row=row, column=1).value = r['weight_id']
+        worksheet.cell(row=row, column=1).fill = locked_fill
+        worksheet.cell(row=row, column=2).value = r['date']
+        worksheet.cell(row=row, column=3).value = r['origin']
+        worksheet.cell(row=row, column=4).value = r['destination']
+        worksheet.cell(row=row, column=5).value = r['stone']
+        origin_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_ORIGIN_COL)
+        origin_cell.value = float(r['origin_weight']) if r['origin_weight'] is not None else None
+        # นน.ต้นทางแสดงไว้ให้เทียบเฉยๆ แก้ไม่ได้ จึงใช้สีเดียวกับช่อง weight_id
+        origin_cell.fill = locked_fill
+        dest_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_DEST_COL)
+        dest_cell.value = float(r['dest_weight']) if r['dest_weight'] is not None else None
+        dest_cell.fill = edit_fill
+        worksheet.cell(row=row, column=8).value = r['car_registration']
+        worksheet.cell(row=row, column=9).value = r['doc_id']
+        team_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_TEAM_COL)
+        # เที่ยวที่ยังไม่มีทีมให้เว้นว่างไว้จริง ๆ ไม่ต้องใส่คำว่า "ไม่ระบุทีม"
+        # ไฟล์นี้เป็นไฟล์กรอกข้อมูล ช่องว่างสื่อว่า "ยังไม่ได้ระบุ" ตรงกว่า
+        team_cell.value = None if r['team_missing'] else r['team']
+        team_cell.fill = edit_fill
+
+    # dropdown ชื่อทีม กันพิมพ์ผิด เก็บรายชื่อไว้อีก sheet เพราะรายการยาวเกินใส่ในสูตรตรง ๆ
+    teams = list(BaseCarTeam.objects.order_by('car_team_name')
+                 .values_list('car_team_name', flat=True))
+    teams = [t for t in teams if t]
+    if teams:
+        listsheet = workbook.create_sheet(EXPORT_DOC_EDIT_TEAM_LIST_SHEET)
+        for i, name in enumerate(teams, start=1):
+            listsheet.cell(row=i, column=1).value = name
+        listsheet.sheet_state = 'hidden'
+
+        validation = DataValidation(
+            type='list',
+            formula1="='%s'!$A$1:$A$%d" % (EXPORT_DOC_EDIT_TEAM_LIST_SHEET, len(teams)),
+            allow_blank=True, showDropDown=False)
+        validation.error = 'ชื่อทีมนี้ไม่มีในระบบ ให้เลือกจาก dropdown'
+        validation.errorTitle = 'ชื่อทีมไม่ถูกต้อง'
+        worksheet.add_data_validation(validation)
+        last_row = EXPORT_DOC_EDIT_FIRST_ROW + len(rows) - 1
+        validation.add('%s%d:%s%d' % (
+            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), EXPORT_DOC_EDIT_FIRST_ROW,
+            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), last_row))
+
+    for i, width in enumerate((14, 12, 18, 18, 22, 14, 14, 14, 12, 34), start=1):
+        worksheet.column_dimensions[get_column_letter(i)].width = width
+    worksheet.freeze_panes = 'A%d' % EXPORT_DOC_EDIT_FIRST_ROW
+
+    stream = BytesIO()
+    workbook.save(stream)
+
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="trip_edit_%s_%s.xlsx"' % (
+        active, filters['selected_month'] or 'all')
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+@login_required(login_url='login')
+def uploadTripEdit(request):
+    """อ่านไฟล์ที่แก้แล้ว เทียบกับ db แล้วพักรายการที่จะเปลี่ยนไว้ใน session เพื่อให้ดูก่อนยืนยัน
+    ขั้นนี้ยังไม่เขียนอะไรลง db"""
+    if request.method != 'POST':
+        return redirect('viewExportDocument')
+
+    upload = request.FILES.get('trip_edit_file')
+    if not upload:
+        messages.error(request, 'ยังไม่ได้เลือกไฟล์')
+        return redirect('viewExportDocument')
+
+    try:
+        workbook = openpyxl.load_workbook(upload, data_only=True)
+        worksheet = workbook[EXPORT_DOC_EDIT_SHEET]
+    except KeyError:
+        messages.error(request, 'ไม่พบ sheet "%s" ในไฟล์ กรุณาใช้ไฟล์ที่โหลดจากปุ่ม '
+                                '"Export ไฟล์สำหรับแก้ไข"' % EXPORT_DOC_EDIT_SHEET)
+        return redirect('viewExportDocument')
+    except Exception:
+        messages.error(request, 'อ่านไฟล์ไม่ได้ ต้องเป็นไฟล์ .xlsx เท่านั้น')
+        return redirect('viewExportDocument')
+
+    # อ้างอิงจาก db เสมอ ไม่เชื่อค่าอื่นในไฟล์นอกจาก weight_id กับชื่อทีม
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    team_by_name = {t.car_team_name: t.car_team_id
+                    for t in BaseCarTeam.objects.all() if t.car_team_name}
+
+    changes = []
+    errors = []
+    seen_ids = set()
+
+    for row in range(EXPORT_DOC_EDIT_FIRST_ROW, worksheet.max_row + 1):
+        raw_id = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_ID_COL).value
+        if raw_id in (None, ''):
+            continue
+        try:
+            weight_id = int(raw_id)
+        except (TypeError, ValueError):
+            errors.append('แถว %s : weight_id "%s" ไม่ใช่ตัวเลข' % (row, raw_id))
+            continue
+        if weight_id in seen_ids:
+            errors.append('แถว %s : weight_id %s ซ้ำกับแถวก่อนหน้า' % (row, weight_id))
+            continue
+        seen_ids.add(weight_id)
+
+        # อ่านทุกช่องที่แก้ได้ก่อน ถ้าไม่มีช่องไหนกรอกมาเลยก็ข้ามไป ไม่ต้องยิง query
+        raw_values = {}
+        for col, label, attr, kind in EXPORT_DOC_EDIT_FIELDS:
+            value = worksheet.cell(row=row, column=col).value
+            if isinstance(value, str):
+                value = value.strip()
+            # ช่องว่าง = ไม่เปลี่ยน | คำว่า "ไม่ระบุทีม" ก็ถือว่าไม่เปลี่ยน เพราะเป็นคำที่ระบบเติมให้เอง
+            if value in (None, '') or (kind == 'team' and value == EXPORT_DOC_NO_TEAM):
+                continue
+            raw_values[attr] = (col, label, kind, value)
+        if not raw_values:
+            continue
+
+        weight = Weight.objects.filter(pk=weight_id).first()
+        if weight is None:
+            errors.append('แถว %s : ไม่พบ weight_id %s ในระบบ' % (row, weight_id))
+            continue
+        # กันอัปไฟล์ผิดแล้วไปแก้เที่ยวที่ไม่ได้อยู่ในขอบเขตของหน้านี้
+        if weight.bws_id not in own_port_bws or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE:
+            errors.append('แถว %s : weight_id %s ไม่ได้อยู่ในเงื่อนไขของหน้านี้ (ลงท่าเรือของเรา + ส่งให้)'
+                          % (row, weight_id))
+            continue
+
+        fields = []
+        apply_values = {}
+        for attr, (col, label, kind, value) in raw_values.items():
+            if kind == 'team':
+                if value not in team_by_name:
+                    errors.append('แถว %s : ไม่มีทีมชื่อ "%s" ในระบบ' % (row, value))
+                    continue
+                old = weight.car_team_name or ''
+                if old == value:
+                    continue
+                apply_values['car_team_id'] = team_by_name[value]
+                apply_values['car_team_name'] = value
+                fields.append({'label': label, 'old': old or '(ไม่มีทีม)', 'new': value})
+            else:
+                try:
+                    new_ton = Decimal(str(value)).quantize(Decimal('0.001'))
+                except (InvalidOperation, TypeError, ValueError):
+                    errors.append('แถว %s : %s "%s" ไม่ใช่ตัวเลข' % (row, label, value))
+                    continue
+                if new_ton < 0:
+                    errors.append('แถว %s : %s ติดลบ (%s)' % (row, label, value))
+                    continue
+                if new_ton > EXPORT_DOC_EDIT_MAX_TON:
+                    errors.append('แถว %s : %s = %s เกิน %s ตัน น่าจะพิมพ์ตกจุดทศนิยม'
+                                  % (row, label, value, EXPORT_DOC_EDIT_MAX_TON))
+                    continue
+                old_ton = getattr(weight, attr)
+                if old_ton is not None and Decimal(old_ton).quantize(Decimal('0.001')) == new_ton:
+                    continue
+                apply_values[attr] = str(new_ton)
+                fields.append({
+                    'label': label,
+                    'old': '%.3f' % old_ton if old_ton is not None else '(ว่าง)',
+                    'new': '%.3f' % new_ton,
+                })
+
+        if not fields:
+            continue
+
+        changes.append({
+            'weight_id': weight_id,
+            'date': weight.date.strftime('%d/%m/%Y') if weight.date else '',
+            'doc_id': weight.doc_id or '',
+            'fields': fields,
+            'apply': apply_values,
+        })
+
+    if len(changes) > EXPORT_DOC_EDIT_MAX_CHANGES:
+        messages.error(request, 'มีรายการจะเปลี่ยน %s แถว เกิน %s ที่รับได้ในรอบเดียว'
+                                % (len(changes), EXPORT_DOC_EDIT_MAX_CHANGES))
+        return redirect('viewExportDocument')
+
+    request.session[EXPORT_DOC_EDIT_SESSION_KEY] = {
+        'changes': changes,
+        'errors': errors[:50],
+        'error_count': len(errors),
+        'filename': upload.name,
+    }
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def confirmTripEdit(request):
+    """เขียนรายการที่พักไว้ลง db จริง
+
+    save ทีละแถวเพราะ signal pre_save บน Weight เป็นตัวเก็บค่าเก่าลง WeightHistory
+    ถ้าใช้ bulk_update จะข้าม signal แล้วประวัติหาย
+    """
+    if request.method != 'POST':
+        return redirect('viewExportDocument')
+
+    pending = request.session.get(EXPORT_DOC_EDIT_SESSION_KEY) or {}
+    changes = pending.get('changes') or []
+    if not changes:
+        messages.error(request, 'ไม่มีรายการรอยืนยัน')
+        return redirect('viewExportDocument')
+
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    applied = 0
+    skipped = 0
+
+    with transaction.atomic():
+        for change in changes:
+            weight = Weight.objects.filter(pk=change['weight_id']).first()
+            # ตรวจซ้ำอีกรอบ เผื่อมีคนแก้ระหว่างที่ค้างพรีวิวอยู่
+            if (weight is None
+                    or weight.bws_id not in own_port_bws
+                    or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE):
+                skipped += 1
+                continue
+
+            for attr, value in (change.get('apply') or {}).items():
+                setattr(weight, attr, value)
+            weight.save()
+
+            history = (WeightHistory.objects.filter(weight_id=weight.pk)
+                       .order_by('-update').first())
+            if history:
+                history.user_update = request.user
+                history.save()
+            applied += 1
+
+    request.session.pop(EXPORT_DOC_EDIT_SESSION_KEY, None)
+    messages.success(request, 'อัปเดตแล้ว %s เที่ยว%s'
+                              % (applied, ' (ข้าม %s เที่ยวที่ข้อมูลเปลี่ยนไปแล้ว)' % skipped
+                                 if skipped else ''))
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def cancelTripEdit(request):
+    """ทิ้งรายการที่พักไว้ ไม่เขียนอะไร"""
+    request.session.pop(EXPORT_DOC_EDIT_SESSION_KEY, None)
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def exportExcelExportDocument(request):
+    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+
+    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
+    ถ้าเขียนทับจะเสียสูตรถาวร เหมือนที่หน้า "วิธีกรอก" ในไฟล์เตือนไว้
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    selected_month = filters['selected_month']
+
+    trip_count = qs.count()
+    if trip_count == 0:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
+    if trip_count > EXPORT_DOC_MAX_TRIPS:
+        return HttpResponse(
+            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
+            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
+            % (trip_count, EXPORT_DOC_MAX_TRIPS)
+        )
+
+    rows = _exportDocumentRows(qs)
+
+    # อัตราค่าขนส่งต้องเตรียมก่อนเขียน sheet รายเที่ยว เพราะมันเป็นตัวบอกประเภทแบก นน. (คอลัมน์ E)
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(rows)
+    _exportDocumentFillWeightCarried(rows, weight_carried_by_key)
+
+    workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+    worksheet = workbook['บันทึกรายเที่ยว']
+
+    # หัวฟอร์ม : B3 ประจำเดือน (D3 เลขที่หนังสือ กับ F3 นามที่จ่าย ปล่อยให้บัญชีกรอกเอง)
+    if selected_month:
+        worksheet['B3'] = _exportDocumentThaiMonth(selected_month)
+
+    # ทาสีแดงช่องทีมที่เราเติม "ไม่ระบุทีม" ให้ จะได้ไล่หาแล้วไปตามทีมจริงมาใส่ทีหลังได้
+    no_team_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+    no_team_font = Font(color='9C0006', bold=True)
+    has_no_team = False
+
+    for i, r in enumerate(rows):
+        excel_row = EXPORT_DOC_FIRST_DATA_ROW + i
+        # ช่องที่ไม่มีข้อมูลเขียน None ไม่ใช่ '' จะได้เป็นช่องว่างจริง ๆ
+        # ถ้าเขียน '' ลงไป excel จะนับว่าเป็นช่องที่มีค่า แล้วช่องตรวจในไฟล์จะรายงานเพี้ยน
+        worksheet.cell(row=excel_row, column=1).value = r['date']                     # A วันที่
+        worksheet.cell(row=excel_row, column=2).value = r['origin'] or None           # B เหมืองต้นทาง
+        worksheet.cell(row=excel_row, column=3).value = r['destination'] or None      # C ท่าปลายทาง
+        worksheet.cell(row=excel_row, column=4).value = r['stone'] or None            # D ชนิดแร่/หิน
+        worksheet.cell(row=excel_row, column=5).value = r['weight_carried'] or None   # E แบก นน. (ยังว่าง)
+        team_cell = worksheet.cell(row=excel_row, column=6)                           # F ทีมรถร่วม
+        team_cell.value = r['team']
+        if r['team_missing']:
+            team_cell.fill = no_team_fill
+            team_cell.font = no_team_font
+            has_no_team = True
+        worksheet.cell(row=excel_row, column=7).value = r['payer'] or None            # G นามที่จ่าย (ยังว่าง)
+        worksheet.cell(row=excel_row, column=8).value = r['car_registration'] or None # H ทะเบียนรถ
+        worksheet.cell(row=excel_row, column=9).value = r['doc_id'] or None           # I เลขที่ชั่ง
+        # J/K เป็นตัวเลข ต้องแปลง Decimal เป็น float ไม่งั้น excel มองเป็นข้อความแล้วสูตรไม่คิด
+        worksheet.cell(row=excel_row, column=10).value = (
+            float(r['origin_weight']) if r['origin_weight'] is not None else None)   # J นน.ต้นทาง
+        worksheet.cell(row=excel_row, column=11).value = (
+            float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
+
+    _exportDocumentWriteRateSheet(workbook, rate_rows)
+
+    # "ไม่ระบุทีม" เป็นชื่อที่เราตั้งขึ้นเอง ต้องไปลงทะเบียนใน sheet รายการมาตรฐาน
+    # ไม่งั้นช่องตรวจ O10 จะนับเป็น "ชื่อที่ไม่อยู่ในรายการ" ทุกแถวที่เราเติมให้
+    if has_no_team:
+        _exportDocumentHoistNoTeam(workbook)
+
+        std = workbook[EXPORT_DOC_STD_LIST_SHEET]
+        col = EXPORT_DOC_STD_TEAM_COL
+        already = any(std.cell(row=row, column=col).value == EXPORT_DOC_NO_TEAM
+                      for row in range(2, EXPORT_DOC_STD_LAST_ROW + 1))
+        if not already:
+            for row in range(2, EXPORT_DOC_STD_LAST_ROW + 1):
+                if std.cell(row=row, column=col).value in (None, ''):
+                    std.cell(row=row, column=col).value = EXPORT_DOC_NO_TEAM
+                    break
+
+    content = xlsx_template.save_with_template_extensions(
+        workbook, xlsx_template.TRIP_REPORT_TEMPLATE)
+
+    response = HttpResponse(
+        content,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = 'trip_report_%s_%s.xlsx' % (active, selected_month or 'all')
+    response['Content-Disposition'] = 'attachment; filename="%s"' % filename
+    return _exportDocumentMarkDownloadDone(request, response)

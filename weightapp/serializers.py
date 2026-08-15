@@ -288,7 +288,7 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
         # ไม่รับ international_freight_rate จาก client เพราะตัวแม่เป็นคนใส่ให้ตอนสร้าง
         exclude = ['international_freight_rate', 'team']
         extra_kwargs = {
-            'weight_carried': {'required': True, 'allow_null': False, 'allow_blank': False},
+            'weight_carried_id': {'required': True, 'allow_null': False, 'allow_blank': False},
         }
 
 
@@ -315,6 +315,41 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
         }
+
+    @staticmethod
+    def _teamLabel(team_pk):
+        """แสดงชื่อทีมในข้อความ error ไม่ใช่รหัส คนอ่านจะได้รู้ว่าทีมไหน"""
+        if team_pk is None:
+            return 'ทุกทีม'
+        team = BaseCarTeam.objects.filter(pk=team_pk).first()
+        return team.car_team_name if team and team.car_team_name else str(team_pk)
+
+    def validate_teams(self, teams_data):
+        """ทีมเดียวกันในเส้นทางเดียวกัน ห้ามมีช่วงน้ำหนักที่ทับกัน
+
+        ถ้าทับกันแปลว่าน้ำหนักค่าเดียวไปเข้าได้สองราคา ระบบเลือกไม่ได้ว่าจะคิดอันไหน
+        เคสที่เจอบ่อยคือทีมที่คิดแบบเหมาทุกช่วงอยู่แล้ว (0 ถึง 999999.99)
+        แล้วมาเพิ่มช่วงย่อยทับอีก เช่น 35.01-40 คนละราคา แบบนี้ต้องเลือกอย่างใดอย่างหนึ่ง
+        """
+        by_team = {}
+        for team_data in teams_data:
+            band = team_data.get('weight_carried')
+            if band is None:
+                continue
+            # team = None คือแถว "ทุกทีม" ก็ต้องไม่ทับกันเองเหมือนกัน
+            team = team_data.get('team')
+            by_team.setdefault(team.pk if team else None, []).append(band)
+
+        for team_pk, bands in by_team.items():
+            for i, first in enumerate(bands):
+                for second in bands[i + 1:]:
+                    if (first.min_weight <= second.max_weight
+                            and second.min_weight <= first.max_weight):
+                        raise serializers.ValidationError(
+                            'ทีม "%s" มีช่วงน้ำหนักทับกัน : "%s" กับ "%s" '
+                            '— ทีมเดียวกันต้องไม่มีช่วงซ้อนกัน ให้ลบออกอันหนึ่ง'
+                            % (self._teamLabel(team_pk), first.name, second.name))
+        return teams_data
 
     def create(self, validated_data):
         # สร้างรายการหลัก + ทีมทั้งหมดในครั้งเดียว

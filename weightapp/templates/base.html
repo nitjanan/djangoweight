@@ -277,6 +277,14 @@
                     </li>
                     {% endif %}
                 {% endfor %}
+
+                <!-- หน้า export เอกสาร (mock) : วางนอก loop visible_tab จึงยังไม่ผูกสิทธิ์ ใครล็อกอินก็เห็น -->
+                <li class="sidebar-item {{export_document_page}}">
+                  <a href="{% url 'viewExportDocument' %}" class="sidebar-link">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>Export เอกสาร</span>
+                  </a>
+                </li>
               </ul>
             {% endif %}
           </div>

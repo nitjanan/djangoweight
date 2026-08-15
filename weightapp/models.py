@@ -1411,8 +1411,8 @@ class ClientUpdateLog(models.Model):
 class BaseCompanyMapBaseCustomer(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=120, verbose_name="ชื่อ")
-    base_company = models.ForeignKey(BaseCompany, on_delete=models.CASCADE, verbose_name="บริษัท")
-    base_customer = models.ForeignKey(BaseCustomer, on_delete=models.CASCADE, verbose_name="ลูกค้า")
+    base_company = models.ForeignKey(BaseCompany , null = True, on_delete=models.CASCADE, verbose_name="บริษัท")
+    base_customer = models.ForeignKey(BaseCustomer, null = True, on_delete=models.CASCADE, verbose_name="ลูกค้า")
     
     class Meta:
         db_table = 'base_company_map_base_customer'
@@ -1420,9 +1420,11 @@ class BaseCompanyMapBaseCustomer(models.Model):
         unique_together = ('base_company', 'base_customer')
         verbose_name = 'บริษัทลูกค้า'
         verbose_name_plural = 'ข้อมูลบริษัทลูกค้า'
-
+    
     def __str__(self):
-        return f"{self.base_company.name} - {self.base_customer.customer_name}"
+        company = self.base_company.name if self.base_company else "-"
+        customer = self.base_customer.customer_name if self.base_customer else "-"
+        return f"{company} - {customer}"
 
 class InternationalFreightRate(models.Model):
     id = models.AutoField(primary_key=True) #
@@ -1452,18 +1454,41 @@ class InternationalFreightRate(models.Model):
         destination = self.destination.name if self.destination else "-"
         return f"{origin} - {destination}"
 
-class CarryingweightTeam(models.TextChoices):
-    # เก็บลง db เป็นข้อความไทยตรงๆ และแสดงผลเป็นข้อความเดียวกัน
-    weight_carried_1 = "แบก นน.", "แบก นน."
-    weight_carried_2 = "ไม่แบก นน.", "ไม่แบก นน."
-    weight_carried_3 = "ตาม นน.", "ตาม นน."
-    weight_carried_4 = "นน. 35.01-40 ตัน", "นน. 35.01-40 ตัน"
-    weight_carried_5 = "นน. 40.01-50 ตันขึ้นไป", "นน. 40.01-50 ตันขึ้นไป"
-    weight_carried_6 = "น้อยกว่าหรือเท่ากับ 35 ตัน", "น้อยกว่าหรือเท่ากับ 35 ตัน"
-    weight_carried_7 = "น้ำหนัก 35.01-50 ตัน", "น้ำหนัก 35.01-50 ตัน"
-    weight_carried_8 = "นน 50 ตันขึ้นไป", "นน 50 ตันขึ้นไป"
-    weight_carried_9 = "นน 40-50 ตัน", "นน 40-50 ตัน"
-    weight_carried_10 = "เหมาเรทเดียว", "เหมาเรทเดียว"
+# class CarryingweightTeam(models.TextChoices):
+#     # เก็บลง db เป็นข้อความไทยตรงๆ และแสดงผลเป็นข้อความเดียวกัน
+#     weight_carried_1 = "แบก นน.", "แบก นน."
+#     weight_carried_2 = "ไม่แบก นน.", "ไม่แบก นน."
+#     weight_carried_3 = "ตาม นน.", "ตาม นน."
+#     weight_carried_4 = "นน. 35.01-40 ตัน", "นน. 35.01-40 ตัน"
+#     weight_carried_5 = "นน. 40.01-50 ตันขึ้นไป", "นน. 40.01-50 ตันขึ้นไป"
+#     weight_carried_6 = "น้อยกว่าหรือเท่ากับ 35 ตัน", "น้อยกว่าหรือเท่ากับ 35 ตัน"
+#     weight_carried_7 = "น้ำหนัก 35.01-50 ตัน", "น้ำหนัก 35.01-50 ตัน"
+#     weight_carried_8 = "นน 50 ตันขึ้นไป", "นน 50 ตันขึ้นไป"
+#     weight_carried_9 = "นน 40-50 ตัน", "นน 40-50 ตัน"
+#     weight_carried_10 = "เหมาเรทเดียว", "เหมาเรทเดียว"
+
+class CarryingweightRate(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(_("ชื่อเรท"), max_length=100)
+    # weight_carried = models.CharField(_("ประเภทการแบก นน."), max_length=100, choices=CarryingweightTeam.choices)
+    description = models.CharField(_("รายละเอียด"), max_length=255)
+    min_weight = models.DecimalField(_("น้ำหนักขั้นต่ำ"), max_digits=10, decimal_places=2)
+    max_weight = models.DecimalField(_("น้ำหนักสูงสุด"), max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+    
+    class  Meta:
+        db_table = 'carryingweight_rate'
+        verbose_name = 'ประเภทการแบกน้ำหนัก'
+        verbose_name_plural = 'ประเภทการแบกน้ำหนัก'
+        
+    def __str__(self):
+        return f"{self.name} ({self.min_weight} - {self.max_weight})"
+    
+
+
+
+
 
 class InternationalFreightRateTeam(models.Model):
     id = models.AutoField(primary_key=True)
@@ -1476,7 +1501,8 @@ class InternationalFreightRateTeam(models.Model):
     # ถ้าทีมไหนคิดไม่เท่ากัน ค่อยเพิ่มแถวที่ระบุทีมนั้นมาทับ
     # การหาราคา : หาแถวที่ตรงทีมก่อน ไม่เจอค่อย fallback ไปแถว team = NULL
     team = models.ForeignKey(BaseCarTeam, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ทีมขนส่ง (ว่าง = ทุกทีม)")
-    weight_carried = models.CharField(max_length=50, choices=CarryingweightTeam.choices, verbose_name="ประเภทการแบกน้ำหนัก")
+    # weight_carried = models.CharField(max_length=50, choices=CarryingweightTeam.choices, verbose_name="ประเภทการแบกน้ำหนัก")
+    weight_carried = models.ForeignKey(CarryingweightRate, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ประเภทการแบกน้ำหนัก")
     freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ค่าขนส่ง")
     discount_per_ton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ลดบาท/ตัน")
     freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")

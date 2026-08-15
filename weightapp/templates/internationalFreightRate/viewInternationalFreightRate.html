@@ -15,6 +15,12 @@
     white-space: normal;
     line-height: 1.25;
   }
+  /* ช่องชื่อทีมที่ถูกรวมด้วย rowspan : เน้นให้เห็นขอบเขตของกลุ่มชัดขึ้น */
+  .ifr-team-group {
+    background-color: rgba(0, 0, 0, .03);
+    border-right: 2px solid rgba(0, 0, 0, .12);
+    white-space: nowrap;
+  }
 </style>
 {% endblock %}
 
@@ -103,6 +109,10 @@
 
       <div class="card-header">
         <a href="{% url 'createInternationalFreightRate' %}" class="btn btn-primary rounded-pill">เพิ่มรายการ <i class="fa-solid fa-circle-plus"></i></a>
+        <!-- ออกเป็นรูปแบบบันทึกขออนุมัติ ตามไฟล์ "ค่าขนส่ง ส่งออก" ของฝ่ายโลจิสติกส์ -->
+        <a href="{% url 'exportExcelInternationalFreightRate' %}" class="btn btn-success rounded-pill">
+          Export Excel <i class="fa-solid fa-file-excel"></i>
+        </a>
       </div>
 
       <div class="card-body">
@@ -129,7 +139,8 @@
               <tr>
                 <td>
                   <button type="button" class="btn btn-outline-primary btn-sm ifr-toggle-teams" data-target="ifr-teams-{{ i.id }}">
-                    <i class="fas fa-users"></i> {{ i.teams.all|length }} ทีม
+                    {# นับจำนวนทีม ไม่ใช่จำนวนแถว ทีมเดียวอาจมีหลายช่วงน้ำหนัก #}
+                    <i class="fas fa-users"></i> {{ i.team_group_count }} ทีม
                   </button>
                 </td>
                 <td>{{ i.origin.name|default:"-" }} <i class="fa-solid fa-arrow-right text-muted"></i> {{ i.destination.name|default:"-" }}</td>
@@ -169,25 +180,34 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {% for t in i.teams.all %}
-                      <tr>
-                        <td>
-                          {% if t.team %}
-                            {{ t.team.car_team_id }} : {{ t.team.car_team_name|default_if_none:"-" }}
-                          {% else %}
-                            {% if i.has_specific_team %}
-                              <span class="badge bg-warning">ทีมที่เหลือ</span>
+                      {# ทีมเดียวกันมักมีหลายช่วงน้ำหนัก จับกลุ่มแล้วรวมช่องชื่อทีมด้วย rowspan #}
+                      {% regroup i.teams.all by team_id as team_groups %}
+                      {% for group in team_groups %}
+                        {% for t in group.list %}
+                        <tr>
+                          {% if forloop.first %}
+                          <td rowspan="{{ group.list|length }}" class="align-middle ifr-team-group">
+                            {% if t.team %}
+                              {{ t.team.car_team_id }} : {{ t.team.car_team_name|default_if_none:"-" }}
                             {% else %}
-                              <span class="badge bg-info">ทุกทีม</span>
+                              {% if i.has_specific_team %}
+                                <span class="badge bg-warning">ทีมที่เหลือ</span>
+                              {% else %}
+                                <span class="badge bg-info">ทุกทีม</span>
+                              {% endif %}
                             {% endif %}
+                            {% if group.list|length > 1 %}
+                              <br /><small class="text-muted">{{ group.list|length }} ช่วงน้ำหนัก</small>
+                            {% endif %}
+                          </td>
                           {% endif %}
-                        </td>
-                        <td>{{ t.weight_carried|default_if_none:"-" }}</td>
-                        <td>{{ t.freight_rate|default_if_none:"-" }}</td>
-                        <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
-                        <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
-                        <td>{{ t.note|default_if_none:"-" }}</td>
-                      </tr>
+                          <td>{{ t.weight_carried.description|default_if_none:"-" }}</td>
+                          <td>{{ t.freight_rate|default_if_none:"-" }}</td>
+                          <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
+                          <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
+                          <td>{{ t.note|default_if_none:"-" }}</td>
+                        </tr>
+                        {% endfor %}
                       {% endfor %}
                     </tbody>
                   </table>
@@ -400,3 +420,4 @@
   });
 </script>
 {% endblock %}
+endblock %}

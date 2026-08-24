@@ -501,13 +501,17 @@ class BaseStoneTypeForm(forms.ModelForm):
         id = cleaned_data.get('base_stone_type_id')
         hoen = has_only_en(id)
 
-        spc = SetPatternCode.objects.get(m_name = 'BaseStoneType')
-        fm = str(spc.end) + spc.pattern
+        original_id = self.instance.pk
+        code_unchanged = original_id is not None and id and id.upper().replace(" ", "") == original_id
 
-        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
-            raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
-            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        if not code_unchanged:
+            spc = SetPatternCode.objects.get(m_name = 'BaseStoneType')
+            fm = str(spc.end) + spc.pattern
+
+            if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+                raise forms.ValidationError(u"รหัสหินผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+            elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+                raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
     
     def save(self, commit=True):
@@ -543,13 +547,17 @@ class BaseScoopForm(forms.ModelForm):
         id = cleaned_data.get('scoop_id')
         hoen = has_only_en(id)
 
-        spc = SetPatternCode.objects.get(m_name = 'BaseScoop')
-        fm = str(spc.end) + spc.pattern
+        original_id = self.instance.pk
+        code_unchanged = original_id is not None and id and id.upper().replace(" ", "") == original_id
 
-        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
-            raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
-            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        if not code_unchanged:
+            spc = SetPatternCode.objects.get(m_name = 'BaseScoop')
+            fm = str(spc.end) + spc.pattern
+
+            if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+                raise forms.ValidationError(u"รหัสผู้ตักผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+            elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+                raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -583,14 +591,19 @@ class BaseCarTeamForm(forms.ModelForm):
         cleaned_data = self.cleaned_data
         #id รxx
         id = cleaned_data.get('car_team_id')
-        spc = SetPatternCode.objects.get(m_name = 'BaseCarTeam')
-        fm =  spc.pattern + str(spc.end)
         #oil_id 92-V-xxx
         oil_id = cleaned_data.get('oil_customer_id')
         pattern = re.compile(r'^92-V-\d{3}$')
 
-        if not id or len(id) != len(fm) or not id.startswith(spc.pattern):
-            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        original_id = self.instance.pk
+        code_unchanged = original_id is not None and id and id.replace(" ", "") == original_id
+
+        if not code_unchanged:
+            spc = SetPatternCode.objects.get(m_name = 'BaseCarTeam')
+            fm =  spc.pattern + str(spc.end)
+
+            if not id or len(id) != len(fm) or not id.startswith(spc.pattern):
+                raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         ''' ปิดรหัสลูกค้าน้ำมัน 10/06/2569
         if not oil_id or not pattern.match(oil_id):
             raise forms.ValidationError(u"รหัสลูกค้าน้ำมันควรมี  format '92-V-xxx' กรุณาเปลี่ยนรหัสใหม่.")        
@@ -630,11 +643,15 @@ class BaseCarForm(forms.ModelForm):
         bct = cleaned_data.get('base_car_team')
         id = cleaned_data.get('car_id')
 
-        spc = SetPatternCode.objects.get(m_name = 'BaseCar')
-        fm =  str(bct.car_team_id) + spc.pattern + str(spc.end)
+        original_id = self.instance.pk
+        code_unchanged = original_id is not None and id and id.upper().replace(" ", "") == original_id
 
-        if not id or len(id) != len(fm) or not id.startswith(bct.car_team_id):
-            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        if not code_unchanged and bct:
+            spc = SetPatternCode.objects.get(m_name = 'BaseCar')
+            fm =  str(bct.car_team_id) + spc.pattern + str(spc.end)
+
+            if not id or len(id) != len(fm) or not id.startswith(bct.car_team_id):
+                raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -778,13 +795,17 @@ class BaseDriverForm(forms.ModelForm):
         id = cleaned_data.get('driver_id')
         hoen = has_only_en(id)
 
-        spc = SetPatternCode.objects.get(m_name = 'BaseDriver')
-        fm = str(spc.end) + spc.pattern
+        original_id = self.instance.pk
+        code_unchanged = original_id is not None and id and id.upper().replace(" ", "") == original_id
 
-        if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
-            raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
-        elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
-            raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
+        if not code_unchanged:
+            spc = SetPatternCode.objects.get(m_name = 'BaseDriver')
+            fm = str(spc.end) + spc.pattern
+
+            if not hoen: #เช็คตัวอักษรภาษาไทยในรหัส
+                raise forms.ValidationError(u"รหัสผู้ขับผิด ("+ str(id) +") มีตัวอักษรภาษาไทยหรือช่องว่าง ไม่สามารถบันทึกได้ กรุณาใส่รหัสใหม่")
+            elif not id or len(id) != len(fm) or not id.endswith(spc.pattern):
+                raise forms.ValidationError(u"รหัสควรมี  format '"+ fm +"' กรุณาเปลี่ยนรหัสใหม่.")
         return cleaned_data
 
     def save(self, commit=True):

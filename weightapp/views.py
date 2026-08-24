@@ -5089,16 +5089,21 @@ def editBaseStoneType(request, id):
  
     form = BaseStoneTypeForm(request.POST or None, instance = obj)
     if form.is_valid():
-        try:
-            stone_type_form = form.save()
-
-            # update weight ด้วย
-            weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)
-            weights.update(stone_type_name = stone_type_form.base_stone_type_name)#iiiiiiiiii
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        new_id = form.cleaned_data.get('base_stone_type_id').upper().replace(" ", "")
+        duplicate = new_id != id and BaseStoneType.objects.filter(base_stone_type_id = new_id).exclude(pk = id).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseStoneType')
+            try:
+                stone_type_form = form.save()
+
+                # update weight ด้วย
+                weights = Weight.objects.filter(stone_type_id = stone_type_form.pk)
+                weights.update(stone_type_name = stone_type_form.base_stone_type_name)#iiiiiiiiii
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseStoneType')
 
     context = {
         'form':form,
@@ -5176,16 +5181,21 @@ def editBaseScoop(request, id):
  
     form = BaseScoopForm(request.POST or None, instance = obj)
     if form.is_valid():
-        try:
-            scoop_form = form.save()
-
-            # update weight ด้วย
-            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
-            weights.update(scoop_name = scoop_form.scoop_name)#iiiiiiiiii
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        new_id = form.cleaned_data.get('scoop_id').upper().replace(" ", "")
+        duplicate = new_id != id and BaseScoop.objects.filter(scoop_id = new_id).exclude(pk = id).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseScoop')
+            try:
+                scoop_form = form.save()
+
+                # update weight ด้วย
+                weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+                weights.update(scoop_name = scoop_form.scoop_name)#iiiiiiiiii
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseScoop')
 
     context = {
         'form':form,
@@ -5264,16 +5274,21 @@ def editBaseCarTeam(request, id):
  
     form = BaseCarTeamForm(request.POST or None, instance = obj)
     if form.is_valid():
-        try:
-            car_team_form = form.save()
-
-            # update weight ด้วย
-            weights = Weight.objects.filter(car_team_id = car_team_form.pk)
-            weights.update(car_team_name = car_team_form.car_team_name)#iiiiiiiiii
-        except IntegrityError:
-            form.add_error(None, 'มีรหัสลูกค้าน้ำมัน หรือมีชื่อทีมนี้อยู่แล้ว กรุณาเปลี่ยนรหัสลูกค้าน้ำมันหรือชื่อทีมใหม่.')
+        new_id = form.cleaned_data.get('car_team_id').replace(" ", "")
+        duplicate = new_id != id and BaseCarTeam.objects.filter(car_team_id = new_id).exclude(pk = id).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseCarTeam')
+            try:
+                car_team_form = form.save()
+
+                # update weight ด้วย
+                weights = Weight.objects.filter(car_team_id = car_team_form.pk)
+                weights.update(car_team_name = car_team_form.car_team_name)#iiiiiiiiii
+            except IntegrityError:
+                form.add_error(None, 'มีรหัสลูกค้าน้ำมัน หรือมีชื่อทีมนี้อยู่แล้ว กรุณาเปลี่ยนรหัสลูกค้าน้ำมันหรือชื่อทีมใหม่.')
+            else:
+                return redirect('settingBaseCarTeam')
 
     context = {
         'form':form,
@@ -5351,18 +5366,23 @@ def editBaseCar(request, id):
  
     form = BaseCarForm(request.POST or None, instance = obj)
     if form.is_valid():
-        try:
-            car_form = form.save()
-
-            '''
-            # update weight ด้วย
-            weights = Weight.objects.filter(scoop_id = scoop_form.pk)
-            weights.update(scoop_name = scoop_form.scoop_name)         
-            '''
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        new_id = form.cleaned_data.get('car_id').upper().replace(" ", "")
+        duplicate = new_id != id and BaseCar.objects.filter(car_id = new_id).exclude(pk = id).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseCar')
+            try:
+                car_form = form.save()
+
+                '''
+                # update weight ด้วย
+                weights = Weight.objects.filter(scoop_id = scoop_form.pk)
+                weights.update(scoop_name = scoop_form.scoop_name)
+                '''
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseCar')
 
     context = {
         'form':form,
@@ -5616,16 +5636,21 @@ def editBaseDriver(request, id):
  
     form = BaseDriverForm(request.POST or None, instance = obj)
     if form.is_valid():
-        try:
-            driver_form = form.save()
-
-            # update weight ด้วย
-            weights = Weight.objects.filter(driver_id = driver_form.pk)
-            weights.update(driver_name = driver_form.driver_name)#iiiiiiiiii
-        except IntegrityError:
-            form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+        new_id = form.cleaned_data.get('driver_id').upper().replace(" ", "")
+        duplicate = new_id != id and BaseDriver.objects.filter(driver_id = new_id).exclude(pk = id).exists()
+        if duplicate:
+            form.add_error(None, 'มีรหัสนี้อยู่แล้ว กรุณาเปลี่ยนรหัสใหม่.')
         else:
-            return redirect('settingBaseDriver')
+            try:
+                driver_form = form.save()
+
+                # update weight ด้วย
+                weights = Weight.objects.filter(driver_id = driver_form.pk)
+                weights.update(driver_name = driver_form.driver_name)#iiiiiiiiii
+            except IntegrityError:
+                form.add_error(None, 'มีชื่อนี้อยู่แล้ว กรุณาตั้งชื่อใหม่.')
+            else:
+                return redirect('settingBaseDriver')
         
     context = {
         'form':form,

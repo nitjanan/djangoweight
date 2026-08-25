@@ -603,6 +603,12 @@ class AppReleaseAdmin(admin.ModelAdmin):
     list_display = ('product_code', 'version', 'channel', 'is_mandatory', 'is_active', 'has_sql_script', 'released_at')
     list_filter = ('product_code', 'channel', 'is_active')
     ordering = ('-released_at',)
+    exclude = ('created_by',)
+
+    def save_model(self, request, obj, form, change):
+        if not change or not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
 
     def has_sql_script(self, obj):
         return bool(obj.sql_script)

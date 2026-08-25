@@ -1171,9 +1171,14 @@ def index(request):
                     data[customer][stone] = Decimal('0.00')
             data[customer]['__total__'] = sum(data[customer][stype] for stype in port_stone_types)
 
+        data = {customer: row for customer, row in data.items() if row['__total__'] != 0}
+
         port_stock_list = recursive_defaultdict_to_dict(data)
 
-        context = { 
+        port_stock_totals = {stone: sum(row[stone] for row in port_stock_list.values()) for stone in port_stone_types}
+        port_stock_totals['__total__'] = sum(port_stock_totals.values())
+
+        context = {
                     'previous_day':previous_day,
                     'start_day':start_day,
                     'end_day':end_day,
@@ -1181,6 +1186,7 @@ def index(request):
                     'stock_list':stock_list,
                     'port_stone_types':port_stone_types,
                     'port_stock_list': port_stock_list,
+                    'port_stock_totals': port_stock_totals,
                     'data_sum_produc_all':data_sum_produc_all,
                     'data_sum_produc':data_sum_produc,
                     'list_date': list_date,

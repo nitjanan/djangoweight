@@ -4,8 +4,14 @@ from django.forms.widgets import DateInput, TextInput
 import django_filters
 from django_filters import DateFilter
 from .models import Weight, BaseWeightType, BaseWeightStation, BaseVatType, BaseMill, BaseLineType, Production, StoneEstimate, BaseStoneType, BaseScoop, BaseCarTeam, BaseCar, BaseSite, BaseCustomer, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, Stock, User, UserScale, GasPrice, PortStock, PortStockStone, PortStockStoneItem, LoadingRate, LoadingRateLoc, LoadingRateItem
+from .forms import CompanyCodeNameChoiceField
+from django_filters.fields import ModelChoiceField as DFModelChoiceField
 from django.utils.translation import gettext_lazy as _
 from datetime import date
+
+class CompanyCodeNameFilterChoiceField(DFModelChoiceField):
+    #แสดง "รหัส - ชื่อ" ในตัวเลือก company ของฟิลเตอร์ แต่ค่าที่ใช้กรองยังเป็น id เดิม
+    label_from_instance = CompanyCodeNameChoiceField.label_from_instance
 
 class WeightFilter(django_filters.FilterSet):
     start_created = django_filters.DateFilter(field_name = "date", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
@@ -140,6 +146,8 @@ class BaseScoopFilter(django_filters.FilterSet):
 BaseScoopFilter.base_filters['scoop_id'].label = 'รหัสผู้ตัก'
 BaseScoopFilter.base_filters['scoop_name'].label = 'ชื่อผู้ตัก'
 BaseScoopFilter.base_filters['company'].label = 'บริษัท'
+BaseScoopFilter.base_filters['company'].field_class = CompanyCodeNameFilterChoiceField
+BaseScoopFilter.base_filters['company'].queryset = BaseScoopFilter.base_filters['company'].queryset.exclude(code='ALL')
 
 
 class BaseCarTeamFilter(django_filters.FilterSet):
@@ -214,6 +222,8 @@ class BaseDriverFilter(django_filters.FilterSet):
 BaseDriverFilter.base_filters['driver_id'].label = 'รหัสผู้ขับ'
 BaseDriverFilter.base_filters['driver_name'].label = 'ชื่อผู้ขับ'
 BaseDriverFilter.base_filters['company'].label = 'บริษัท'
+BaseDriverFilter.base_filters['company'].field_class = CompanyCodeNameFilterChoiceField
+BaseDriverFilter.base_filters['company'].queryset = BaseDriverFilter.base_filters['company'].queryset.exclude(code='ALL')
 
 class BaseCarRegistrationFilter(django_filters.FilterSet):
     จีน = 'จีน'
@@ -236,6 +246,8 @@ BaseCarRegistrationFilter.base_filters['car_registration_id'].label = 'รหั
 BaseCarRegistrationFilter.base_filters['car_registration_name'].label = 'ชื่อทะเบียนรถ'
 BaseCarRegistrationFilter.base_filters['car_type'].label = 'ประเภทรถ'
 BaseCarRegistrationFilter.base_filters['company'].label = 'บริษัท'
+BaseCarRegistrationFilter.base_filters['company'].field_class = CompanyCodeNameFilterChoiceField
+BaseCarRegistrationFilter.base_filters['company'].queryset = BaseCarRegistrationFilter.base_filters['company'].queryset.exclude(code='ALL')
 
 
 class GasPriceFilter(django_filters.FilterSet):

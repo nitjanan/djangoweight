@@ -83,7 +83,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseScoop' i.scoop_id %}">{{i.scoop_id}}</a>{% else %}{{i.scoop_id}}{%endif%}</b></td>
                     <td>{{i.scoop_name}}</td>
-                    <td>{{i.company}}</td>
+                    <td>{{i.company.code}}{% if i.company.code and i.company.name %} - {% endif %}{{i.company.name}}</td>
                   </tr>
                   {% empty %}
                   <tr>

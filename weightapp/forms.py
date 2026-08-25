@@ -20,7 +20,16 @@ import re
 from django_select2 import forms as s2forms
 from django_select2.forms import ModelSelect2Widget
 
-#new check error id 
+class CompanyCodeNameChoiceField(forms.ModelChoiceField):
+    #แสดง "รหัส - ชื่อ" ในตัวเลือก company แต่ค่าที่บันทึกยังเป็น id เดิม
+    def label_from_instance(self, obj):
+        code = (obj.code or '').strip()
+        name = (obj.name or '').strip()
+        if code and name:
+            return f"{code} - {name}"
+        return code or name or str(obj.pk)
+
+#new check error id
 def has_only_en(name):
     char_set = string.ascii_letters + string.digits + "-"
     return all((True if x in char_set else False for x in name))
@@ -536,6 +545,16 @@ class BaseScoopForm(forms.ModelForm):
             'company': _('บริษัท'),
        }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        old_field = self.fields['company']
+        self.fields['company'] = CompanyCodeNameChoiceField(
+            queryset = old_field.queryset.exclude(code='ALL'),
+            label = old_field.label,
+            required = old_field.required,
+            widget = old_field.widget,
+        )
+
     def clean_name_field(self):
         name_field = self.cleaned_data.get('scoop_name')
         if name_field:
@@ -784,6 +803,16 @@ class BaseDriverForm(forms.ModelForm):
             'company': _('บริษัท'),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        old_field = self.fields['company']
+        self.fields['company'] = CompanyCodeNameChoiceField(
+            queryset = old_field.queryset.exclude(code='ALL'),
+            label = old_field.label,
+            required = old_field.required,
+            widget = old_field.widget,
+        )
+
     def clean_name_field(self):
         name_field = self.cleaned_data.get('driver_name')
         if name_field:
@@ -839,6 +868,16 @@ class BaseCarRegistrationForm(forms.ModelForm):
             'car_type': _('ประเภทรถ'),
             'company': _('บริษัท'),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        old_field = self.fields['company']
+        self.fields['company'] = CompanyCodeNameChoiceField(
+            queryset = old_field.queryset.exclude(code='ALL'),
+            label = old_field.label,
+            required = old_field.required,
+            widget = old_field.widget,
+        )
 
     def clean_name_field(self):
         name_field = self.cleaned_data.get('car_registration_name')

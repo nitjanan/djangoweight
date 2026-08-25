@@ -83,7 +83,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <tr>
                     <td><b>{% if is_edit_setting %}<a href="{% url 'editBaseDriver' i.driver_id %}">{{i.driver_id}}</a>{% else %}{{i.driver_id}}{%endif%}</b></td>
                     <td>{{i.driver_name}}</td>
-                    <td>{{i.company}}</td>
+                    <td>{{i.company.code}}{% if i.company.code and i.company.name %} - {% endif %}{{i.company.name}}</td>
                   </tr>
                   {% empty %}
                   <tr>

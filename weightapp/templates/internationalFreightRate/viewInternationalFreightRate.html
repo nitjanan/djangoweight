@@ -124,12 +124,11 @@
                 <th>เส้นทาง</th>
                 <th class="ifr-col-num">ระยะทาง</th>
                 <th class="ifr-col-num">ราคาน้ำมันฐาน<br />(บาท/ลิตร)</th>
-                <th class="ifr-col-num">ราคาน้ำมันเฉลี่ย<br />(บาท/ลิตร)</th>
+                <th class="ifr-col-num">ราคาน้ำมันเฉลี่ย<br />(เดือนล่าสุด)</th>
                 <th class="ifr-col-num">น้ำหนักบรรทุก<br />(ตัน/เที่ยว)</th>
                 <th class="ifr-col-num">ใช้น้ำมัน<br />(ลิตร/เที่ยว)</th>
                 <th class="ifr-col-num">ปรับค่าขนส่งตามน้ำมัน<br />ลิตรละ 1 บาท</th>
-                <th>วันที่สร้าง</th>
-                <th>วันที่อัปเดต<br />ล่าสุด</th>
+                <th style="min-width: 130px;">วันที่เริ่มใช้</th>
                 <th>แก้ไข</th>
                 <th>ลบ</th>
               </tr>
@@ -143,15 +142,29 @@
                     <i class="fas fa-users"></i> {{ i.team_group_count }} ทีม
                   </button>
                 </td>
-                <td>{{ i.origin.name|default:"-" }} <i class="fa-solid fa-arrow-right text-muted"></i> {{ i.destination.name|default:"-" }}</td>
+                <td>
+                  {{ i.origin_display|default:"-" }} <i class="fa-solid fa-arrow-right text-muted"></i> {{ i.destination_display|default:"-" }}
+                  {# แถวนี้คือใบที่ใช้อยู่ของเส้นทางเสมอ (view คัดมาให้แล้ว) จึงติดป้ายเขียวได้เลย #}
+                  <br />
+                  <span class="badge bg-success">{{ i.version_th }} · ใช้อยู่</span>
+                  {% if i.version_count > 1 %}
+                  <a href="{% url 'viewInternationalFreightRateVersions' i.id %}" class="badge bg-light text-dark border text-decoration-none">
+                    ปรับมาแล้ว {{ i.change_count }} ครั้ง
+                  </a>
+                  {% endif %}
+                </td>
                 <td class="ifr-col-num">{{ i.distance|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.base_fuel_price|default_if_none:"-" }}</td>
-                <td class="ifr-col-num">{{ i.average_fuel_price|default_if_none:"-" }}</td>
+                <td class="ifr-col-num">
+                  {% if i.latest_fuel %}
+                    {{ i.latest_fuel.average_fuel_price }}
+                    <br /><small class="text-muted">{{ i.latest_fuel_month_th }}</small>
+                  {% else %}-{% endif %}
+                </td>
                 <td class="ifr-col-num">{{ i.payload_weight|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.fuel_used_per_trip|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.fuel_freight_adjustment|default_if_none:"-" }}</td>
-                <td>{{ i.created_at|date:"d/m/Y" }}</td>
-                <td>{{ i.updated_at|date:"d/m/Y"|default:"-" }}</td>
+                <td>{{ i.effective_th }}</td>
                 <td>
                   <a href="{% url 'editInternationalFreightRate' i.id %}" class="btn btn-secondary btn-sm">
                     <i class="fas fa-edit"></i> แก้ไข
@@ -166,7 +179,7 @@
 
               <!-- แถวรายละเอียดทีมของรายการนี้ ซ่อนไว้ กดปุ่มจำนวนทีมเพื่อเปิด -->
               <tr id="ifr-teams-{{ i.id }}" class="d-none">
-                <td colspan="12" class="bg-light">
+                <td colspan="11" class="bg-light">
                   {% if i.teams.all %}
                   <table class="table table-sm table-bordered mb-0">
                     <thead>
@@ -220,7 +233,7 @@
               </tr>
               {% empty %}
               <tr>
-                <th scope="row" colspan="12" class="text-center">
+                <th scope="row" colspan="11" class="text-center">
                   <div class="alert alert-light-warning color-warning">
                     <i class="bi bi-exclamation-triangle"></i> ไม่มีรายการค่าขนส่งต่างประเทศ
                   </div>
@@ -328,7 +341,6 @@
     payload_weight: 'น้ำหนักบรรทุก',
     fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
     fuel_freight_adjustment: 'ปรับค่าขนส่งตามน้ำมัน',
-    average_fuel_price: 'ราคาเฉลี่ย',
   };
 
   var ifrForm = document.getElementById('ifr_form');
@@ -337,7 +349,7 @@
     const btn = document.getElementById('ifr_submit');
 
     const payload = { origin: ifrValue('ifr_origin'), destination: ifrValue('ifr_destination') };
-    const decimalFields = ['base_fuel_price', 'distance', 'payload_weight', 'fuel_used_per_trip', 'fuel_freight_adjustment', 'average_fuel_price'];
+    const decimalFields = ['base_fuel_price', 'distance', 'payload_weight', 'fuel_used_per_trip', 'fuel_freight_adjustment'];
     const invalidFields = [];
 
     decimalFields.forEach(function (field) {

@@ -33,6 +33,13 @@
       justify-content: center;
       z-index: 9999;
     }
+
+    /* เมนูที่มีเมนูย่อย ถ้าอยู่ในหน้านั้นอยู่แล้วให้กางค้างไว้เลย
+       theme เดิมตั้ง .submenu{max-height:0} ไว้ ถ้าไม่เขียนทับ submenu จะถูกซ่อนจนกว่าจะกด
+       ใส่ :not(.submenu-closed) ไว้เพื่อให้ user กดพับเองได้อยู่ */
+    .sidebar-item.has-sub.active > .submenu:not(.submenu-closed) {
+      max-height: none;
+    }
   </style>
 
     {% block css %}
@@ -183,12 +190,25 @@
                     </a>
                   </li>
 
-                  <!-- ค่าขนส่งต่างประเทศ : ผูกไว้กับ tab Transport ถ้าจะย้ายให้ย้ายทั้ง <li> ก้อนนี้ -->
-                  <li class="sidebar-item {{ifr_page}}">
-                    <a href="{% url 'viewInternationalFreightRate' %}" class="sidebar-link">
+                  <!-- ค่าขนส่งต่างประเทศ : ผูกไว้กับ tab Transport ถ้าจะย้ายให้ย้ายทั้ง <li> ก้อนนี้
+                       เมนูแม่ติด active ถ้าอยู่หน้าไหนก็ได้ในกลุ่มนี้ (ตัวแปรใดตัวหนึ่งเป็น 'active') -->
+                  <li class="sidebar-item has-sub {{ifr_page}}{{export_document_page}}">
+                    <a href="#" class="sidebar-link">
                       <i class="fa-solid fa-ship"></i>
                       <span>Freight Rate</span>
                     </a>
+                    <ul class="submenu">
+                      <li class="submenu-item {{ifr_page}}">
+                        <a href="{% url 'viewInternationalFreightRate' %}" class="submenu-link"
+                          >ค่าขนส่งต่างประเทศ</a
+                        >
+                      </li>
+                      <li class="submenu-item {{export_document_page}}">
+                        <a href="{% url 'viewExportDocument' %}" class="submenu-link"
+                          >Export เอกสาร</a
+                        >
+                      </li>
+                    </ul>
                   </li>
                   {% endif %}
                   {% if 'Relocate' in tab.name %}
@@ -278,13 +298,7 @@
                     {% endif %}
                 {% endfor %}
 
-                <!-- หน้า export เอกสาร (mock) : วางนอก loop visible_tab จึงยังไม่ผูกสิทธิ์ ใครล็อกอินก็เห็น -->
-                <li class="sidebar-item {{export_document_page}}">
-                  <a href="{% url 'viewExportDocument' %}" class="sidebar-link">
-                    <i class="fa-solid fa-file-export"></i>
-                    <span>Export เอกสาร</span>
-                  </a>
-                </li>
+                <!-- Export เอกสาร ย้ายไปอยู่ใต้เมนู Freight Rate แล้ว (ในบล็อก tab Transport) -->
               </ul>
             {% endif %}
           </div>

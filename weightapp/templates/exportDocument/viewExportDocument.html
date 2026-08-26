@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% load humanize %}
+{% load templatehelpers %}
 
 {% block css %}
 <style>
@@ -44,6 +45,38 @@
     background-color: #fff8e1;
     box-shadow: none;
   }
+  /* แถบตรวจความพร้อมก่อนโหลดไฟล์
+     ทำเป็นรายการปัญหาเรียงลงมา ไม่ใช่ช่องตัวเลขเรียงข้าง เพราะแต่ละข้อต้องมีคำอธิบาย
+     ตัวเลขอยู่ซ้ายคงที่ คำอธิบายอยู่ขวา กวาดตาลงมาเห็นได้ว่ามีกี่เรื่องต้องแก้ */
+  .ifr-health-icon { font-size: 1.6rem; line-height: 1; }
+  .ifr-issue {
+    display: flex;
+    gap: .75rem;
+    padding: .6rem .75rem;
+    border-left: 3px solid #ced4da;
+    border-radius: .35rem;
+    background-color: #f8f9fa;
+  }
+  .ifr-issue + .ifr-issue { margin-top: .5rem; }
+  .ifr-issue-num {
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .ifr-issue-title { font-weight: 600; font-size: .9rem; }
+  .ifr-issue-text { font-size: .8rem; color: #6c757d; line-height: 1.55; }
+  .ifr-issue-bad  { border-left-color: #dc3545; background-color: rgba(220,53,69,.05); }
+  .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
+  .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
+  .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
+  .ifr-health-detail > summary { cursor: pointer; }
+  @media (max-width: 575px) {
+    /* จอแคบวางตัวเลขไว้บนคำอธิบาย ไม่งั้นคำอธิบายเหลือความกว้างนิดเดียว */
+    .ifr-issue { flex-direction: column; gap: .15rem; }
+  }
+
   /* ทีมที่เราเติม "ไม่ระบุทีม" ให้ : แดงเฉพาะตัวอักษรในคอลัมน์ทีม ไม่ทาพื้น ไม่ทาทั้งแถว */
   .trip-table > tbody > tr > td.trip-no-team {
     color: #d32f2f;
@@ -88,7 +121,7 @@
   <div class="page-title">
     <div class="row">
       <div class="col-12 col-md-6 order-md-1 order-last">
-        <h3>บันทึกรายเที่ยว (เคส 1 ลงท่าเรือของตัวเอง)</h3>
+        <h3>บันทึกรายเที่ยว </h3>
       </div>
       <div class="col-12 col-md-6 order-md-2 order-first">
         <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
@@ -118,17 +151,37 @@
           </div>
 
           <div class="form-group col-md-3">
-            <label for="bws">ท่าปลายทาง</label>
-            <select class="form-select" id="bws" name="bws">
+            <label for="date_from">
+              ดูเฉพาะวันที่
+              <small class="text-muted">(ไม่บังคับ)</small>
+              <i class="fa-regular fa-circle-question text-muted"
+                 title="เว้นว่างทั้งคู่ = ดูทั้งเดือน · ใส่ช่องเดียวก็ได้ (ตั้งแต่วันที่ หรือ ถึงวันที่) · สลับวันเข้ากับวันออกก็ได้ ระบบสลับให้เอง · ต้องอยู่ใน &quot;ประจำเดือน&quot; ที่เลือกไว้ด้วย ไม่งั้นจะไม่มีข้อมูล"></i>
+            </label>
+            <div class="d-flex align-items-center gap-1">
+              <input type="date" class="form-control" id="date_from" name="date_from"
+                     value="{{ selected_date_from }}"
+                     title="ตั้งแต่วันที่" />
+              <span class="text-muted">ถึง</span>
+              <input type="date" class="form-control" id="date_to" name="date_to"
+                     value="{{ selected_date_to }}"
+                     title="ถึงวันที่" />
+            </div>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="origin">ต้นทาง (นาม)</label>
+            <select class="form-select" id="origin" name="origin">
               <option value="">ทั้งหมด</option>
-              {% for b in bws_options %}
-                <option value="{{ b.id }}" {% if b.id == selected_bws %}selected{% endif %}>
-                  {{ b.id }} - {{ b.company.name }}
-                </option>
+              {% for o in origin_options %}
+                <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
               {% endfor %}
             </select>
           </div>
 
+          {% comment %}
+            เอาตัวกรอง เคส / ตาชั่ง ออกจากหน้าแล้ว
+            ฝั่ง view ยังรับพารามิเตอร์ bws กับ case อยู่ ลิงก์เก่าที่ bookmark ไว้จึงยังใช้ได้
+          {% endcomment %}
           <div class="form-group col-md-3">
             <label for="team">ทีมรถร่วม</label>
             <select class="form-select" id="team" name="team">
@@ -283,43 +336,114 @@
       {% endfor %}
     {% endif %}
 
-    {% if summary.no_team_count %}
-    <div class="alert alert-light-danger color-danger">
-      เดือนนี้มี <strong>{{ summary.no_team_count|intcomma }} เที่ยว</strong> ที่ไม่มีทีมรถร่วมใน db
-      ระบบเติมคำว่า <strong class="text-danger">ไม่ระบุทีม</strong> ให้แทน และไฮไลต์สีแดงไว้ทั้งในตารางนี้และในไฟล์ excel
-      โดยในไฟล์จะดันขึ้นเป็น<strong>บล็อกแรกของหน้าสรุปจ่ายรถร่วมและปะหน้าจ่ายรถร่วม</strong>
-      ส่วน sheet บันทึกรายเที่ยว ยังเรียงตามวันที่เก่าไปใหม่ตามปกติ
-      <br>
-      ถ้าปล่อยว่างไว้ หน้า "สรุปจ่ายรถร่วม" กับ "ปะหน้าจ่ายรถร่วม" ในไฟล์จะว่างทั้งหน้า ไม่ใช่ว่างแค่แถวที่ทีมหาย
-      เพราะสูตรจัดกลุ่มของ sheet นั้นเจอช่องว่างแล้วพังทั้งตาราง
-    </div>
-    {% endif %}
+    {% comment %}
+    แถบตรวจความพร้อมก่อนโหลดไฟล์
 
-    <div class="alert {% if rate_stats.wc_filled %}alert-light-warning color-warning{% else %}alert-light-danger color-danger{% endif %}">
-      <strong>sheet อัตราค่าขนส่ง</strong> — ดึงจากตาราง <code>international_freight_rate</code>
-      ({{ rate_stats.rate_in_db|intcomma }} ชุดราคาใน db |
-      ตรงกับเส้นทางที่วิ่งเดือนนี้ {{ rate_stats.route_matched }} ชุด |
-      เขียนลง sheet ได้ {{ rate_stats.sheet_rows|intcomma }} แถว{% if rate_stats.truncated %}
-      <span class="text-danger">เกินที่ sheet รับได้ ตัดทิ้ง {{ rate_stats.truncated|intcomma }} แถว</span>{% endif %})
-      <br>
-      คอลัมน์ E (แบก นน.) คิดจาก นน.ต้นทาง เทียบช่วงที่สัญญากำหนด ได้ <strong>{{ rate_stats.wc_filled|intcomma }}</strong> เที่ยว
-      (ไม่เก็บลง db คิดสดทุกครั้ง) |
-      หาอัตราไม่เจอ <strong>{{ rate_stats.wc_missing|intcomma }}</strong> เที่ยว
-      {% if rate_stats.wc_unresolved %}| เจออัตราแต่เทียบช่วงน้ำหนักไม่ลงตัว
-      <strong>{{ rate_stats.wc_unresolved|intcomma }}</strong> เที่ยว{% endif %}
-      {% if not rate_stats.wc_filled %}
-      <br>
-      <strong>ตอนนี้ยังไม่มีเที่ยวไหนหาอัตราเจอเลย ไฟล์ที่ export ออกมาจะมีรายได้เป็น 0 ทุกแถว</strong>
-      ต้องไปเพิ่มข้อมูลในหน้า Freight Rate ให้ตรงกับเส้นทางที่วิ่งจริงก่อน
-      {% endif %}
-    </div>
+    คนใช้หน้านี้ถามอยู่คำถามเดียว : "ไฟล์เดือนนี้ใช้ได้เลยไหม ถ้าไม่ได้ต้องทำอะไร"
+    จึงตอบเป็นประโยคก่อน แล้วค่อยแจกแจงทีละข้อว่า เกิดอะไร -> ผลคืออะไร -> ต้องทำอะไร
+    เลี่ยงศัพท์ระบบทุกคำ (เรท / สัญญา / ช่วง / คีย์) เพราะคนกรอกไม่ได้เป็นคนตั้งค่าระบบ
+    {% endcomment %}
+    <div class="card ifr-health mb-3">
+      <div class="card-body py-3">
 
-    <div class="alert alert-light-warning color-warning">
-      ไฟล์ที่ export จะเติมคอลัมน์ A-K ลง sheet "บันทึกรายเที่ยว" และเติม sheet "อัตราค่าขนส่ง" ให้
-      ส่วนคอลัมน์ L/M กับ sheet สรุปเหมือง / ปะหน้าจ่ายรถร่วม / สรุปจ่ายรถร่วม เป็นสูตรในไฟล์ที่คิดให้เอง |
-      <strong>คอลัมน์ G (นามที่จ่าย) ยังเว้นว่าง</strong> เพราะไม่มีที่เก็บใน db
-      ช่องตรวจ O7 / O11 ในไฟล์จึงจะขึ้นว่า "มีแถวกรอกไม่ครบ" จนกว่าจะเติมช่องนี้ |
-      sheet "oil" ยังต้องกรอกมือตามเดิม
+        {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count %}
+        <div class="d-flex align-items-center gap-2">
+          <span class="ifr-health-icon text-success"><i class="bi bi-check-circle-fill"></i></span>
+          <div>
+            <div class="fw-bold">ข้อมูลครบ พร้อมโหลดไฟล์ได้เลย</div>
+            <div class="small text-muted">คิดค่าขนส่งได้ครบทั้ง {{ rate_stats.wc_total|intcomma }} เที่ยว</div>
+          </div>
+        </div>
+        {% else %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="ifr-health-icon text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>
+          <div>
+            <div class="fw-bold">ไฟล์เดือนนี้ยังคิดเงินได้ไม่ครบทุกเที่ยว</div>
+            <div class="small text-muted">
+              คิดค่าขนส่งได้ <strong class="text-body">{{ rate_stats.wc_filled|intcomma }}</strong> เที่ยว
+              จากทั้งหมด <strong class="text-body">{{ rate_stats.wc_total|intcomma }}</strong> เที่ยว
+              ({{ rate_stats.wc_filled_pct }}%) — ที่เหลือจะขึ้นเป็นเงิน 0 ในไฟล์
+            </div>
+          </div>
+        </div>
+
+        <div class="ifr-issues">
+          {% if rate_stats.wc_no_contract %}
+          <div class="ifr-issue ifr-issue-bad">
+            <div class="ifr-issue-num">{{ rate_stats.wc_no_contract|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ยังไม่ได้ตั้งราคาค่าขนส่งให้ทีมรถที่วิ่งเที่ยวนี้</div>
+              <div class="ifr-issue-text">
+                ระบบไม่รู้ว่าต้องจ่ายทีมนี้เท่าไหร่ในเส้นทางนี้ เที่ยวพวกนี้จึงขึ้นเงิน 0 ในไฟล์<br />
+                <strong>ต้องทำ:</strong> ไปหน้า
+                <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่งต่างประเทศ</a>
+                แล้วเพิ่มราคาให้ทีมที่ยังไม่มี
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if rate_stats.wc_out_of_range %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.wc_out_of_range|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วงที่ตั้งไว้</div>
+              <div class="ifr-issue-text">
+                เช่น ตั้งราคาไว้เฉพาะรถ 0–35 ตัน แต่เที่ยวนี้บรรทุก 42 ตัน ระบบจึงเลือกราคาให้ไม่ได้<br />
+                <strong>ต้องทำ:</strong> เพิ่มช่วงน้ำหนักให้ครอบคลุม หรือตรวจว่าน้ำหนักที่ชั่งถูกต้องไหม
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if summary.no_team_count %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ summary.no_team_count|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ตอนชั่งไม่ได้เลือกทีมรถ</div>
+              <div class="ifr-issue-text">
+                ในไฟล์จะขึ้นเป็นตัวแดงว่า "ไม่ระบุทีม" ถ้าปล่อยไว้ หน้าสรุปจ่ายรถร่วมจะว่างทั้งหน้า<br />
+                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if not rate_stats.route_matched %}
+          <div class="ifr-issue ifr-issue-bad">
+            <div class="ifr-issue-num">ทุกเที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ยังไม่มีราคาค่าขนส่งของเส้นทางไหนเลย</div>
+              <div class="ifr-issue-text">ไฟล์ที่ได้จะเป็นเงิน 0 ทั้งหมด</div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <details class="ifr-health-detail mt-3">
+          <summary class="small text-muted">
+            <i class="bi bi-info-circle"></i> เรื่องที่ปกติอยู่แล้ว ไม่ต้องทำอะไร
+          </summary>
+          <ul class="small text-muted mt-2 mb-0 ps-4">
+            <li>ช่อง "นามที่จ่าย" ในไฟล์เว้นว่างไว้ให้บัญชีกรอกเอง ระบบไม่มีข้อมูลนี้</li>
+            {% if rate_stats.rate_as_of_th %}
+            <li>ราคาที่ใช้ในไฟล์ = ราคา ณ วันที่ {{ rate_stats.rate_as_of_th }}</li>
+            {% endif %}
+            <li>
+              เดือนนี้มีเที่ยววิ่ง {{ rate_stats.route_matched }} เส้นทาง
+              จากที่ตั้งราคาไว้ {{ rate_stats.rate_in_db }} เส้นทาง
+              {% if rate_stats.truncated %}
+              <span class="text-danger">(ตัดทิ้ง {{ rate_stats.truncated|intcomma }} แถว เพราะเกินที่ไฟล์รับได้)</span>
+              {% endif %}
+            </li>
+            {% for v in rate_stats.rate_versions %}
+            <li>{{ v }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+
+      </div>
     </div>
 
     <div class="row">
@@ -370,9 +494,10 @@
           <table class="table table-striped table-hover trip-table">
             <thead>
               <tr>
+                <th>เคส</th>
                 <th>วันที่</th>
-                <th>เหมืองต้นทาง</th>
-                <th>ท่าปลายทาง</th>
+                <th>ต้นทาง</th>
+                <th>ปลายทาง</th>
                 <th>ชนิดแร่/หิน</th>
                 <th>แบก นน.</th>
                 <th>ทีมรถร่วม</th>
@@ -385,7 +510,8 @@
                 <th>weight_id</th>
               </tr>
               <tr class="col-letter">
-                {# ข้าม G (นามที่จ่าย) เพราะเอาคอลัมน์นั้นออกจากตารางแล้ว แต่ในไฟล์ยังมีอยู่ #}
+                {# ข้าม G (นามที่จ่าย) เพราะไม่มีที่เก็บใน db เว้นว่างทุกแถว แต่ในไฟล์ยังมีคอลัมน์อยู่ #}
+                <th>-</th>
                 <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
                 <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
                 <th>นอกไฟล์ template</th>
@@ -394,11 +520,16 @@
             <tbody>
               {% for r in rows %}
               <tr {% if r.is_cancel %}class="trip-cancel"{% endif %}>
+                <td>
+                  <span class="badge {% if r.case == '1' %}bg-primary{% else %}bg-secondary{% endif %}"
+                        title="{{ r.case_label }}">{{ r.case_label }}</span>
+                </td>
                 <td>{{ r.date|date:"d/m/Y" }}</td>
                 <td title="{{ r.origin_raw }} ({{ r.customer_id }})">{{ r.origin|default:"-" }}</td>
                 <td title="{{ r.bws_id }}">{{ r.destination|default:"-" }}</td>
                 <td>{{ r.stone|default:"-" }}</td>
-                <td class="trip-todo"></td>
+                {# แบก นน. คิดสดจาก นน.ต้นทาง เทียบช่วงในตารางอัตรา ไม่ได้เก็บลง db #}
+                <td>{{ r.weight_carried|default:"-" }}</td>
                 <td class="{% if r.team_missing %}trip-no-team{% endif %}">{{ r.team }}</td>
                 <td>{{ r.car_registration|default:"-" }}</td>
                 <td>{{ r.doc_id|default:"-" }}</td>
@@ -410,7 +541,7 @@
               </tr>
               {% empty %}
               <tr>
-                <td colspan="13" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
+                <td colspan="14" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -420,9 +551,13 @@
         {% if trips.paginator.num_pages > 1 %}
         <nav class="mt-3">
           <ul class="pagination">
+            {% comment %}
+              my_url ส่งต่อ query string ทั้งชุดแล้วเปลี่ยนเฉพาะ page
+              ไม่ไล่ระบุตัวกรองทีละตัว เพิ่มตัวกรองใหม่ทีหลังจะได้ไม่หายตอนเปลี่ยนหน้า
+            {% endcomment %}
             {% if trips.has_previous %}
               <li class="page-item">
-                <a class="page-link" href="?month={{ selected_month }}&bws={{ selected_bws }}&team={{ selected_team }}{% if include_cancel %}&include_cancel=1{% endif %}&page={{ trips.previous_page_number }}">ก่อนหน้า</a>
+                <a class="page-link" href="{% my_url trips.previous_page_number 'page' request.GET.urlencode %}">ก่อนหน้า</a>
               </li>
             {% endif %}
             <li class="page-item disabled">
@@ -430,7 +565,7 @@
             </li>
             {% if trips.has_next %}
               <li class="page-item">
-                <a class="page-link" href="?month={{ selected_month }}&bws={{ selected_bws }}&team={{ selected_team }}{% if include_cancel %}&include_cancel=1{% endif %}&page={{ trips.next_page_number }}">ถัดไป</a>
+                <a class="page-link" href="{% my_url trips.next_page_number 'page' request.GET.urlencode %}">ถัดไป</a>
               </li>
             {% endif %}
           </ul>
@@ -443,6 +578,14 @@
 {% endblock %}
 
 {% block script %}
+{% comment %}
+  app.js เป็นตัวคุมการกาง submenu ของ sidebar ถ้าไม่โหลด เมนู Freight Rate จะกดไม่ออก
+  base.html ปล่อย block นี้ว่างไว้ ทุกหน้าจึงต้องโหลดสคริปต์ชุดนี้เอง
+{% endcomment %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
 <script>
   (function () {
     // ใส่วงกลมหมุนหน้าปุ่มแล้วปิดปุ่มไว้ กันกดซ้ำและบอกผู้ใช้ว่ากำลังทำงานอยู่
@@ -498,6 +641,32 @@
     window.addEventListener('pageshow', function () {
       document.querySelectorAll('.btn.is-busy').forEach(clearBusy);
     });
+
+    // เคสกับตาชั่งรวมเป็น dropdown เดียวแล้ว ไม่ต้องมี js คอยซิงก์สองช่องอีก
+
+    // ช่องกรองรายวัน : ปล่อยให้เลื่อนปฏิทินไปเดือนไหนก็ได้ตามปกติ (ไม่ตั้ง min/max)
+    // เพราะ browser จะปิดปุ่มเลื่อนเดือนของปฏิทินทันทีถ้า min/max อยู่ในเดือนเดียวกัน
+    // แต่ถ้าเปลี่ยน dropdown "ประจำเดือน" แล้ววันที่เดิมหลุดจากเดือนใหม่ ก็ล้างทิ้งให้
+    // กันส่งค่าที่ขัดกันเอง (เลือกเดือน ส.ค. แต่ยังค้างวันที่ของเดือน ก.ค.)
+    var monthSelect = document.getElementById('month');
+    var dateFrom = document.getElementById('date_from');
+    var dateTo = document.getElementById('date_to');
+    if (monthSelect && dateFrom && dateTo) {
+      monthSelect.addEventListener('change', function () {
+        var parts = monthSelect.value.split('-');
+        if (parts.length !== 2) return;
+        var year = parseInt(parts[0], 10);
+        var month = parseInt(parts[1], 10);
+        var firstDay = parts[0] + '-' + parts[1] + '-01';
+        var lastDayNum = new Date(year, month, 0).getDate();
+        var lastDay = parts[0] + '-' + parts[1] + '-' + String(lastDayNum).padStart(2, '0');
+        [dateFrom, dateTo].forEach(function (input) {
+          if (input.value && (input.value < firstDay || input.value > lastDay)) {
+            input.value = '';
+          }
+        });
+      });
+    }
   })();
 </script>
 {% endblock %}

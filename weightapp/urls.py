@@ -309,6 +309,7 @@ urlpatterns = [
       path('internationalFreightRate/api/update/<int:id>/' , views.internationalFreightRateUpdate,name="internationalFreightRateUpdate"),
       path('internationalFreightRate/api/delete/<int:id>/' , views.internationalFreightRateDelete,name="internationalFreightRateDelete"),
       path('internationalFreightRate/edit/<int:id>/', views.editInternationalFreightRate, name="editInternationalFreightRate"),
+      path('internationalFreightRate/versions/<int:id>/', views.viewInternationalFreightRateVersions, name="viewInternationalFreightRateVersions"),
       path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
       path('internationalFreightRate/excel/', views.exportExcelInternationalFreightRate, name="exportExcelInternationalFreightRate"),
       path('exportDocument/', views.viewExportDocument, name="viewExportDocument"),

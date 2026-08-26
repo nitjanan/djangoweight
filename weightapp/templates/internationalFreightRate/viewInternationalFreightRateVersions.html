@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<style>
+  /* การ์ดของการปรับราคาแต่ละครั้ง กางอยู่ตลอด ไม่ต้องกดเปิด */
+  .ifr-version {
+    border: 1px solid #dee2e6;
+    border-radius: .5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  /* ราคาที่ใช้อยู่ ทำให้เด่นกว่าครั้งก่อน ๆ ด้วยขอบซ้ายสีเขียว */
+  .ifr-version-current {
+    border-left: 4px solid #198754;
+    background-color: rgba(25, 135, 84, .04);
+  }
+  .ifr-version-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+
+  /* รายการฟิลด์ของการปรับแต่ละครั้ง : ป้ายซ้าย ค่าขวา เรียงลงมาตามลำดับเดียวกับฟอร์ม */
+  .ifr-version-fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .25rem 1rem;
+    margin-bottom: 0;
+    font-size: .875rem;
+  }
+  .ifr-version-fields dt { font-weight: 600; color: #495057; }
+  .ifr-version-fields dd { margin: 0; }
+  @media (min-width: 992px) {
+    /* จอกว้างวางเป็น 2 คอลัมน์คู่ จะได้ไม่ยาวเกินไป */
+    .ifr-version-fields { grid-template-columns: max-content 1fr max-content 1fr; }
+  }
+
+  /* ปุ่มดูการปรับครั้งเก่ากว่านี้ : ทำ <summary> ให้หน้าตาเป็นปุ่ม และซ่อนสามเหลี่ยม default */
+  .ifr-version-more > summary {
+    cursor: pointer;
+    list-style: none;
+    display: inline-block;
+  }
+  .ifr-version-more > summary::-webkit-details-marker { display: none; }
+
+  /* บทสนทนาการอนุมัติ เส้นแนวตั้งด้านซ้ายให้อ่านเป็นลำดับเวลา */
+  .ifr-approval-thread {
+    border-left: 3px solid #dee2e6;
+    padding-left: .75rem;
+    margin-top: .5rem;
+  }
+  .ifr-approval-item + .ifr-approval-item { margin-top: .5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ประวัติการปรับราคาค่าขนส่ง</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item">
+              <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่งต่างประเทศ</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">ประวัติการปรับราคา</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-1">
+          {{ ifr_origin_display|default:"-" }}
+          <i class="fa-solid fa-arrow-right text-muted"></i>
+          {{ ifr_destination_display|default:"-" }}
+        </h5>
+        <span class="text-muted">ปรับมาแล้ว {{ ifr_change_count }} ครั้ง (รวมราคาเริ่มต้น {{ ifr_version_count }} รายการ)</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          <small>
+            แก้ราคาแล้วระบบเก็บของเดิมไว้ทุกครั้ง ไม่ทับกัน เอกสารเดือนเก่าจึงได้ตัวเลขเดิมเสมอ<br />
+            ตอน export ระบบเลือกราคาตามเดือนที่รายงาน ไม่ใช่ราคาล่าสุดเสมอไป
+          </small>
+        </p>
+
+        {% for v in ifr_versions %}
+          {% include "internationalFreightRate/_versionCard.html" with v=v %}
+        {% empty %}
+        <p class="text-muted mb-0">ยังไม่มีประวัติการปรับราคา</p>
+        {% endfor %}
+
+        {% if ifr_versions_more %}
+        {% comment %}
+        การปรับครั้งเก่ากว่า 5 อันแรกซ่อนไว้หลังปุ่มเดียว
+        ใช้ <details> แทน collapse ของ bootstrap เพราะไม่ต้องพึ่ง JS
+        {% endcomment %}
+        <details class="ifr-version-more">
+          <summary class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            ดูการปรับครั้งเก่ากว่านี้ ({{ ifr_versions_more_count }} ครั้ง)
+          </summary>
+          <div class="mt-3">
+            {% for v in ifr_versions_more %}
+              {% include "internationalFreightRate/_versionCard.html" with v=v %}
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mb-5">
+      {% if ifr_in_use_id %}
+      <a href="{% url 'editInternationalFreightRate' ifr_in_use_id %}" class="btn btn-info btn-lg rounded-pill">
+        แก้ไขราคาที่ใช้อยู่ <i class="fas fa-edit"></i>
+      </a>
+      {% endif %}
+      <a href="{% url 'viewInternationalFreightRate' %}" class="btn btn-secondary btn-lg rounded-pill">กลับหน้ารายการ</a>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start"><p>2023 &copy; Southern Group</p></div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+{# app.js เป็นตัวคุมการกาง submenu ของ sidebar ถ้าไม่โหลด เมนู Freight Rate จะกดไม่ออก #}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+{% endblock %}

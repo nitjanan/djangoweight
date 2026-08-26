@@ -29,7 +29,10 @@ _EXTLST_RE = re.compile(r'<extLst>.*?</extLst>\s*</worksheet>\s*$', re.S)
 _XR_UID_RE = re.compile(r'\s+xr:uid="[^"]*"')
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exceltemplate')
-TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v11.xlsx')
+TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v12.xlsx')
+# v12 = v11 ที่ขยายพื้นที่ข้อมูลจากแถว 6-3005 (3,000 เที่ยว) เป็น 6-6005 (6,000 เที่ยว)
+# ถ้าจะขยายอีกต้องขยายทั้งสามอย่างพร้อมกัน ไม่งั้นยอดในหน้าสรุปจะขาดไปเงียบ ๆ :
+#   1) แถวในชีต บันทึกรายเที่ยว   2) ช่วงที่สูตรทุกชีตอ้างถึง   3) EXPORT_DOC_MAX_TRIPS ใน views.py
 
 
 def _sheet_xml_by_name(zf):

@@ -1,6 +1,9 @@
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateTeam
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, InternationalFreightRateStatus, InternationalFreightRateApproval, InternationalFreightRateApprovalAction, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE
 from django.contrib.auth.models import User
+from django.db import models, transaction
+from django.utils import timezone
+from datetime import date
 from rest_framework.validators import ValidationError
 from rest_framework.authtoken.models import Token
 
@@ -292,8 +295,38 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
         }
 
 
+THAI_MONTH_NAMES = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+]
+
+
+def _thaiMonthLabel(month_date):
+    """date -> 'พฤษภาคม 2569' ให้ข้อความ error ตรงกับที่หน้าเว็บแสดง"""
+    if not month_date:
+        return '-'
+    return '%s %s' % (THAI_MONTH_NAMES[month_date.month - 1], month_date.year + 543)
+
+
+class InternationalFreightRateFuelPriceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InternationalFreightRateFuelPrice
+        # ตัวแม่เป็นคนใส่ root (เส้นทาง) ให้ตอนสร้าง เหมือนฝั่ง teams
+        exclude = ['root']
+        extra_kwargs = {
+            'month': {'required': True, 'allow_null': False},
+            'average_fuel_price': {'required': True, 'allow_null': False},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
+
+
 class InternationalFreightRateSerializer(serializers.ModelSerializer):
     teams = InternationalFreightRateTeamSerializer(many=True, required=False)
+    fuel_prices = InternationalFreightRateFuelPriceSerializer(many=True, required=False)
+    # หมายเหตุตอนขออนุมัติ ไม่ใช่คอลัมน์ของใบ แต่ไปลงตาราง approval เป็นข้อความรอบแรกของบทสนทนา
+    comment = serializers.CharField(write_only=True, required=False, allow_blank=True,
+                                    allow_null=True, trim_whitespace=True)
 
     class Meta:
         model = InternationalFreightRate
@@ -310,10 +343,20 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             'payload_weight': {'required': True, 'allow_null': False},
             'fuel_freight_adjustment': {'required': True, 'allow_null': False},
             'fuel_used_per_trip': {'required': True, 'allow_null': False},
-            'average_fuel_price': {'required': True, 'allow_null': False},
             # ระบบเป็นคนใส่เวลาเอง ไม่ให้ client ส่งมาทับ
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
+            # ฟิลด์ของระบบเวอร์ชัน/การอนุมัติ ระบบกำหนดเองทั้งหมด client ส่งมาไม่ได้
+            # ต้องเป็น read_only ด้วยอีกเหตุผลหนึ่ง : unique_together ('root','version')
+            # ทำให้ DRF สร้าง UniqueTogetherValidator ซึ่งบังคับให้ส่งทั้งสองช่องมาเสมอ
+            # DRF จะข้าม validator นั้นก็ต่อเมื่อฟิลด์ไม่ได้อยู่ในชุดที่เขียนได้
+            'root': {'read_only': True},
+            'version': {'read_only': True},
+            'status': {'read_only': True},
+            # effective_date ให้ผู้ใช้กรอกได้ ตั้งวันเริ่มใช้เองตอนสร้าง/ตอนออกใบใหม่
+            # ใบที่อนุมัติแล้วแก้ไม่ได้ (กดบันทึกจะกลายเป็นใบใหม่ ค่านี้จึงเป็นของใบใหม่)
+            'effective_date': {'required': False, 'allow_null': True},
+            'user_created': {'read_only': True},
         }
 
     @staticmethod
@@ -351,20 +394,138 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
                             % (self._teamLabel(team_pk), first.name, second.name))
         return teams_data
 
+    def validate_fuel_prices(self, fuel_data):
+        """ตัดวันทิ้งให้เหลือวันที่ 1 ทุกแถว
+
+        ต้องตัดตรงนี้ ไม่ใช่รอ save() ของโมเดล เพราะฝั่งอ่านจับกลุ่มด้วยค่า month ตรง ๆ
+        ถ้าบางแถวเป็นวันที่ 17 เดือนเดียวกันจะแตกเป็นคนละกลุ่ม
+        ไม่ต้องกันเดือนซ้ำแล้ว เพราะออกแบบให้ 1 เดือนมีได้หลายแถว (เก็บทุกครั้งที่แก้)
+        """
+        for fuel in fuel_data:
+            month = fuel.get('month')
+            if month is not None:
+                fuel['month'] = month.replace(day=1)
+        return fuel_data
+
+    def _currentUser(self):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return user if user is not None and user.is_authenticated else None
+
+    def _logApproval(self, rate, action, comment, user):
+        return InternationalFreightRateApproval.objects.create(
+            international_freight_rate=rate, action=action,
+            comment=(comment or None), user=user)
+
+    def _autoApprove(self, rate, comment, user):
+        """เฟสนี้ยังไม่เปิดหน้าอนุมัติของผู้บริหาร ใบที่ออกมาจึงอนุมัติให้อัตโนมัติ
+
+        ถึงจะอนุมัติเอง ก็ยังเขียนบทสนทนาไว้ครบทั้ง 2 รอบ (ขอ + อนุมัติ)
+        พอเปิดหน้าอนุมัติจริง ประวัติจะต่อกันได้เลย ไม่มีช่วงที่ข้อมูลขาด
+        แถว approve ตั้ง user = None ไว้ตั้งใจ เพื่อให้แยกออกว่าอันไหนระบบอนุมัติเอง
+        """
+        self._logApproval(rate, InternationalFreightRateApprovalAction.SUBMIT, comment, user)
+        self._logApproval(rate, InternationalFreightRateApprovalAction.APPROVE,
+                          'ระบบอนุมัติอัตโนมัติ (ยังไม่เปิดระบบอนุมัติโดยผู้บริหาร)', None)
+        rate.submitted_at = timezone.now()
+        rate.approved_at = timezone.now()
+        rate.save(update_fields=['submitted_at', 'approved_at'])
+
+    @transaction.atomic
     def create(self, validated_data):
-        # สร้างรายการหลัก + ทีมทั้งหมดในครั้งเดียว
+        """ใบแรกของเส้นทาง : เวอร์ชัน 1 อนุมัติทันที และมีผลตั้งแต่ต้น
+
+        ที่ต้องมีผลตั้งแต่ต้น (ไม่ใช่เดือนที่กรอก) เพราะข้อมูลการชั่งมีย้อนหลังหลายปี
+        แต่แถวอัตราเพิ่งถูกกรอกเข้าระบบ ถ้าใช้เดือนที่กรอก export เดือนเก่าจะหาอัตราไม่เจอ
+        """
         teams_data = validated_data.pop('teams', [])
-        rate = InternationalFreightRate.objects.create(**validated_data)
+        fuel_data = validated_data.pop('fuel_prices', [])
+        comment = validated_data.pop('comment', None)
+
+        # ไม่กรอกวันเริ่มใช้ = ตั้งแต่เริ่มระบบ ครอบคลุมทุกเดือนย้อนหลัง
+        # เส้นทางที่เพิ่งบันทึกเข้าระบบมักวิ่งมาก่อนหน้านั้นแล้ว ถ้าตั้งเป็นวันนี้
+        # export เดือนเก่าจะหาอัตราไม่เจอ เที่ยวหายทั้งเส้นทาง
+        effective_date = (validated_data.pop('effective_date', None)
+                          or INTERNATIONAL_FREIGHT_RATE_FIRST_DATE)
+
+        rate = InternationalFreightRate.objects.create(
+            version=1,
+            status=InternationalFreightRateStatus.APPROVED,
+            effective_date=effective_date,
+            user_created=self._currentUser(),
+            **validated_data)
+
         for team_data in teams_data:
             InternationalFreightRateTeam.objects.create(international_freight_rate=rate, **team_data)
+        # ราคาน้ำมันผูกกับเส้นทาง (root) ใบแรกเป็น root ของตัวเองอยู่แล้ว
+        for fuel in fuel_data:
+            InternationalFreightRateFuelPrice.objects.create(root=rate.root, **fuel)
+
+        self._autoApprove(rate, comment or 'สร้างเส้นทางใหม่', self._currentUser())
         return rate
 
+    @transaction.atomic
     def update(self, instance, validated_data):
-        # teams : ถ้าส่งมา จะแทนที่ของเดิมทั้งชุด (ลบทิ้งแล้วสร้างใหม่ตามที่ส่งมา)
-        # เพราะฟอร์มฝั่งหน้าเว็บส่งรายการทีมมาทั้งหมดทุกครั้งอยู่แล้ว
-        # ถ้าไม่ส่งคีย์ teams มาเลย = ไม่แตะทีมเดิม (ใช้กับ PATCH ที่แก้เฉพาะข้อมูลหลัก)
-        teams_data = validated_data.pop('teams', None)
+        """แก้ราคา = ออกใบใหม่ทั้งใบ ใบเก่าไม่ถูกแตะ เอกสารเดือนเก่าจึงได้ตัวเลขเดิม
 
+        ยกเว้นใบที่ยังไม่เคยถูกใช้จริง (ร่าง / รออนุมัติ / ไม่อนุมัติ) แก้ทับในแถวเดิมได้เลย
+        ไม่งั้นแก้คำผิด 3 รอบจะได้ 3 เวอร์ชันโดยไม่มีประโยชน์
+
+        fuel_prices ไม่เกี่ยวกับเวอร์ชัน เพราะผูกกับเส้นทาง เพิ่มแถวใหม่ต่อท้ายเสมอ
+        """
+        teams_data = validated_data.pop('teams', None)
+        fuel_data = validated_data.pop('fuel_prices', None)
+        comment = validated_data.pop('comment', None)
+
+        if instance.status == InternationalFreightRateStatus.APPROVED:
+            rate = self._issueNewVersion(instance, validated_data, teams_data, comment)
+        else:
+            rate = self._editInPlace(instance, validated_data, teams_data, comment)
+
+        if fuel_data is not None:
+            # เพิ่มแถวใหม่เสมอ ไม่ทับของเดิม ประวัติการแก้ราคาจึงอยู่ครบทุกครั้ง
+            for fuel in fuel_data:
+                InternationalFreightRateFuelPrice.objects.create(root=rate.root, **fuel)
+
+        return rate
+
+    def _issueNewVersion(self, instance, validated_data, teams_data, comment=None):
+        """copy ใบเดิมทั้งใบแล้วทับด้วยค่าที่ส่งมา ทีมที่ไม่ได้ส่งมาก็ copy ตามไปด้วย"""
+        root = instance.root or instance
+        last_version = (InternationalFreightRate.objects
+                        .filter(root=root)
+                        .aggregate(models.Max('version'))['version__max'] or 0)
+
+        rate = InternationalFreightRate(root=root, version=last_version + 1)
+        # ยกค่าทุกช่องจากใบเดิมมาก่อน แล้วค่อยทับเฉพาะช่องที่ส่งมาแก้
+        for field in ('origin', 'destination', 'base_fuel_price', 'distance', 'payload_weight',
+                      'fuel_freight_adjustment', 'fuel_used_per_trip', 'note'):
+            setattr(rate, field, getattr(instance, field))
+        for attr, value in validated_data.items():
+            setattr(rate, attr, value)
+
+        # เฟสนี้ยังไม่มีระบบอนุมัติ ใบใหม่จึงใช้ได้ทันที
+        # ไม่กรอกวันเริ่มใช้ = วันนี้ (ต่างจากตอนสร้างใหม่ที่ default เป็น "ตั้งแต่เริ่มระบบ"
+        # เพราะอันนี้คือการเปลี่ยนราคา ไม่ควรย้อนไปทับเดือนที่ปิดไปแล้วโดยไม่ตั้งใจ)
+        rate.status = InternationalFreightRateStatus.APPROVED
+        rate.effective_date = validated_data.get('effective_date') or date.today()
+        rate.user_created = self._currentUser()
+        rate.save()
+
+        source_teams = teams_data if teams_data is not None else [
+            {'team': t.team, 'weight_carried': t.weight_carried, 'freight_rate': t.freight_rate,
+             'discount_per_ton': t.discount_per_ton,
+             'freight_rate_per_ton_km': t.freight_rate_per_ton_km, 'note': t.note}
+            for t in instance.teams.all()
+        ]
+        for team_data in source_teams:
+            InternationalFreightRateTeam.objects.create(international_freight_rate=rate, **team_data)
+
+        self._autoApprove(rate, comment or 'แก้ไขอัตราค่าขนส่ง', self._currentUser())
+        return rate
+
+    def _editInPlace(self, instance, validated_data, teams_data, comment=None):
+        """ใบที่ยังไม่เคยถูกใช้จริง แก้ทับได้ ไม่ต้องขึ้นเวอร์ชันใหม่"""
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -372,6 +533,13 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         if teams_data is not None:
             instance.teams.all().delete()
             for team_data in teams_data:
-                InternationalFreightRateTeam.objects.create(international_freight_rate=instance, **team_data)
+                InternationalFreightRateTeam.objects.create(
+                    international_freight_rate=instance, **team_data)
 
+        # ใบที่ยังไม่อนุมัติ แก้แล้วถือเป็นการส่งขออนุมัติใหม่อีกรอบ
+        self._logApproval(instance, InternationalFreightRateApprovalAction.SUBMIT,
+                          comment or 'แก้ไขแล้วส่งอีกครั้ง', self._currentUser())
+        instance.submitted_at = timezone.now()
+        instance.status = InternationalFreightRateStatus.PENDING
+        instance.save(update_fields=['submitted_at', 'status'])
         return instance

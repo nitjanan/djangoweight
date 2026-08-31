@@ -124,7 +124,6 @@
                 <th>เส้นทาง</th>
                 <th class="ifr-col-num">ระยะทาง</th>
                 <th class="ifr-col-num">ราคาน้ำมันฐาน<br />(บาท/ลิตร)</th>
-                <th class="ifr-col-num">ราคาน้ำมันเฉลี่ย<br />(เดือนล่าสุด)</th>
                 <th class="ifr-col-num">น้ำหนักบรรทุก<br />(ตัน/เที่ยว)</th>
                 <th class="ifr-col-num">ใช้น้ำมัน<br />(ลิตร/เที่ยว)</th>
                 <th class="ifr-col-num">ปรับค่าขนส่งตามน้ำมัน<br />ลิตรละ 1 บาท</th>
@@ -155,12 +154,6 @@
                 </td>
                 <td class="ifr-col-num">{{ i.distance|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.base_fuel_price|default_if_none:"-" }}</td>
-                <td class="ifr-col-num">
-                  {% if i.latest_fuel %}
-                    {{ i.latest_fuel.average_fuel_price }}
-                    <br /><small class="text-muted">{{ i.latest_fuel_month_th }}</small>
-                  {% else %}-{% endif %}
-                </td>
                 <td class="ifr-col-num">{{ i.payload_weight|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.fuel_used_per_trip|default_if_none:"-" }}</td>
                 <td class="ifr-col-num">{{ i.fuel_freight_adjustment|default_if_none:"-" }}</td>

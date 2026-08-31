@@ -11234,9 +11234,14 @@ def _exportProgressSet(request, percent, label, done=False):
         return
     try:
         os.makedirs(EXPORT_DOC_PROGRESS_DIR, exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
+        # เขียนลงไฟล์ชั่วคราวก่อนแล้วค่อย replace ทับ เพราะ replace เป็น atomic
+        # ถ้าเขียนทับตรง ๆ ฝั่ง poll มีจังหวะอ่านเจอไฟล์ที่เขียนค้างครึ่งทาง
+        # แล้ว json.loads พัง กลายเป็น percent = None แถบจะกระตุกเป็นระยะ
+        tmp = path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
             f.write(json.dumps({'percent': percent, 'label': label, 'done': done},
                                ensure_ascii=False))
+        os.replace(tmp, path)
     except OSError:
         pass
 
@@ -11606,7 +11611,9 @@ def _exportDocumentQuerySet(request):
     # คง query string เดิมไว้) ก็ถอยไปใช้ตัวแรกของแท็บ ไม่ปล่อยให้กลายเป็น "ทั้งหมด"
     # เพราะจะได้สภาพที่ dropdown ขึ้นชื่อบริษัทหนึ่ง แต่ข้อมูลเป็นของทุกบริษัท ซึ่งหลอกตา
     company_code = request.session.get('company_code')
-    origin_sees_all = company_code == EXPORT_DOC_ALL_ORIGIN_COMPANY_CODE
+    # แท็บ ALL (บริษัททั้งหมด) ถ้าวันหลังเปิดใช้ ก็ต้องเห็นทุกต้นทางเหมือนร้อยเกาะ
+    origin_sees_all = company_code in (EXPORT_DOC_ALL_ORIGIN_COMPANY_CODE,
+                                       EXPORT_DOC_ALL_COMPANY_CODE)
     allowed_origins = _exportDocumentOriginNames(None if origin_sees_all else company_code)
 
     selected_origin = request.GET.get('origin') or ''
@@ -12069,6 +12076,8 @@ def uploadTripEdit(request):
         messages.error(request, 'ยังไม่ได้เลือกไฟล์')
         return redirect('viewExportDocument')
 
+    _exportProgressSweep()
+    _exportProgressSet(request, 5, 'กำลังอ่านไฟล์ที่อัปโหลด')
     try:
         workbook = openpyxl.load_workbook(upload, data_only=True)
         worksheet = workbook[EXPORT_DOC_EDIT_SHEET]
@@ -12091,7 +12100,19 @@ def uploadTripEdit(request):
     errors = []
     seen_ids = set()
 
-    for row in range(EXPORT_DOC_EDIT_FIRST_ROW, worksheet.max_row + 1):
+    _exportProgressSet(request, 60, 'กำลังเทียบข้อมูลกับระบบ')
+    last_row = worksheet.max_row
+    row_span = max(last_row - EXPORT_DOC_EDIT_FIRST_ROW, 1)
+
+    for row in range(EXPORT_DOC_EDIT_FIRST_ROW, last_row + 1):
+        # รายงานทุก 200 แถว ไม่ใช่ทุกแถว เพราะแต่ละครั้งเขียนไฟล์ 1 ที
+        # ถี่กว่านี้จะเสียเวลาไปกับการเขียนไฟล์มากกว่างานจริง
+        if row % 200 == 0:
+            _exportProgressSet(
+                request,
+                60 + int(38 * (row - EXPORT_DOC_EDIT_FIRST_ROW) / row_span),
+                'กำลังเทียบข้อมูลกับระบบ แถวที่ %s จาก %s' % (row, last_row))
+
         raw_id = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_ID_COL).value
         if raw_id in (None, ''):
             continue
@@ -12192,6 +12213,9 @@ def uploadTripEdit(request):
         'error_count': len(errors),
         'filename': upload.name,
     }
+    _exportProgressSet(request, 100,
+                       'ตรวจไฟล์เสร็จแล้ว พบรายการจะเปลี่ยน %s แถว' % len(changes),
+                       done=True)
     return redirect('viewExportDocument')
 
 

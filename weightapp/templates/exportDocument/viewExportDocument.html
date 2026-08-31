@@ -4,7 +4,11 @@
 {% load templatehelpers %}
 
 {% block css %}
+<link rel="stylesheet" href="{% static 'extensions/flatpickr/flatpickr.min.css' %}" />
 <style>
+  /* flatpickr สร้าง input ที่คนเห็น (altInput) ขึ้นมาใหม่ ต้องบังคับให้กว้างเท่าเดิม
+     ไม่งั้นมันจะกว้างตามข้อความ ทำให้สองช่องขนาดไม่เท่ากัน */
+  .flatpickr-input.form-control { width: 100%; }
   /* ตารางกว้างกว่าจอ ให้เลื่อนในกล่องตัวเองไม่ใช่ทั้งหน้า และหัวตารางค้างไว้ตอนเลื่อน */
   .trip-scroll {
     overflow-x: auto;
@@ -93,6 +97,29 @@
     pointer-events: none;
     opacity: 0.75;
   }
+  /* ความคืบหน้าวิ่งอยู่ในตัวปุ่มเอง แบบเดียวกับปุ่ม Weight to Express ในหน้า /weight/table
+     ผู้ใช้คุ้นกับหน้าตานี้อยู่แล้ว และไม่กินที่เพิ่มในหน้าที่มีปุ่มโหลดไฟล์หลายปุ่ม */
+  .btn.is-busy { position: relative; overflow: hidden; }
+  /* ข้อความเดิมยังกินที่อยู่ ปุ่มจึงไม่หดตอนสลับไปโชว์ % */
+  .dl-keep { visibility: hidden; }
+  .dl-fill {
+    position: absolute; left: 0; top: 0; height: 100%; width: 0;
+    /* currentColor = สีตัวอักษรของปุ่มนั้น ๆ ปุ่มทึบ (ตัวอักษรขาว) จะได้ฝ้าขาวแบบหน้า
+       /weight/table ส่วนปุ่มขอบ (ตัวอักษรสีน้ำเงิน) จะได้ฝ้าสีเดียวกับขอบ
+       ถ้า fix เป็นสีขาวตายตัว ปุ่มขอบบนธีมมืดจะกลายเป็นก้อนเทาอ่านไม่ออก */
+    background: currentColor;
+    opacity: .28;
+    transition: width .3s;
+  }
+  .dl-percent {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: 700;
+    color: inherit;
+  }
+  /* ขั้นตอนกับเวลาที่เหลือ ใส่ไว้ใต้ปุ่มเพราะในปุ่มมีที่พอแค่ตัวเลข % */
+  .dl-note { display: block; margin-top: .25rem; line-height: 1.4; }
+
   .btn-spinner {
     display: inline-block;
     width: 0.9em;
@@ -157,23 +184,40 @@
               <i class="fa-regular fa-circle-question text-muted"
                  title="เว้นว่างทั้งคู่ = ดูทั้งเดือน · ใส่ช่องเดียวก็ได้ (ตั้งแต่วันที่ หรือ ถึงวันที่) · สลับวันเข้ากับวันออกก็ได้ ระบบสลับให้เอง · ต้องอยู่ใน &quot;ประจำเดือน&quot; ที่เลือกไว้ด้วย ไม่งั้นจะไม่มีข้อมูล"></i>
             </label>
+            {% comment %}
+            ใช้ type="text" + flatpickr แทน type="date"
+            เพราะ type="date" แสดงรูปแบบตาม locale ของเบราว์เซอร์ (เครื่องนี้ขึ้น mm/dd/yyyy)
+            บังคับให้เป็น วัน/เดือน/ปี ด้วย HTML หรือ CSS ไม่ได้เลย
+            flatpickr ตั้ง altInput ไว้ : ช่องที่คนเห็นเป็น d/m/Y ส่วนค่าที่ส่งไป server
+            ยังเป็น Y-m-d เหมือนเดิม ฝั่ง view จึงไม่ต้องแก้อะไร
+            {% endcomment %}
             <div class="d-flex align-items-center gap-1">
-              <input type="date" class="form-control" id="date_from" name="date_from"
+              <input type="text" class="form-control ifr-datepicker" id="date_from" name="date_from"
                      value="{{ selected_date_from }}"
-                     title="ตั้งแต่วันที่" />
+                     placeholder="วว/ดด/ปปปป" title="ตั้งแต่วันที่" autocomplete="off" />
               <span class="text-muted">ถึง</span>
-              <input type="date" class="form-control" id="date_to" name="date_to"
+              <input type="text" class="form-control ifr-datepicker" id="date_to" name="date_to"
                      value="{{ selected_date_to }}"
-                     title="ถึงวันที่" />
+                     placeholder="วว/ดด/ปปปป" title="ถึงวันที่" autocomplete="off" />
             </div>
           </div>
 
           <div class="form-group col-md-3">
             <label for="origin">ต้นทาง (นาม)</label>
-            <select class="form-select" id="origin" name="origin">
+            {% comment %}
+            รายการมาจากแท็บบริษัทด้านบนเท่านั้น
+            (base_company_map_base_customer.base_company_id == base_comp.id)
+            มีตัวเลือก "ทั้งหมด" เฉพาะแท็บร้อยเกาะ ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
+            {% endcomment %}
+            <select class="form-select" id="origin" name="origin"
+                    {% if origin_unmapped %}disabled{% endif %}>
+              {% if origin_sees_all %}
               <option value="">ทั้งหมด</option>
+              {% endif %}
               {% for o in origin_options %}
                 <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
+              {% empty %}
+                <option value="">— ยังไม่มีต้นทางของแท็บนี้ —</option>
               {% endfor %}
             </select>
           </div>
@@ -224,6 +268,20 @@
       </div>
     </div>
 
+    {% comment %}
+    แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง base_company_map_base_customer จะเลือกต้นทางไม่ได้
+    หน้านี้จึงไม่มีข้อมูลให้ดู ต้องบอกเหตุผลกับทางแก้ ไม่งั้นจะดูเหมือนระบบพัง
+    {% endcomment %}
+    {% if origin_unmapped %}
+    <div class="alert alert-warning">
+      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง (นาม)" ไว้ในระบบ หน้านี้จึงยังไม่มีข้อมูลให้ดู<br />
+      <small>
+        ต้องไปเพิ่มบริษัทลูกค้าที่ตรงกับบริษัทนี้ในตารางบริษัทลูกค้าก่อน
+        แล้วหน้านี้จะแสดงเที่ยวของต้นทางนั้นให้เอง
+      </small>
+    </div>
+    {% endif %}
+
     {% if over_limit %}
     <div class="alert alert-danger">
       เดือนนี้มี {{ summary.trip_count|intcomma }} เที่ยว เกินที่ไฟล์ template รองรับ ({{ max_trips|intcomma }} เที่ยว)
@@ -245,12 +303,17 @@
           <div class="col-md-5">
             <a class="btn btn-outline-primary" data-busy-download="กำลังสร้างไฟล์..."
                href="{% url 'exportExcelTripEdit' %}?{{ request.GET.urlencode }}">
-              <i class="fa-solid fa-download"></i> Export ไฟล์สำหรับแก้ไข
+              <i class="fa-solid fa-download"></i> Export ข้อมูลจากตาชั่ง
             </a>
           </div>
           <div class="col-md-7">
+            {% comment %}
+            data-upload-progress : ให้ js ยิงด้วย XMLHttpRequest แทนการ submit ตรง ๆ
+            จะได้อ่าน % ของการอัปโหลดจริงจาก xhr.upload ซึ่งฟอร์มธรรมดาทำไม่ได้
+            ถ้า js พังหรือถูกปิด ฟอร์มยัง submit แบบเดิมได้ตามปกติ
+            {% endcomment %}
             <form method="post" action="{% url 'uploadTripEdit' %}" enctype="multipart/form-data"
-                  class="d-flex gap-2">
+                  class="d-flex gap-2" data-upload-progress>
               {% csrf_token %}
               <input type="file" name="trip_edit_file" accept=".xlsx" class="form-control" required>
               <button type="submit" class="btn btn-primary text-nowrap" data-busy="กำลังอัปโหลดและตรวจไฟล์...">
@@ -415,6 +478,44 @@
             <div class="ifr-issue-body">
               <div class="ifr-issue-title">ยังไม่มีราคาค่าขนส่งของเส้นทางไหนเลย</div>
               <div class="ifr-issue-text">ไฟล์ที่ได้จะเป็นเงิน 0 ทั้งหมด</div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% comment %}
+          ไม่มีราคาน้ำมัน = ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันเลยเป็น 0
+          ค่าขนส่งยังคิดได้ตามอัตราสัญญา แต่ได้ไม่ครบ จึงเป็นคำเตือน ไม่ใช่ความผิดพลาดร้ายแรง
+          แยก 2 กล่องเพราะแก้คนละที่ อันแรกแก้ที่ข้อมูลบริษัท อันหลังแค่ไปกรอกราคา
+          {% endcomment %}
+          {% if rate_stats.fuel_no_company %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_no_company|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ไม่มีราคาน้ำมัน เพราะต้นทางยังไม่ได้ผูกกับบริษัท</div>
+              <div class="ifr-issue-text">
+                ราคาน้ำมันเก็บเป็นของบริษัท ถ้าต้นทางไม่รู้ว่าเป็นของบริษัทไหน ก็หาราคาไม่เจอ
+                ช่องราคาน้ำมันในไฟล์จะว่างและมีหมายเหตุกำกับไว้ ส่วนปรับน้ำมันจะเป็น 0<br />
+                <strong>ต้องทำ:</strong> ไปผูกบริษัทให้ต้นทางเหล่านี้ในหน้าตั้งค่าบริษัทลูกค้า<br />
+                {% for r in rate_stats.fuel_no_company %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if rate_stats.fuel_no_price %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_no_price|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">เดือนนี้ยังไม่ได้กรอกราคาน้ำมันของบริษัทต้นทาง</div>
+              <div class="ifr-issue-text">
+                ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันจะเป็น 0 (ระบบไม่ใส่ 0 ในช่องราคา
+                และไม่หยิบราคาเดือนอื่นมาแทน เพราะจะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต)<br />
+                <strong>ต้องทำ:</strong>
+                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
+                  ไปกรอกราคาน้ำมันของเดือนนี้
+                </a><br />
+                {% for r in rate_stats.fuel_no_price %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
             </div>
           </div>
           {% endif %}
@@ -585,6 +686,8 @@
 <script src="{% static 'js/components/dark.js' %}"></script>
 <script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'compiled/js/app.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/flatpickr.min.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/l10n/th.js' %}"></script>
 
 <script>
   (function () {
@@ -605,8 +708,85 @@
       if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
     }
 
+    // ---------- ความคืบหน้าในตัวปุ่ม ----------
+    // หน้าตาเดียวกับปุ่ม Weight to Express ในหน้า /weight/table คือ % วิ่งอยู่ในปุ่มเลย
+    // ต่างกันที่แหล่งของตัวเลข : หน้านั้นเป็นตัวนับปลอม (เดินเองทีละ 1% ทุก 50 ms
+    // ถึง 95% แล้วค้างรอ) ส่วนหน้านี้ถาม server จริงว่าทำถึงขั้นไหน
+    // เพราะไฟล์รายงานใช้เวลาราวครึ่งนาที ตัวนับปลอมจะถึง 95% ใน 5 วินาทีแล้วค้างอีก 20 วินาที
+    // ซึ่งตอบไม่ได้ว่าอีกนานแค่ไหน อันเป็นเรื่องที่อยากรู้ตั้งแต่แรก
+    function startButtonProgress(btn) {
+      if (btn.classList.contains('is-busy')) return null;
+      btn.classList.add('is-busy');
+      btn.setAttribute('aria-busy', 'true');
+      btn.dataset.originalHtml = btn.innerHTML;
+
+      // ข้อความเดิมยังอยู่แต่ซ่อนด้วย visibility ไม่ใช่ display
+      // เพื่อให้ปุ่มกว้างเท่าเดิม ไม่หดแล้วปุ่มข้าง ๆ ขยับตาม
+      btn.innerHTML =
+        '<span class="dl-keep">' + btn.dataset.originalHtml + '</span>' +
+        '<div class="dl-fill"></div>' +
+        '<span class="dl-percent">0%</span>';
+
+      var fill = btn.querySelector('.dl-fill');
+      var percent = btn.querySelector('.dl-percent');
+
+      // ข้อความบอกขั้นตอน + เวลาที่เหลือ วางใต้ปุ่ม เพราะในปุ่มมีที่พอแค่ตัวเลข %
+      var note = document.createElement('small');
+      note.className = 'text-muted dl-note';
+      note.textContent = 'กำลังเริ่ม...';
+      btn.parentNode.insertBefore(note, btn.nextSibling);
+
+      var startedAt = Date.now();
+      var shown = 0;   // % ที่แสดงอยู่ ห้ามเดินถอยหลัง คนดูจะสับสน
+
+      function restore() {
+        btn.classList.remove('is-busy');
+        btn.removeAttribute('aria-busy');
+        if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+      }
+
+      return {
+        // percent = null แปลว่ายังไม่รู้ ให้ค้างที่เดิมแล้วบอกสถานะเป็นข้อความแทน
+        update: function (value, label) {
+          if (value !== null && value !== undefined && value > shown) {
+            shown = value;
+            fill.style.width = shown + '%';
+            percent.textContent = shown + '%';
+          }
+          var parts = [];
+          if (label) parts.push(label);
+          var left = remaining(shown, Date.now() - startedAt);
+          if (left) parts.push(left);
+          note.textContent = parts.join(' · ');
+        },
+        finish: function (label) {
+          fill.style.width = '100%';
+          percent.textContent = '100%';
+          note.textContent = label || 'เสร็จแล้ว';
+          setTimeout(function () { restore(); note.remove(); }, 1500);
+        },
+        fail: function (label) {
+          restore();
+          note.classList.remove('text-muted');
+          note.classList.add('text-danger');
+          note.textContent = label;
+        }
+      };
+    }
+
+    // เดาเวลาที่เหลือจากที่ผ่านมาแล้วเทียบกับ % ที่ทำไปได้
+    // ต่ำกว่า 5% ยังเดาไม่ได้ (ตัวหารเล็กเกิน ตัวเลขจะแกว่งจนไม่มีประโยชน์) ไม่ต้องแสดง
+    function remaining(percent, elapsedMs) {
+      if (!percent || percent < 5 || percent >= 100) return '';
+      var sec = Math.round(elapsedMs * (100 - percent) / percent / 1000);
+      if (sec <= 0) return '';
+      if (sec < 60) return 'เหลืออีกประมาณ ' + sec + ' วินาที';
+      return 'เหลืออีกประมาณ ' + Math.ceil(sec / 60) + ' นาที';
+    }
+
     // ฟอร์มธรรมดา : กดแล้วหน้าจะเปลี่ยน ปล่อยให้หมุนไปจนโหลดหน้าใหม่
-    document.querySelectorAll('form').forEach(function (form) {
+    // ฟอร์มอัปโหลดมีตัวจัดการของตัวเองด้านล่าง ข้ามไป
+    document.querySelectorAll('form:not([data-upload-progress])').forEach(function (form) {
       form.addEventListener('submit', function () {
         var btn = form.querySelector('[data-busy]');
         if (btn) setBusy(btn, btn.dataset.busy);
@@ -614,7 +794,12 @@
     });
 
     // ลิงก์ดาวน์โหลด : หน้าไม่เปลี่ยน เลยไม่รู้ว่าเสร็จเมื่อไหร่
-    // ให้ฝั่ง server ส่ง cookie ที่มี token เดียวกันกลับมาตอนไฟล์พร้อม แล้วคอยเช็ค cookie นั้น
+    // เวลาส่วนใหญ่หมดไปกับการ "สร้างไฟล์" ที่ฝั่ง server ซึ่งยังไม่ส่งไบต์ไหนออกมาเลย
+    // การวัด % จากไบต์ที่โหลดจึงไม่ช่วยอะไร ต้องให้ฝั่ง server บอกมาว่าทำถึงขั้นไหนแล้ว
+    // (view เขียนความคืบหน้าไว้ตาม token แล้วเรา poll อ่านผ่าน exportDocumentProgress)
+    // ส่วน cookie ตัวเดิมยังใช้เป็นสัญญาณว่า "ไฟล์เริ่มส่งมาแล้วจริง" เหมือนเดิม
+    var PROGRESS_URL = "{% url 'exportDocumentProgress' %}";
+
     document.querySelectorAll('[data-busy-download]').forEach(function (link) {
       link.addEventListener('click', function () {
         if (link.classList.contains('disabled')) return;
@@ -623,48 +808,129 @@
         url.searchParams.set('dl', token);
         link.href = url.pathname + url.search;
 
-        if (!setBusy(link, link.dataset.busyDownload)) return;
+        var progress = startButtonProgress(link);
+        if (!progress) return;   // กดซ้ำระหว่างที่ยังทำอยู่
 
-        var deadline = Date.now() + 180000;   // เผื่อไฟล์ใหญ่ ถ้าเกินนี้ค่อยคืนปุ่ม
+        var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
+        var polling = false;
+
         var timer = setInterval(function () {
-          var done = document.cookie.indexOf('exportDownloadToken=' + token) !== -1;
-          if (done || Date.now() > deadline) {
+          // cookie กลับมา = ไฟล์ถูกส่งออกมาแล้ว จบงานไม่ว่า % จะค้างอยู่ตรงไหน
+          if (document.cookie.indexOf('exportDownloadToken=' + token) !== -1) {
             clearInterval(timer);
-            clearBusy(link);
+            progress.finish('ไฟล์พร้อมแล้ว');
             document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
+            return;
           }
-        }, 300);
+          if (Date.now() > deadline) {
+            clearInterval(timer);
+            progress.fail('ใช้เวลานานผิดปกติ ลองใหม่อีกครั้ง หรือกรองข้อมูลให้แคบลง');
+            return;
+          }
+          if (polling) return;   // รอบก่อนยังไม่กลับ อย่ายิงซ้อน
+          polling = true;
+          fetch(PROGRESS_URL + '?dl=' + token, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { progress.update(d.percent, d.label); })
+            .catch(function () { /* อ่านไม่ได้ก็ปล่อย รอบหน้าค่อยลองใหม่ */ })
+            .then(function () { polling = false; });
+        }, 700);
+      });
+    });
+
+    // ---------- อัปโหลดไฟล์ที่แก้แล้ว ----------
+    // ฟอร์มธรรมดาบอก % ไม่ได้ ต้องยิงเองด้วย XMLHttpRequest ถึงจะอ่าน xhr.upload ได้
+    // ช่วงอัปโหลดเป็น % จริงจากไบต์ที่ส่งไป ส่วนช่วงที่ server อ่านไฟล์ต่อจะไม่มี % บอก
+    // เขียนบอกตรง ๆ ว่า "กำลังตรวจไฟล์" ดีกว่าปล่อยตัวเลขเดินเองแบบมั่ว ๆ
+    document.querySelectorAll('form[data-upload-progress]').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        var input = form.querySelector('input[type="file"]');
+        if (!input || !input.files.length) return;   // ปล่อยให้ required ของเบราว์เซอร์เตือนเอง
+        e.preventDefault();
+
+        var btn = form.querySelector('[data-busy]');
+        var progress = btn ? startButtonProgress(btn) : null;
+        if (btn && !progress) return;
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action);
+
+        xhr.upload.addEventListener('progress', function (evt) {
+          if (!evt.lengthComputable || !progress) return;
+          progress.update(Math.round(evt.loaded / evt.total * 100), 'กำลังอัปโหลดไฟล์');
+        });
+        xhr.upload.addEventListener('load', function () {
+          if (progress) progress.update(100, 'อัปโหลดเสร็จแล้ว กำลังตรวจไฟล์');
+        });
+        xhr.addEventListener('load', function () {
+          // ฝั่ง server redirect กลับหน้านี้พร้อมเก็บรายการรอยืนยันไว้ใน session
+          // โหลดหน้าเดิมซ้ำจึงเห็นผลครบ และยังคงตัวกรองบน url เดิมไว้ด้วย
+          if (progress) progress.finish('ตรวจไฟล์เสร็จแล้ว');
+          window.location.reload();
+        });
+        xhr.addEventListener('error', function () {
+          if (progress) progress.fail('อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+        });
+        xhr.send(new FormData(form));
       });
     });
 
     // กลับมาหน้านี้ด้วยปุ่ม back ของเบราว์เซอร์ ต้องคืนปุ่มให้กดได้
+    // เก็บข้อความบอกขั้นตอนที่ค้างอยู่ด้วย ไม่งั้นจะเหลือ "กำลังบันทึกไฟล์" ค้างทั้งที่จบไปแล้ว
     window.addEventListener('pageshow', function () {
       document.querySelectorAll('.btn.is-busy').forEach(clearBusy);
+      document.querySelectorAll('.dl-note').forEach(function (n) { n.remove(); });
     });
 
     // เคสกับตาชั่งรวมเป็น dropdown เดียวแล้ว ไม่ต้องมี js คอยซิงก์สองช่องอีก
 
-    // ช่องกรองรายวัน : ปล่อยให้เลื่อนปฏิทินไปเดือนไหนก็ได้ตามปกติ (ไม่ตั้ง min/max)
-    // เพราะ browser จะปิดปุ่มเลื่อนเดือนของปฏิทินทันทีถ้า min/max อยู่ในเดือนเดียวกัน
-    // แต่ถ้าเปลี่ยน dropdown "ประจำเดือน" แล้ววันที่เดิมหลุดจากเดือนใหม่ ก็ล้างทิ้งให้
-    // กันส่งค่าที่ขัดกันเอง (เลือกเดือน ส.ค. แต่ยังค้างวันที่ของเดือน ก.ค.)
+    // ช่องกรองรายวัน : type="date" แสดงรูปแบบตาม locale ของเบราว์เซอร์ บังคับไม่ได้
+    // จึงใช้ flatpickr แทน โดยแยกเป็น 2 ค่า
+    //   dateFormat 'Y-m-d'  = ค่าที่ส่งไป server (ฝั่ง view ไม่ต้องแก้อะไรเลย)
+    //   altFormat  'd/m/Y'  = ค่าที่คนเห็นบนจอ
+    // ไม่ตั้ง minDate/maxDate เพราะจะทำให้เลื่อนปฏิทินข้ามเดือนไม่ได้
     var monthSelect = document.getElementById('month');
-    var dateFrom = document.getElementById('date_from');
-    var dateTo = document.getElementById('date_to');
-    if (monthSelect && dateFrom && dateTo) {
+    var pickers = [];
+    if (window.flatpickr) {
+      if (window.flatpickr.l10ns && window.flatpickr.l10ns.th) {
+        flatpickr.localize(flatpickr.l10ns.th);
+      }
+      document.querySelectorAll('.ifr-datepicker').forEach(function (input) {
+        pickers.push(flatpickr(input, {
+          dateFormat: 'Y-m-d',
+          altInput: true,
+          altFormat: 'd/m/Y',
+          allowInput: true,
+          disableMobile: true,
+        }));
+      });
+    }
+
+    // เปลี่ยน dropdown "ประจำเดือน" แล้ววันที่เดิมหลุดจากเดือนใหม่ ก็ล้างทิ้งให้
+    // กันส่งค่าที่ขัดกันเอง (เลือกเดือน ส.ค. แต่ยังค้างวันที่ของเดือน ก.ค.)
+    // ต้องสั่งผ่าน picker.clear() ไม่ใช่ input.value = '' เพราะ flatpickr
+    // สร้างช่องที่คนเห็นขึ้นมาใหม่ การแก้ input เดิมตรง ๆ จะไม่อัปเดตสิ่งที่แสดง
+    if (monthSelect) {
       monthSelect.addEventListener('change', function () {
         var parts = monthSelect.value.split('-');
         if (parts.length !== 2) return;
-        var year = parseInt(parts[0], 10);
-        var month = parseInt(parts[1], 10);
+        var lastDayNum = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10), 0).getDate();
         var firstDay = parts[0] + '-' + parts[1] + '-01';
-        var lastDayNum = new Date(year, month, 0).getDate();
         var lastDay = parts[0] + '-' + parts[1] + '-' + String(lastDayNum).padStart(2, '0');
-        [dateFrom, dateTo].forEach(function (input) {
-          if (input.value && (input.value < firstDay || input.value > lastDay)) {
-            input.value = '';
-          }
-        });
+
+        if (pickers.length) {
+          pickers.forEach(function (fp) {
+            var v = fp.input.value;
+            if (v && (v < firstDay || v > lastDay)) fp.clear();
+          });
+        } else {
+          // เผื่อ flatpickr โหลดไม่ขึ้น ช่องจะยังเป็น text ธรรมดา ล้างค่าตรง ๆ ได้
+          document.querySelectorAll('.ifr-datepicker').forEach(function (input) {
+            if (input.value && (input.value < firstDay || input.value > lastDay)) {
+              input.value = '';
+            }
+          });
+        }
       });
     }
   })();

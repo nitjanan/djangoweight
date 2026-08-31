@@ -1565,25 +1565,25 @@ class InternationalFreightRate(models.Model):
 
 
 class InternationalFreightRateFuelPrice(models.Model):
-    """ราคาน้ำมันเฉลี่ยรายเดือนของแต่ละเส้นทาง (เก็บแบบ log ต่อท้าย)
+    """ราคาน้ำมันเฉลี่ย "รายวัน" ของแต่ละบริษัท (base_comp)
 
-    แยกออกมาจาก InternationalFreightRate เพราะราคาเปลี่ยนทุกเดือน
-    ส่วนตัวสัญญา (ระยะทาง / อัตรา / ราคาน้ำมันฐาน) ไม่เปลี่ยน
+    เดิมเก็บเป็นรายเดือนและผูกกับเส้นทาง (root) เปลี่ยนมาเป็นรายวันผูกกับบริษัท เพราะ
+    ราคาน้ำมันเป็นของบริษัท ไม่ใช่ของเส้นทาง เส้นทางที่ออกจากบริษัทเดียวกันย่อมใช้ราคาเดียวกัน
+    ถ้าเก็บแยกทีละเส้นทางต้องกรอกซ้ำหลายรอบ และมีโอกาสที่ราคาของบริษัทเดียวกันไม่ตรงกัน
 
-    แก้ราคาเดือนเดิมกี่ครั้งก็เพิ่มแถวใหม่ทุกครั้ง ไม่ทับของเก่า
-    "ราคาที่ใช้จริง" ของเดือนหนึ่ง = แถวที่ id มากที่สุดของเดือนนั้น (บันทึกล่าสุด)
+    เชื่อกับใบค่าขนส่งตอนเอาไปใช้ด้วยเงื่อนไข
+        fuel_price.base_comp_id == international_freight_rate.origin.base_company_id
+    (origin เป็นแถวของ base_company_map_base_customer ซึ่งมีคอลัมน์ base_company อยู่แล้ว)
+
+    1 บริษัท ต่อ 1 วัน มีได้แถวเดียว แก้ทับได้ เพราะตารางนี้คือ "ราคาประจำวัน"
+    ไม่ใช่ log การแก้ไข ถ้ากรอกผิดก็แก้ให้ถูก ไม่ต้องเก็บค่าที่ผิดไว้
     """
     id = models.AutoField(primary_key=True)
-    # ผูกกับ "เส้นทาง" (แถว root) ไม่ใช่เวอร์ชันใดเวอร์ชันหนึ่ง
-    # เพราะราคาน้ำมันเปลี่ยนทุกเดือน ส่วนใบอัตราเปลี่ยนปีละครั้ง คนละจังหวะกัน
-    # ถ้าผูกกับเวอร์ชัน พอออกใบใหม่ประวัติราคาน้ำมันจะติดอยู่กับใบเก่าแล้วใบใหม่เริ่มจากศูนย์
-    root = models.ForeignKey(
-        InternationalFreightRate, on_delete=models.CASCADE,
-        related_name='fuel_prices', verbose_name="เส้นทาง (ใบแรกสุด)")
+    base_comp = models.ForeignKey(
+        BaseCompany, on_delete=models.CASCADE,
+        related_name='fuel_prices', verbose_name="บริษัท")
 
-    # เก็บเป็นวันที่ 1 ของเดือนเสมอ (ดู save) หน้าเว็บให้เลือกแค่เดือน ไม่มีช่องวัน
-    # ใช้ DateField แทน year/month แยกช่อง จะได้กรองช่วงเดือนและเรียงลำดับได้ตรง ๆ
-    month = models.DateField(verbose_name="ประจำเดือน")
+    date = models.DateField(verbose_name="ประจำวันที่")
     average_fuel_price = models.DecimalField(
         max_digits=10, decimal_places=2, verbose_name="ราคาน้ำมันเฉลี่ย (บาท/ลิตร)")
 
@@ -1593,26 +1593,20 @@ class InternationalFreightRateFuelPrice(models.Model):
 
     class Meta:
         db_table = 'international_freight_rate_fuel_price'
-        # ใหม่ไปเก่า : เดือนล่าสุดก่อน ถ้าเดือนเดียวกันเอาที่บันทึกทีหลังขึ้นก่อน
-        ordering = ['-month', '-id']
-        # ไม่มี unique_together เพราะ 1 เดือนมีได้หลายแถว (แก้ราคากี่ครั้งก็เก็บครบ)
+        # ใหม่ไปเก่า วันเดียวกันเรียงตามบริษัท จะได้อ่านเป็นตารางรายวันได้เลย
+        ordering = ['-date', 'base_comp_id']
+        # 1 บริษัท 1 วัน = 1 ราคา ให้ฐานข้อมูลกันซ้ำเอง ไม่ต้องหวังพึ่งการตรวจฝั่งหน้าเว็บ
+        unique_together = ('base_comp', 'date')
         indexes = [
-            models.Index(fields=['root', '-month', '-id'],
-                         name='ifr_fuel_rate_month_idx'),
+            models.Index(fields=['base_comp', '-date'], name='ifr_fuel_comp_date_idx'),
         ]
-        verbose_name = 'ราคาน้ำมันเฉลี่ยรายเดือน'
-        verbose_name_plural = 'ราคาน้ำมันเฉลี่ยรายเดือน'
-
-    def save(self, *args, **kwargs):
-        # ตัดวันทิ้งเสมอ ให้ทุกแถวของเดือนเดียวกันมีค่า month ตรงกันเป๊ะ
-        # ไม่งั้นการจับกลุ่มตามเดือนจะแตกเป็นหลายกลุ่มโดยไม่ตั้งใจ
-        if self.month:
-            self.month = self.month.replace(day=1)
-        super().save(*args, **kwargs)
+        verbose_name = 'ราคาน้ำมันเฉลี่ยรายวัน'
+        verbose_name_plural = 'ราคาน้ำมันเฉลี่ยรายวัน'
 
     def __str__(self):
-        return "%s : %s" % (self.month.strftime('%Y-%m') if self.month else '-',
-                            self.average_fuel_price)
+        return '%s %s : %s' % (
+            self.base_comp.code if self.base_comp_id else '-',
+            self.date, self.average_fuel_price)
 
 
 # class CarryingweightTeam(models.TextChoices):

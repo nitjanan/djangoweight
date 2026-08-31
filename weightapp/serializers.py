@@ -309,21 +309,38 @@ def _thaiMonthLabel(month_date):
 
 
 class InternationalFreightRateFuelPriceSerializer(serializers.ModelSerializer):
+    """ราคาน้ำมันเฉลี่ยรายวันของบริษัท มีหน้าจอของตัวเอง ไม่ได้ฝังอยู่ในใบค่าขนส่งแล้ว
+
+    ถอด UniqueTogetherValidator ที่ DRF ใส่มาให้เองออก เพราะเราตั้งใจให้ "บันทึกซ้ำวันเดิม
+    = แก้ราคาของวันนั้น" ถ้าปล่อยไว้จะเด้ง error ว่าซ้ำ ทั้งที่เจตนาคือแก้ทับ
+    การกันซ้ำจริง ๆ ยังอยู่ที่ unique_together ในฐานข้อมูล
+    """
+    # ส่งกลับให้หน้าเว็บใช้แสดงผลได้เลย ไม่ต้องยิงถามชื่อบริษัทซ้ำ
+    base_comp_code = serializers.CharField(source='base_comp.code', read_only=True)
+    base_comp_name = serializers.CharField(source='base_comp.name', read_only=True)
+
     class Meta:
         model = InternationalFreightRateFuelPrice
-        # ตัวแม่เป็นคนใส่ root (เส้นทาง) ให้ตอนสร้าง เหมือนฝั่ง teams
-        exclude = ['root']
+        fields = '__all__'
+        validators = []
         extra_kwargs = {
-            'month': {'required': True, 'allow_null': False},
+            'base_comp': {'required': True, 'allow_null': False},
+            'date': {'required': True, 'allow_null': False},
             'average_fuel_price': {'required': True, 'allow_null': False},
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
         }
 
+    def validate_average_fuel_price(self, value):
+        # ราคาน้ำมันติดลบหรือศูนย์เป็นไปไม่ได้ และตัวเลขนี้ไปคูณคิดเงินต่อ
+        # ปล่อยผ่านแล้วยอดจะเพี้ยนแบบเงียบ ๆ กันไว้ตั้งแต่ตอนกรอกดีกว่า
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('ราคาน้ำมันต้องมากกว่า 0')
+        return value
+
 
 class InternationalFreightRateSerializer(serializers.ModelSerializer):
     teams = InternationalFreightRateTeamSerializer(many=True, required=False)
-    fuel_prices = InternationalFreightRateFuelPriceSerializer(many=True, required=False)
     # หมายเหตุตอนขออนุมัติ ไม่ใช่คอลัมน์ของใบ แต่ไปลงตาราง approval เป็นข้อความรอบแรกของบทสนทนา
     comment = serializers.CharField(write_only=True, required=False, allow_blank=True,
                                     allow_null=True, trim_whitespace=True)
@@ -394,19 +411,6 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
                             % (self._teamLabel(team_pk), first.name, second.name))
         return teams_data
 
-    def validate_fuel_prices(self, fuel_data):
-        """ตัดวันทิ้งให้เหลือวันที่ 1 ทุกแถว
-
-        ต้องตัดตรงนี้ ไม่ใช่รอ save() ของโมเดล เพราะฝั่งอ่านจับกลุ่มด้วยค่า month ตรง ๆ
-        ถ้าบางแถวเป็นวันที่ 17 เดือนเดียวกันจะแตกเป็นคนละกลุ่ม
-        ไม่ต้องกันเดือนซ้ำแล้ว เพราะออกแบบให้ 1 เดือนมีได้หลายแถว (เก็บทุกครั้งที่แก้)
-        """
-        for fuel in fuel_data:
-            month = fuel.get('month')
-            if month is not None:
-                fuel['month'] = month.replace(day=1)
-        return fuel_data
-
     def _currentUser(self):
         request = self.context.get('request')
         user = getattr(request, 'user', None)
@@ -439,7 +443,6 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         แต่แถวอัตราเพิ่งถูกกรอกเข้าระบบ ถ้าใช้เดือนที่กรอก export เดือนเก่าจะหาอัตราไม่เจอ
         """
         teams_data = validated_data.pop('teams', [])
-        fuel_data = validated_data.pop('fuel_prices', [])
         comment = validated_data.pop('comment', None)
 
         # ไม่กรอกวันเริ่มใช้ = ตั้งแต่เริ่มระบบ ครอบคลุมทุกเดือนย้อนหลัง
@@ -457,9 +460,6 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         for team_data in teams_data:
             InternationalFreightRateTeam.objects.create(international_freight_rate=rate, **team_data)
-        # ราคาน้ำมันผูกกับเส้นทาง (root) ใบแรกเป็น root ของตัวเองอยู่แล้ว
-        for fuel in fuel_data:
-            InternationalFreightRateFuelPrice.objects.create(root=rate.root, **fuel)
 
         self._autoApprove(rate, comment or 'สร้างเส้นทางใหม่', self._currentUser())
         return rate
@@ -471,23 +471,72 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         ยกเว้นใบที่ยังไม่เคยถูกใช้จริง (ร่าง / รออนุมัติ / ไม่อนุมัติ) แก้ทับในแถวเดิมได้เลย
         ไม่งั้นแก้คำผิด 3 รอบจะได้ 3 เวอร์ชันโดยไม่มีประโยชน์
 
-        fuel_prices ไม่เกี่ยวกับเวอร์ชัน เพราะผูกกับเส้นทาง เพิ่มแถวใหม่ต่อท้ายเสมอ
+        ราคาน้ำมันเฉลี่ยไม่เกี่ยวข้องกับใบนี้แล้ว ย้ายไปอยู่หน้าราคาน้ำมันรายวันของบริษัท
         """
         teams_data = validated_data.pop('teams', None)
-        fuel_data = validated_data.pop('fuel_prices', None)
         comment = validated_data.pop('comment', None)
 
-        if instance.status == InternationalFreightRateStatus.APPROVED:
+        if not self._rateChanged(instance, validated_data, teams_data):
+            # กดบันทึกโดยไม่ได้แก้อะไรในตัวค่าขนส่งเลย ไม่ต้องออกฉบับใหม่
+            # ไม่งั้นจะได้ฉบับที่ทุกช่องเหมือนเดิมมากองเต็มประวัติจนอ่านไม่ออก
+            rate = instance
+        elif instance.status == InternationalFreightRateStatus.APPROVED:
             rate = self._issueNewVersion(instance, validated_data, teams_data, comment)
         else:
             rate = self._editInPlace(instance, validated_data, teams_data, comment)
 
-        if fuel_data is not None:
-            # เพิ่มแถวใหม่เสมอ ไม่ทับของเดิม ประวัติการแก้ราคาจึงอยู่ครบทุกครั้ง
-            for fuel in fuel_data:
-                InternationalFreightRateFuelPrice.objects.create(root=rate.root, **fuel)
-
         return rate
+
+    # ช่องที่ถือว่าเป็น "ตัวค่าขนส่ง" จริง ๆ ถ้าช่องพวกนี้เปลี่ยนถึงจะนับเป็นการปรับราคา
+    # effective_date ไม่นับ เพราะฟอร์มเติมค่าเดิมมาให้อยู่แล้ว ถ้าไม่แตะก็ส่งค่าเดิมกลับมา
+    _RATE_FIELDS = ('origin', 'destination', 'base_fuel_price', 'distance', 'payload_weight',
+                    'fuel_freight_adjustment', 'fuel_used_per_trip', 'note')
+
+    @staticmethod
+    def _teamKey(team_data):
+        """ปั้นคีย์เทียบทีม 1 แถว รับได้ทั้ง dict จากฟอร์มและ object จาก db
+
+        คืนเป็น tuple ของ str ทุกช่อง เพราะต้องเอาไป sorted() แล้วเทียบกัน
+        ถ้าปล่อยเป็นค่าดิบจะพังทันทีเมื่อมีแถว "ทุกทีม" (team = None) ปนกับทีมที่ระบุชื่อ
+        เพราะ python เทียบ None กับ str ไม่ได้ -> TypeError ตอนกดบันทึก
+        """
+        get = (team_data.get if isinstance(team_data, dict)
+               else lambda k, d=None: getattr(team_data, k, d))
+        team = get('team')
+        band = get('weight_carried')
+
+        def s(value):
+            # None กับค่าว่างให้ถือเป็นอย่างเดียวกัน ฟอร์มส่ง null มาแทนช่องที่ไม่ได้กรอก
+            return '' if value is None else str(value)
+
+        return (
+            s(getattr(team, 'pk', team)),
+            s(getattr(band, 'pk', band)),
+            s(get('freight_rate')),
+            s(get('discount_per_ton')),
+            s(get('freight_rate_per_ton_km')),
+            s(get('note')),
+        )
+
+    def _rateChanged(self, instance, validated_data, teams_data):
+        """ค่าขนส่งเปลี่ยนจริงไหม ใช้ตัดสินว่าต้องออกฉบับใหม่หรือไม่
+
+        กดบันทึกโดยไม่แก้อะไรในตัวค่าขนส่ง (เช่นแก้แค่ราคาน้ำมันเฉลี่ย) ไม่ควรได้ฉบับใหม่
+        เพราะฉบับใหม่ที่ทุกช่องเหมือนเดิมไม่ได้บอกอะไร มีแต่ทำให้ประวัติอ่านยาก
+        """
+        for field in self._RATE_FIELDS:
+            if field not in validated_data:
+                continue
+            if validated_data[field] != getattr(instance, field):
+                return True
+
+        if teams_data is not None:
+            old = sorted(self._teamKey(t) for t in instance.teams.all())
+            new = sorted(self._teamKey(t) for t in teams_data)
+            if old != new:
+                return True
+
+        return False
 
     def _issueNewVersion(self, instance, validated_data, teams_data, comment=None):
         """copy ใบเดิมทั้งใบแล้วทับด้วยค่าที่ส่งมา ทีมที่ไม่ได้ส่งมาก็ copy ตามไปด้วย"""

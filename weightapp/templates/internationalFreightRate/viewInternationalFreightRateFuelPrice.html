@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'extensions/flatpickr/flatpickr.min.css' %}" />
+<style>
+  /* flatpickr สร้างช่องที่คนเห็น (altInput) ขึ้นมาใหม่ ต้องบังคับความกว้างให้เท่าช่องเดิม
+     ไม่งั้นช่องจะหดเหลือเท่าความยาวข้อความ */
+  .flatpickr-input.form-control { width: 100%; }
+
+  .fuel-col-num { text-align: right; white-space: nowrap; }
+
+  /* ฟอร์มกรอกราคาของ 1 วัน : ช่องราคาแคบ ๆ เรียงกันเป็นแถว อ่านเทียบกันได้ทั้งคอลัมน์ */
+  .fuel-price-input { max-width: 140px; text-align: right; }
+
+  /* บริษัทที่ยังไม่ได้กรอกราคาของวันนี้ ทำให้จางลง จะได้เห็นว่าเหลืออะไรต้องกรอก */
+  .fuel-row-empty td { background-color: rgba(0, 0, 0, .015); }
+
+  /* การ์ดสรุปค่าเฉลี่ย : ตัวเลขที่ export จะใช้จริง ทำให้เด่นกว่าตารางดิบ */
+  .fuel-avg-value { font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+  .fuel-avg-none { color: #dc3545; font-size: .95rem; font-weight: 600; }
+
+  .fuel-day-head {
+    background-color: rgba(0, 0, 0, .04);
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ราคาน้ำมันเฉลี่ย</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">ราคาน้ำมันเฉลี่ย</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+
+    <div id="fuel_alert" class="alert d-none" role="alert"></div>
+
+    {% comment %}
+    ฟอร์มกรอกราคาของ 1 วัน ทีเดียวครบทุกบริษัท
+    คนกรอกคิดเป็น "วันนี้ราคาเท่าไร" ไม่ได้คิดเป็น "บริษัทนี้วันไหนบ้าง"
+    ฟอร์มจึงยึดวันที่เป็นหลัก แล้วไล่บริษัทลงมา
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-1">กรอกราคาน้ำมันประจำวัน</h5>
+        <span class="text-muted">
+          ราคาน้ำมันเก็บเป็นของ <strong>บริษัท</strong> ไม่ใช่ของเส้นทาง
+          เส้นทางที่ออกจากบริษัทเดียวกันจึงใช้ราคาเดียวกันทั้งหมด<br />
+          {% if fuel_tab_is_all %}
+          ตอนนี้อยู่แท็บ <strong>{{ fuel_tab_code }}</strong> จึงเห็นครบทุกบริษัท
+          {% else %}
+          ตอนนี้อยู่แท็บ <strong>{{ fuel_tab_code }}</strong> —
+          ทุกตารางในหน้านี้เป็นของบริษัทนี้เท่านั้น เปลี่ยนบริษัทได้ที่แท็บด้านบน
+          {% endif %}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row gx-3 gy-2 align-items-end mb-3">
+          <div class="form-group col-md-4 mb-0">
+            <label for="fuel_form_date">วันที่</label>
+            {% comment %}
+            type="date" แสดงรูปแบบตาม locale ของเบราว์เซอร์ บังคับไม่ได้
+            จึงใช้ type="text" + flatpickr เหมือนหน้า Export เอกสาร
+            ช่องที่คนเห็นเป็น วัน/เดือน/ปี ส่วนค่าที่ส่งไป server ยังเป็น Y-m-d เหมือนเดิม
+            {% endcomment %}
+            <input type="text" class="form-control" id="fuel_form_date" value="{{ fuel_form_date }}" />
+            <small class="text-muted">{{ fuel_form_date_th }}</small>
+          </div>
+          <div class="form-group col-md-8 mb-0">
+            <p class="text-muted mb-0" style="font-size: .85rem;">
+              เปลี่ยนวันที่แล้วหน้าจะโหลดราคาของวันนั้นมาให้ · กรอกทับได้เลยถ้าใส่ผิด<br />
+              <strong>ลบราคาออกจากช่องแล้วกดบันทึก = ลบราคาของบริษัทนั้นในวันนั้นทิ้ง</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th>บริษัท</th>
+                <th style="width: 180px;">ราคาน้ำมัน (บาท/ลิตร)</th>
+                <th>หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody id="fuel_form_rows">
+              {% for r in fuel_form_rows %}
+              <tr {% if not r.price %}class="fuel-row-empty"{% endif %} data-company="{{ r.company.id }}">
+                <td>
+                  <strong>{{ r.company.code }}</strong>
+                  <span class="text-muted">{{ r.company.name }}</span>
+                </td>
+                <td>
+                  <input type="text" inputmode="decimal" class="form-control fuel-price-input fuel-price"
+                         value="{{ r.price }}" placeholder="ไม่กรอก" />
+                </td>
+                <td>
+                  <input type="text" class="form-control fuel-note" maxlength="255"
+                         value="{{ r.note }}" placeholder="ไม่บังคับ" />
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">ยังไม่มีบริษัทในระบบ</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <button type="button" id="fuel_save" class="btn btn-primary rounded-pill">
+          <i class="fas fa-save"></i> บันทึกราคาของวันนี้
+        </button>
+      </div>
+    </div>
+
+    {% comment %}
+    สรุปค่าเฉลี่ยของเดือน = ตัวเลขที่ไฟล์ export จะหยิบไปใส่ช่อง "ราคาน้ำมันเฉลี่ย" จริง ๆ
+    แสดงไว้ให้เห็นกับตา จะได้ไม่ต้องเปิดไฟล์ออกมาเช็คว่าใช้ราคาเท่าไร
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header d-flex flex-wrap align-items-center gap-2">
+        <h5 class="card-title mb-0">ราคาเฉลี่ยประจำเดือน {{ fuel_selected_month_th }}</h5>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <a href="?month={{ fuel_prev_month }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-chevron-left"></i> เดือนก่อน
+          </a>
+          <input type="month" class="form-control form-control-sm" style="width: 170px;"
+                 id="fuel_month" value="{{ fuel_selected_month }}" />
+          <a href="?month={{ fuel_next_month }}" class="btn btn-sm btn-outline-secondary">
+            เดือนถัดไป <i class="fa-solid fa-chevron-right"></i>
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          <small>
+            ไฟล์ export ของเดือนนี้จะใช้ตัวเลขข้างล่างนี้ในช่อง "ราคาน้ำมันเฉลี่ย" ของ sheet อัตราค่าขนส่ง
+            โดยเฉลี่ยจากทุกวันที่กรอกไว้ในเดือน<br />
+            บริษัทที่ยังไม่ได้กรอกเลย ช่องราคาน้ำมันในไฟล์จะว่าง และมีหมายเหตุกำกับไว้ว่า
+            "ไม่มีราคาน้ำมัน" — ระบบไม่ใส่ 0 ให้ เพราะ 0 จะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต
+          </small>
+        </p>
+        <div class="row gy-3">
+          {% for s in fuel_summary %}
+          <div class="col-6 col-md-4 col-xl-3">
+            <div class="card mb-0 h-100">
+              <div class="card-body px-3 py-3">
+                <h6 class="text-muted mb-1">
+                  <strong>{{ s.company.code }}</strong> {{ s.company.name }}
+                </h6>
+                {% if s.avg_price %}
+                <div class="fuel-avg-value">{{ s.avg_price|floatformat:2 }}</div>
+                <small class="text-muted">
+                  บาท/ลิตร · เฉลี่ยจาก {{ s.day_count }} วัน จาก {{ fuel_month_days }} วัน
+                </small>
+                {% else %}
+                <div class="fuel-avg-none">ไม่มีราคาน้ำมัน</div>
+                <small class="text-muted">เดือนนี้ยังไม่ได้กรอกสักวัน</small>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">ราคาที่กรอกไว้ในเดือน {{ fuel_selected_month_th }}</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th style="min-width: 150px;">วันที่</th>
+                <th>บริษัท</th>
+                <th class="fuel-col-num">ราคา (บาท/ลิตร)</th>
+                <th>หมายเหตุ</th>
+                <th style="width: 90px;">ลบ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% regroup fuel_rows by date as day_groups %}
+              {% for g in day_groups %}
+                {% for f in g.list %}
+                <tr>
+                  {% if forloop.first %}
+                  {% comment %}รวมช่องวันที่ของวันเดียวกันเป็นช่องเดียว จะได้อ่านเป็นวัน ๆ ไป{% endcomment %}
+                  <td class="fuel-day-head" rowspan="{{ g.list|length }}">
+                    {{ f.date_th }}
+                    <br />
+                    <a href="?month={{ fuel_selected_month }}&amp;date={{ f.date|date:'Y-m-d' }}"
+                       class="badge bg-light text-dark border text-decoration-none">
+                      แก้ราคาของวันนี้
+                    </a>
+                  </td>
+                  {% endif %}
+                  <td>
+                    <strong>{{ f.base_comp.code }}</strong>
+                    <span class="text-muted">{{ f.base_comp.name }}</span>
+                  </td>
+                  <td class="fuel-col-num">{{ f.average_fuel_price }}</td>
+                  <td>{{ f.note|default_if_none:"-"|default:"-" }}</td>
+                  <td>
+                    <button type="button" class="btn btn-danger btn-sm fuel-delete-btn" data-id="{{ f.id }}">
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% empty %}
+              <tr><td colspan="5" class="text-center text-muted">เดือนนี้ยังไม่ได้กรอกราคาน้ำมัน</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start"><p>2023 &copy; Southern Group</p></div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+{% comment %}app.js เป็นตัวคุมการกาง submenu ของ sidebar ถ้าไม่โหลด เมนู Freight Rate จะกดไม่ออก{% endcomment %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/flatpickr.min.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/l10n/th.js' %}"></script>
+
+<script>
+  const FUEL_CSRF = "{{ csrf_token }}";
+  const FUEL_SAVE_URL = "{% url 'internationalFreightRateFuelPriceSaveDay' %}";
+  const FUEL_DELETE_URL = "{% url 'internationalFreightRateFuelPriceDelete' 0 %}";
+  const FUEL_MONTH = "{{ fuel_selected_month }}";
+
+  function fuelShowAlert(message, isError) {
+    const box = document.getElementById('fuel_alert');
+    box.textContent = message;
+    box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ช่องวันที่ : dateFormat = ค่าที่ส่งไป server (ฝั่ง view ไม่ต้องแก้อะไรเลย)
+  //             altFormat  = รูปแบบที่คนเห็นบนจอ คือ วัน/เดือน/ปี
+  // ไม่ตั้ง minDate/maxDate เพราะจะทำให้เลื่อนปฏิทินข้ามเดือนไม่ได้
+  var fuelDateInput = document.getElementById('fuel_form_date');
+  if (window.flatpickr) {
+    if (window.flatpickr.l10ns && window.flatpickr.l10ns.th) {
+      flatpickr.localize(flatpickr.l10ns.th);
+    }
+    flatpickr(fuelDateInput, {
+      dateFormat: 'Y-m-d',
+      altInput: true,
+      altFormat: 'd/m/Y',
+      allowInput: true,
+      disableMobile: true,
+    });
+  }
+
+  // เปลี่ยนวันที่หรือเดือน = โหลดหน้าใหม่พร้อมข้อมูลของช่วงนั้น
+  // ไม่ทำเป็น ajax เพราะทั้งฟอร์ม ตาราง และการ์ดสรุป ต้องเปลี่ยนพร้อมกันหมด
+  // ฟัง change ที่ input เดิม (ไม่ใช่ altInput) เพราะ flatpickr เขียนค่า Y-m-d ลงตัวนี้แล้วยิง change ให้
+  fuelDateInput.addEventListener('change', function () {
+    if (!this.value) return;
+    window.location.href = '?month=' + this.value.slice(0, 7) + '&date=' + this.value;
+  });
+
+  document.getElementById('fuel_month').addEventListener('change', function () {
+    if (!this.value) return;
+    window.location.href = '?month=' + this.value;
+  });
+
+  document.getElementById('fuel_save').addEventListener('click', function () {
+    const btn = this;
+    const targetDate = document.getElementById('fuel_form_date').value;
+    if (!targetDate) {
+      fuelShowAlert('กรุณาเลือกวันที่ก่อน', true);
+      return;
+    }
+
+    // ตรวจรูปแบบตัวเลขที่ฝั่งหน้าเว็บก่อน จะได้บอกได้ว่าบริษัทไหนกรอกผิด
+    // (ฝั่ง API ตรวจซ้ำอีกรอบอยู่แล้ว ตรงนี้แค่ทำให้ข้อความ error อ่านง่ายขึ้น)
+    const prices = [];
+    const badRows = [];
+    document.querySelectorAll('#fuel_form_rows tr[data-company]').forEach(function (tr) {
+      const raw = tr.querySelector('.fuel-price').value.trim();
+      if (raw !== '' && !(parseFloat(raw) > 0)) {
+        badRows.push(tr.querySelector('td').innerText.trim());
+        return;
+      }
+      prices.push({
+        base_comp: tr.dataset.company,
+        average_fuel_price: raw,
+        note: tr.querySelector('.fuel-note').value.trim(),
+      });
+    });
+
+    if (badRows.length > 0) {
+      fuelShowAlert('ราคาน้ำมันต้องเป็นตัวเลขมากกว่า 0 : ' + badRows.join(', '), true);
+      return;
+    }
+
+    btn.disabled = true;
+    fetch(FUEL_SAVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': FUEL_CSRF },
+      body: JSON.stringify({ date: targetDate, prices: prices }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (result.ok) {
+          fuelShowAlert('บันทึกสำเร็จ กำลังโหลดหน้าใหม่...', false);
+          window.location.reload();
+        } else {
+          fuelShowAlert('บันทึกไม่สำเร็จ : ' + (result.data.error || JSON.stringify(result.data)), true);
+          btn.disabled = false;
+        }
+      })
+      .catch(function (err) {
+        console.error(err);
+        fuelShowAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+        btn.disabled = false;
+      });
+  });
+
+  document.querySelectorAll('.fuel-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!confirm('ต้องการลบราคาน้ำมันรายการนี้หรือไม่ ?')) return;
+      btn.disabled = true;
+      fetch(FUEL_DELETE_URL.replace(/0\/$/, btn.dataset.id + '/'), {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': FUEL_CSRF },
+      })
+        .then(function (res) {
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            fuelShowAlert('ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', true);
+            btn.disabled = false;
+          }
+        })
+        .catch(function (err) {
+          console.error(err);
+          fuelShowAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+          btn.disabled = false;
+        });
+    });
+  });
+</script>
+{% endblock %}

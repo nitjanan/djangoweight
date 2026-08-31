@@ -32,14 +32,6 @@
     max-width: min(360px, 90vw);
   }
 
-  /* ปุ่มดูประวัติราคาปีก่อน ๆ : ทำ <summary> ให้หน้าตาเป็นปุ่ม และซ่อนสามเหลี่ยม default */
-  .ifr-fuel-older > summary {
-    cursor: pointer;
-    list-style: none;
-    display: inline-block;
-  }
-  .ifr-fuel-older > summary::-webkit-details-marker { display: none; }
-
   /* จัดกลุ่มทีม : เส้นหนาคั่นระหว่างทีม ส่วนแถวที่เป็นทีมเดิมต่อจากด้านบนทำให้จางลง
      ยังคงให้แก้ทีมในทุกแถวได้ตามเดิม แค่ทำให้เห็นด้วยตาว่าแถวไหนเป็นทีมเดียวกัน */
   #ifr_team_rows tr.ifr-team-group-start > td {
@@ -181,71 +173,6 @@
         </div>
       </div>
 
-      <!-- ราคาน้ำมันเฉลี่ยรายเดือน : กรอกแค่ของเดือนปัจจุบัน เดือนก่อน ๆ เก็บเป็นประวัติ -->
-      <div class="card">
-        <div class="card-header">
-          <h5 class="card-title mb-0">ราคาน้ำมันเฉลี่ย ประจำเดือน {{ ifr_current_month_th }}</h5>
-        </div>
-        <div class="card-body">
-          <div class="row gx-3 gy-2 align-items-end">
-            <div class="form-group col-md-3">
-              <label for="ifr_fuel_price">ราคาน้ำมันเฉลี่ย (บาท/ลิตร)</label>
-              {# เริ่มต้นล็อกไว้ กันแก้ราคาโดยไม่ตั้งใจตอนเข้ามาแก้เรื่องอื่น #}
-              <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_price"
-                     placeholder="ยังไม่ได้กรอก"
-                     value="{{ ifr_current_month_price|default_if_none:'' }}" readonly />
-            </div>
-            <div class="form-group col-md-6">
-              <label for="ifr_fuel_note">หมายเหตุ</label>
-              <input type="text" class="form-control" id="ifr_fuel_note" maxlength="255"
-                     placeholder="ไม่บังคับ"
-                     value="{{ ifr_current_month_note|default_if_none:'' }}" readonly />
-            </div>
-            <div class="form-group col-md-3">
-              <button type="button" id="ifr_fuel_edit" class="btn btn-secondary">
-                <i class="fas fa-edit"></i> แก้ไขราคาเดือนนี้
-              </button>
-              <button type="button" id="ifr_fuel_cancel" class="btn btn-outline-secondary d-none">
-                ยกเลิก
-              </button>
-            </div>
-          </div>
-          <p class="text-muted mb-0 mt-2" style="font-size: .85rem;">
-            บันทึกเป็นราคาของเดือน <strong>{{ ifr_current_month_th }}</strong> ให้อัตโนมัติ
-            ไม่ต้องเลือกเดือนเอง — แก้กี่ครั้งก็เก็บไว้ทุกครั้ง ราคาที่ใช้จริงคือครั้งล่าสุด
-            <br />ตอน export เอกสาร ระบบหยิบราคาของเดือนที่เลือกในหน้ารายงานมาใช้
-            เดือนไหนยังไม่ได้กรอก ช่องนั้นในไฟล์จะว่าง (ไม่หยิบเดือนอื่นมาแทน)
-          </p>
-
-          {% if ifr_fuel_history_current or ifr_fuel_history_older %}
-          <hr />
-          <h6 class="mb-2">ประวัติราคาย้อนหลัง</h6>
-
-          {# หน้าจอปกติเห็นแค่ปีนี้ ปีก่อน ๆ ซ่อนไว้หลังปุ่มเพื่อไม่ให้ตารางยาวเกินไป #}
-          {% if ifr_fuel_history_current %}
-            {% include "internationalFreightRate/_fuelPriceHistoryYear.html" with g=ifr_fuel_history_current %}
-          {% else %}
-            <p class="text-muted mb-2"><small>ปีนี้ยังไม่มีการบันทึกราคา</small></p>
-          {% endif %}
-
-          {% if ifr_fuel_history_older %}
-          {# ใช้ <details> แทน collapse ของ bootstrap เพราะไม่ต้องพึ่ง JS กดเปิด/ปิดได้เลย #}
-          <details class="ifr-fuel-older">
-            <summary class="btn btn-sm btn-outline-secondary">
-              <i class="fa-solid fa-clock-rotate-left"></i>
-              ดูย้อนหลังทั้งหมด ({{ ifr_fuel_history_older_count }} รายการ)
-            </summary>
-            <div class="mt-3">
-              {% for g in ifr_fuel_history_older %}
-                {% include "internationalFreightRate/_fuelPriceHistoryYear.html" with g=g %}
-              {% endfor %}
-            </div>
-          </details>
-          {% endif %}
-          {% endif %}
-        </div>
-      </div>
-
       <div class="card">
         <div class="card-header">
           <h5 class="card-title mb-0">ความเห็นตอนขออนุมัติ</h5>
@@ -346,7 +273,6 @@
   );
 
   // เดือนปัจจุบันจาก server (วันที่ 1 ของเดือน) ใช้ผูกกับราคาน้ำมันที่กรอก
-  const IFR_CURRENT_MONTH = "{{ ifr_current_month }}";
 
   let TEAM_OPTIONS = [];   // [{car_team_id, car_team_name}, ...]
   // ลูกค้ามีหลายพันรายการ ใช้ choices.js ทำ dropdown ที่พิมพ์ค้นหาได้
@@ -647,54 +573,6 @@
     return teams;
   }
 
-  // ---------- ราคาน้ำมันเฉลี่ยของเดือนปัจจุบัน ----------
-  // กรอกช่องเดียว ระบบผูกกับเดือนปัจจุบันให้เอง (เดือนมาจาก server ไม่ใช่นาฬิกาเครื่องผู้ใช้
-  // เพราะเครื่องที่ตั้งวันที่ผิดจะบันทึกลงผิดเดือน)
-  // ส่งไปเฉพาะเดือนนี้เดือนเดียว ฝั่ง backend ทับเฉพาะเดือนที่ส่งมา เดือนก่อน ๆ ไม่ถูกลบ
-  // ส่งราคาไปก็ต่อเมื่อกดปุ่มแก้ไขแล้วเท่านั้น
-  // ถ้าส่งทุกครั้งที่กดบันทึก จะได้แถวประวัติเพิ่มขึ้นเรื่อย ๆ ทั้งที่ราคาไม่ได้เปลี่ยน
-  let FUEL_EDIT_MODE = false;
-
-  function collectFuelPrices() {
-    if (!FUEL_EDIT_MODE) return [];
-    const price = document.getElementById('ifr_fuel_price').value.trim();
-    if (price === '') return [];   // เปิดแก้ไขแล้วแต่ไม่ได้กรอก = ไม่แตะราคาเดือนนี้
-    return [{
-      month: IFR_CURRENT_MONTH,
-      average_fuel_price: price,
-      note: orNull(document.getElementById('ifr_fuel_note').value),
-    }];
-  }
-
-  // ---------- ปุ่มแก้ไขราคาเดือนนี้ ----------
-  (function setupFuelEdit() {
-    const priceInput = document.getElementById('ifr_fuel_price');
-    const noteInput = document.getElementById('ifr_fuel_note');
-    const editBtn = document.getElementById('ifr_fuel_edit');
-    const cancelBtn = document.getElementById('ifr_fuel_cancel');
-    const originalPrice = priceInput.value;
-    const originalNote = noteInput.value;
-
-    function setMode(editing) {
-      FUEL_EDIT_MODE = editing;
-      priceInput.readOnly = !editing;
-      noteInput.readOnly = !editing;
-      editBtn.classList.toggle('d-none', editing);
-      cancelBtn.classList.toggle('d-none', !editing);
-      if (editing) {
-        priceInput.placeholder = 'เช่น 33.20';
-        priceInput.focus();
-      }
-    }
-
-    editBtn.addEventListener('click', function () { setMode(true); });
-    cancelBtn.addEventListener('click', function () {
-      priceInput.value = originalPrice;
-      noteInput.value = originalNote;
-      setMode(false);
-    });
-  })();
-
   // ---------- แปลง error ของ DRF เป็นข้อความอ่านง่าย ----------
   // DRF ส่ง error ของ nested field มาได้ 2 แบบ
   //   1. รายแถว  -> [{}, {field: [msg]}, ...]   ต้องบอกว่าแถวไหนผิดตรงไหน
@@ -705,7 +583,6 @@
     destination: 'ปลายทาง',
     distance: 'ระยะทาง',
     base_fuel_price: 'ราคาน้ำมันฐาน',
-    average_fuel_price: 'ราคาน้ำมันเฉลี่ย',
     fuel_freight_adjustment: 'ปรับค่าขนส่งต่อน้ำมัน 1 บาท',
     fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
     payload_weight: 'น้ำหนักบรรทุก',
@@ -738,8 +615,8 @@
 
     Object.keys(data).forEach(function (key) {
       const value = data[key];
-      if ((key === 'teams' || key === 'fuel_prices') && Array.isArray(value)) {
-        const rowLabel = key === 'teams' ? 'ทีมแถวที่ ' : 'ราคาน้ำมันแถวที่ ';
+      if (key === 'teams' && Array.isArray(value)) {
+        const rowLabel = 'ทีมแถวที่ ';
         value.forEach(function (item, index) {
           if (!item) return;
           if (typeof item === 'string') {
@@ -792,7 +669,6 @@
       // ความเห็นตอนขออนุมัติ ไม่ใช่หมายเหตุของค่าขนส่ง คนละช่องกัน
       comment: orNull(document.getElementById('ifr_comment').value),
       teams: collectTeams(),
-      fuel_prices: collectFuelPrices(),
     };
 
     fetch(IFR_SUBMIT_URL, {

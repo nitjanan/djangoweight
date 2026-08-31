@@ -800,6 +800,22 @@
     // ส่วน cookie ตัวเดิมยังใช้เป็นสัญญาณว่า "ไฟล์เริ่มส่งมาแล้วจริง" เหมือนเดิม
     var PROGRESS_URL = "{% url 'exportDocumentProgress' %}";
 
+    // ถาม server ซ้ำ ๆ ว่าทำถึงไหนแล้ว คืนฟังก์ชันไว้สั่งหยุด
+    // ใช้ร่วมกันทั้งปุ่มดาวน์โหลดและปุ่มอัปโหลด ต่างกันแค่วิธีแปลงเลขที่ได้มาเป็น % บนแถบ
+    function pollServerProgress(token, onData) {
+      var polling = false;
+      var timer = setInterval(function () {
+        if (polling) return;   // รอบก่อนยังไม่กลับ อย่ายิงซ้อน
+        polling = true;
+        fetch(PROGRESS_URL + '?dl=' + token, { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { onData(d); })
+          .catch(function () { /* อ่านไม่ได้ก็ปล่อย รอบหน้าค่อยลองใหม่ */ })
+          .then(function () { polling = false; });
+      }, 700);
+      return function () { clearInterval(timer); };
+    }
+
     document.querySelectorAll('[data-busy-download]').forEach(function (link) {
       link.addEventListener('click', function () {
         if (link.classList.contains('disabled')) return;
@@ -811,37 +827,39 @@
         var progress = startButtonProgress(link);
         if (!progress) return;   // กดซ้ำระหว่างที่ยังทำอยู่
 
-        var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
-        var polling = false;
+        var stopPoll = pollServerProgress(token, function (d) {
+          // percent = null แปลว่ายังไม่รู้ (ยังไม่เริ่มเขียน หรืออยู่คนละ server)
+          // ข้ามไปเลย ไม่งั้นข้อความบอกขั้นตอนใต้ปุ่มจะวูบหายเป็นจังหวะ
+          if (d.percent === null || d.percent === undefined) return;
+          progress.update(d.percent, d.label);
+        });
 
-        var timer = setInterval(function () {
+        var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
+        var watcher = setInterval(function () {
           // cookie กลับมา = ไฟล์ถูกส่งออกมาแล้ว จบงานไม่ว่า % จะค้างอยู่ตรงไหน
           if (document.cookie.indexOf('exportDownloadToken=' + token) !== -1) {
-            clearInterval(timer);
+            clearInterval(watcher);
+            stopPoll();
             progress.finish('ไฟล์พร้อมแล้ว');
             document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
-            return;
-          }
-          if (Date.now() > deadline) {
-            clearInterval(timer);
+          } else if (Date.now() > deadline) {
+            clearInterval(watcher);
+            stopPoll();
             progress.fail('ใช้เวลานานผิดปกติ ลองใหม่อีกครั้ง หรือกรองข้อมูลให้แคบลง');
-            return;
           }
-          if (polling) return;   // รอบก่อนยังไม่กลับ อย่ายิงซ้อน
-          polling = true;
-          fetch(PROGRESS_URL + '?dl=' + token, { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (d) { progress.update(d.percent, d.label); })
-            .catch(function () { /* อ่านไม่ได้ก็ปล่อย รอบหน้าค่อยลองใหม่ */ })
-            .then(function () { polling = false; });
-        }, 700);
+        }, 400);
       });
     });
 
     // ---------- อัปโหลดไฟล์ที่แก้แล้ว ----------
     // ฟอร์มธรรมดาบอก % ไม่ได้ ต้องยิงเองด้วย XMLHttpRequest ถึงจะอ่าน xhr.upload ได้
-    // ช่วงอัปโหลดเป็น % จริงจากไบต์ที่ส่งไป ส่วนช่วงที่ server อ่านไฟล์ต่อจะไม่มี % บอก
-    // เขียนบอกตรง ๆ ว่า "กำลังตรวจไฟล์" ดีกว่าปล่อยตัวเลขเดินเองแบบมั่ว ๆ
+    // แถบเดียวครอบ 2 ช่วงที่ต้องรอ ผู้ใช้จะได้เห็นเป็นงานเดียวจบ ไม่ใช่ค้างที่ 100% แล้วรอต่อ
+    //   ส่งไฟล์ขึ้นไป  = 0-20%   วัดจากไบต์จริงผ่าน xhr.upload
+    //   server ตรวจไฟล์ = 20-100% ถามจาก endpoint เดียวกับปุ่มดาวน์โหลด โดยแนบ ?dl= ไปกับ POST
+    // ช่วงตรวจกินเวลามากกว่าช่วงส่งมาก (อ่านไฟล์ด้วย openpyxl กินเวลา 98% ของขั้นตอนนี้)
+    // จึงแบ่งให้ช่วงส่งแค่ 20% ไม่งั้นแถบจะพุ่งไป 100% ทันทีแล้วค้างรออีกหลายวินาที
+    var UPLOAD_SEND_SHARE = 20;
+
     document.querySelectorAll('form[data-upload-progress]').forEach(function (form) {
       form.addEventListener('submit', function (e) {
         var input = form.querySelector('input[type="file"]');
@@ -852,23 +870,37 @@
         var progress = btn ? startButtonProgress(btn) : null;
         if (btn && !progress) return;
 
+        var token = 'ul' + Date.now();
+        var stopPoll = null;
+
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action);
+        xhr.open('POST', form.action + (form.action.indexOf('?') === -1 ? '?' : '&') + 'dl=' + token);
 
         xhr.upload.addEventListener('progress', function (evt) {
           if (!evt.lengthComputable || !progress) return;
-          progress.update(Math.round(evt.loaded / evt.total * 100), 'กำลังอัปโหลดไฟล์');
+          progress.update(Math.round(evt.loaded / evt.total * UPLOAD_SEND_SHARE),
+                          'กำลังส่งไฟล์ขึ้นระบบ');
         });
         xhr.upload.addEventListener('load', function () {
-          if (progress) progress.update(100, 'อัปโหลดเสร็จแล้ว กำลังตรวจไฟล์');
+          if (!progress) return;
+          progress.update(UPLOAD_SEND_SHARE, 'กำลังตรวจไฟล์');
+          // เริ่มถาม server ต่อจากตรงนี้ ไฟล์ถึงเครื่องแล้วจึงจะมีความคืบหน้าให้อ่าน
+          stopPoll = pollServerProgress(token, function (d) {
+            if (d.percent === null || d.percent === undefined) return;
+            progress.update(
+              UPLOAD_SEND_SHARE + Math.round(d.percent * (100 - UPLOAD_SEND_SHARE) / 100),
+              d.label);
+          });
         });
         xhr.addEventListener('load', function () {
+          if (stopPoll) stopPoll();
           // ฝั่ง server redirect กลับหน้านี้พร้อมเก็บรายการรอยืนยันไว้ใน session
           // โหลดหน้าเดิมซ้ำจึงเห็นผลครบ และยังคงตัวกรองบน url เดิมไว้ด้วย
           if (progress) progress.finish('ตรวจไฟล์เสร็จแล้ว');
           window.location.reload();
         });
         xhr.addEventListener('error', function () {
+          if (stopPoll) stopPoll();
           if (progress) progress.fail('อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
         });
         xhr.send(new FormData(form));

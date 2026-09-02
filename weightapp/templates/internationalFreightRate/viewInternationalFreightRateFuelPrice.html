@@ -39,13 +39,13 @@
   <div class="page-title">
     <div class="row">
       <div class="col-12 col-md-6 order-md-1 order-last">
-        <h3>ราคาน้ำมันเฉลี่ย</h3>
+        <h3>ราคาน้ำมันรายวัน</h3>
       </div>
       <div class="col-12 col-md-6 order-md-2 order-first">
         <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">ราคาน้ำมันเฉลี่ย</li>
+            <li class="breadcrumb-item active" aria-current="page">ราคาน้ำมันรายวัน</li>
           </ol>
         </nav>
       </div>
@@ -68,7 +68,8 @@
           ราคาน้ำมันเก็บเป็นของ <strong>บริษัท</strong> ไม่ใช่ของเส้นทาง
           เส้นทางที่ออกจากบริษัทเดียวกันจึงใช้ราคาเดียวกันทั้งหมด<br />
           {% if fuel_tab_is_all %}
-          ตอนนี้อยู่แท็บ <strong>{{ fuel_tab_code }}</strong> จึงเห็นครบทุกบริษัท
+          ตอนนี้อยู่แท็บ <strong>{{ fuel_tab_code }}</strong> ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
+          จึงเห็นครบทุกบริษัท กรอกราคาของทั้งวันรวดเดียวจบได้เลย
           {% else %}
           ตอนนี้อยู่แท็บ <strong>{{ fuel_tab_code }}</strong> —
           ทุกตารางในหน้านี้เป็นของบริษัทนี้เท่านั้น เปลี่ยนบริษัทได้ที่แท็บด้านบน
@@ -134,12 +135,17 @@
     </div>
 
     {% comment %}
-    สรุปค่าเฉลี่ยของเดือน = ตัวเลขที่ไฟล์ export จะหยิบไปใส่ช่อง "ราคาน้ำมันเฉลี่ย" จริง ๆ
-    แสดงไว้ให้เห็นกับตา จะได้ไม่ต้องเปิดไฟล์ออกมาเช็คว่าใช้ราคาเท่าไร
+    สรุปภาพรวมของช่วงวันที่เลือก ไม่ใช่ตัวเลขที่ไฟล์ export หยิบไปใช้
+    (ตอน export คิดรายเที่ยว ถ่วงด้วยตันที่วิ่งจริง ดู _exportDocumentFuelPriceByRoute)
     {% endcomment %}
     <div class="card">
       <div class="card-header d-flex flex-wrap align-items-center gap-2">
-        <h5 class="card-title mb-0">ราคาเฉลี่ยประจำเดือน {{ fuel_selected_month_th }}</h5>
+        <h5 class="card-title mb-0">
+          ราคาเฉลี่ย {{ fuel_range_label }}
+          {% if not fuel_range_is_full_month %}
+          <span class="badge bg-info">เลือกช่วงวันอยู่</span>
+          {% endif %}
+        </h5>
         <div class="ms-auto d-flex align-items-center gap-2">
           <a href="?month={{ fuel_prev_month }}" class="btn btn-sm btn-outline-secondary">
             <i class="fa-solid fa-chevron-left"></i> เดือนก่อน
@@ -152,11 +158,44 @@
         </div>
       </div>
       <div class="card-body">
+        {% comment %}
+        ตัวกรองช่วงวัน : ให้ลองดูได้ว่า "ถ้าวิ่งวันที่ 5-10 ราคาเฉลี่ยจะเป็นเท่าไร"
+        เป็นกติกาเดียวกับที่ export ใช้ ต่างแค่ตอน export ระบบรู้วันที่วิ่งจริงจากข้อมูลการชั่ง
+        เว้นว่าง = ทั้งเดือน · ใส่กลับหัวได้ ระบบสลับให้เอง
+        {% endcomment %}
+        <div class="row gx-3 gy-2 align-items-end mb-3">
+          <div class="form-group col-6 col-md-3 mb-0">
+            <label for="fuel_date_from">ตั้งแต่วันที่</label>
+            <input type="text" class="form-control fuel-range" id="fuel_date_from"
+                   value="{{ fuel_date_from }}" placeholder="วว/ดด/ปปปป" autocomplete="off" />
+          </div>
+          <div class="form-group col-6 col-md-3 mb-0">
+            <label for="fuel_date_to">ถึงวันที่</label>
+            <input type="text" class="form-control fuel-range" id="fuel_date_to"
+                   value="{{ fuel_date_to }}" placeholder="วว/ดด/ปปปป" autocomplete="off" />
+          </div>
+          <div class="col-md-6">
+            <button type="button" id="fuel_range_reset" class="btn btn-outline-secondary">
+              <i class="fa-solid fa-rotate-left"></i> ดูทั้งเดือน
+            </button>
+            <span class="text-muted ms-2" style="font-size: .85rem;">
+              กำลังคิดจาก {{ fuel_range_days }} วัน
+            </span>
+          </div>
+        </div>
+
+        <div class="alert alert-light-primary color-primary mb-3">
+          <strong>ตัวเลขข้างล่างนี้คิดจากช่วงวันที่เลือกไว้ด้านบน</strong><br />
+          <small>
+            ตอน export ระบบใช้กติกาเดียวกัน แต่ไม่ต้องเลือกช่วงเอง —
+            มันเฉลี่ยเฉพาะ <strong>วันที่มีเที่ยววิ่งจริง</strong> ของบริษัทนั้น
+            เช่นบริษัทหนึ่งวิ่งวันที่ 5-10 ก็เอาราคาของวันที่ 5-10 มาเฉลี่ย
+            วันที่ไม่มีรถวิ่งไม่ถูกนำมาคิด
+          </small>
+        </div>
         <p class="text-muted">
           <small>
-            ไฟล์ export ของเดือนนี้จะใช้ตัวเลขข้างล่างนี้ในช่อง "ราคาน้ำมันเฉลี่ย" ของ sheet อัตราค่าขนส่ง
-            โดยเฉลี่ยจากทุกวันที่กรอกไว้ในเดือน<br />
-            บริษัทที่ยังไม่ได้กรอกเลย ช่องราคาน้ำมันในไฟล์จะว่าง และมีหมายเหตุกำกับไว้ว่า
+            บริษัทที่วันวิ่งไม่มีราคาสักวัน ช่องราคาน้ำมันในไฟล์จะว่าง และมีหมายเหตุกำกับไว้ว่า
             "ไม่มีราคาน้ำมัน" — ระบบไม่ใส่ 0 ให้ เพราะ 0 จะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต
           </small>
         </p>
@@ -171,11 +210,11 @@
                 {% if s.avg_price %}
                 <div class="fuel-avg-value">{{ s.avg_price|floatformat:2 }}</div>
                 <small class="text-muted">
-                  บาท/ลิตร · เฉลี่ยจาก {{ s.day_count }} วัน จาก {{ fuel_month_days }} วัน
+                  บาท/ลิตร · เฉลี่ยจาก {{ s.day_count }} วัน ในช่วง {{ fuel_range_days }} วัน
                 </small>
                 {% else %}
-                <div class="fuel-avg-none">ไม่มีราคาน้ำมัน</div>
-                <small class="text-muted">เดือนนี้ยังไม่ได้กรอกสักวัน</small>
+                <div class="fuel-avg-none">ยังไม่ได้กรอก</div>
+                <small class="text-muted">ช่วงนี้ยังไม่ได้กรอกสักวัน</small>
                 {% endif %}
               </div>
             </div>
@@ -187,7 +226,7 @@
 
     <div class="card">
       <div class="card-header">
-        <h5 class="card-title mb-0">ราคาที่กรอกไว้ในเดือน {{ fuel_selected_month_th }}</h5>
+        <h5 class="card-title mb-0">ราคาที่กรอกไว้ {{ fuel_range_label }}</h5>
       </div>
       <div class="card-body">
         <div class="table-responsive">
@@ -231,7 +270,7 @@
                 </tr>
                 {% endfor %}
               {% empty %}
-              <tr><td colspan="5" class="text-center text-muted">เดือนนี้ยังไม่ได้กรอกราคาน้ำมัน</td></tr>
+              <tr><td colspan="5" class="text-center text-muted">ช่วงวันที่เลือกยังไม่ได้กรอกราคาน้ำมัน</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -287,12 +326,49 @@
     });
   }
 
+  // ช่องช่วงวัน : ใช้ flatpickr เหมือนกัน เปลี่ยนแล้วโหลดหน้าใหม่ทันที
+  // ส่งค่าไปเป็น Y-m-d แต่โชว์เป็น วัน/เดือน/ปี เหมือนช่องวันที่ของฟอร์ม
+  if (window.flatpickr) {
+    document.querySelectorAll('.fuel-range').forEach(function (input) {
+      flatpickr(input, {
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'd/m/Y',
+        allowInput: true,
+        disableMobile: true,
+      });
+      input.addEventListener('change', reloadWithRange);
+    });
+  }
+
+  function reloadWithRange() {
+    var from = document.getElementById('fuel_date_from').value;
+    var to = document.getElementById('fuel_date_to').value;
+    // ไม่ต้องสลับให้ตรงนี้ ฝั่ง server สลับให้อยู่แล้ว จะได้มีที่เดียวที่ตัดสินใจ
+    window.location.href = '?month=' + FUEL_MONTH +
+      (from ? '&date_from=' + from : '') + (to ? '&date_to=' + to : '');
+  }
+
+  document.getElementById('fuel_range_reset').addEventListener('click', function () {
+    window.location.href = '?month=' + FUEL_MONTH;
+  });
+
   // เปลี่ยนวันที่หรือเดือน = โหลดหน้าใหม่พร้อมข้อมูลของช่วงนั้น
   // ไม่ทำเป็น ajax เพราะทั้งฟอร์ม ตาราง และการ์ดสรุป ต้องเปลี่ยนพร้อมกันหมด
   // ฟัง change ที่ input เดิม (ไม่ใช่ altInput) เพราะ flatpickr เขียนค่า Y-m-d ลงตัวนี้แล้วยิง change ให้
   fuelDateInput.addEventListener('change', function () {
     if (!this.value) return;
-    window.location.href = '?month=' + this.value.slice(0, 7) + '&date=' + this.value;
+    var month = this.value.slice(0, 7);
+    // เปลี่ยนวันที่ที่กำลังกรอก ไม่ควรทำให้ช่วงวันที่ตั้งไว้หายไป ยกเว้นข้ามไปคนละเดือน
+    // เพราะช่วงวันถูกหนีบอยู่ในเดือนที่เลือกอยู่แล้ว พาข้ามเดือนไปก็ใช้ไม่ได้
+    var keepRange = (month === FUEL_MONTH)
+      ? document.getElementById('fuel_date_from').value + '|' +
+        document.getElementById('fuel_date_to').value
+      : '';
+    var parts = keepRange.split('|');
+    window.location.href = '?month=' + month + '&date=' + this.value +
+      (parts[0] ? '&date_from=' + parts[0] : '') +
+      (parts[1] ? '&date_to=' + parts[1] : '');
   });
 
   document.getElementById('fuel_month').addEventListener('change', function () {

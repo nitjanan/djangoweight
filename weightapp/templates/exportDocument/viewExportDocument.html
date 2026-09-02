@@ -502,14 +502,36 @@
           </div>
           {% endif %}
 
+          {% comment %}
+          กรอกราคาไม่ครบทุกวันที่วิ่ง : ยังคิดเงินได้ แต่ค่าเฉลี่ยมาจากวันที่มีราคาเท่านั้น
+          ต้องบอกไว้ ไม่งั้นทีหลังมาเถียงกันว่าเลขนี้มาจากไหน
+          {% endcomment %}
+          {% if rate_stats.fuel_partial %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_partial|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">กรอกราคาน้ำมันไม่ครบทุกวันที่รถวิ่ง</div>
+              <div class="ifr-issue-text">
+                ยังคิดค่าขนส่งได้ แต่ราคาเฉลี่ยมาจากเฉพาะวันที่กรอกไว้ ไม่ใช่ทุกวันที่วิ่ง<br />
+                <strong>ต้องทำ:</strong>
+                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
+                  ไปกรอกราคาน้ำมันของวันที่ขาด
+                </a><br />
+                {% for r in rate_stats.fuel_partial %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
           {% if rate_stats.fuel_no_price %}
           <div class="ifr-issue ifr-issue-warn">
             <div class="ifr-issue-num">{{ rate_stats.fuel_no_price|length }} เส้นทาง</div>
             <div class="ifr-issue-body">
-              <div class="ifr-issue-title">เดือนนี้ยังไม่ได้กรอกราคาน้ำมันของบริษัทต้นทาง</div>
+              <div class="ifr-issue-title">วันที่รถวิ่ง ยังไม่ได้กรอกราคาน้ำมันของบริษัทต้นทางเลยสักวัน</div>
               <div class="ifr-issue-text">
-                ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันจะเป็น 0 (ระบบไม่ใส่ 0 ในช่องราคา
-                และไม่หยิบราคาเดือนอื่นมาแทน เพราะจะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต)<br />
+                ระบบเฉลี่ยราคาจาก "วันที่มีเที่ยววิ่งจริง" เท่านั้น ถ้าวันเหล่านั้นไม่มีราคาเลย
+                ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันจะเป็น 0 (ไม่ใส่ 0 ในช่องราคา
+                และไม่หยิบวันอื่นมาแทน เพราะจะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต)<br />
                 <strong>ต้องทำ:</strong>
                 <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
                   ไปกรอกราคาน้ำมันของเดือนนี้

@@ -13,3 +13,8 @@ __pycache__/
 # Logs & local backups
 *.log
 backup_*.json
+
+# ไฟล์ template excel รุ่นเก่าที่ไม่มีโค้ดไหนเรียกใช้แล้ว
+# ตัวที่ระบบใช้จริงคือ trip_report_template_v12.xlsx (อยู่ใน git แล้ว)
+# v11 รับได้ 3,000 เที่ยว ซึ่งไม่พอตั้งแต่เดือน ก.ค. ที่มี 3,595 เที่ยว
+weightapp/exceltemplate/trip_report_template_v11.xlsx

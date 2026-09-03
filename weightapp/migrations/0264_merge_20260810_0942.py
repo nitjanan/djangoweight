@@ -6,7 +6,10 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0252_portstockstone_note'),
+        # เดิมชี้ '0252_portstockstone_note' ซึ่งเป็นเลขที่ใช้ตอนอยู่คนละ branch
+        # ฝั่ง main เปลี่ยนเลขชุดนี้เป็น 0264-0267 ก่อน merge เข้าไป (เนื้อในเหมือนกันทุกอย่าง)
+        # พอ rebase มาลง main ไฟล์ชื่อเก่าจึงหายไป ต้องชี้ชื่อใหม่แทน ไม่งั้นกราฟ migration พังทั้งโปรเจกต์
+        ('weightapp', '0267_portstockstone_note'),
         ('weightapp', '0263_remove_clientupdatelog_company'),
     ]
 

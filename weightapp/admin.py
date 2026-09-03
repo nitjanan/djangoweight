@@ -296,6 +296,9 @@ class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['name', 'code', 'biz', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
+    # จำเป็นต้องมี เพราะ BaseCompanyMapBaseCustomerAdmin ใช้ autocomplete_fields ชี้มาที่ BaseCompany
+    # ถ้าไม่มี Django จะขึ้น admin.E040 ตั้งแต่ตอน system check แล้วรันคำสั่งอะไรไม่ได้เลยทั้งโปรเจกต์
+    search_fields = ('name', 'code')
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 PASSWORD_PLACEHOLDER = '●' * 8  # ●●●●●●●● shown when a password is already set

@@ -1419,7 +1419,14 @@ class BaseCompanyMapBaseCustomer(models.Model):
     name = models.CharField(max_length=120, verbose_name="ชื่อ")
     base_company = models.ForeignKey(BaseCompany , null = True, on_delete=models.CASCADE, verbose_name="บริษัท")
     base_customer = models.ForeignKey(BaseCustomer, null = True, on_delete=models.CASCADE, verbose_name="ลูกค้า")
-    
+    # คำนำหน้าเลขที่เอกสาร (docnum) ของบิลขายเชื่อน้ำมันให้บุคคลภายนอก ในระบบ Express ของสาขานี้
+    # เช่น 'IO' 'IL' 'Iท' -> docnum จะออกมาเป็น 'Iท6909018'
+    # ใช้คัดเฉพาะบิลน้ำมันออกจาก OEINVH ตอนคิดราคาน้ำมันเฉลี่ยของทีมรถร่วม
+    # ชื่อฟิลด์ล้อของ djangostock BaseBranchCompany.oi_soc_code เพื่อให้เทียบสองระบบได้ตรง ๆ
+    # ว่าง = สาขานี้ไม่มีการขายเชื่อน้ำมันให้บุคคลภายนอก
+    oi_soc_code = models.CharField(max_length=255, null=True, blank=True,
+                                   verbose_name="โค้ดขายเชื่อบุคคลภายนอก - น้ำมัน")
+
     class Meta:
         db_table = 'base_company_map_base_customer'
         ordering = ['id']

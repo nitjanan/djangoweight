@@ -626,8 +626,8 @@ class ClientUpdateLogAdmin(admin.ModelAdmin):
 
 
 class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'base_company', 'base_customer')
-    search_fields = ('base_company__name', 'base_customer__customer_name')
+    list_display = ('id', 'name', 'base_company', 'base_customer', 'oi_soc_code')
+    search_fields = ('base_company__name', 'base_customer__customer_name', 'oi_soc_code')
     autocomplete_fields = ['base_company', 'base_customer']
     list_per_page = 20
 

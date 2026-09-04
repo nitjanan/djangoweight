@@ -104,7 +104,24 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': '13306',
-    }
+    },
+    # Postgres ของระบบ Express (บัญชี/สต๊อก) — อ่านอย่างเดียว ไม่เคยเขียน
+    # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam
+    # ตารางฝั่งนี้ประกาศเป็น managed = False ทั้งหมด migrate จึงไม่แตะ
+    # ค่าชุดเดียวกับ djangostock/settings.py ถ้าที่โน่นเปลี่ยน ต้องตามมาแก้ที่นี่ด้วย
+    'pg_db': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('PG_DB_NAME', 'dbslc'),
+        'USER': os.environ.get('PG_DB_USER', 'silachai'),
+        'PASSWORD': os.environ.get('PG_DB_PASSWORD', 'Suratthani89/*'),
+        'HOST': os.environ.get('PG_DB_HOST', '27.254.142.147'),
+        'PORT': os.environ.get('PG_DB_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+            # เน็ตไปไม่ถึง อย่าให้หน้า export ค้างรอยาว ๆ
+            'connect_timeout': 10,
+        },
+    },
 }
 
 

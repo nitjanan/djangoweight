@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
@@ -11100,6 +11100,237 @@ def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
     return result
 
 
+# ---------- ราคาน้ำมันจากบิลเติมน้ำมันจริงในระบบ Express ----------
+# ทุกคอลัมน์ฝั่ง Express เป็น CHAR ค่าที่อ่านมาจึงมี space ต่อท้ายเสมอ
+# ('SLC       ', '92-V-012  ') ลืม strip เมื่อไหร่คือจับคู่ไม่เจอทั้งกระดาน
+def _pgText(value):
+    return (value or '').strip()
+
+
+def _exportDocumentFuelBranchesByPrefix():
+    """คำนำหน้าเลขที่เอกสาร -> สาขาของเราที่ออกบิลนั้น
+
+    Express ไม่ได้แยกสาขาด้วย comcod : ศิลาชัย 3 กับ ทุ่งใหญ่ ไม่มี comcod ของตัวเอง
+    ไปออกบิลใต้ SLC และ CMC ตามลำดับ สิ่งที่แยกสาขาได้จริงคือคำนำหน้าเลขที่เอกสาร
+    ซึ่งเก็บไว้ในคอลัมน์ oi_soc_code ของตาราง map (เช่น 'IL' -> 'IL6907001')
+
+    คำนำหน้าเดียวใช้ได้หลายสาขา (ศิลาชัย กับ 39 ศิลาทอง ใช้ 'IO' ทั้งคู่)
+    เคสนั้นค่อยแยกด้วย comcod ตอนอ่านบิล ดู _exportDocumentFuelBranchOf
+
+    คืน {คำนำหน้า -> [(id บริษัท, โค้ดบริษัท, ชื่อสาขา), ...]}
+    """
+    company_code = dict(BaseCompany.objects.values_list('id', 'code'))
+    branches = defaultdict(list)
+    for row in (BaseCompanyMapBaseCustomer.objects
+                .exclude(oi_soc_code__isnull=True).exclude(oi_soc_code='')
+                .values('name', 'oi_soc_code', 'base_company_id')):
+        company_id = row['base_company_id']
+        if not company_id:
+            # ไม่รู้บริษัท = หาราคาน้ำมันไม่ได้ ใส่เข้าไปก็ได้แต่ None
+            continue
+        branches[row['oi_soc_code'].strip()].append(
+            (company_id, company_code.get(company_id), row['name']))
+    return branches
+
+
+def _exportDocumentFuelBranchOf(branches, docnum, comcod):
+    """หาว่าบิลใบนี้เป็นของสาขาไหน คืน (id บริษัท, ชื่อสาขา) หรือ None
+
+    คำนำหน้าตรงกับสาขาเดียว = จบ ไม่ต้องดู comcod
+    จำเป็นต้องยอมแบบนี้ เพราะ comcod ของ Express ไม่ได้ตรงกับโค้ดบริษัทฝั่งเราเสมอไป
+    (ทุ่งใหญ่ ฝั่งเราเป็น TYM แต่ Express ออกบิลใต้ CMC)
+
+    ตรงหลายสาขา = ตัดสินด้วย comcod ที่ตรงกับโค้ดบริษัท
+    """
+    for length in (2, 3, 1):
+        found = branches.get(docnum[:length])
+        if not found:
+            continue
+        if len(found) == 1:
+            return found[0][0], found[0][2]
+        for company_id, code, name in found:
+            if code == comcod:
+                return company_id, name
+        return None
+    return None
+
+
+def _exportDocumentFuelRefills(selected_month):
+    """นับจำนวนครั้งที่แต่ละทีมเติมน้ำมัน แยกตามสาขาที่เติมและวันที่เติม
+
+    ส่วนนี้แยกออกมาเพราะเป็นส่วนเดียวที่ต้องยิงข้ามไป Postgres ของ Express
+    ซึ่งอยู่คนละเครื่องและกินเวลาหลายวินาที จึง cache ไว้สั้น ๆ
+    ส่วนการคูณราคาไม่ cache เพราะราคาอยู่ฐานเรา แก้แล้วต้องเห็นผลทันที
+
+    คืน ({(ชื่อทีม, id บริษัท, วันที่) -> จำนวนครั้ง}, stats)
+    """
+    cache_key = 'exportdoc:fuelrefill:%s' % selected_month
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = _exportDocumentFuelRefillsUncached(selected_month)
+    # 5 นาทีพอ : บิลเติมน้ำมันของเดือนที่ปิดไปแล้วแทบไม่ขยับ
+    # ส่วนเดือนปัจจุบันช้าไป 5 นาทีก็ไม่มีใครเดือดร้อน เพราะเอกสารออกทีเดียวตอนสิ้นเดือน
+    cache.set(cache_key, result, 300)
+    return result
+
+
+def _exportDocumentFuelRefillsUncached(selected_month):
+    """ตัวจริงของ _exportDocumentFuelRefills — อย่าเรียกตรง ๆ ให้เรียกตัวที่ cache แทน
+
+    บิลเติมน้ำมันอยู่ในระบบ Express (Postgres) คนละฐานกับระบบชั่ง เชื่อมกันด้วย
+      ทีม  : BaseCarTeam.oil_customer_id  ==  OEINVH.cuscod
+      สาขา : BaseCompanyMapBaseCustomer.oi_soc_code  ==  คำนำหน้า OEINVH.docnum
+
+    คำนำหน้า docnum คัดบิลน้ำมันออกจากบิลอื่นได้ 100% อยู่แล้ว
+    (ตรวจกับข้อมูลจริงแล้ว รายการใต้บิลชุดนี้เป็น OL-* น้ำมันดีเซล ล้วน ไม่มีหิน/อะไหล่ปน)
+    จึงไม่ต้องไปกรองชนิดสินค้าใน OEINVD ซ้ำอีก
+
+    นับ "ครั้ง" จากบรรทัดใน OEINVD แต่ต้องนับ (docnum, seqnum) ที่ไม่ซ้ำ
+    เพราะบิลของสาขาทุ่งใหญ่ถูกบันทึกซ้ำสองบริษัท (comcod 'CMC' กับ '01') เลขที่ วันที่
+    จำนวนลิตร เท่ากันหมด เดือนเดียวมี 325 ใบ ถ้านับตรง ๆ ทุ่งใหญ่จะถูกนับสองเท่า
+
+    ฐานข้อมูล Express อยู่นอกเน็ตเวิร์กเรา ต่อไม่ได้เมื่อไหร่ก็ได้ จึงห้ามปล่อยให้ error
+    หลุดขึ้นไป ไม่งั้นหน้า export พังทั้งหน้าเพราะเรื่องราคาน้ำมัน ผู้เรียกจะถอยไปใช้
+    วิธีเฉลี่ยรายวันจากวันที่วิ่งแทน
+    """
+    stats = {'bills': 0, 'refills': 0, 'teams': 0, 'no_team': 0,
+             'no_branch': 0, 'duplicate': 0, 'no_price': 0, 'error': None}
+
+    first = _exportDocumentMonthDate(selected_month)
+    if first is None:
+        return {}, stats
+    last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+
+    branches = _exportDocumentFuelBranchesByPrefix()
+    if not branches:
+        stats['error'] = 'ยังไม่ได้กรอกโค้ดขายเชื่อน้ำมัน (oi_soc_code) ให้สาขาไหนเลย'
+        return {}, stats
+
+    team_name = {
+        row['oil_customer_id'].strip(): row['car_team_name']
+        for row in (BaseCarTeam.objects
+                    .exclude(oil_customer_id__isnull=True).exclude(oil_customer_id='')
+                    .values('oil_customer_id', 'car_team_name'))}
+
+    prefix_filter = Q()
+    for prefix in branches:
+        prefix_filter |= Q(docnum__startswith=prefix)
+
+    try:
+        headers = list(ExOEINVH.objects.using('pg_db')
+                       .filter(prefix_filter, docdate__gte=first, docdate__lte=last)
+                       .values_list('docnum', 'docdate', 'cuscod', 'comcod'))
+    except Exception as exc:
+        stats['error'] = 'ต่อฐานข้อมูล Express ไม่ได้ : %s' % exc
+        return {}, stats
+
+    # เลขที่เอกสารดิบ (มี space ต่อท้าย) เอาไว้ยิง query ต่อ ห้าม strip ก่อนถึงตอนนั้น
+    # ส่วนคีย์ใน dict ใช้ตัวที่ strip แล้ว จะได้เทียบกับที่อ่านจาก OEINVD ได้ตรง
+    bill_of = {}
+    raw_docnums = []
+    for docnum, docdate, cuscod, comcod in headers:
+        stats['bills'] += 1
+        key = _pgText(docnum)
+        team = team_name.get(_pgText(cuscod))
+        if not team:
+            # Express ขายน้ำมันให้ลูกค้าทั่วไปด้วย ไม่ใช่แค่ทีมรถร่วม
+            stats['no_team'] += 1
+            continue
+        branch = _exportDocumentFuelBranchOf(branches, key, _pgText(comcod))
+        if branch is None:
+            stats['no_branch'] += 1
+            continue
+        if key in bill_of:
+            stats['duplicate'] += 1
+            continue
+        bill_of[key] = (team, branch[0], docdate)
+        raw_docnums.append(docnum)
+
+    if not bill_of:
+        return {}, stats
+
+    # (ทีม, id บริษัท, วันที่) -> จำนวนครั้ง
+    refills = defaultdict(int)
+    seen = set()
+    try:
+        # ยิงทีละก้อน เผื่อบิลเยอะจน IN (...) ยาวเกินจนฐานข้อมูลไม่รับ
+        for start in range(0, len(raw_docnums), 900):
+            chunk = raw_docnums[start:start + 900]
+            for docnum, seqnum in (ExOEINVD.objects.using('pg_db')
+                                   .filter(docnum__in=chunk)
+                                   .values_list('docnum', 'seqnum')):
+                key = _pgText(docnum)
+                if (key, seqnum) in seen:
+                    stats['duplicate'] += 1
+                    continue
+                seen.add((key, seqnum))
+                bill = bill_of.get(key)
+                if bill is None:
+                    continue
+                refills[(bill[0], bill[1], bill[2])] += 1
+    except Exception as exc:
+        stats['error'] = 'อ่านรายการเติมน้ำมันจาก Express ไม่ได้ : %s' % exc
+        return {}, stats
+
+    return dict(refills), stats
+
+
+def _exportDocumentFuelPriceByTeam(selected_month):
+    """ราคาน้ำมันเฉลี่ยของแต่ละทีมรถร่วม ถ่วงด้วย "จำนวนครั้งที่เติมน้ำมันจริง"
+
+        avg(ทีม) = Σ ( ราคาน้ำมัน(สาขาที่เติม, วันที่เติม) × จำนวนครั้ง ) ÷ Σ จำนวนครั้ง
+
+    ทีมเดียวกันได้ราคาเดียวกันทุกแถว ไม่ว่าวิ่งเส้นทางไหน เพราะน้ำมันที่เขาเติม
+    คือถังเดียวกัน ไม่ได้แยกตามเส้นทาง
+
+    ราคามาจาก InternationalFreightRateFuelPrice ของบริษัทเจ้าของสาขาที่ไปเติม
+    ไม่ใช่บริษัทเจ้าของต้นทางที่วิ่ง เพราะเงินค่าน้ำมันจ่ายที่ปั๊มที่เติม
+
+    คืน ({ชื่อทีม -> (ราคาเฉลี่ย, จำนวนครั้งที่มีราคา, จำนวนครั้งที่ขาดราคา)}, stats)
+    """
+    refills, cached_stats = _exportDocumentFuelRefills(selected_month)
+    # ก๊อปก่อนแก้เสมอ : dict ตัวนั้นอยู่ใน cache ถ้าบวกทับลงไปตรง ๆ
+    # ตัวเลขจะสะสมทบขึ้นเรื่อย ๆ ทุกครั้งที่เปิดหน้า
+    stats = dict(cached_stats)
+    stats['refills'] = stats['no_price'] = stats['teams'] = 0
+    if not refills:
+        return {}, stats
+
+    first = _exportDocumentMonthDate(selected_month)
+    last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+    price_of = {
+        (comp_id, day): price
+        for comp_id, day, price in (
+            InternationalFreightRateFuelPrice.objects
+            .filter(base_comp_id__in={c for _, c, _ in refills},
+                    date__gte=first, date__lte=last)
+            .values_list('base_comp_id', 'date', 'average_fuel_price'))}
+
+    total = defaultdict(Decimal)     # ทีม -> Σ ราคา × ครั้ง
+    counted = defaultdict(int)       # ทีม -> Σ ครั้งที่มีราคา
+    missing = defaultdict(int)       # ทีม -> Σ ครั้งที่ขาดราคา
+    for (team, company_id, day), times in refills.items():
+        stats['refills'] += times
+        price = price_of.get((company_id, day))
+        if price is None:
+            # วันนั้นยังไม่ได้กรอกราคาของบริษัทนั้น ตัดครั้งนั้นทิ้งจากการเฉลี่ย
+            # ไม่เดาราคาแทน แต่รายงานจำนวนไว้ให้เห็นว่าเฉลี่ยจากไม่ครบ
+            missing[team] += times
+            stats['no_price'] += times
+            continue
+        total[team] += price * times
+        counted[team] += times
+
+    result = {}
+    for team, times in counted.items():
+        if times:
+            result[team] = (total[team] / times, times, missing.get(team, 0))
+    stats['teams'] = len(result)
+    return result, stats
+
+
 def _ifrFuelRangeAverage(start, end):
     """ค่าเฉลี่ยของราคาที่กรอกไว้ในช่วงวันที่กำหนด ใช้แสดงบนหน้าราคาน้ำมัน
 
@@ -11182,7 +11413,11 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
              'fuel_no_price': [],
              # เส้นทางที่มีราคาแต่ไม่ครบทุกวันที่วิ่ง : ยังคิดเงินได้ แต่ค่าเฉลี่ยมาจากวันที่มีราคาเท่านั้น
              'fuel_partial': [],
-             'fuel_days': {}}
+             'fuel_days': {},
+             # ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันใน Express จึงต้องถอยไปเฉลี่ยจากวันที่วิ่ง
+             'fuel_no_bill': [],
+             # สรุปการอ่านบิลจาก Express (ดู _exportDocumentFuelPriceByTeam)
+             'fuel_bill': {}}
 
     for rate in rates:
         stats['rate_in_db'] += 1
@@ -11243,7 +11478,7 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                     })
 
     _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
-                                 rate_by_route, stats)
+                                 rate_by_route, stats, selected_month)
 
     if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
         stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
@@ -11253,10 +11488,18 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
 
 
 def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
-                                 rate_by_route, stats):
+                                 rate_by_route, stats, selected_month=None):
     """เติมช่อง I (ราคาน้ำมัน) และ N (หมายเหตุ) ให้แถวอัตรา
 
-    ราคาน้ำมันของแถวหนึ่ง = เฉลี่ยราคารายวันของวันที่กลุ่มนั้นวิ่ง (1 วัน 1 เสียง)
+    ราคาน้ำมันของทีมหนึ่ง = ถ่วงน้ำหนักจากบิลเติมน้ำมันจริงในระบบ Express
+        Σ ( ราคาน้ำมัน(สาขาที่เติม, วันที่เติม) × จำนวนครั้ง ) ÷ Σ จำนวนครั้ง
+    ทีมเดียวกันจึงได้ราคาเดียวกันทุกแถว ไม่ว่าจะวิ่งเส้นทางไหน เพราะน้ำมันที่เขาเติม
+    คือถังเดียวกัน ไม่ได้แยกตามเส้นทาง
+
+    ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันเลย (หรือ Express ต่อไม่ติด) ถอยไปใช้วิธีเดิม
+    คือเฉลี่ยราคารายวันของวันที่กลุ่มนั้นวิ่ง 1 วัน 1 เสียง เพื่อไม่ให้แถวนั้นได้ 0
+    ซึ่งจะกลายเป็นจ่ายขาดโดยไม่มีใครสังเกต คอลัมน์ N บอกว่าแถวไหนใช้วิธีไหน
+
     ต้องทำหลังจากมีแถวอัตราครบแล้ว เพราะต้องรู้ว่าเที่ยวไหนมีแถวอัตรารองรับบ้าง
     เที่ยวที่ไม่มีแถวอัตรารองรับ (ทีมไม่มีสัญญา / น้ำหนักไม่เข้าช่วงไหน) ในไฟล์ได้เงิน 0 อยู่แล้ว
     จึงไม่ต้องเอาวันของมันมาคิดราคาเฉลี่ย
@@ -11270,39 +11513,54 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
     billable = {(r['team'], r['origin'], r['destination'],
                  r['weight_carried'], r['stone']) for r in rate_rows}
 
+    fuel_by_team, stats['fuel_bill'] = _exportDocumentFuelPriceByTeam(selected_month)
     fuel_by_group = _exportDocumentFuelPriceByGroup(trip_rows, billable)
 
     for row in rate_rows:
         route = row.pop('route')
         rate, route_label = rate_by_route[route]
         company_id = rate.origin.base_company_id
-        group_key = (row['team'], row['origin'], row['destination'],
-                     row['weight_carried'], row['stone'])
-        fuel = fuel_by_group.get(group_key) if company_id else None
+
+        # บิลน้ำมันจริงมาก่อนเสมอ เพราะเป็นราคาที่ทีมนั้นจ่ายไปจริง ๆ
+        fuel = fuel_by_team.get(row['team'])
+        from_bill = fuel is not None
+        if not from_bill:
+            group_key = (row['team'], row['origin'], row['destination'],
+                         row['weight_carried'], row['stone'])
+            fuel = fuel_by_group.get(group_key) if company_id else None
+            if row['team'] not in stats['fuel_no_bill']:
+                stats['fuel_no_bill'].append(row['team'])
 
         if fuel is None:
             bucket = 'fuel_no_company' if not company_id else 'fuel_no_price'
             if route_label not in stats[bucket]:
                 stats[bucket].append(route_label)
             row['fuel_note'] = ('ไม่มีราคาน้ำมัน (ต้นทางยังไม่ได้ผูกบริษัท)' if not company_id
-                                else 'ไม่มีราคาน้ำมัน (วันที่วิ่งยังไม่ได้กรอกราคา)')
+                                else 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)')
             continue
 
-        price, priced_days, missing_days = fuel
-        # ปัดเหลือ 4 ตำแหน่ง : หารด้วยจำนวนวันแล้วได้ทศนิยมยาวเหยียด อ่านไม่รู้เรื่อง
+        price, counted, missing = fuel
+        # ปัดเหลือ 4 ตำแหน่ง : หารแล้วได้ทศนิยมยาวเหยียด อ่านไม่รู้เรื่อง
         # และไม่มีประโยชน์ เพราะสูตร K ในไฟล์ปัดเป็น 2 ตำแหน่งอยู่แล้ว
         row['average_fuel_price'] = price.quantize(Decimal('0.0001'))
-        stats['fuel_days'][route_label] = priced_days
-        if missing_days:
-            # ยังคิดเงินได้ แต่ต้องบอกว่าคิดจากไม่ครบทุกวัน ไม่งั้นไปเถียงกันทีหลังว่าเลขมาจากไหน
-            note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
-                route_label, priced_days, missing_days)
-            if note not in stats['fuel_partial']:
-                stats['fuel_partial'].append(note)
-            row['fuel_note'] = 'เฉลี่ยจาก %s วันที่วิ่ง (ขาดราคา %s วัน)' % (
-                priced_days, missing_days)
+
+        if from_bill:
+            row['fuel_note'] = 'ถ่วงจากบิลเติมน้ำมัน %s ครั้ง' % counted
+            if missing:
+                row['fuel_note'] += ' (อีก %s ครั้งไม่มีราคาของวันนั้น)' % missing
+                note = '%s : ถ่วงจาก %s ครั้ง ขาดราคาอีก %s ครั้ง' % (
+                    row['team'], counted, missing)
+                if note not in stats['fuel_partial']:
+                    stats['fuel_partial'].append(note)
         else:
-            row['fuel_note'] = 'เฉลี่ยจาก %s วันที่วิ่ง' % priced_days
+            stats['fuel_days'][route_label] = counted
+            row['fuel_note'] = 'ไม่มีบิลเติมน้ำมัน จึงเฉลี่ยจาก %s วันที่วิ่ง' % counted
+            if missing:
+                note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
+                    route_label, counted, missing)
+                if note not in stats['fuel_partial']:
+                    stats['fuel_partial'].append(note)
+                row['fuel_note'] += ' (ขาดราคา %s วัน)' % missing
 
 
 def _exportDocumentPickWeightCarried(options, pay_weight):

@@ -1732,3 +1732,60 @@ class InternationalFreightRateApproval(models.Model):
     def __str__(self):
         return f"Version {self.version} - {self.origin} to {self.destination}"
     
+
+# ---------------------------------------------------------------------------
+# ตารางฝั่ง Express (Postgres 'pg_db') — อ่านอย่างเดียว managed = False
+#
+# ประกาศเฉพาะคอลัมน์ที่ใช้จริง ไม่ต้องยกมาทั้งตาราง เพราะ Django จะ SELECT
+# เฉพาะฟิลด์ที่ประกาศไว้ ยกมาครบ ๆ มีแต่จะพังเวลาฝั่งโน้นเพิ่ม/แก้คอลัมน์
+# ตัวเต็มอยู่ที่ djangostock stock/models.py (ExOEINVH / ExOEINVD)
+#
+# กับดักที่ต้องระวัง : คอลัมน์เป็น CHAR ค่าที่ได้จึงมี space ต่อท้ายเสมอ
+# ('SLC       ', '92-V-012  ') ต้อง .strip() ก่อนเทียบกับข้อมูลฝั่งเรา
+# ---------------------------------------------------------------------------
+
+class ExOEINVH(models.Model):
+    """หัวบิลขายเชื่อของ Express — 1 แถว = 1 ใบ
+
+    ที่ใช้ : docnum (เลขที่ใบ) · docdate (วันที่เติม) · cuscod (รหัสลูกค้า = ทีมรถร่วม)
+    docnum ไม่ unique ข้ามบริษัท แต่ละบริษัทเดินเลขของตัวเอง คีย์จริงคือ (docnum, comcod)
+    """
+    recordid = models.AutoField(primary_key=True)
+    docnum = models.CharField(max_length=12, null=True, blank=True)
+    docdate = models.DateField(null=True, blank=True)
+    cuscod = models.CharField(max_length=10, null=True, blank=True)
+    cusnam = models.CharField(max_length=60, null=True, blank=True)
+    comcod = models.CharField(max_length=10, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'OEINVH'
+        verbose_name = 'Express : หัวบิลขายเชื่อ'
+        verbose_name_plural = 'Express : หัวบิลขายเชื่อ'
+
+    def __str__(self):
+        return '%s - %s' % (self.docnum, self.cuscod)
+
+
+class ExOEINVD(models.Model):
+    """รายการในบิลขายเชื่อของ Express — 1 แถว = 1 บรรทัดสินค้า
+
+    ที่ใช้ : docnum + seqnum (คู่นี้คือ "การเติม 1 ครั้ง") · ordqty (ลิตร)
+    ordqty ยังไม่ได้ใช้ตอนนี้ แต่เก็บไว้เผื่อเปลี่ยนไปถ่วงน้ำหนักด้วยลิตรแทนจำนวนครั้ง
+    """
+    recordid = models.AutoField(primary_key=True)
+    docnum = models.CharField(max_length=12, null=True, blank=True)
+    seqnum = models.IntegerField(null=True, blank=True)
+    stkcod = models.CharField(max_length=20, null=True, blank=True)
+    stkdes = models.CharField(max_length=60, null=True, blank=True)
+    ordqty = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    comcod = models.CharField(max_length=10, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'OEINVD'
+        verbose_name = 'Express : รายการในบิลขายเชื่อ'
+        verbose_name_plural = 'Express : รายการในบิลขายเชื่อ'
+
+    def __str__(self):
+        return '%s - %s' % (self.docnum, self.stkcod)

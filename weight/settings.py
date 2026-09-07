@@ -99,11 +99,11 @@ WSGI_APPLICATION = 'weight.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'djangoweightdb2',
+        'NAME': 'djangoweightdb',
         'USER': 'root',
         'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT': '13306',
+        'PORT': '',
     },
     # Postgres ของระบบ Express (บัญชี/สต๊อก) — อ่านอย่างเดียว ไม่เคยเขียน
     # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam

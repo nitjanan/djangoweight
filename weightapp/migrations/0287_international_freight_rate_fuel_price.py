@@ -50,7 +50,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ('weightapp', '0282_add_weight_export_index'),
+        ('weightapp', '0286_add_weight_export_index'),
     ]
 
     operations = [

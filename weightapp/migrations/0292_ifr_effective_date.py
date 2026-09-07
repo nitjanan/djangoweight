@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0287_backfill_approval_trail'),
+        ('weightapp', '0291_backfill_approval_trail'),
     ]
 
     operations = [

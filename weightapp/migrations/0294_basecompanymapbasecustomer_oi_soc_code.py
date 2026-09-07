@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0289_ifr_fuel_price_daily_by_company'),
+        ('weightapp', '0293_ifr_fuel_price_daily_by_company'),
     ]
 
     operations = [

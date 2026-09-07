@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('weightapp', '0285_international_freight_rate_versioning'),
+        ('weightapp', '0289_international_freight_rate_versioning'),
     ]
 
     operations = [

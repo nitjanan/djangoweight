@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ('weightapp', '0278_internationalfreightrate_created_at_updated_at'),
+        ('weightapp', '0282_internationalfreightrate_created_at_updated_at'),
     ]
 
     operations = [

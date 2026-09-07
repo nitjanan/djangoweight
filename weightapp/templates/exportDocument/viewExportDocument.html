@@ -75,15 +75,8 @@
      ไม่งั้นกล่องเตือนดันเนื้อหาที่เหลือของหน้าหายไปข้างล่าง */
   .ifr-missing-list { list-style: none; padding-left: 0; margin: .5rem 0 0;
     max-height: 15rem; overflow-y: auto; }
-  /* บรรทัดละปลายทาง จุดไข่ปลาลากไปหาตัวเลขชิดขวา เหมือนสารบัญ
-     ตาจะวิ่งจากชื่อไปเจอตัวเลขได้เองโดยไม่ต้องมีเส้นตาราง */
-  .ifr-missing-list > li { display: flex; align-items: baseline; gap: .5rem;
-    padding: .3rem .1rem; border-bottom: 1px dotted #e3c9c9; color: #495057; }
-  .ifr-missing-list > li:last-child { border-bottom: 0; }
-  .ifr-missing-list > li > span:first-child { flex: 0 1 auto; }
-  .ifr-missing-list > li::after { content: ""; flex: 1 1 auto;
-    border-bottom: 1px dotted #d9c3c3; transform: translateY(-.2rem); }
-  .ifr-missing-trips { order: 3; white-space: nowrap; color: #b02a37; font-weight: 600; }
+  .ifr-missing-list > li { padding: .4rem .6rem; margin-bottom: .35rem;
+    background: #fff; border: 1px solid #f1d6d6; border-radius: .35rem; }
   .ifr-issue-bad  { border-left-color: #dc3545; background-color: rgba(220,53,69,.05); }
   .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
   .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
@@ -456,13 +449,19 @@
                 แล้วเพิ่มเส้นทางที่ยังขาด
 
                 {% comment %}
-                ไม่ใส่ต้นทาง เพราะหน้านี้แยกดูทีละบริษัทอยู่แล้ว ต้นทางชัดจากแท็บที่เปิด
+                ราคาตั้งเป็นคู่ ต้นทาง-ปลายทาง ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งแล้ว
+                และยังไม่ได้ตั้ง ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+                จึงต้องแจกแจงต้นทางกำกับไว้ใต้ปลายทางเสมอ
                 {% endcomment %}
                 <ul class="ifr-missing-list">
-                  {% for r in rate_stats.wc_missing_routes %}
+                  {% for d in rate_stats.wc_missing_routes %}
                   <li>
-                    <span>{{ r.destination }}</span>
-                    <span class="ifr-missing-trips">{{ r.trips|intcomma }} เที่ยว</span>
+                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
+                    <div class="small mt-1">
+                      ต้นทางที่ยังไม่มีราคา:
+                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                    </div>
                   </li>
                   {% endfor %}
                 </ul>

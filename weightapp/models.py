@@ -1770,8 +1770,9 @@ class ExOEINVH(models.Model):
 class ExOEINVD(models.Model):
     """รายการในบิลขายเชื่อของ Express — 1 แถว = 1 บรรทัดสินค้า
 
-    ที่ใช้ : docnum + seqnum (คู่นี้คือ "การเติม 1 ครั้ง") · ordqty (ลิตร)
-    ordqty ยังไม่ได้ใช้ตอนนี้ แต่เก็บไว้เผื่อเปลี่ยนไปถ่วงน้ำหนักด้วยลิตรแทนจำนวนครั้ง
+    ที่ใช้ : docnum + seqnum (คู่นี้คือ "การเติม 1 ครั้ง")
+             ordqty (ลิตร) · unitpr (ราคา/ลิตร) · trnval (จำนวนเงิน)
+    สามตัวหลังใช้กรอก sheet oil ในไฟล์รายงาน ซึ่งเป็นยอดหักค่าน้ำมันของทีมรถร่วม
     """
     recordid = models.AutoField(primary_key=True)
     docnum = models.CharField(max_length=12, null=True, blank=True)
@@ -1779,6 +1780,8 @@ class ExOEINVD(models.Model):
     stkcod = models.CharField(max_length=20, null=True, blank=True)
     stkdes = models.CharField(max_length=60, null=True, blank=True)
     ordqty = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    unitpr = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    trnval = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     comcod = models.CharField(max_length=10, null=True, blank=True)
 
     class Meta:

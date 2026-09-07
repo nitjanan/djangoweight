@@ -11156,13 +11156,19 @@ def _exportDocumentFuelBranchOf(branches, docnum, comcod):
 
 
 def _exportDocumentFuelRefills(selected_month):
-    """นับจำนวนครั้งที่แต่ละทีมเติมน้ำมัน แยกตามสาขาที่เติมและวันที่เติม
+    """รายการเติมน้ำมันรายบรรทัดของทีมรถร่วม ในเดือนที่ระบุ
 
     ส่วนนี้แยกออกมาเพราะเป็นส่วนเดียวที่ต้องยิงข้ามไป Postgres ของ Express
     ซึ่งอยู่คนละเครื่องและกินเวลาหลายวินาที จึง cache ไว้สั้น ๆ
     ส่วนการคูณราคาไม่ cache เพราะราคาอยู่ฐานเรา แก้แล้วต้องเห็นผลทันที
 
-    คืน ({(ชื่อทีม, id บริษัท, วันที่) -> จำนวนครั้ง}, stats)
+    คืนรายบรรทัด ไม่ยุบเป็นตัวเลขสรุป เพราะมีคนใช้ 3 ที่ที่ต้องการคนละหน้าตา
+      ราคาน้ำมันเฉลี่ย -> ยุบเป็นจำนวนครั้ง ต่อ (ทีม, บริษัท, วัน)
+      sheet oil        -> ยุบเป็น ลิตร/เงิน ต่อ (ทีม, สาขา)
+      sheet express    -> ใช้รายบรรทัดตรง ๆ ให้ตรวจย้อนได้ถึงเลขที่บิล
+
+    คืน ([{date, docnum, comcod, branch, company_id, team, stkdes,
+           litre, unit_price, amount}, ...], stats)
     """
     cache_key = 'exportdoc:fuelrefill:%s' % selected_month
     cached = cache.get(cache_key)
@@ -11245,36 +11251,50 @@ def _exportDocumentFuelRefillsUncached(selected_month):
         if key in bill_of:
             stats['duplicate'] += 1
             continue
-        bill_of[key] = (team, branch[0], docdate)
+        bill_of[key] = (team, branch[0], branch[1], docdate, _pgText(comcod))
         raw_docnums.append(docnum)
 
     if not bill_of:
-        return {}, stats
+        return [], stats
 
-    # (ทีม, id บริษัท, วันที่) -> จำนวนครั้ง
-    refills = defaultdict(int)
+    lines = []
     seen = set()
     try:
         # ยิงทีละก้อน เผื่อบิลเยอะจน IN (...) ยาวเกินจนฐานข้อมูลไม่รับ
         for start in range(0, len(raw_docnums), 900):
             chunk = raw_docnums[start:start + 900]
-            for docnum, seqnum in (ExOEINVD.objects.using('pg_db')
-                                   .filter(docnum__in=chunk)
-                                   .values_list('docnum', 'seqnum')):
-                key = _pgText(docnum)
-                if (key, seqnum) in seen:
+            for row in (ExOEINVD.objects.using('pg_db')
+                        .filter(docnum__in=chunk)
+                        .values('docnum', 'seqnum', 'stkdes',
+                                'ordqty', 'unitpr', 'trnval')):
+                key = _pgText(row['docnum'])
+                if (key, row['seqnum']) in seen:
                     stats['duplicate'] += 1
                     continue
-                seen.add((key, seqnum))
+                seen.add((key, row['seqnum']))
                 bill = bill_of.get(key)
                 if bill is None:
                     continue
-                refills[(bill[0], bill[1], bill[2])] += 1
+                team, company_id, branch_name, docdate, comcod = bill
+                lines.append({
+                    'date': docdate,
+                    'docnum': key,
+                    'comcod': comcod,
+                    'branch': branch_name,
+                    'company_id': company_id,
+                    'team': team,
+                    'stkdes': _pgText(row['stkdes']),
+                    'litre': row['ordqty'] or Decimal(0),
+                    'unit_price': row['unitpr'] or Decimal(0),
+                    'amount': row['trnval'] or Decimal(0),
+                })
     except Exception as exc:
         stats['error'] = 'อ่านรายการเติมน้ำมันจาก Express ไม่ได้ : %s' % exc
-        return {}, stats
+        return [], stats
 
-    return dict(refills), stats
+    # เรียงให้คงที่ ไม่งั้น sheet express สลับแถวไปมาทุกครั้งที่ export
+    lines.sort(key=lambda x: (x['team'], x['date'], x['docnum']))
+    return lines, stats
 
 
 def _exportDocumentFuelPriceByTeam(selected_month):
@@ -11290,13 +11310,18 @@ def _exportDocumentFuelPriceByTeam(selected_month):
 
     คืน ({ชื่อทีม -> (ราคาเฉลี่ย, จำนวนครั้งที่มีราคา, จำนวนครั้งที่ขาดราคา)}, stats)
     """
-    refills, cached_stats = _exportDocumentFuelRefills(selected_month)
+    lines, cached_stats = _exportDocumentFuelRefills(selected_month)
     # ก๊อปก่อนแก้เสมอ : dict ตัวนั้นอยู่ใน cache ถ้าบวกทับลงไปตรง ๆ
     # ตัวเลขจะสะสมทบขึ้นเรื่อย ๆ ทุกครั้งที่เปิดหน้า
     stats = dict(cached_stats)
     stats['refills'] = stats['no_price'] = stats['teams'] = 0
-    if not refills:
+    if not lines:
         return {}, stats
+
+    # ยุบรายบรรทัดเป็นจำนวนครั้ง : 1 บรรทัดใน OEINVD = เติม 1 ครั้ง
+    refills = defaultdict(int)
+    for ln in lines:
+        refills[(ln['team'], ln['company_id'], ln['date'])] += 1
 
     first = _exportDocumentMonthDate(selected_month)
     last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
@@ -11734,6 +11759,162 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
         # ช่อง I ว่าง = หาราคาน้ำมันไม่ได้ เขียนเหตุผลไว้ข้าง ๆ ไม่ใส่ 0 เพราะ 0 อ่านเหมือนราคาจริง
         # และไม่เขียนข้อความลง I เด็ดขาด สูตร K = (I-H)*J จะพังทั้งคอลัมน์
         worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = r.get('fuel_note')
+
+
+# sheet oil : แถวข้อมูลอยู่ 4-63 (60 ทีม) และมีช่องรับได้ 8 "หนังสือที่" ต่อทีม
+# แต่ละหนังสือกิน 3 คอลัมน์ (ลิตร / ราคาต่อลิตร / จำนวนเงิน) เริ่มที่คอลัมน์ C
+EXPORT_DOC_OIL_FIRST_ROW = 4
+EXPORT_DOC_OIL_MAX_ROWS = 60
+EXPORT_DOC_OIL_MAX_BOOKS = 8
+EXPORT_DOC_OIL_FIRST_COL = 3
+
+EXPORT_DOC_EXPRESS_SHEET = 'express'
+
+
+def _exportDocumentWriteExpressSheet(workbook, lines, stats):
+    """สร้าง sheet express : รายการเติมน้ำมันดิบที่ดึงมาจากระบบ Express
+
+    มีไว้ให้ตรวจย้อนได้ว่าตัวเลขในช่องราคาน้ำมันกับ sheet oil มาจากบิลใบไหนบ้าง
+    ไม่มีสูตรไหนอ้างถึง sheet นี้ ลบทิ้งได้ถ้าไม่อยากให้ติดไปกับไฟล์
+    """
+    index = workbook.sheetnames.index('oil') + 1 if 'oil' in workbook.sheetnames else None
+    worksheet = workbook.create_sheet(EXPORT_DOC_EXPRESS_SHEET, index)
+
+    worksheet['A1'] = 'รายการเติมน้ำมันของทีมรถร่วม (ดึงจากระบบ Express)'
+    worksheet['A1'].font = Font(bold=True, size=14)
+    worksheet['A2'] = ('sheet นี้เป็นข้อมูลดิบไว้ตรวจสอบอย่างเดียว ไม่มีสูตรไหนอ้างถึง '
+                       '| คัดบิลด้วยคำนำหน้าเลขที่เอกสาร ซึ่งบอกว่าเติมที่สาขาไหน '
+                       '| "ราคาอ้างอิง" คือราคาน้ำมันรายวันที่กรอกในระบบ ไม่ใช่ราคาบนบิล')
+    if stats.get('error'):
+        worksheet['A3'] = 'อ่านข้อมูลไม่ได้ : %s' % stats['error']
+        worksheet['A3'].font = Font(bold=True, color='9C0006')
+        return
+    worksheet['A3'] = ('บิลทั้งหมด %s ใบ | เป็นของทีมรถร่วม %s รายการ | ไม่ใช่ทีมรถร่วม %s ใบ '
+                       '| บิลซ้ำที่ตัดออก %s' % (
+                           stats.get('bills', 0), len(lines),
+                           stats.get('no_team', 0), stats.get('duplicate', 0)))
+
+    headers = ['วันที่', 'เลขที่บิล', 'สาขาที่เติม', 'comcod', 'ทีมรถร่วม',
+               'ชนิดน้ำมัน', 'ลิตร', 'ราคา/ลิตร', 'จำนวนเงิน', 'ราคาอ้างอิงของวันนั้น']
+    for col, name in enumerate(headers, start=1):
+        cell = worksheet.cell(row=4, column=col)
+        cell.value = name
+        cell.font = Font(bold=True)
+
+    price_of = {}
+    if lines:
+        days = {ln['date'] for ln in lines}
+        price_of = {
+            (comp_id, day): price
+            for comp_id, day, price in (
+                InternationalFreightRateFuelPrice.objects
+                .filter(base_comp_id__in={ln['company_id'] for ln in lines},
+                        date__in=list(days))
+                .values_list('base_comp_id', 'date', 'average_fuel_price'))}
+
+    for i, ln in enumerate(lines):
+        row = 5 + i
+        worksheet.cell(row=row, column=1).value = ln['date']
+        worksheet.cell(row=row, column=2).value = ln['docnum']
+        worksheet.cell(row=row, column=3).value = ln['branch']
+        worksheet.cell(row=row, column=4).value = ln['comcod']
+        worksheet.cell(row=row, column=5).value = ln['team']
+        worksheet.cell(row=row, column=6).value = ln['stkdes']
+        worksheet.cell(row=row, column=7).value = float(ln['litre'])
+        worksheet.cell(row=row, column=8).value = float(ln['unit_price'])
+        worksheet.cell(row=row, column=9).value = float(ln['amount'])
+        ref = price_of.get((ln['company_id'], ln['date']))
+        worksheet.cell(row=row, column=10).value = float(ref) if ref is not None else None
+        worksheet.cell(row=row, column=1).number_format = 'DD/MM/YYYY'
+        for col in (7, 8, 10):
+            worksheet.cell(row=row, column=col).number_format = '0.00'
+        worksheet.cell(row=row, column=9).number_format = '#,##0.00'
+
+    for col, width in zip('ABCDEFGHIJ', (11, 14, 30, 9, 30, 26, 10, 10, 13, 13)):
+        worksheet.column_dimensions[col].width = width
+    worksheet.freeze_panes = 'A5'
+
+
+def _exportDocumentOilBooks(lines):
+    """จัดสาขาที่ไปเติมน้ำมัน ลงช่อง "หนังสือที่ 1-8" ของ sheet oil
+
+    1 หนังสือ = 1 สาขาที่ไปเติม ตามที่ฝ่ายบัญชีใช้กันอยู่
+    หัวคอลัมน์เป็นของทั้ง sheet ไม่ใช่ของทีมใดทีมหนึ่ง ลำดับสาขาจึงต้องตายตัวทั้งไฟล์
+    เรียงตามลิตรรวมมากไปน้อย สาขาที่ใช้บ่อยจะได้อยู่ต้น ๆ อ่านง่าย
+
+    ตอนนี้มีสาขาที่ขายเชื่อน้ำมัน 7 แห่ง ยังพอดีกับช่อง 8 ช่อง
+    ถ้าวันหน้าเกิน 8 สาขา ส่วนที่เกินจะไม่มีที่ลง ต้องรายงานให้เห็น ไม่ใช่หายเงียบ
+
+    คืน (รายชื่อสาขาเรียงตามช่อง, ชุดสาขาที่ล้นช่อง)
+    """
+    litre_of = defaultdict(Decimal)
+    for ln in lines:
+        litre_of[ln['branch']] += ln['litre']
+    ordered = sorted(litre_of, key=lambda b: (-litre_of[b], b))
+    return ordered[:EXPORT_DOC_OIL_MAX_BOOKS], set(ordered[EXPORT_DOC_OIL_MAX_BOOKS:])
+
+
+def _exportDocumentWriteOilSheet(workbook, lines, trip_teams, stats):
+    """กรอก sheet oil ด้วยยอดน้ำมันจริงของแต่ละทีม แยกตามสาขาที่ไปเติม
+
+    เดิม sheet นี้ให้ฝ่ายบัญชีกรอกมือ ตอนนี้เติมให้จากบิลใน Express แล้ว แก้ทับได้เหมือนเดิม
+
+    ยอดในนี้ไม่ใช่แค่ข้อมูลประกอบ แต่ถูกหักออกจากเงินที่จ่ายทีมรถร่วมจริง ๆ
+    (สรุปจ่ายรถร่วม!AJ = SUMIF(oil!B, ชื่อทีม, oil!AE) แล้วไปโผล่ที่คอลัมน์ "หักค่าใช้จ่าย")
+    ก่อนหน้านี้ sheet นี้ว่าง ยอดหักจึงเป็น 0 มาตลอด
+
+    เขียนเฉพาะทีมที่มีเที่ยววิ่งในรอบนี้ เพราะช่องตรวจ AI4 ในไฟล์จะฟ้องทันที
+    ถ้ามีชื่อทีมใน oil ที่ไม่มีในสรุปจ่ายรถร่วม (ยอดหักจะหายไปเฉย ๆ)
+    ทีมที่เติมน้ำมันแต่ไม่ได้วิ่งงานส่งออกเดือนนี้ ก็ไม่มีเงินให้หักอยู่แล้ว
+
+    ราคาต่อลิตรคิดย้อนจาก เงินรวม ÷ ลิตรรวม เพราะเดือนหนึ่งเติมหลายครั้ง ราคาไม่เท่ากัน
+
+    เก็บราคาไว้ 6 ตำแหน่งแต่ตั้งรูปแบบให้แสดง 2 ตำแหน่ง เพราะช่องตรวจ AF ในไฟล์
+    เช็คว่า ลิตร x ราคา ต่างจากเงินได้ไม่เกิน 1 บาท ถ้าปัดราคาเหลือ 2 ตำแหน่งจริง ๆ
+    ทีมที่เติมเยอะจะคลาดเกิน 1 บาททันที (เช่น 1,495 ลิตร คลาด 6 บาท) แล้วโดนฟ้องทั้งที่ไม่ผิด
+    ยอดเงินต้องเป๊ะเพราะเป็นเงินที่ Express เรียกเก็บจริง จึงยอมให้ราคาเป็นตัวที่ละเอียดแทน
+    """
+    worksheet = workbook['oil']
+    books, overflow = _exportDocumentOilBooks(lines)
+    stats['oil_books'] = books
+    stats['oil_overflow'] = sorted(overflow)
+
+    # (ทีม, สาขา) -> [ลิตรรวม, เงินรวม]
+    total = defaultdict(lambda: [Decimal(0), Decimal(0)])
+    for ln in lines:
+        if ln['team'] not in trip_teams or ln['branch'] in overflow:
+            continue
+        bucket = total[(ln['team'], ln['branch'])]
+        bucket[0] += ln['litre']
+        bucket[1] += ln['amount']
+
+    teams = sorted({team for team, _ in total})
+    stats['oil_teams'] = len(teams)
+    stats['oil_truncated'] = max(0, len(teams) - EXPORT_DOC_OIL_MAX_ROWS)
+
+    # หัวคอลัมน์ของแต่ละหนังสือ เขียนชื่อสาขาแทนคำว่า "(หนังสือที่ N)"
+    for slot, branch in enumerate(books):
+        cell = worksheet.cell(row=2, column=EXPORT_DOC_OIL_FIRST_COL + slot * 3)
+        cell.value = '(หนังสือที่ %s) %s' % (slot + 1, branch)
+
+    for i, team in enumerate(teams[:EXPORT_DOC_OIL_MAX_ROWS]):
+        row = EXPORT_DOC_OIL_FIRST_ROW + i
+        worksheet.cell(row=row, column=2).value = team
+        for slot, branch in enumerate(books):
+            litre, amount = total.get((team, branch), (Decimal(0), Decimal(0)))
+            col = EXPORT_DOC_OIL_FIRST_COL + slot * 3
+            if not litre:
+                # เว้นว่างไว้ ไม่ใส่ 0 เพราะ 0 อ่านเหมือน "เติมแล้วแต่ไม่เสียเงิน"
+                for offset in range(3):
+                    worksheet.cell(row=row, column=col + offset).value = None
+                continue
+            worksheet.cell(row=row, column=col).value = float(litre)
+            worksheet.cell(row=row, column=col + 1).value = float(
+                (amount / litre).quantize(Decimal('0.000001')))
+            worksheet.cell(row=row, column=col + 2).value = float(amount)
+            worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+            worksheet.cell(row=row, column=col + 1).number_format = '0.00'
+            worksheet.cell(row=row, column=col + 2).number_format = '#,##0.00'
 
 
 def _exportDocumentHoistNoTeam(workbook):
@@ -12913,6 +13094,13 @@ def exportExcelExportDocument(request):
             float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
 
     _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats)
+
+    # บิลน้ำมันจาก Express : ใช้ทั้งกรอก sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)
+    # อ่านจาก cache ตัวเดียวกับที่ราคาน้ำมันเฉลี่ยใช้ ไม่ได้ยิงซ้ำ
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentWriteOilSheet(workbook, fuel_lines,
+                                 {r['team'] for r in rows}, rate_stats)
+    _exportDocumentWriteExpressSheet(workbook, fuel_lines, fuel_stats)
 
     # "ไม่ระบุทีม" เป็นชื่อที่เราตั้งขึ้นเอง ต้องไปลงทะเบียนใน sheet รายการมาตรฐาน
     # ไม่งั้นช่องตรวจ O10 จะนับเป็น "ชื่อที่ไม่อยู่ในรายการ" ทุกแถวที่เราเติมให้

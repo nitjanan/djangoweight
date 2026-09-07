@@ -488,9 +488,9 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         return rate
 
     # ช่องที่ถือว่าเป็น "ตัวค่าขนส่ง" จริง ๆ ถ้าช่องพวกนี้เปลี่ยนถึงจะนับเป็นการปรับราคา
-    # effective_date ไม่นับ เพราะฟอร์มเติมค่าเดิมมาให้อยู่แล้ว ถ้าไม่แตะก็ส่งค่าเดิมกลับมา
+    # effective_date รวมอยู่ด้วย เพราะการเปลี่ยนวันเริ่มใช้ต้อง save ลง DB จริง
     _RATE_FIELDS = ('origin', 'destination', 'base_fuel_price', 'distance', 'payload_weight',
-                    'fuel_freight_adjustment', 'fuel_used_per_trip', 'note')
+                    'fuel_freight_adjustment', 'fuel_used_per_trip', 'note', 'effective_date')
 
     @staticmethod
     def _teamKey(team_data):

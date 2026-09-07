@@ -11522,6 +11522,41 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
     return rate_rows, weight_carried_by_key, stats
 
 
+def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
+    """เส้นทางที่ยังไม่มีอัตราค่าขนส่งเลย จัดกลุ่มเป็น "ปลายทาง แล้วแจกแจงต้นทาง"
+
+    จัดหัวข้อด้วยปลายทาง เพราะเป็นมุมที่ฝ่ายบัญชีใช้คุยกัน (ท่าไหนยังไม่ได้ตั้งราคา)
+    แต่ต้องบอกต้นทางกำกับด้วยเสมอ เพราะราคาตั้งเป็น "คู่ ต้นทาง-ปลายทาง"
+    ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งราคาแล้วและยังไม่ได้ตั้ง
+    ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+
+    นับเฉพาะเที่ยวที่ "ไม่มีสัญญาเลย" (wc_no_contract) ไม่รวมเที่ยวที่มีสัญญาแล้วแต่
+    น้ำหนักไม่เข้าช่วง (wc_out_of_range) เพราะสองอย่างนี้แก้คนละที่
+    อันแรกต้องเพิ่มเส้นทางใหม่ อันหลังแค่เพิ่มช่วงน้ำหนักในเส้นทางที่มีอยู่แล้ว
+    หน้าเว็บมีกล่องแยกให้อยู่แล้ว เอามาปนกันจะทำให้ไปแก้ผิดที่
+
+    คืน [{'destination': ..., 'trips': n, 'origins': [{'name':..., 'trips': n}, ...]}, ...]
+    เรียงจากปลายทางที่มีเที่ยวค้างมากไปน้อย
+    """
+    pending = defaultdict(lambda: defaultdict(int))
+    for row in trip_rows:
+        if weight_carried_by_key.get(
+                (row['origin_map_id'], row['destination_map_id'], row['team_id'])):
+            continue
+        pending[row['destination']][row['origin']] += 1
+
+    result = []
+    for destination, origins in pending.items():
+        result.append({
+            'destination': destination,
+            'trips': sum(origins.values()),
+            'origins': [{'name': name, 'trips': n}
+                        for name, n in sorted(origins.items(), key=lambda x: -x[1])],
+        })
+    result.sort(key=lambda x: -x['trips'])
+    return result
+
+
 def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_key, stats):
     """เรียงแถวอัตราให้แถวที่มีเที่ยววิ่งจริงขึ้นก่อน แถวที่ยังไม่มีเที่ยวไปต่อท้าย
 
@@ -12622,6 +12657,7 @@ def viewExportDocument(request):
         'wc_filled_pct': round(100.0 * wc_filled / wc_total) if wc_total else 0,
         'wc_no_contract_pct': round(100.0 * wc_no_contract / wc_total) if wc_total else 0,
         'wc_out_of_range_pct': round(100.0 * wc_out_of_range / wc_total) if wc_total else 0,
+        'wc_missing_routes': _exportDocumentMissingRoutes(all_rows, weight_carried_by_key),
     })
     # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)

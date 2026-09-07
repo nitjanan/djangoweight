@@ -11477,6 +11477,9 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'route': route,
                     })
 
+    rate_rows = _exportDocumentDropUnusedRateRows(rate_rows, trip_rows,
+                                                  weight_carried_by_key, stats)
+
     _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                                  rate_by_route, stats, selected_month)
 
@@ -11485,6 +11488,36 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
         rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
 
     return rate_rows, weight_carried_by_key, stats
+
+
+def _exportDocumentDropUnusedRateRows(rate_rows, trip_rows, weight_carried_by_key, stats):
+    """ตัดแถวอัตราที่ไม่มีเที่ยวไหนตกลงมาใช้จริงทิ้ง
+
+    1 อัตราถูกขยายออกเป็นหลายแถวตาม ทีม x ช่วงแบก นน. x ชนิดหิน ซึ่งได้คู่ผสมเยอะมาก
+    แต่คู่ผสมส่วนใหญ่ไม่เคยเกิดขึ้นจริง (ทีมนั้นไม่เคยขนหินชนิดนั้นในช่วงน้ำหนักนั้น)
+    ของจริงเดือน ก.ค. 2026 มีแถวเปล่าถึง 58%
+
+    แถวเปล่าไม่ได้แค่เปลืองที่ แต่สร้างปัญหาสองอย่าง
+      1. sheet รับได้ 200 แถว พอแถวเปล่ากินที่จนเต็ม แถวที่มีเที่ยวจริงจะถูกตัดทิ้ง
+         แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์
+      2. แถวเปล่าไม่มีวันวิ่งให้เฉลี่ยราคาน้ำมัน เลยถูกรายงานว่า "ไม่มีราคาน้ำมัน"
+         ทั้งที่ราคากรอกไว้ครบ ทำให้หน้าเว็บฟ้องผิดสาเหตุ
+
+    ตัดได้อย่างปลอดภัย เพราะสูตรในไฟล์หาอัตราด้วยคีย์ของ "เที่ยว" เสมอ
+    แถวที่ไม่มีเที่ยวตรงกับมันจึงไม่เคยถูกเรียกใช้ ตรงกับหลักเดียวกับที่ตอนต้นฟังก์ชัน
+    ตัดอัตราของเส้นทางที่ไม่มีเที่ยววิ่งในรอบนี้ทิ้งไปแล้ว แค่ลงลึกอีกชั้น
+
+    ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้ว่าเที่ยวไหนตกคีย์ไหน
+    """
+    _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
+
+    used = {(r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
+            for r in trip_rows}
+    kept = [row for row in rate_rows
+            if (row['team'], row['origin'], row['destination'],
+                row['weight_carried'], row['stone']) in used]
+    stats['rate_rows_empty'] = len(rate_rows) - len(kept)
+    return kept
 
 
 def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,

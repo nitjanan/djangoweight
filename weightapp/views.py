@@ -11402,6 +11402,9 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
     # เส้นทาง -> (ใบอัตรา, ชื่อที่เอาไว้แสดง) เก็บไว้ใช้ตอนเติมราคาน้ำมันในรอบที่ 2
     rate_by_route = {}
     stats = {'rate_in_db': 0, 'route_matched': 0, 'route_unmatched': 0, 'truncated': 0,
+             # แถวอัตราที่มีเที่ยวรองรับจริง กับแถวที่เตรียมไว้เฉย ๆ เผื่อบัญชีแก้ในไฟล์
+             # ดู _exportDocumentSortRateRowsByUsage
+             'rate_rows_used': 0, 'rate_rows_empty': 0, 'truncated_used': 0,
              # ใช้บอกในไฟล์กับหน้าเว็บว่าอัตราชุดนี้เป็นข้อมูล ณ วันไหน
              'rate_as_of': rate_as_of,
              'rate_as_of_th': _thaiDate(rate_as_of),
@@ -11477,47 +11480,64 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'route': route,
                     })
 
-    rate_rows = _exportDocumentDropUnusedRateRows(rate_rows, trip_rows,
-                                                  weight_carried_by_key, stats)
+    rate_rows = _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows,
+                                                   weight_carried_by_key, stats)
 
     _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                                  rate_by_route, stats, selected_month)
 
     if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
         stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
+        # เรียงมาแล้วให้แถวที่มีเที่ยวจริงอยู่ต้น ๆ ส่วนที่เกินจึงควรเป็นแถวเปล่าล้วน
+        # ถ้าเลขนี้ยังมากกว่า 0 แปลว่าแถวที่ต้องใช้จริงหลุดไป = เที่ยวนั้นจะได้เงิน 0
+        # ต้องเตือนคนละแบบกับการตัดแถวเปล่า จึงแยกตัวเลขไว้
+        stats['truncated_used'] = max(0, stats['rate_rows_used'] - EXPORT_DOC_RATE_MAX_ROWS)
         rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
 
     return rate_rows, weight_carried_by_key, stats
 
 
-def _exportDocumentDropUnusedRateRows(rate_rows, trip_rows, weight_carried_by_key, stats):
-    """ตัดแถวอัตราที่ไม่มีเที่ยวไหนตกลงมาใช้จริงทิ้ง
+def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_key, stats):
+    """เรียงแถวอัตราให้แถวที่มีเที่ยววิ่งจริงขึ้นก่อน แถวที่ยังไม่มีเที่ยวไปต่อท้าย
 
     1 อัตราถูกขยายออกเป็นหลายแถวตาม ทีม x ช่วงแบก นน. x ชนิดหิน ซึ่งได้คู่ผสมเยอะมาก
     แต่คู่ผสมส่วนใหญ่ไม่เคยเกิดขึ้นจริง (ทีมนั้นไม่เคยขนหินชนิดนั้นในช่วงน้ำหนักนั้น)
-    ของจริงเดือน ก.ค. 2026 มีแถวเปล่าถึง 58%
+    ของจริงเดือน ก.ค. 2026 สร้างออกมา 427 แถว มีเที่ยวรองรับแค่ 178 แถว
 
-    แถวเปล่าไม่ได้แค่เปลืองที่ แต่สร้างปัญหาสองอย่าง
-      1. sheet รับได้ 200 แถว พอแถวเปล่ากินที่จนเต็ม แถวที่มีเที่ยวจริงจะถูกตัดทิ้ง
-         แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์
-      2. แถวเปล่าไม่มีวันวิ่งให้เฉลี่ยราคาน้ำมัน เลยถูกรายงานว่า "ไม่มีราคาน้ำมัน"
-         ทั้งที่ราคากรอกไว้ครบ ทำให้หน้าเว็บฟ้องผิดสาเหตุ
+    แถวเปล่าเองไม่ได้ทำอะไรผิด สูตรในไฟล์หาอัตราด้วยคีย์ของ "เที่ยว" เสมอ
+    แถวที่ไม่มีเที่ยวตรงกับมันก็แค่ไม่มีใครเรียกใช้ ยอดเงินไม่เพี้ยน
+    และยังมีประโยชน์ด้วย : ถ้าบัญชีแก้น้ำหนักหรือชนิดหินในไฟล์จนเที่ยวย้ายคีย์
+    แถวเปล่าที่เตรียมไว้จะรองรับให้พอดี ไม่ต้องกลับมา export ใหม่
 
-    ตัดได้อย่างปลอดภัย เพราะสูตรในไฟล์หาอัตราด้วยคีย์ของ "เที่ยว" เสมอ
-    แถวที่ไม่มีเที่ยวตรงกับมันจึงไม่เคยถูกเรียกใช้ ตรงกับหลักเดียวกับที่ตอนต้นฟังก์ชัน
-    ตัดอัตราของเส้นทางที่ไม่มีเที่ยววิ่งในรอบนี้ทิ้งไปแล้ว แค่ลงลึกอีกชั้น
+    ปัญหาอยู่ที่ sheet รับได้แค่ EXPORT_DOC_RATE_MAX_ROWS แถว และตัวตัดส่วนเกิน
+    ตัดตามลำดับที่สร้าง ไม่ได้ดูว่าแถวไหนจำเป็น จึงเผลอตัดแถวที่มีเที่ยวจริงทิ้ง
+    แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์โดยไม่มีใครสังเกต
 
+    เรียงใหม่แล้วส่วนที่ถูกตัดจะเป็นแถวเปล่าเสมอ ได้ทั้งสองอย่าง
+    แถวที่ต้องใช้ไม่มีทางหาย และแถวเปล่ายังอยู่เท่าที่ที่ว่างเหลือ
+
+    เรียงแบบ stable ลำดับเดิมภายในแต่ละกลุ่มจึงไม่เปลี่ยน sheet ยังอ่านไล่ได้เหมือนเดิม
     ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้ว่าเที่ยวไหนตกคีย์ไหน
     """
     _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
 
     used = {(r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
             for r in trip_rows}
-    kept = [row for row in rate_rows
-            if (row['team'], row['origin'], row['destination'],
-                row['weight_carried'], row['stone']) in used]
-    stats['rate_rows_empty'] = len(rate_rows) - len(kept)
-    return kept
+
+    def hasTrip(row):
+        return (row['team'], row['origin'], row['destination'],
+                row['weight_carried'], row['stone']) in used
+
+    for row in rate_rows:
+        # ติดธงไว้ให้ขั้นตอนถัดไปแยกออกว่าแถวไหน "ไม่มีเที่ยว" กับแถวไหน "มีเที่ยวแต่ขาดราคา"
+        # สองอย่างนี้ต้องรายงานคนละแบบ ไม่งั้นหน้าเว็บจะฟ้องผิดสาเหตุ
+        row['has_trip'] = hasTrip(row)
+
+    ordered = ([row for row in rate_rows if row['has_trip']]
+               + [row for row in rate_rows if not row['has_trip']])
+    stats['rate_rows_used'] = sum(1 for row in rate_rows if row['has_trip'])
+    stats['rate_rows_empty'] = len(rate_rows) - stats['rate_rows_used']
+    return ordered
 
 
 def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
@@ -11561,10 +11581,17 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
             group_key = (row['team'], row['origin'], row['destination'],
                          row['weight_carried'], row['stone'])
             fuel = fuel_by_group.get(group_key) if company_id else None
-            if row['team'] not in stats['fuel_no_bill']:
+            # นับเฉพาะแถวที่มีเที่ยวจริง แถวเผื่อไว้ไม่ได้จ่ายเงินอยู่แล้ว
+            # เอามารวมจะทำให้รายชื่อทีมในคำเตือนยาวเกินจริง
+            if row.get('has_trip') and row['team'] not in stats['fuel_no_bill']:
                 stats['fuel_no_bill'].append(row['team'])
 
         if fuel is None:
+            if not row.get('has_trip'):
+                # แถวที่เตรียมไว้เผื่อบัญชีแก้ในไฟล์ ยังไม่มีเที่ยววิ่งจริงในกลุ่มนี้
+                # จึงไม่มีวันไหนให้เอาไปหาราคา ไม่ใช่ความผิดพลาด ห้ามเอาไปรวมในคำเตือน
+                row['fuel_note'] = 'ยังไม่มีเที่ยววิ่งในกลุ่มนี้ (แถวเผื่อไว้สำหรับแก้ในไฟล์)'
+                continue
             bucket = 'fuel_no_company' if not company_id else 'fuel_no_price'
             if route_label not in stats[bucket]:
                 stats[bucket].append(route_label)

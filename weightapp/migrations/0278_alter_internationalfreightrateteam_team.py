@@ -61,7 +61,7 @@ def dropFk(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0273_rename_international_freight_rate_id_internationalfreightratelog_international_freight_rate_and_more'),
+        ('weightapp', '0277_rename_international_freight_rate_id_internationalfreightratelog_international_freight_rate_and_more'),
     ]
 
     operations = [

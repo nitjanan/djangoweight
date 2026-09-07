@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0290_basecompanymapbasecustomer_oi_soc_code'),
+        ('weightapp', '0294_basecompanymapbasecustomer_oi_soc_code'),
     ]
 
     operations = [

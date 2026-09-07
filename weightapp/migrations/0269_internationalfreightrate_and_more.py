@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0264_merge_20260810_0942'),
+        ('weightapp', '0268_merge_20260810_0942'),
     ]
 
     operations = [

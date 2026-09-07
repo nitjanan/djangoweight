@@ -8,7 +8,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0279_internationalfreightrate_origin_destination_fk'),
+        ('weightapp', '0283_internationalfreightrate_origin_destination_fk'),
     ]
 
     operations = [

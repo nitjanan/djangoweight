@@ -16,7 +16,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0288_ifr_effective_date'),
+        ('weightapp', '0292_ifr_effective_date'),
     ]
 
     operations = [

@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('weightapp', '0284_fuel_price_allow_multiple_per_month'),
+        ('weightapp', '0288_fuel_price_allow_multiple_per_month'),
     ]
 
     operations = [

@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ('weightapp', '0277_rename_average_price_to_average_fuel_price'),
+        ('weightapp', '0281_rename_average_price_to_average_fuel_price'),
     ]
 
     operations = [

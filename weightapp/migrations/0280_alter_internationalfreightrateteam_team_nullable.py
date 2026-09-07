@@ -64,7 +64,7 @@ def makeNotNull(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0275_rename_used_payload_weight_to_fuel_used_per_trip'),
+        ('weightapp', '0279_rename_used_payload_weight_to_fuel_used_per_trip'),
     ]
 
     operations = [

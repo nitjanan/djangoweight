@@ -37,7 +37,7 @@ def unbackfill_trail(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0286_international_freight_rate_approval'),
+        ('weightapp', '0290_international_freight_rate_approval'),
     ]
 
     operations = [

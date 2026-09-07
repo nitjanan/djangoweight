@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ('weightapp', '0276_alter_internationalfreightrateteam_team_nullable'),
+        ('weightapp', '0280_alter_internationalfreightrateteam_team_nullable'),
     ]
 
     operations = [

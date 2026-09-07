@@ -11523,28 +11523,28 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
 
 
 def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
-    """เส้นทางที่ยังไม่มีอัตราค่าขนส่งเลย บรรทัดละ 1 เส้นทาง
+    """ปลายทางที่ยังไม่มีอัตราค่าขนส่ง บรรทัดละ 1 ปลายทาง
 
-    ต้องบอกเป็นคู่ ต้นทาง-ปลายทาง เพราะราคาตั้งเป็นคู่ ปลายทางเดียวกันจึงมีทั้งเส้นที่
-    ตั้งราคาแล้วและยังไม่ได้ตั้ง ถ้าบอกแต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+    ไม่บอกต้นทาง เพราะหน้านี้แยกดูทีละบริษัทอยู่แล้ว ต้นทางจึงชัดจากแท็บที่เปิดอยู่
+    เอามาใส่ซ้ำมีแต่ทำให้บรรทัดยาวจนกวาดตาไม่ทัน
 
     นับเฉพาะเที่ยวที่ "ไม่มีสัญญาเลย" (wc_no_contract) ไม่รวมเที่ยวที่มีสัญญาแล้วแต่
     น้ำหนักไม่เข้าช่วง (wc_out_of_range) เพราะสองอย่างนี้แก้คนละที่
     อันแรกต้องเพิ่มเส้นทางใหม่ อันหลังแค่เพิ่มช่วงน้ำหนักในเส้นทางที่มีอยู่แล้ว
     หน้าเว็บมีกล่องแยกให้อยู่แล้ว เอามาปนกันจะทำให้ไปแก้ผิดที่
 
-    คืน [{'origin': ..., 'destination': ..., 'trips': n}, ...] เรียงจากเที่ยวมากไปน้อย
+    คืน [{'destination': ..., 'trips': n}, ...] เรียงจากเที่ยวมากไปน้อย
     """
     pending = defaultdict(int)
     for row in trip_rows:
         if weight_carried_by_key.get(
                 (row['origin_map_id'], row['destination_map_id'], row['team_id'])):
             continue
-        pending[(row['origin'], row['destination'])] += 1
+        pending[row['destination']] += 1
 
-    result = [{'origin': origin, 'destination': destination, 'trips': trips}
-              for (origin, destination), trips in pending.items()]
-    result.sort(key=lambda x: (-x['trips'], x['origin']))
+    result = [{'destination': destination, 'trips': trips}
+              for destination, trips in pending.items()]
+    result.sort(key=lambda x: (-x['trips'], x['destination']))
     return result
 
 

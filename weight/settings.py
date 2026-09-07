@@ -104,7 +104,29 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': '',
-    }
+    },
+    # Postgres ของระบบ Express (บัญชี/สต๊อก) — อ่านอย่างเดียว ไม่เคยเขียน
+    # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam
+    # ตารางฝั่งนี้ประกาศเป็น managed = False ทั้งหมด migrate จึงไม่แตะ
+    #
+    # รหัสผ่าน/ผู้ใช้/เครื่อง อยู่ในไฟล์ .env (ถูก gitignore ไว้) ห้ามเขียนค่าจริงลงไฟล์นี้
+    # ดูคีย์ที่ต้องมีได้จาก .env.example
+    # ไม่ตั้งค่า default ให้ และไม่ throw ตอน import ด้วย : ถ้า .env ขาด ให้ไปพังตอน
+    # เชื่อมต่อแทน ซึ่ง _exportDocumentFuelRefills ดักไว้แล้วและถอยไปใช้วิธีเฉลี่ยรายวัน
+    # ทั้งเว็บจึงยังใช้งานได้ตามปกติ เสียแค่ราคาน้ำมันที่ถ่วงจากบิลจริง
+    'pg_db': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('PG_DB_NAME', 'dbslc'),
+        'USER': os.environ.get('PG_DB_USER', ''),
+        'PASSWORD': os.environ.get('PG_DB_PASSWORD', ''),
+        'HOST': os.environ.get('PG_DB_HOST', ''),
+        'PORT': os.environ.get('PG_DB_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+            # เน็ตไปไม่ถึง อย่าให้หน้า export ค้างรอยาว ๆ
+            'connect_timeout': 10,
+        },
+    },
 }
 
 
@@ -190,7 +212,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-    'DEFAULT_PERMISSION_CLASSES':(
+    'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated'
     )
 }

@@ -33,6 +33,13 @@
       justify-content: center;
       z-index: 9999;
     }
+
+    /* เมนูที่มีเมนูย่อย ถ้าอยู่ในหน้านั้นอยู่แล้วให้กางค้างไว้เลย
+       theme เดิมตั้ง .submenu{max-height:0} ไว้ ถ้าไม่เขียนทับ submenu จะถูกซ่อนจนกว่าจะกด
+       ใส่ :not(.submenu-closed) ไว้เพื่อให้ user กดพับเองได้อยู่ */
+    .sidebar-item.has-sub.active > .submenu:not(.submenu-closed) {
+      max-height: none;
+    }
   </style>
 
     {% block css %}
@@ -182,6 +189,32 @@
                       <span>Transport</span>
                     </a>
                   </li>
+
+                  <!-- ค่าขนส่งต่างประเทศ : ผูกไว้กับ tab Transport ถ้าจะย้ายให้ย้ายทั้ง <li> ก้อนนี้
+                       เมนูแม่ติด active ถ้าอยู่หน้าไหนก็ได้ในกลุ่มนี้ (ตัวแปรใดตัวหนึ่งเป็น 'active') -->
+                  <li class="sidebar-item has-sub {{ifr_page}}{{ifr_fuel_page}}{{export_document_page}}">
+                    <a href="#" class="sidebar-link">
+                      <i class="fa-solid fa-ship"></i>
+                      <span>Freight Rate</span>
+                    </a>
+                    <ul class="submenu">
+                      <li class="submenu-item {{ifr_page}}">
+                        <a href="{% url 'viewInternationalFreightRate' %}" class="submenu-link"
+                          >ค่าขนส่งต่างประเทศ</a
+                        >
+                      </li>
+                      <li class="submenu-item {{ifr_fuel_page}}">
+                        <a href="{% url 'viewInternationalFreightRateFuelPrice' %}" class="submenu-link"
+                          >ราคาน้ำมันรายวัน</a
+                        >
+                      </li>
+                      <li class="submenu-item {{export_document_page}}">
+                        <a href="{% url 'viewExportDocument' %}" class="submenu-link"
+                          >Export เอกสาร</a
+                        >
+                      </li>
+                    </ul>
+                  </li>
                   {% endif %}
                   {% if 'Relocate' in tab.name %}
                   <li class="sidebar-item {{ldr_page}}">
@@ -269,6 +302,8 @@
                     </li>
                     {% endif %}
                 {% endfor %}
+
+                <!-- Export เอกสาร ย้ายไปอยู่ใต้เมนู Freight Rate แล้ว (ในบล็อก tab Transport) -->
               </ul>
             {% endif %}
           </div>
@@ -363,6 +398,17 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js" integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+" crossorigin="anonymous"></script>
 
+    {% comment %}
+    jQuery ต้องมาก่อน 2 อย่างข้างล่างนี้ที่ต้องพึ่งมัน
+      - bootstrap-nav-paginator.jquery.min.js : เป็น plugin ของ jQuery
+      - js/tabSidebar/tab.js : บรรทัดแรกเรียก $(document).ready() ทันที
+        ถ้า $ ยังไม่มี ทั้งไฟล์จะพังตั้งแต่บรรทัดแรก ทำให้ setCompany() ไม่ถูกสร้าง
+        ผลคือกดแท็ปบริษัทแล้ว Bootstrap เปลี่ยนสีแท็ปให้ฝั่ง client เฉย ๆ
+        แต่ AJAX ไม่เคยยิง session ไม่เปลี่ยน หน้าไม่ reload ตัวกรองในหน้าเลยค้างบริษัทเดิม
+    ก่อนหน้านี้ base.html ไม่ได้โหลด jQuery เลย แต่ละหน้าไปโหลดเองใน block script
+    ซึ่งอยู่ท้าย body หลัง tab.js จึงสายเกินไปทุกหน้า
+    {% endcomment %}
+    <script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
     <script src="{% static 'js/nav/bootstrap-nav-paginator.jquery.min.js' %}"></script>
     <!-- As A Vanilla JS Plugin -->
     <script src="{% static 'js/nav/bootstrap-nav-paginator.min.js' %}"></script>

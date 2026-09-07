@@ -295,4 +295,34 @@ urlpatterns = [
 
       path('api/updates/latest/', views.appReleaseLatest, name="appReleaseLatest"),
       path('api/updates/log/', views.appUpdateLog, name="appUpdateLog"),
+
+
+
+
+
+
+
+      path('baseCompanyCustomerMap/api/create/', views.baseCompanyCustomerMapCreate, name="baseCompanyCustomerMapCreate"),
+      path('baseCompanyCustomerMap/api/delete/<int:id>/' , views.baseCompanyCustomerMapDelete,name="baseCompanyCustomerMapDelete"),
+      path('internationalFreightRate/api/create/', views.internationalFreightRateCreate, name="internationalFreightRateCreate"),
+      path('internationalFreightRate/create', views.internationalFreightRate, name="createInternationalFreightRate"),
+      path('internationalFreightRate/api/update/<int:id>/' , views.internationalFreightRateUpdate,name="internationalFreightRateUpdate"),
+      path('internationalFreightRate/api/delete/<int:id>/' , views.internationalFreightRateDelete,name="internationalFreightRateDelete"),
+      path('internationalFreightRate/edit/<int:id>/', views.editInternationalFreightRate, name="editInternationalFreightRate"),
+      path('internationalFreightRate/versions/<int:id>/', views.viewInternationalFreightRateVersions, name="viewInternationalFreightRateVersions"),
+      path('internationalFreightRate/fuelPrice/api/save/', views.internationalFreightRateFuelPriceSaveDay, name="internationalFreightRateFuelPriceSaveDay"),
+      path('internationalFreightRate/fuelPrice/api/delete/<int:id>/', views.internationalFreightRateFuelPriceDelete, name="internationalFreightRateFuelPriceDelete"),
+      path('internationalFreightRate/fuelPrice/', views.viewInternationalFreightRateFuelPrice, name="viewInternationalFreightRateFuelPrice"),
+      path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
+      path('internationalFreightRate/excel/', views.exportExcelInternationalFreightRate, name="exportExcelInternationalFreightRate"),
+      path('exportDocument/', views.viewExportDocument, name="viewExportDocument"),
+      path('exportDocument/excel/', views.exportExcelExportDocument, name="exportExcelExportDocument"),
+      path('exportDocument/progress/', views.exportDocumentProgress, name="exportDocumentProgress"),
+      path('exportDocument/edit/excel/', views.exportExcelTripEdit, name="exportExcelTripEdit"),
+      path('exportDocument/edit/upload/', views.uploadTripEdit, name="uploadTripEdit"),
+      path('exportDocument/edit/confirm/', views.confirmTripEdit, name="confirmTripEdit"),
+      path('exportDocument/edit/cancel/', views.cancelTripEdit, name="cancelTripEdit"),
+      path('baseCarTeam/api/options/', views.baseCarTeamOptions, name="baseCarTeamOptions"),
+      path('baseCompanyCustomerMap/api/options/', views.baseCompanyCustomerMapOptions, name="baseCompanyCustomerMapOptions"),
+
 ]

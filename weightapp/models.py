@@ -534,6 +534,12 @@ class Weight(models.Model):
     class Meta:
         db_table = 'weight'
         ordering = ["weight_id"]
+        indexes = [
+            # หน้า export เอกสารกรองด้วย carry_type_name + bws_id + ช่วงวันที่ ทุกครั้ง
+            # ไม่มี index ชุดนี้ MySQL จะ full scan ทั้งตาราง (ล้านแถว) ทุก query
+            models.Index(fields=['carry_type_name', 'date', 'bws_id'],
+                         name='weight_carry_date_bws_idx'),
+        ]
 
 class WeightHistory(models.Model):
     date = models.DateField(blank=True, null=True)#วันที่
@@ -1407,3 +1413,382 @@ class ClientUpdateLog(models.Model):
 
     def __str__(self):
         return f"{self.machine_name} -> {self.to_version}"
+
+class BaseCompanyMapBaseCustomer(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=120, verbose_name="ชื่อ")
+    base_company = models.ForeignKey(BaseCompany , null = True, on_delete=models.CASCADE, verbose_name="บริษัท")
+    base_customer = models.ForeignKey(BaseCustomer, null = True, on_delete=models.CASCADE, verbose_name="ลูกค้า")
+    # คำนำหน้าเลขที่เอกสาร (docnum) ของบิลขายเชื่อน้ำมันให้บุคคลภายนอก ในระบบ Express ของสาขานี้
+    # เช่น 'IO' 'IL' 'Iท' -> docnum จะออกมาเป็น 'Iท6909018'
+    # ใช้คัดเฉพาะบิลน้ำมันออกจาก OEINVH ตอนคิดราคาน้ำมันเฉลี่ยของทีมรถร่วม
+    # ชื่อฟิลด์ล้อของ djangostock BaseBranchCompany.oi_soc_code เพื่อให้เทียบสองระบบได้ตรง ๆ
+    # ว่าง = สาขานี้ไม่มีการขายเชื่อน้ำมันให้บุคคลภายนอก
+    oi_soc_code = models.CharField(max_length=255, null=True, blank=True,
+                                   verbose_name="โค้ดขายเชื่อบุคคลภายนอก - น้ำมัน")
+
+    class Meta:
+        db_table = 'base_company_map_base_customer'
+        ordering = ['id']
+        unique_together = ('base_company', 'base_customer')
+        verbose_name = 'บริษัทลูกค้า'
+        verbose_name_plural = 'ข้อมูลบริษัทลูกค้า'
+    
+    def __str__(self):
+        company = self.base_company.name if self.base_company else "-"
+        customer = self.base_customer.customer_name if self.base_customer else "-"
+        return f"{company} - {customer}"
+
+class InternationalFreightRateStatus(models.TextChoices):
+    """สถานะการอนุมัติของ 1 ใบ (1 เวอร์ชัน)
+
+    เก็บเฉพาะข้อเท็จจริงว่า "ใบนี้ผ่านการอนุมัติหรือยัง" ซึ่งไม่เปลี่ยนอีกเมื่อเกิดขึ้นแล้ว
+    ส่วนคำถามว่า "ใบไหนใช้อยู่ตอนนี้" ไม่เก็บเป็นค่า แต่คำนวณจาก effective_date
+    เพราะคำตอบขึ้นกับว่าถามถึงเดือนไหน เดือน พ.ค. กับ ส.ค. อาจได้คนละใบ
+    """
+    DRAFT = 'draft', 'ร่าง'
+    PENDING = 'pending', 'รออนุมัติ'
+    APPROVED = 'approved', 'อนุมัติแล้ว'
+    REJECTED = 'rejected', 'ไม่อนุมัติ'
+
+
+# เวอร์ชันแรกของทุกเส้นทางมีผล "ตั้งแต่ต้น" ไม่ใช่ตั้งแต่วันที่สร้างแถว
+# เพราะข้อมูลการชั่งมีย้อนหลังหลายปี แต่แถวอัตราเพิ่งถูกกรอกเข้าระบบปีนี้
+# ถ้าใช้วันที่สร้าง export เดือนเก่าจะหาอัตราไม่เจอแล้วเที่ยวหายทั้งเส้นทาง
+# หมายเหตุ : ไฟล์นี้ import datetime แบบโมดูล (บรรทัดล่างทับ from datetime import ...) จึงต้องเรียกเต็ม
+INTERNATIONAL_FREIGHT_RATE_FIRST_DATE = datetime.date(2000, 1, 1)
+
+
+class InternationalFreightRate(models.Model):
+    """1 แถว = 1 ใบ = 1 เวอร์ชันของเส้นทางหนึ่ง
+
+    แก้ราคาแล้วไม่ทับของเดิม แต่ออกใบใหม่ทั้งใบ (copy ทีมมาด้วย) ใบเก่าอยู่ครบไม่ถูกแตะ
+    เอกสารเดือนเก่าจึงได้ตัวเลขเดิมเสมอ ต่อให้ราคาปัจจุบันเปลี่ยนไปแล้ว
+
+    root = ใบแรกสุดของเส้นทางนั้น ใช้เป็นตัวแทน "เส้นทาง" (ใบแรกชี้ตัวเอง)
+    ทุกเวอร์ชันของเส้นทางเดียวกันมี root เดียวกัน
+    """
+    id = models.AutoField(primary_key=True) #
+    # ผูกกับคู่บริษัท-ลูกค้าที่ map ไว้แล้ว แทนการเก็บชื่อเป็นข้อความ
+    # PROTECT : ห้ามลบแถว map ที่ยังมีอัตราค่าขนส่งอ้างอยู่ ไม่งั้นจะเหลือรายการที่ไม่รู้ต้นทาง/ปลายทาง
+    # ชื่อดึงจาก origin.name เอา ไม่เก็บซ้ำในตารางนี้ กันข้อมูลขัดกันเองเวลามีคนแก้ชื่อในตาราง map
+    origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_origins', null=True, blank=True, verbose_name="ต้นทาง")
+    destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_destinations', null=True, blank=True, verbose_name="ปลายทาง")
+    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")#
+    distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
+    payload_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="น้ำหนักบรรทุก")#
+    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมันที่ใช้ ลิตรละ 1 บาท")#
+    fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")#
+    # ราคาน้ำมันเฉลี่ยย้ายไปตาราง InternationalFreightRateFuelPrice เพราะเปลี่ยนทุกเดือน
+    # ส่วน base_fuel_price กับ fuel_freight_adjustment ยังอยู่ที่นี่ เป็นเงื่อนไขในสัญญาที่ไม่เปลี่ยนรายเดือน
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")#
+
+    # --- การทำเวอร์ชัน ---
+    # PROTECT : ห้ามลบใบแรกทิ้งขณะที่ยังมีเวอร์ชันอื่นอ้างอยู่ ไม่งั้นทั้งเส้นทางจะขาดตัวแทน
+    # การลบเส้นทางต้องลบทั้งตระกูล (ทุกใบที่ root เดียวกัน) ดูใน API delete
+    root = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                             related_name='versions', verbose_name="เส้นทาง (ใบแรกสุด)")
+    version = models.IntegerField(default=1, verbose_name="เวอร์ชัน")
+    # วันที่เริ่มใช้จริง เป็นวันไหนของเดือนก็ได้ ไม่บังคับวันที่ 1
+    # v1 = INTERNATIONAL_FREIGHT_RATE_FIRST_DATE (ตั้งแต่ต้น) · v2 ขึ้นไป = วันที่อนุมัติ
+    effective_date = models.DateField(null=True, blank=True, verbose_name="วันที่เริ่มใช้")
+
+    # --- การอนุมัติ ---
+    # เฟสนี้ยังไม่เปิดระบบอนุมัติ ทุกใบจึงเป็น approved ทันที
+    # พอเปิดเฟส 2 ค่อยเปลี่ยนใบใหม่ให้เริ่มที่ pending แล้วรอผู้บริหารกด
+    status = models.CharField(max_length=20, choices=InternationalFreightRateStatus.choices,
+                              default=InternationalFreightRateStatus.APPROVED,
+                              verbose_name="สถานะ")
+    user_created = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='international_freight_rates_created',
+                                     verbose_name="ผู้ออกใบ")
+    # เวลาที่ส่งขออนุมัติ "ครั้งล่าสุด" ถ้าโดน reject แล้วส่งใหม่ ค่านี้จะทับของเดิม
+    # ประวัติครบทุกรอบอยู่ใน InternationalFreightRateApproval ไม่ได้หายไปไหน
+    submitted_at = models.DateTimeField(null=True, blank=True, verbose_name="ส่งขออนุมัติเมื่อ")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='international_freight_rates_approved',
+                                    verbose_name="ผู้อนุมัติ")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="อนุมัติเมื่อ")
+
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    # ใบที่อนุมัติแล้วจะไม่ถูกแก้อีก ค่านี้จึงมีความหมายเฉพาะช่วงที่ยังเป็นร่าง/รออนุมัติ
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+
+    class Meta:
+        db_table = 'international_freight_rate'
+        ordering = ['id']
+        unique_together = ('root', 'version')
+        indexes = [
+            models.Index(fields=['root', 'status', '-effective_date', '-id'],
+                         name='ifr_root_status_month_idx'),
+        ]
+        verbose_name = 'อัตราค่าขนส่งไปนอกประเทศ'
+        verbose_name_plural = 'อัตราค่าขนส่งไปนอกประเทศ'
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # ใบแรกของเส้นทางชี้ตัวเอง ต้องรอให้มี id ก่อนถึงจะตั้งได้
+        if self.root_id is None:
+            self.root_id = self.id
+            super().save(update_fields=['root'])
+
+    @classmethod
+    def effectiveOn(cls, as_of=None, queryset=None):
+        """ใบที่ใช้จริงของทุกเส้นทาง ณ วันที่ที่ระบุ — 1 เส้นทางได้ 1 ใบเท่านั้น
+
+        นี่คือกฎกลางจุดเดียวของทั้งระบบ ห้ามเขียน query หาอัตราเองที่อื่น
+        ไม่งั้นจะมีที่ที่หลุดไปใช้ใบที่ยังไม่อนุมัติ หรือใบที่ยังไม่ถึงวันมีผล
+
+        as_of ต้องเป็น "วันที่" ไม่ใช่เดือน เพราะ effective_date เป็นวันไหนก็ได้ของเดือน
+        ถ้าส่งวันที่ 1 ของเดือนเข้ามา ใบที่เริ่มใช้กลางเดือนจะยังไม่ถูกเลือก
+        as_of = None แปลว่าเอาใบล่าสุดที่อนุมัติแล้ว ไม่สนวันมีผล
+
+        queryset ส่งเข้ามาได้เพื่อใส่ select_related / prefetch_related เพิ่มเอง
+        """
+        qs = cls.objects.all() if queryset is None else queryset
+        qs = qs.filter(status=InternationalFreightRateStatus.APPROVED)
+        if as_of is not None:
+            qs = qs.filter(effective_date__lte=as_of)
+
+        # ตัดสินด้วย "ลำดับใบ" (id) ไม่ใช่ "วันที่มีผล"
+        # ใบที่ออกทีหลังคือคำสั่งล่าสุดของคน จึงต้องชนะเสมอเมื่อถึงวันมีผลแล้ว
+        #
+        # ถ้าเรียงตาม effective_date จะมีกับดัก : ตั้งวันย้อนหลังในใบล่าสุดแล้วมันไม่มีผล
+        # เพราะใบเก่าที่วันใหม่กว่าจะชนะ คนแก้ราคาแล้วงงว่าทำไมระบบไม่เปลี่ยน
+        # เช่น v8 วันมีผล 23 ส.ค. / v9 ตั้งย้อนเป็น 1 ส.ค. -> ต้องได้ v9 ไม่ใช่ v8
+        by_root = {}
+        for rate in qs.order_by('root_id', 'id'):
+            by_root[rate.root_id] = rate
+        return list(by_root.values())
+
+    def isFirstVersion(self):
+        """ใบแรกของเส้นทาง แก้ทับได้เลยไม่ต้องขึ้นเวอร์ชัน ถ้ายังไม่มีใบอื่นตามมา"""
+        return self.root_id == self.id
+
+    def __str__(self):
+        origin = self.origin.name if self.origin else "-"
+        destination = self.destination.name if self.destination else "-"
+        return f"{origin} - {destination} (v{self.version})"
+
+
+class InternationalFreightRateFuelPrice(models.Model):
+    """ราคาน้ำมันเฉลี่ย "รายวัน" ของแต่ละบริษัท (base_comp)
+
+    เดิมเก็บเป็นรายเดือนและผูกกับเส้นทาง (root) เปลี่ยนมาเป็นรายวันผูกกับบริษัท เพราะ
+    ราคาน้ำมันเป็นของบริษัท ไม่ใช่ของเส้นทาง เส้นทางที่ออกจากบริษัทเดียวกันย่อมใช้ราคาเดียวกัน
+    ถ้าเก็บแยกทีละเส้นทางต้องกรอกซ้ำหลายรอบ และมีโอกาสที่ราคาของบริษัทเดียวกันไม่ตรงกัน
+
+    เชื่อกับใบค่าขนส่งตอนเอาไปใช้ด้วยเงื่อนไข
+        fuel_price.base_comp_id == international_freight_rate.origin.base_company_id
+    (origin เป็นแถวของ base_company_map_base_customer ซึ่งมีคอลัมน์ base_company อยู่แล้ว)
+
+    1 บริษัท ต่อ 1 วัน มีได้แถวเดียว แก้ทับได้ เพราะตารางนี้คือ "ราคาประจำวัน"
+    ไม่ใช่ log การแก้ไข ถ้ากรอกผิดก็แก้ให้ถูก ไม่ต้องเก็บค่าที่ผิดไว้
+    """
+    id = models.AutoField(primary_key=True)
+    base_comp = models.ForeignKey(
+        BaseCompany, on_delete=models.CASCADE,
+        related_name='fuel_prices', verbose_name="บริษัท")
+
+    date = models.DateField(verbose_name="ประจำวันที่")
+    average_fuel_price = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="ราคาน้ำมันเฉลี่ย (บาท/ลิตร)")
+
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+
+    class Meta:
+        db_table = 'international_freight_rate_fuel_price'
+        # ใหม่ไปเก่า วันเดียวกันเรียงตามบริษัท จะได้อ่านเป็นตารางรายวันได้เลย
+        ordering = ['-date', 'base_comp_id']
+        # 1 บริษัท 1 วัน = 1 ราคา ให้ฐานข้อมูลกันซ้ำเอง ไม่ต้องหวังพึ่งการตรวจฝั่งหน้าเว็บ
+        unique_together = ('base_comp', 'date')
+        indexes = [
+            models.Index(fields=['base_comp', '-date'], name='ifr_fuel_comp_date_idx'),
+        ]
+        verbose_name = 'ราคาน้ำมันเฉลี่ยรายวัน'
+        verbose_name_plural = 'ราคาน้ำมันเฉลี่ยรายวัน'
+
+    def __str__(self):
+        return '%s %s : %s' % (
+            self.base_comp.code if self.base_comp_id else '-',
+            self.date, self.average_fuel_price)
+
+
+# class CarryingweightTeam(models.TextChoices):
+#     # เก็บลง db เป็นข้อความไทยตรงๆ และแสดงผลเป็นข้อความเดียวกัน
+#     weight_carried_1 = "แบก นน.", "แบก นน."
+#     weight_carried_2 = "ไม่แบก นน.", "ไม่แบก นน."
+#     weight_carried_3 = "ตาม นน.", "ตาม นน."
+#     weight_carried_4 = "นน. 35.01-40 ตัน", "นน. 35.01-40 ตัน"
+#     weight_carried_5 = "นน. 40.01-50 ตันขึ้นไป", "นน. 40.01-50 ตันขึ้นไป"
+#     weight_carried_6 = "น้อยกว่าหรือเท่ากับ 35 ตัน", "น้อยกว่าหรือเท่ากับ 35 ตัน"
+#     weight_carried_7 = "น้ำหนัก 35.01-50 ตัน", "น้ำหนัก 35.01-50 ตัน"
+#     weight_carried_8 = "นน 50 ตันขึ้นไป", "นน 50 ตันขึ้นไป"
+#     weight_carried_9 = "นน 40-50 ตัน", "นน 40-50 ตัน"
+#     weight_carried_10 = "เหมาเรทเดียว", "เหมาเรทเดียว"
+
+class CarryingweightRate(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(_("ชื่อเรท"), max_length=100)
+    # weight_carried = models.CharField(_("ประเภทการแบก นน."), max_length=100, choices=CarryingweightTeam.choices)
+    description = models.CharField(_("รายละเอียด"), max_length=255)
+    min_weight = models.DecimalField(_("น้ำหนักขั้นต่ำ"), max_digits=10, decimal_places=2)
+    max_weight = models.DecimalField(_("น้ำหนักสูงสุด"), max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+    
+    class  Meta:
+        db_table = 'carryingweight_rate'
+        verbose_name = 'ประเภทการแบกน้ำหนัก'
+        verbose_name_plural = 'ประเภทการแบกน้ำหนัก'
+        
+    def __str__(self):
+        return f"{self.name} ({self.min_weight} - {self.max_weight})"
+    
+
+
+
+
+
+class InternationalFreightRateTeam(models.Model):
+    id = models.AutoField(primary_key=True)
+    international_freight_rate = models.ForeignKey(InternationalFreightRate, on_delete=models.CASCADE, related_name='teams', verbose_name="อัตราค่าขนส่งไปนอกประเทศ")
+    # base_car_team เป็นตารางเก่าจาก phpMyAdmin dump คอลัมน์ car_team_id ใช้ collation utf8mb4_general_ci
+    # ต่างจาก default ของ DB (utf8mb4_unicode_ci) ที่ Django ใช้สร้างคอลัมน์ใหม่
+    # MySQL 8 จะ error 3780 ถ้าสร้าง FK ข้าม collation จึงต้องบังคับ collation ของคอลัมน์ฝั่งนี้ให้ตรงกัน
+    # ดู migration 0274 ที่แปลง collation แล้วค่อยสร้าง constraint จริง
+    # team = NULL หมายถึง "ทุกทีม" (เคสเหมาเรทเดียวที่ทุกทีมคิดราคาเท่ากัน) เก็บแถวเดียวพอ
+    # ถ้าทีมไหนคิดไม่เท่ากัน ค่อยเพิ่มแถวที่ระบุทีมนั้นมาทับ
+    # การหาราคา : หาแถวที่ตรงทีมก่อน ไม่เจอค่อย fallback ไปแถว team = NULL
+    team = models.ForeignKey(BaseCarTeam, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ทีมขนส่ง (ว่าง = ทุกทีม)")
+    # weight_carried = models.CharField(max_length=50, choices=CarryingweightTeam.choices, verbose_name="ประเภทการแบกน้ำหนัก")
+    weight_carried = models.ForeignKey(CarryingweightRate, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ประเภทการแบกน้ำหนัก")
+    freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ค่าขนส่ง")
+    discount_per_ton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ลดบาท/ตัน")
+    freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")
+    note = models.TextField(null=True, blank=True, verbose_name="หมายเหตุ")
+
+    class Meta:
+        db_table = 'international_freight_rate_team'
+        ordering = ['id']
+        verbose_name = 'อัตราค่าขนส่งไปนอกประเทศ (ทีม)'
+        verbose_name_plural = 'อัตราค่าขนส่งไปนอกประเทศ (ทีม)'
+
+    def __str__(self):
+        team_name = self.team.car_team_name if self.team else "ทุกทีม"
+        return f"{team_name} - {self.weight_carried}"
+
+
+
+class InternationalFreightRateApprovalAction(models.TextChoices):
+    SUBMIT = 'submit', 'ขออนุมัติ'
+    APPROVE = 'approve', 'อนุมัติ'
+    REJECT = 'reject', 'ไม่อนุมัติ'
+
+
+class InternationalFreightRateApproval(models.Model):
+    """บทสนทนาการอนุมัติของ 1 ใบ เก็บต่อท้ายทุกครั้ง ไม่ทับของเดิม
+
+    ต้องแยกเป็นตาราง ไม่ใช่คอลัมน์บนใบ เพราะเป็นการคุยไป-กลับหลายรอบ
+    (ขอ -> ไม่อนุมัติพร้อมเหตุผล -> แก้แล้วขอใหม่ -> อนุมัติ) คอลัมน์เดียวเก็บได้แค่ครั้งล่าสุด
+
+    ผูกกับ "ใบ" ไม่ใช่เส้นทาง เพราะใบที่ยังไม่อนุมัติแก้ทับในแถวเดิมได้
+    บทสนทนาทั้งรอบจึงอยู่ครบในใบเดียว ไม่กระจัดกระจายข้ามเวอร์ชัน
+    """
+    id = models.AutoField(primary_key=True)
+    international_freight_rate = models.ForeignKey(
+        InternationalFreightRate, on_delete=models.CASCADE,
+        related_name='approvals', verbose_name="ใบอัตราค่าขนส่ง")
+    action = models.CharField(max_length=20, choices=InternationalFreightRateApprovalAction.choices,
+                              verbose_name="การกระทำ")
+    # ไม่บังคับที่ระดับ DB แต่บังคับที่ API : ตอนขออนุมัติกับตอนไม่อนุมัติต้องเขียนเหตุผล
+    comment = models.TextField(null=True, blank=True, verbose_name="ความเห็น")
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                             related_name='international_freight_rate_approvals',
+                             verbose_name="ผู้บันทึก")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="เมื่อ")
+
+    class Meta:
+        db_table = 'international_freight_rate_approval'
+        # เก่าไปใหม่ อ่านไล่จากบนลงล่างเหมือนแชท
+        ordering = ['id']
+        indexes = [
+            models.Index(fields=['international_freight_rate', 'id'], name='ifr_approval_rate_idx'),
+        ]
+        verbose_name = 'การอนุมัติอัตราค่าขนส่งไปนอกประเทศ'
+        verbose_name_plural = 'การอนุมัติอัตราค่าขนส่งไปนอกประเทศ'
+
+    def __str__(self):
+        return "%s : %s" % (self.get_action_display(), self.comment or '-')
+
+
+# InternationalFreightRateLog ถูกลบทิ้งใน migration 0285
+# ตารางนั้นไม่เคยมีโค้ดไหนเขียนหรืออ่าน (0 แถว) และฟิลด์ก็ล้าสมัยไปแล้วหลังเปลี่ยน
+# origin/destination เป็น FK และย้าย average_fuel_price ออกไปตารางราคาน้ำมันรายเดือน
+# ตอนนี้ InternationalFreightRate เก็บทุกเวอร์ชันไว้ในตัวเองแล้ว จึงไม่ต้องมีตารางประวัติแยก
+
+    def __str__(self):
+        return f"Version {self.version} - {self.origin} to {self.destination}"
+    
+
+# ---------------------------------------------------------------------------
+# ตารางฝั่ง Express (Postgres 'pg_db') — อ่านอย่างเดียว managed = False
+#
+# ประกาศเฉพาะคอลัมน์ที่ใช้จริง ไม่ต้องยกมาทั้งตาราง เพราะ Django จะ SELECT
+# เฉพาะฟิลด์ที่ประกาศไว้ ยกมาครบ ๆ มีแต่จะพังเวลาฝั่งโน้นเพิ่ม/แก้คอลัมน์
+# ตัวเต็มอยู่ที่ djangostock stock/models.py (ExOEINVH / ExOEINVD)
+#
+# กับดักที่ต้องระวัง : คอลัมน์เป็น CHAR ค่าที่ได้จึงมี space ต่อท้ายเสมอ
+# ('SLC       ', '92-V-012  ') ต้อง .strip() ก่อนเทียบกับข้อมูลฝั่งเรา
+# ---------------------------------------------------------------------------
+
+class ExOEINVH(models.Model):
+    """หัวบิลขายเชื่อของ Express — 1 แถว = 1 ใบ
+
+    ที่ใช้ : docnum (เลขที่ใบ) · docdate (วันที่เติม) · cuscod (รหัสลูกค้า = ทีมรถร่วม)
+    docnum ไม่ unique ข้ามบริษัท แต่ละบริษัทเดินเลขของตัวเอง คีย์จริงคือ (docnum, comcod)
+    """
+    recordid = models.AutoField(primary_key=True)
+    docnum = models.CharField(max_length=12, null=True, blank=True)
+    docdate = models.DateField(null=True, blank=True)
+    cuscod = models.CharField(max_length=10, null=True, blank=True)
+    cusnam = models.CharField(max_length=60, null=True, blank=True)
+    comcod = models.CharField(max_length=10, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'OEINVH'
+        verbose_name = 'Express : หัวบิลขายเชื่อ'
+        verbose_name_plural = 'Express : หัวบิลขายเชื่อ'
+
+    def __str__(self):
+        return '%s - %s' % (self.docnum, self.cuscod)
+
+
+class ExOEINVD(models.Model):
+    """รายการในบิลขายเชื่อของ Express — 1 แถว = 1 บรรทัดสินค้า
+
+    ที่ใช้ : docnum + seqnum (คู่นี้คือ "การเติม 1 ครั้ง")
+             ordqty (ลิตร) · unitpr (ราคา/ลิตร) · trnval (จำนวนเงิน)
+    สามตัวหลังใช้กรอก sheet oil ในไฟล์รายงาน ซึ่งเป็นยอดหักค่าน้ำมันของทีมรถร่วม
+    """
+    recordid = models.AutoField(primary_key=True)
+    docnum = models.CharField(max_length=12, null=True, blank=True)
+    seqnum = models.IntegerField(null=True, blank=True)
+    stkcod = models.CharField(max_length=20, null=True, blank=True)
+    stkdes = models.CharField(max_length=60, null=True, blank=True)
+    ordqty = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    unitpr = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    trnval = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    comcod = models.CharField(max_length=10, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'OEINVD'
+        verbose_name = 'Express : รายการในบิลขายเชื่อ'
+        verbose_name_plural = 'Express : รายการในบิลขายเชื่อ'
+
+    def __str__(self):
+        return '%s - %s' % (self.docnum, self.stkcod)

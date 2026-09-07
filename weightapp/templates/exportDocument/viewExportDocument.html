@@ -1,0 +1,1065 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load templatehelpers %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'extensions/flatpickr/flatpickr.min.css' %}" />
+<style>
+  /* flatpickr สร้าง input ที่คนเห็น (altInput) ขึ้นมาใหม่ ต้องบังคับให้กว้างเท่าเดิม
+     ไม่งั้นมันจะกว้างตามข้อความ ทำให้สองช่องขนาดไม่เท่ากัน */
+  .flatpickr-input.form-control { width: 100%; }
+  /* ตารางกว้างกว่าจอ ให้เลื่อนในกล่องตัวเองไม่ใช่ทั้งหน้า และหัวตารางค้างไว้ตอนเลื่อน */
+  .trip-scroll {
+    overflow-x: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .trip-table {
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+  .trip-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    vertical-align: middle;
+  }
+  /* แถบตัวอักษรคอลัมน์ A-M ให้เทียบกับไฟล์ excel ได้ทันทีว่าช่องไหนคือช่องไหน */
+  .trip-table thead .col-letter th {
+    top: 38px;
+    font-weight: 400;
+    font-size: 0.7rem;
+    color: #6c757d;
+    border-bottom: 2px solid #dee2e6;
+  }
+  .trip-num {
+    text-align: right;
+  }
+  /* ธีมมี 2 กฎที่ทับสไตล์ของ cell ต้องเขียนให้ specificity สูงกว่าถึงจะชนะ
+       .table-striped>tbody>tr:nth-of-type(odd)>*  กำหนด color ทับ เฉพาะแถวคี่ (0,2,2)
+         ถ้าเขียนสั้นกว่านี้ สีจะติดแค่แถวคู่ กลายเป็นแดงสลับเทา
+       .table>:not(caption)>*>*  วาดพื้นแถวด้วย box-shadow inset ทับ background อีกชั้น
+         ต้องสั่ง box-shadow: none เฉพาะช่องที่อยากทาสีเอง
+     ตัวเลือก a > b > c ข้างล่างนี้คือ (0,2,3) ซึ่งชนะทั้งคู่ */
+
+  /* ช่องที่ db ยังไม่มีข้อมูล ทำให้เห็นชัดว่าเว้นไว้ตั้งใจ ไม่ใช่ลืม */
+  .trip-table > tbody > tr > td.trip-todo {
+    background-color: #fff8e1;
+    box-shadow: none;
+  }
+  /* แถบตรวจความพร้อมก่อนโหลดไฟล์
+     ทำเป็นรายการปัญหาเรียงลงมา ไม่ใช่ช่องตัวเลขเรียงข้าง เพราะแต่ละข้อต้องมีคำอธิบาย
+     ตัวเลขอยู่ซ้ายคงที่ คำอธิบายอยู่ขวา กวาดตาลงมาเห็นได้ว่ามีกี่เรื่องต้องแก้ */
+  .ifr-health-icon { font-size: 1.6rem; line-height: 1; }
+  .ifr-issue {
+    display: flex;
+    gap: .75rem;
+    padding: .6rem .75rem;
+    border-left: 3px solid #ced4da;
+    border-radius: .35rem;
+    background-color: #f8f9fa;
+  }
+  .ifr-issue + .ifr-issue { margin-top: .5rem; }
+  .ifr-issue-num {
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .ifr-issue-title { font-weight: 600; font-size: .9rem; }
+  .ifr-issue-text { font-size: .8rem; color: #6c757d; line-height: 1.55; }
+  /* รายชื่อปลายทางที่ยังไม่มีราคา : ยาวได้หลายบรรทัด จึงจำกัดความสูงแล้วเลื่อนดูแทน
+     ไม่งั้นกล่องเตือนดันเนื้อหาที่เหลือของหน้าหายไปข้างล่าง */
+  .ifr-missing-list { list-style: none; padding-left: 0; margin: .5rem 0 0;
+    max-height: 15rem; overflow-y: auto; }
+  .ifr-missing-list > li { padding: .4rem .6rem; margin-bottom: .35rem;
+    background: #fff; border: 1px solid #f1d6d6; border-radius: .35rem; }
+  .ifr-issue-bad  { border-left-color: #dc3545; background-color: rgba(220,53,69,.05); }
+  .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
+  .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
+  .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
+  .ifr-health-detail > summary { cursor: pointer; }
+  @media (max-width: 575px) {
+    /* จอแคบวางตัวเลขไว้บนคำอธิบาย ไม่งั้นคำอธิบายเหลือความกว้างนิดเดียว */
+    .ifr-issue { flex-direction: column; gap: .15rem; }
+  }
+
+  /* ทีมที่เราเติม "ไม่ระบุทีม" ให้ : แดงเฉพาะตัวอักษรในคอลัมน์ทีม ไม่ทาพื้น ไม่ทาทั้งแถว */
+  .trip-table > tbody > tr > td.trip-no-team {
+    color: #d32f2f;
+    font-weight: 700;
+    opacity: 1;
+  }
+  .trip-cancel td {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  /* ปุ่มที่กำลังทำงานอยู่ กันกดซ้ำและบอกผู้ใช้ว่ายังไม่เสร็จ */
+  .btn.is-busy {
+    pointer-events: none;
+    opacity: 0.75;
+  }
+  /* ความคืบหน้าวิ่งอยู่ในตัวปุ่มเอง แบบเดียวกับปุ่ม Weight to Express ในหน้า /weight/table
+     ผู้ใช้คุ้นกับหน้าตานี้อยู่แล้ว และไม่กินที่เพิ่มในหน้าที่มีปุ่มโหลดไฟล์หลายปุ่ม */
+  .btn.is-busy { position: relative; overflow: hidden; }
+  /* ข้อความเดิมยังกินที่อยู่ ปุ่มจึงไม่หดตอนสลับไปโชว์ % */
+  .dl-keep { visibility: hidden; }
+  .dl-fill {
+    position: absolute; left: 0; top: 0; height: 100%; width: 0;
+    /* currentColor = สีตัวอักษรของปุ่มนั้น ๆ ปุ่มทึบ (ตัวอักษรขาว) จะได้ฝ้าขาวแบบหน้า
+       /weight/table ส่วนปุ่มขอบ (ตัวอักษรสีน้ำเงิน) จะได้ฝ้าสีเดียวกับขอบ
+       ถ้า fix เป็นสีขาวตายตัว ปุ่มขอบบนธีมมืดจะกลายเป็นก้อนเทาอ่านไม่ออก */
+    background: currentColor;
+    opacity: .28;
+    transition: width .3s;
+  }
+  .dl-percent {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: 700;
+    color: inherit;
+  }
+  /* ขั้นตอนกับเวลาที่เหลือ ใส่ไว้ใต้ปุ่มเพราะในปุ่มมีที่พอแค่ตัวเลข % */
+  .dl-note { display: block; margin-top: .25rem; line-height: 1.4; }
+
+  .btn-spinner {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    margin-right: 0.4em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    animation: btn-spin 0.7s linear infinite;
+  }
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>บันทึกรายเที่ยว </h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Export เอกสาร</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">ตัวกรอง</h5>
+      </div>
+      <div class="card-body">
+        <form method="get" class="row gx-3 gy-2 align-items-end">
+          <div class="form-group col-md-3">
+            <label for="month">ประจำเดือน</label>
+            <select class="form-select" id="month" name="month">
+              {% for m in month_list %}
+                <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="date_from">
+              ดูเฉพาะวันที่
+              <small class="text-muted">(ไม่บังคับ)</small>
+              <i class="fa-regular fa-circle-question text-muted"
+                 title="เว้นว่างทั้งคู่ = ดูทั้งเดือน · ใส่ช่องเดียวก็ได้ (ตั้งแต่วันที่ หรือ ถึงวันที่) · สลับวันเข้ากับวันออกก็ได้ ระบบสลับให้เอง · ต้องอยู่ใน &quot;ประจำเดือน&quot; ที่เลือกไว้ด้วย ไม่งั้นจะไม่มีข้อมูล"></i>
+            </label>
+            {% comment %}
+            ใช้ type="text" + flatpickr แทน type="date"
+            เพราะ type="date" แสดงรูปแบบตาม locale ของเบราว์เซอร์ (เครื่องนี้ขึ้น mm/dd/yyyy)
+            บังคับให้เป็น วัน/เดือน/ปี ด้วย HTML หรือ CSS ไม่ได้เลย
+            flatpickr ตั้ง altInput ไว้ : ช่องที่คนเห็นเป็น d/m/Y ส่วนค่าที่ส่งไป server
+            ยังเป็น Y-m-d เหมือนเดิม ฝั่ง view จึงไม่ต้องแก้อะไร
+            {% endcomment %}
+            <div class="d-flex align-items-center gap-1">
+              <input type="text" class="form-control ifr-datepicker" id="date_from" name="date_from"
+                     value="{{ selected_date_from }}"
+                     placeholder="วว/ดด/ปปปป" title="ตั้งแต่วันที่" autocomplete="off" />
+              <span class="text-muted">ถึง</span>
+              <input type="text" class="form-control ifr-datepicker" id="date_to" name="date_to"
+                     value="{{ selected_date_to }}"
+                     placeholder="วว/ดด/ปปปป" title="ถึงวันที่" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="origin">ต้นทาง (นาม)</label>
+            {% comment %}
+            รายการมาจากแท็บบริษัทด้านบนเท่านั้น
+            (base_company_map_base_customer.base_company_id == base_comp.id)
+            มีตัวเลือก "ทั้งหมด" เฉพาะแท็บร้อยเกาะ ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
+            {% endcomment %}
+            <select class="form-select" id="origin" name="origin"
+                    {% if origin_unmapped %}disabled{% endif %}>
+              {% if origin_sees_all %}
+              <option value="">ทั้งหมด</option>
+              {% endif %}
+              {% for o in origin_options %}
+                <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
+              {% empty %}
+                <option value="">— ยังไม่มีต้นทางของแท็บนี้ —</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {% comment %}
+            เอาตัวกรอง เคส / ตาชั่ง ออกจากหน้าแล้ว
+            ฝั่ง view ยังรับพารามิเตอร์ bws กับ case อยู่ ลิงก์เก่าที่ bookmark ไว้จึงยังใช้ได้
+          {% endcomment %}
+          <div class="form-group col-md-3">
+            <label for="team">ทีมรถร่วม</label>
+            <select class="form-select" id="team" name="team">
+              <option value="">ทั้งหมด</option>
+              {% for t in team_options %}
+                <option value="{{ t.car_team_id }}" {% if t.car_team_id == selected_team %}selected{% endif %}>
+                  {{ t.car_team_name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="stone">ชนิดแร่/หิน</label>
+            <select class="form-select" id="stone" name="stone">
+              <option value="">ทั้งหมด</option>
+              {% for s in stone_options %}
+                <option value="{{ s }}" {% if s == selected_stone %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
+                     value="1" {% if include_cancel %}checked{% endif %}>
+              <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
+            </div>
+            <button type="submit" class="btn btn-primary" data-busy="กำลังโหลด...">
+              <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
+            </button>
+            <!-- ปุ่ม export ส่งตัวกรองชุดเดียวกับที่หน้าจอใช้อยู่ ไฟล์จะได้ตรงกับที่เห็น
+                 ส่งต่อทั้ง query string ไม่ไล่ระบุทีละตัว เพิ่มตัวกรองใหม่ทีหลังจะได้ไม่ลืมแก้ตรงนี้ -->
+            <a class="btn btn-success {% if over_limit %}disabled{% endif %}" data-busy-download="กำลังสร้างไฟล์รายงาน..."
+               href="{% url 'exportExcelExportDocument' %}?{{ request.GET.urlencode }}">
+              <i class="fa-solid fa-file-excel"></i> Export Excel
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% comment %}
+    แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง base_company_map_base_customer จะเลือกต้นทางไม่ได้
+    หน้านี้จึงไม่มีข้อมูลให้ดู ต้องบอกเหตุผลกับทางแก้ ไม่งั้นจะดูเหมือนระบบพัง
+    {% endcomment %}
+    {% if origin_unmapped %}
+    <div class="alert alert-warning">
+      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง (นาม)" ไว้ในระบบ หน้านี้จึงยังไม่มีข้อมูลให้ดู<br />
+      <small>
+        ต้องไปเพิ่มบริษัทลูกค้าที่ตรงกับบริษัทนี้ในตารางบริษัทลูกค้าก่อน
+        แล้วหน้านี้จะแสดงเที่ยวของต้นทางนั้นให้เอง
+      </small>
+    </div>
+    {% endif %}
+
+    {% if over_limit %}
+    <div class="alert alert-danger">
+      เดือนนี้มี {{ summary.trip_count|intcomma }} เที่ยว เกินที่ไฟล์ template รองรับ ({{ max_trips|intcomma }} เที่ยว)
+      กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่ม เพื่อลดจำนวนแถวก่อน export
+    </div>
+    {% endif %}
+
+    <!-- แก้ไขข้อมูลผ่าน Excel : แยกจากปุ่ม Export รายงานด้านบนคนละไฟล์คนละเรื่อง -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">แก้ไขข้อมูลผ่าน Excel</h5>
+        <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
+          โหลดไฟล์ไปแก้ → อัปกลับ → ระบบให้ดูก่อนว่าจะเปลี่ยนอะไร → กดยืนยันถึงจะบันทึกลงฐานข้อมูล |
+          แก้ได้ 3 ช่อง <strong>นน.ต้นทาง / นน.ปลายทาง / ทีมรถร่วม</strong> | คนละไฟล์กับปุ่ม Export รายงานด้านบน
+        </p>
+      </div>
+      <div class="card-body">
+        <div class="row gy-2 align-items-end">
+          <div class="col-md-5">
+            <a class="btn btn-outline-primary" data-busy-download="กำลังสร้างไฟล์..."
+               href="{% url 'exportExcelTripEdit' %}?{{ request.GET.urlencode }}">
+              <i class="fa-solid fa-download"></i> Export ข้อมูลจากตาชั่ง
+            </a>
+          </div>
+          <div class="col-md-7">
+            {% comment %}
+            data-upload-progress : ให้ js ยิงด้วย XMLHttpRequest แทนการ submit ตรง ๆ
+            จะได้อ่าน % ของการอัปโหลดจริงจาก xhr.upload ซึ่งฟอร์มธรรมดาทำไม่ได้
+            ถ้า js พังหรือถูกปิด ฟอร์มยัง submit แบบเดิมได้ตามปกติ
+            {% endcomment %}
+            <form method="post" action="{% url 'uploadTripEdit' %}" enctype="multipart/form-data"
+                  class="d-flex gap-2" data-upload-progress>
+              {% csrf_token %}
+              <input type="file" name="trip_edit_file" accept=".xlsx" class="form-control" required>
+              <button type="submit" class="btn btn-primary text-nowrap" data-busy="กำลังอัปโหลดและตรวจไฟล์...">
+                <i class="fa-solid fa-upload"></i> อัปโหลด
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {% if pending_edit %}
+        <hr>
+        <h6 class="mb-2">
+          รายการรอยืนยัน จากไฟล์ <code>{{ pending_edit.filename }}</code>
+        </h6>
+
+        {% if pending_edit.error_count %}
+        <div class="alert alert-light-danger color-danger">
+          มีปัญหา {{ pending_edit.error_count }} แถว (แถวเหล่านี้จะถูกข้าม)
+          <ul class="mb-0 mt-1">
+            {% for e in pending_edit.errors %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if pending_edit.changes %}
+        <div class="trip-scroll mb-3" style="max-height: 40vh;">
+          <table class="table table-sm table-striped trip-table">
+            <thead>
+              <tr>
+                <th>weight_id</th><th>วันที่</th><th>เลขที่ชั่ง</th>
+                <th>ช่อง</th><th>ค่าเดิม</th><th>ค่าใหม่</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in pending_edit.changes %}
+                {% for f in c.fields %}
+                <tr>
+                  {% if forloop.first %}
+                  <td rowspan="{{ c.fields|length }}">{{ c.weight_id }}</td>
+                  <td rowspan="{{ c.fields|length }}">{{ c.date }}</td>
+                  <td rowspan="{{ c.fields|length }}">{{ c.doc_id }}</td>
+                  {% endif %}
+                  <td>{{ f.label }}</td>
+                  <td class="text-muted">{{ f.old }}</td>
+                  <td><strong>{{ f.new }}</strong></td>
+                </tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="d-flex gap-2">
+          <form method="post" action="{% url 'confirmTripEdit' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success" data-busy="กำลังบันทึกลงฐานข้อมูล...">
+              <i class="fa-solid fa-check"></i>
+              ยืนยันบันทึก {{ pending_edit.changes|length }} เที่ยว
+            </button>
+          </form>
+          <form method="post" action="{% url 'cancelTripEdit' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-light-secondary">ยกเลิก</button>
+          </form>
+        </div>
+        {% else %}
+        <div class="alert alert-light-secondary mb-0">
+          ไม่มีรายการที่ต้องเปลี่ยน (ข้อมูลในไฟล์ตรงกับฐานข้อมูลอยู่แล้ว)
+          <form method="post" action="{% url 'cancelTripEdit' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-light-secondary ms-2">ปิด</button>
+          </form>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-light-danger color-danger{% else %}alert-light-success color-success{% endif %}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% comment %}
+    แถบตรวจความพร้อมก่อนโหลดไฟล์
+
+    คนใช้หน้านี้ถามอยู่คำถามเดียว : "ไฟล์เดือนนี้ใช้ได้เลยไหม ถ้าไม่ได้ต้องทำอะไร"
+    จึงตอบเป็นประโยคก่อน แล้วค่อยแจกแจงทีละข้อว่า เกิดอะไร -> ผลคืออะไร -> ต้องทำอะไร
+    เลี่ยงศัพท์ระบบทุกคำ (เรท / สัญญา / ช่วง / คีย์) เพราะคนกรอกไม่ได้เป็นคนตั้งค่าระบบ
+    {% endcomment %}
+    <div class="card ifr-health mb-3">
+      <div class="card-body py-3">
+
+        {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count %}
+        <div class="d-flex align-items-center gap-2">
+          <span class="ifr-health-icon text-success"><i class="bi bi-check-circle-fill"></i></span>
+          <div>
+            <div class="fw-bold">ข้อมูลครบ พร้อมโหลดไฟล์ได้เลย</div>
+            <div class="small text-muted">คิดค่าขนส่งได้ครบทั้ง {{ rate_stats.wc_total|intcomma }} เที่ยว</div>
+          </div>
+        </div>
+        {% else %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="ifr-health-icon text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>
+          <div>
+            <div class="fw-bold">ไฟล์เดือนนี้ยังคิดเงินได้ไม่ครบทุกเที่ยว</div>
+            <div class="small text-muted">
+              คิดค่าขนส่งได้ <strong class="text-body">{{ rate_stats.wc_filled|intcomma }}</strong> เที่ยว
+              จากทั้งหมด <strong class="text-body">{{ rate_stats.wc_total|intcomma }}</strong> เที่ยว
+              ({{ rate_stats.wc_filled_pct }}%) — ที่เหลือจะขึ้นเป็นเงิน 0 ในไฟล์
+            </div>
+          </div>
+        </div>
+
+        <div class="ifr-issues">
+          {% if rate_stats.wc_no_contract %}
+          <div class="ifr-issue ifr-issue-bad">
+            <div class="ifr-issue-num">{{ rate_stats.wc_no_contract|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ยังไม่ได้ตั้งราคาค่าขนส่งของปลายทางเหล่านี้</div>
+              <div class="ifr-issue-text">
+                เที่ยวพวกนี้จะขึ้นเงิน 0 ในไฟล์<br />
+                <strong>ต้องทำ:</strong> ไปหน้า
+                <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่งต่างประเทศ</a>
+                แล้วเพิ่มเส้นทางที่ยังขาด
+
+                {% comment %}
+                ราคาตั้งเป็นคู่ ต้นทาง-ปลายทาง ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งแล้ว
+                และยังไม่ได้ตั้ง ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+                จึงต้องแจกแจงต้นทางกำกับไว้ใต้ปลายทางเสมอ
+                {% endcomment %}
+                <ul class="ifr-missing-list">
+                  {% for d in rate_stats.wc_missing_routes %}
+                  <li>
+                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
+                    <div class="small mt-1">
+                      ต้นทางที่ยังไม่มีราคา:
+                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                    </div>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if rate_stats.wc_out_of_range %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.wc_out_of_range|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วงที่ตั้งไว้</div>
+              <div class="ifr-issue-text">
+                เช่น ตั้งราคาไว้เฉพาะรถ 0–35 ตัน แต่เที่ยวนี้บรรทุก 42 ตัน ระบบจึงเลือกราคาให้ไม่ได้<br />
+                <strong>ต้องทำ:</strong> เพิ่มช่วงน้ำหนักให้ครอบคลุม หรือตรวจว่าน้ำหนักที่ชั่งถูกต้องไหม
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if summary.no_team_count %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ summary.no_team_count|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ตอนชั่งไม่ได้เลือกทีมรถ</div>
+              <div class="ifr-issue-text">
+                ในไฟล์จะขึ้นเป็นตัวแดงว่า "ไม่ระบุทีม" ถ้าปล่อยไว้ หน้าสรุปจ่ายรถร่วมจะว่างทั้งหน้า<br />
+                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if not rate_stats.route_matched %}
+          <div class="ifr-issue ifr-issue-bad">
+            <div class="ifr-issue-num">ทุกเที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ยังไม่มีราคาค่าขนส่งของเส้นทางไหนเลย</div>
+              <div class="ifr-issue-text">ไฟล์ที่ได้จะเป็นเงิน 0 ทั้งหมด</div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% comment %}
+          ราคาน้ำมันหลักมาจากบิลเติมน้ำมันจริงในระบบ Express (Postgres คนละเครื่อง)
+          ต่อไม่ติดเมื่อไหร่ก็ได้ ระบบจะถอยไปเฉลี่ยจากวันที่วิ่งแทนแล้วไฟล์ยังออกได้
+          แต่ต้องบอกให้เห็นชัด ไม่งั้นตัวเลขเปลี่ยนวิธีคิดโดยไม่มีใครรู้
+          {% endcomment %}
+          {% if rate_stats.fuel_bill.error %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">Express</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">อ่านบิลเติมน้ำมันจากระบบ Express ไม่ได้</div>
+              <div class="ifr-issue-text">
+                ราคาน้ำมันในไฟล์นี้จึงไม่ได้ถ่วงตามจำนวนครั้งที่เติมจริง
+                แต่ใช้วิธีสำรองคือเฉลี่ยราคารายวันของวันที่รถวิ่ง<br />
+                <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% comment %}
+          ไม่มีราคาน้ำมัน = ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันเลยเป็น 0
+          ค่าขนส่งยังคิดได้ตามอัตราสัญญา แต่ได้ไม่ครบ จึงเป็นคำเตือน ไม่ใช่ความผิดพลาดร้ายแรง
+          แยก 2 กล่องเพราะแก้คนละที่ อันแรกแก้ที่ข้อมูลบริษัท อันหลังแค่ไปกรอกราคา
+          {% endcomment %}
+          {% if rate_stats.fuel_no_company %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_no_company|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ไม่มีราคาน้ำมัน เพราะต้นทางยังไม่ได้ผูกกับบริษัท</div>
+              <div class="ifr-issue-text">
+                ราคาน้ำมันเก็บเป็นของบริษัท ถ้าต้นทางไม่รู้ว่าเป็นของบริษัทไหน ก็หาราคาไม่เจอ
+                ช่องราคาน้ำมันในไฟล์จะว่างและมีหมายเหตุกำกับไว้ ส่วนปรับน้ำมันจะเป็น 0<br />
+                <strong>ต้องทำ:</strong> ไปผูกบริษัทให้ต้นทางเหล่านี้ในหน้าตั้งค่าบริษัทลูกค้า<br />
+                {% for r in rate_stats.fuel_no_company %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% comment %}
+          กรอกราคาไม่ครบทุกวันที่วิ่ง : ยังคิดเงินได้ แต่ค่าเฉลี่ยมาจากวันที่มีราคาเท่านั้น
+          ต้องบอกไว้ ไม่งั้นทีหลังมาเถียงกันว่าเลขนี้มาจากไหน
+          {% endcomment %}
+          {% if rate_stats.fuel_partial %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_partial|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">กรอกราคาน้ำมันไม่ครบทุกวันที่ต้องใช้</div>
+              <div class="ifr-issue-text">
+                ยังคิดค่าขนส่งได้ แต่ราคาเฉลี่ยมาจากเฉพาะวันที่กรอกไว้ ไม่ใช่ทุกวันที่เติม/วิ่ง<br />
+                <strong>ต้องทำ:</strong>
+                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
+                  ไปกรอกราคาน้ำมันของวันที่ขาด
+                </a><br />
+                {% for r in rate_stats.fuel_partial %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% comment %}
+          ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันเลย ยังได้ราคาจากวิธีสำรอง (เฉลี่ยวันที่วิ่ง)
+          ไม่ใช่ error แต่ต้องรู้ เพราะสองวิธีให้ตัวเลขไม่เท่ากัน
+          สาเหตุที่เจอบ่อยคือรหัสลูกค้าน้ำมันของทีมยังไม่ได้กรอก หรือทีมเติมปั๊มนอก
+          {% endcomment %}
+          {% if rate_stats.fuel_no_bill %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_no_bill|length }} ทีม</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ไม่มีบิลเติมน้ำมันในระบบ Express เดือนนี้</div>
+              <div class="ifr-issue-text">
+                ทีมเหล่านี้ใช้วิธีสำรองแทน คือเฉลี่ยราคารายวันของวันที่รถวิ่ง
+                ไม่ได้ถ่วงตามจำนวนครั้งที่เติมจริงเหมือนทีมอื่น (ดูหมายเหตุท้ายแถวในไฟล์)<br />
+                <strong>ตรวจดู:</strong> ทีมนั้นกรอก "รหัสลูกค้าน้ำมัน" ไว้ในข้อมูลทีมหรือยัง
+                ถ้ากรอกแล้วแปลว่าเดือนนี้เขาไม่ได้เติมน้ำมันกับเรา<br />
+                {% for t in rate_stats.fuel_no_bill %}<span class="badge bg-light text-dark border">{{ t }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if rate_stats.fuel_no_price %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.fuel_no_price|length }} เส้นทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">วันที่รถวิ่ง ยังไม่ได้กรอกราคาน้ำมันของบริษัทต้นทางเลยสักวัน</div>
+              <div class="ifr-issue-text">
+                ระบบเฉลี่ยราคาจาก "วันที่มีเที่ยววิ่งจริง" เท่านั้น ถ้าวันเหล่านั้นไม่มีราคาเลย
+                ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันจะเป็น 0 (ไม่ใส่ 0 ในช่องราคา
+                และไม่หยิบวันอื่นมาแทน เพราะจะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต)<br />
+                <strong>ต้องทำ:</strong>
+                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
+                  ไปกรอกราคาน้ำมันของเดือนนี้
+                </a><br />
+                {% for r in rate_stats.fuel_no_price %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <details class="ifr-health-detail mt-3">
+          <summary class="small text-muted">
+            <i class="bi bi-info-circle"></i> เรื่องที่ปกติอยู่แล้ว ไม่ต้องทำอะไร
+          </summary>
+          <ul class="small text-muted mt-2 mb-0 ps-4">
+            <li>ช่อง "นามที่จ่าย" ในไฟล์เว้นว่างไว้ให้บัญชีกรอกเอง ระบบไม่มีข้อมูลนี้</li>
+            {% if rate_stats.rate_as_of_th %}
+            <li>ราคาที่ใช้ในไฟล์ = ราคา ณ วันที่ {{ rate_stats.rate_as_of_th }}</li>
+            {% endif %}
+            <li>
+              เดือนนี้มีเที่ยววิ่ง {{ rate_stats.route_matched }} เส้นทาง
+              จากที่ตั้งราคาไว้ {{ rate_stats.rate_in_db }} เส้นทาง
+              {% comment %}
+              แถวอัตราเรียงให้แถวที่มีเที่ยววิ่งจริงอยู่ต้น ๆ ส่วนที่ล้นเพดานจึงเป็นแถวเปล่า
+              ซึ่งไม่มีผลกับยอดเงิน บอกเป็นข้อความเทา ๆ พอ
+              จะเป็นเรื่องใหญ่ก็ต่อเมื่อแถวที่มีเที่ยวจริงล้นออกไปด้วย (truncated_used)
+              {% endcomment %}
+              {% if rate_stats.truncated_used %}
+              <span class="text-danger">(ตัดทิ้ง {{ rate_stats.truncated_used|intcomma }} แถวที่มีเที่ยววิ่งจริง
+                เพราะเกินที่ไฟล์รับได้ — เที่ยวพวกนั้นจะเป็นเงิน 0)</span>
+              {% elif rate_stats.truncated %}
+              <span class="text-muted">(ตัดแถวที่ยังไม่มีเที่ยววิ่งออก {{ rate_stats.truncated|intcomma }} แถว
+                เพราะเกินที่ไฟล์รับได้ ไม่มีผลกับยอดเงิน)</span>
+              {% endif %}
+            </li>
+            {% for v in rate_stats.rate_versions %}
+            <li>{{ v }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">จำนวนเที่ยว</h6>
+            <h4 class="mb-0">{{ summary.trip_count|default:0|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.ต้นทาง (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.origin_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.ปลายทาง (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.dest_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="card">
+          <div class="card-body px-3 py-4">
+            <h6 class="text-muted mb-1">รวม นน.จ่ายค่าบรรทุก (ตัน)</h6>
+            <h4 class="mb-0">{{ summary.pay_sum|default:0|floatformat:2|intcomma }}</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">รายเที่ยว</h5>
+        <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
+          หัวตารางเรียงตามคอลัมน์ A-M ของ sheet "บันทึกรายเที่ยว" ในไฟล์ รายเที่ยว_template_v11.xlsx |
+          ช่องพื้นเหลืองคือช่องที่ยังไม่มีข้อมูลใน db
+        </p>
+      </div>
+      <div class="card-body">
+        <div class="trip-scroll">
+          <table class="table table-striped table-hover trip-table">
+            <thead>
+              <tr>
+                <th>เคส</th>
+                <th>วันที่</th>
+                <th>ต้นทาง</th>
+                <th>ปลายทาง</th>
+                <th>ชนิดแร่/หิน</th>
+                <th>แบก นน.</th>
+                <th>ทีมรถร่วม</th>
+                <th>ทะเบียนรถ</th>
+                <th>เลขที่ชั่ง</th>
+                <th class="trip-num">นน.ต้นทาง</th>
+                <th class="trip-num">นน.ปลายทาง</th>
+                <th class="trip-num">นน.ส่วนต่าง</th>
+                <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
+                <th>weight_id</th>
+              </tr>
+              <tr class="col-letter">
+                {# ข้าม G (นามที่จ่าย) เพราะไม่มีที่เก็บใน db เว้นว่างทุกแถว แต่ในไฟล์ยังมีคอลัมน์อยู่ #}
+                <th>-</th>
+                <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
+                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
+                <th>นอกไฟล์ template</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr {% if r.is_cancel %}class="trip-cancel"{% endif %}>
+                <td>
+                  <span class="badge {% if r.case == '1' %}bg-primary{% else %}bg-secondary{% endif %}"
+                        title="{{ r.case_label }}">{{ r.case_label }}</span>
+                </td>
+                <td>{{ r.date|date:"d/m/Y" }}</td>
+                <td title="{{ r.origin_raw }} ({{ r.customer_id }})">{{ r.origin|default:"-" }}</td>
+                <td title="{{ r.bws_id }}">{{ r.destination|default:"-" }}</td>
+                <td>{{ r.stone|default:"-" }}</td>
+                {# แบก นน. คิดสดจาก นน.ต้นทาง เทียบช่วงในตารางอัตรา ไม่ได้เก็บลง db #}
+                <td>{{ r.weight_carried|default:"-" }}</td>
+                <td class="{% if r.team_missing %}trip-no-team{% endif %}">{{ r.team }}</td>
+                <td>{{ r.car_registration|default:"-" }}</td>
+                <td>{{ r.doc_id|default:"-" }}</td>
+                <td class="trip-num">{{ r.origin_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
+                <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
+                <td>{{ r.weight_id }}</td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="14" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if trips.paginator.num_pages > 1 %}
+        <nav class="mt-3">
+          <ul class="pagination">
+            {% comment %}
+              my_url ส่งต่อ query string ทั้งชุดแล้วเปลี่ยนเฉพาะ page
+              ไม่ไล่ระบุตัวกรองทีละตัว เพิ่มตัวกรองใหม่ทีหลังจะได้ไม่หายตอนเปลี่ยนหน้า
+            {% endcomment %}
+            {% if trips.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="{% my_url trips.previous_page_number 'page' request.GET.urlencode %}">ก่อนหน้า</a>
+              </li>
+            {% endif %}
+            <li class="page-item disabled">
+              <span class="page-link">หน้า {{ trips.number }} / {{ trips.paginator.num_pages }}</span>
+            </li>
+            {% if trips.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="{% my_url trips.next_page_number 'page' request.GET.urlencode %}">ถัดไป</a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+{% comment %}
+  app.js เป็นตัวคุมการกาง submenu ของ sidebar ถ้าไม่โหลด เมนู Freight Rate จะกดไม่ออก
+  base.html ปล่อย block นี้ว่างไว้ ทุกหน้าจึงต้องโหลดสคริปต์ชุดนี้เอง
+{% endcomment %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/flatpickr.min.js' %}"></script>
+<script src="{% static 'extensions/flatpickr/l10n/th.js' %}"></script>
+
+<script>
+  (function () {
+    // ใส่วงกลมหมุนหน้าปุ่มแล้วปิดปุ่มไว้ กันกดซ้ำและบอกผู้ใช้ว่ากำลังทำงานอยู่
+    function setBusy(btn, label) {
+      if (btn.classList.contains('is-busy')) return false;
+      btn.dataset.originalHtml = btn.innerHTML;
+      btn.classList.add('is-busy');
+      btn.setAttribute('aria-busy', 'true');
+      btn.innerHTML = '<span class="btn-spinner"></span>' + label;
+      return true;
+    }
+
+    function clearBusy(btn) {
+      if (!btn.classList.contains('is-busy')) return;
+      btn.classList.remove('is-busy');
+      btn.removeAttribute('aria-busy');
+      if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+    }
+
+    // ---------- ความคืบหน้าในตัวปุ่ม ----------
+    // หน้าตาเดียวกับปุ่ม Weight to Express ในหน้า /weight/table คือ % วิ่งอยู่ในปุ่มเลย
+    // ต่างกันที่แหล่งของตัวเลข : หน้านั้นเป็นตัวนับปลอม (เดินเองทีละ 1% ทุก 50 ms
+    // ถึง 95% แล้วค้างรอ) ส่วนหน้านี้ถาม server จริงว่าทำถึงขั้นไหน
+    // เพราะไฟล์รายงานใช้เวลาราวครึ่งนาที ตัวนับปลอมจะถึง 95% ใน 5 วินาทีแล้วค้างอีก 20 วินาที
+    // ซึ่งตอบไม่ได้ว่าอีกนานแค่ไหน อันเป็นเรื่องที่อยากรู้ตั้งแต่แรก
+    function startButtonProgress(btn) {
+      if (btn.classList.contains('is-busy')) return null;
+      btn.classList.add('is-busy');
+      btn.setAttribute('aria-busy', 'true');
+      btn.dataset.originalHtml = btn.innerHTML;
+
+      // ข้อความเดิมยังอยู่แต่ซ่อนด้วย visibility ไม่ใช่ display
+      // เพื่อให้ปุ่มกว้างเท่าเดิม ไม่หดแล้วปุ่มข้าง ๆ ขยับตาม
+      btn.innerHTML =
+        '<span class="dl-keep">' + btn.dataset.originalHtml + '</span>' +
+        '<div class="dl-fill"></div>' +
+        '<span class="dl-percent">0%</span>';
+
+      var fill = btn.querySelector('.dl-fill');
+      var percent = btn.querySelector('.dl-percent');
+
+      // ข้อความบอกขั้นตอน + เวลาที่เหลือ วางใต้ปุ่ม เพราะในปุ่มมีที่พอแค่ตัวเลข %
+      var note = document.createElement('small');
+      note.className = 'text-muted dl-note';
+      note.textContent = 'กำลังเริ่ม...';
+      btn.parentNode.insertBefore(note, btn.nextSibling);
+
+      var startedAt = Date.now();
+      var shown = 0;   // % ที่แสดงอยู่ ห้ามเดินถอยหลัง คนดูจะสับสน
+
+      function restore() {
+        btn.classList.remove('is-busy');
+        btn.removeAttribute('aria-busy');
+        if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+      }
+
+      return {
+        // percent = null แปลว่ายังไม่รู้ ให้ค้างที่เดิมแล้วบอกสถานะเป็นข้อความแทน
+        update: function (value, label) {
+          if (value !== null && value !== undefined && value > shown) {
+            shown = value;
+            fill.style.width = shown + '%';
+            percent.textContent = shown + '%';
+          }
+          var parts = [];
+          if (label) parts.push(label);
+          var left = remaining(shown, Date.now() - startedAt);
+          if (left) parts.push(left);
+          note.textContent = parts.join(' · ');
+        },
+        finish: function (label) {
+          fill.style.width = '100%';
+          percent.textContent = '100%';
+          note.textContent = label || 'เสร็จแล้ว';
+          setTimeout(function () { restore(); note.remove(); }, 1500);
+        },
+        fail: function (label) {
+          restore();
+          note.classList.remove('text-muted');
+          note.classList.add('text-danger');
+          note.textContent = label;
+        }
+      };
+    }
+
+    // เดาเวลาที่เหลือจากที่ผ่านมาแล้วเทียบกับ % ที่ทำไปได้
+    // ต่ำกว่า 5% ยังเดาไม่ได้ (ตัวหารเล็กเกิน ตัวเลขจะแกว่งจนไม่มีประโยชน์) ไม่ต้องแสดง
+    function remaining(percent, elapsedMs) {
+      if (!percent || percent < 5 || percent >= 100) return '';
+      var sec = Math.round(elapsedMs * (100 - percent) / percent / 1000);
+      if (sec <= 0) return '';
+      if (sec < 60) return 'เหลืออีกประมาณ ' + sec + ' วินาที';
+      return 'เหลืออีกประมาณ ' + Math.ceil(sec / 60) + ' นาที';
+    }
+
+    // ฟอร์มธรรมดา : กดแล้วหน้าจะเปลี่ยน ปล่อยให้หมุนไปจนโหลดหน้าใหม่
+    // ฟอร์มอัปโหลดมีตัวจัดการของตัวเองด้านล่าง ข้ามไป
+    document.querySelectorAll('form:not([data-upload-progress])').forEach(function (form) {
+      form.addEventListener('submit', function () {
+        var btn = form.querySelector('[data-busy]');
+        if (btn) setBusy(btn, btn.dataset.busy);
+      });
+    });
+
+    // ลิงก์ดาวน์โหลด : หน้าไม่เปลี่ยน เลยไม่รู้ว่าเสร็จเมื่อไหร่
+    // เวลาส่วนใหญ่หมดไปกับการ "สร้างไฟล์" ที่ฝั่ง server ซึ่งยังไม่ส่งไบต์ไหนออกมาเลย
+    // การวัด % จากไบต์ที่โหลดจึงไม่ช่วยอะไร ต้องให้ฝั่ง server บอกมาว่าทำถึงขั้นไหนแล้ว
+    // (view เขียนความคืบหน้าไว้ตาม token แล้วเรา poll อ่านผ่าน exportDocumentProgress)
+    // ส่วน cookie ตัวเดิมยังใช้เป็นสัญญาณว่า "ไฟล์เริ่มส่งมาแล้วจริง" เหมือนเดิม
+    var PROGRESS_URL = "{% url 'exportDocumentProgress' %}";
+
+    // ถาม server ซ้ำ ๆ ว่าทำถึงไหนแล้ว คืนฟังก์ชันไว้สั่งหยุด
+    // ใช้ร่วมกันทั้งปุ่มดาวน์โหลดและปุ่มอัปโหลด ต่างกันแค่วิธีแปลงเลขที่ได้มาเป็น % บนแถบ
+    function pollServerProgress(token, onData) {
+      var polling = false;
+      var timer = setInterval(function () {
+        if (polling) return;   // รอบก่อนยังไม่กลับ อย่ายิงซ้อน
+        polling = true;
+        fetch(PROGRESS_URL + '?dl=' + token, { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { onData(d); })
+          .catch(function () { /* อ่านไม่ได้ก็ปล่อย รอบหน้าค่อยลองใหม่ */ })
+          .then(function () { polling = false; });
+      }, 700);
+      return function () { clearInterval(timer); };
+    }
+
+    document.querySelectorAll('[data-busy-download]').forEach(function (link) {
+      link.addEventListener('click', function () {
+        if (link.classList.contains('disabled')) return;
+        var token = 'dl' + Date.now();
+        var url = new URL(link.href, window.location.origin);
+        url.searchParams.set('dl', token);
+        link.href = url.pathname + url.search;
+
+        var progress = startButtonProgress(link);
+        if (!progress) return;   // กดซ้ำระหว่างที่ยังทำอยู่
+
+        var stopPoll = pollServerProgress(token, function (d) {
+          // percent = null แปลว่ายังไม่รู้ (ยังไม่เริ่มเขียน หรืออยู่คนละ server)
+          // ข้ามไปเลย ไม่งั้นข้อความบอกขั้นตอนใต้ปุ่มจะวูบหายเป็นจังหวะ
+          if (d.percent === null || d.percent === undefined) return;
+          progress.update(d.percent, d.label);
+        });
+
+        var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
+        var watcher = setInterval(function () {
+          // cookie กลับมา = ไฟล์ถูกส่งออกมาแล้ว จบงานไม่ว่า % จะค้างอยู่ตรงไหน
+          if (document.cookie.indexOf('exportDownloadToken=' + token) !== -1) {
+            clearInterval(watcher);
+            stopPoll();
+            progress.finish('ไฟล์พร้อมแล้ว');
+            document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
+          } else if (Date.now() > deadline) {
+            clearInterval(watcher);
+            stopPoll();
+            progress.fail('ใช้เวลานานผิดปกติ ลองใหม่อีกครั้ง หรือกรองข้อมูลให้แคบลง');
+          }
+        }, 400);
+      });
+    });
+
+    // ---------- อัปโหลดไฟล์ที่แก้แล้ว ----------
+    // ฟอร์มธรรมดาบอก % ไม่ได้ ต้องยิงเองด้วย XMLHttpRequest ถึงจะอ่าน xhr.upload ได้
+    // แถบเดียวครอบ 2 ช่วงที่ต้องรอ ผู้ใช้จะได้เห็นเป็นงานเดียวจบ ไม่ใช่ค้างที่ 100% แล้วรอต่อ
+    //   ส่งไฟล์ขึ้นไป  = 0-20%   วัดจากไบต์จริงผ่าน xhr.upload
+    //   server ตรวจไฟล์ = 20-100% ถามจาก endpoint เดียวกับปุ่มดาวน์โหลด โดยแนบ ?dl= ไปกับ POST
+    // ช่วงตรวจกินเวลามากกว่าช่วงส่งมาก (อ่านไฟล์ด้วย openpyxl กินเวลา 98% ของขั้นตอนนี้)
+    // จึงแบ่งให้ช่วงส่งแค่ 20% ไม่งั้นแถบจะพุ่งไป 100% ทันทีแล้วค้างรออีกหลายวินาที
+    var UPLOAD_SEND_SHARE = 20;
+
+    document.querySelectorAll('form[data-upload-progress]').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        var input = form.querySelector('input[type="file"]');
+        if (!input || !input.files.length) return;   // ปล่อยให้ required ของเบราว์เซอร์เตือนเอง
+        e.preventDefault();
+
+        var btn = form.querySelector('[data-busy]');
+        var progress = btn ? startButtonProgress(btn) : null;
+        if (btn && !progress) return;
+
+        var token = 'ul' + Date.now();
+        var stopPoll = null;
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action + (form.action.indexOf('?') === -1 ? '?' : '&') + 'dl=' + token);
+
+        xhr.upload.addEventListener('progress', function (evt) {
+          if (!evt.lengthComputable || !progress) return;
+          progress.update(Math.round(evt.loaded / evt.total * UPLOAD_SEND_SHARE),
+                          'กำลังส่งไฟล์ขึ้นระบบ');
+        });
+        xhr.upload.addEventListener('load', function () {
+          if (!progress) return;
+          progress.update(UPLOAD_SEND_SHARE, 'กำลังตรวจไฟล์');
+          // เริ่มถาม server ต่อจากตรงนี้ ไฟล์ถึงเครื่องแล้วจึงจะมีความคืบหน้าให้อ่าน
+          stopPoll = pollServerProgress(token, function (d) {
+            if (d.percent === null || d.percent === undefined) return;
+            progress.update(
+              UPLOAD_SEND_SHARE + Math.round(d.percent * (100 - UPLOAD_SEND_SHARE) / 100),
+              d.label);
+          });
+        });
+        xhr.addEventListener('load', function () {
+          if (stopPoll) stopPoll();
+          // ฝั่ง server redirect กลับหน้านี้พร้อมเก็บรายการรอยืนยันไว้ใน session
+          // โหลดหน้าเดิมซ้ำจึงเห็นผลครบ และยังคงตัวกรองบน url เดิมไว้ด้วย
+          if (progress) progress.finish('ตรวจไฟล์เสร็จแล้ว');
+          window.location.reload();
+        });
+        xhr.addEventListener('error', function () {
+          if (stopPoll) stopPoll();
+          if (progress) progress.fail('อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+        });
+        xhr.send(new FormData(form));
+      });
+    });
+
+    // กลับมาหน้านี้ด้วยปุ่ม back ของเบราว์เซอร์ ต้องคืนปุ่มให้กดได้
+    // เก็บข้อความบอกขั้นตอนที่ค้างอยู่ด้วย ไม่งั้นจะเหลือ "กำลังบันทึกไฟล์" ค้างทั้งที่จบไปแล้ว
+    window.addEventListener('pageshow', function () {
+      document.querySelectorAll('.btn.is-busy').forEach(clearBusy);
+      document.querySelectorAll('.dl-note').forEach(function (n) { n.remove(); });
+    });
+
+    // เคสกับตาชั่งรวมเป็น dropdown เดียวแล้ว ไม่ต้องมี js คอยซิงก์สองช่องอีก
+
+    // ช่องกรองรายวัน : type="date" แสดงรูปแบบตาม locale ของเบราว์เซอร์ บังคับไม่ได้
+    // จึงใช้ flatpickr แทน โดยแยกเป็น 2 ค่า
+    //   dateFormat 'Y-m-d'  = ค่าที่ส่งไป server (ฝั่ง view ไม่ต้องแก้อะไรเลย)
+    //   altFormat  'd/m/Y'  = ค่าที่คนเห็นบนจอ
+    // ไม่ตั้ง minDate/maxDate เพราะจะทำให้เลื่อนปฏิทินข้ามเดือนไม่ได้
+    var monthSelect = document.getElementById('month');
+    var pickers = [];
+    if (window.flatpickr) {
+      if (window.flatpickr.l10ns && window.flatpickr.l10ns.th) {
+        flatpickr.localize(flatpickr.l10ns.th);
+      }
+      document.querySelectorAll('.ifr-datepicker').forEach(function (input) {
+        pickers.push(flatpickr(input, {
+          dateFormat: 'Y-m-d',
+          altInput: true,
+          altFormat: 'd/m/Y',
+          allowInput: true,
+          disableMobile: true,
+        }));
+      });
+    }
+
+    // เปลี่ยน dropdown "ประจำเดือน" แล้ววันที่เดิมหลุดจากเดือนใหม่ ก็ล้างทิ้งให้
+    // กันส่งค่าที่ขัดกันเอง (เลือกเดือน ส.ค. แต่ยังค้างวันที่ของเดือน ก.ค.)
+    // ต้องสั่งผ่าน picker.clear() ไม่ใช่ input.value = '' เพราะ flatpickr
+    // สร้างช่องที่คนเห็นขึ้นมาใหม่ การแก้ input เดิมตรง ๆ จะไม่อัปเดตสิ่งที่แสดง
+    if (monthSelect) {
+      monthSelect.addEventListener('change', function () {
+        var parts = monthSelect.value.split('-');
+        if (parts.length !== 2) return;
+        var lastDayNum = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10), 0).getDate();
+        var firstDay = parts[0] + '-' + parts[1] + '-01';
+        var lastDay = parts[0] + '-' + parts[1] + '-' + String(lastDayNum).padStart(2, '0');
+
+        if (pickers.length) {
+          pickers.forEach(function (fp) {
+            var v = fp.input.value;
+            if (v && (v < firstDay || v > lastDay)) fp.clear();
+          });
+        } else {
+          // เผื่อ flatpickr โหลดไม่ขึ้น ช่องจะยังเป็น text ธรรมดา ล้างค่าตรง ๆ ได้
+          document.querySelectorAll('.ifr-datepicker').forEach(function (input) {
+            if (input.value && (input.value < firstDay || input.value > lastDay)) {
+              input.value = '';
+            }
+          });
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}

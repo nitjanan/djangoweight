@@ -1,0 +1,100 @@
+{% comment %}
+การ์ดของการปรับราคา 1 ครั้ง รับตัวแปร v = {obj, is_in_use, approvals, effective_th, version_th}
+แยกเป็นไฟล์เพราะใช้ทั้งส่วนที่กางอยู่แล้วและส่วนที่อยู่หลังปุ่ม "ดูเวอร์ชันเก่ากว่านี้"
+{% endcomment %}
+<div class="ifr-version {% if v.is_in_use %}ifr-version-current{% endif %}">
+  <div class="ifr-version-head">
+    <span class="badge {% if v.is_in_use %}bg-success{% else %}bg-secondary{% endif %}">
+      {{ v.version_th }}
+    </span>
+    <span class="fw-bold">{{ v.effective_th }}</span>
+    <span class="text-muted">
+      {% if v.is_in_use %}· ใช้อยู่{% else %}· ครั้งก่อน{% endif %}
+    </span>
+    {% if not v.is_in_use %}
+    <a href="{% url 'editInternationalFreightRate' v.obj.id %}" class="btn btn-sm btn-outline-primary ms-auto">
+      เปิดในหน้าแก้ไข <i class="fas fa-edit"></i>
+    </a>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive mt-2">
+    <table class="table table-sm table-bordered mb-0">
+      <thead>
+        <tr>
+          <th style="min-width: 140px;">ทีม</th>
+          <th style="min-width: 170px;">ประเภทการแบกน้ำหนัก</th>
+          <th class="text-end" style="min-width: 110px;">ค่าขนส่ง</th>
+          <th class="text-end" style="min-width: 110px;">ลดบาท/ตัน</th>
+          <th class="text-end" style="min-width: 120px;">บาท/ตัน/กม.</th>
+          <th>หมายเหตุ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in v.obj.teams.all %}
+        <tr>
+          <td>{% if t.team %}{{ t.team.car_team_name }}{% else %}ทุกทีม{% endif %}</td>
+          <td>{% if t.weight_carried %}{{ t.weight_carried.name }}{% else %}-{% endif %}</td>
+          <td class="text-end">{{ t.freight_rate|default_if_none:"-" }}</td>
+          <td class="text-end">{{ t.discount_per_ton|default_if_none:"-" }}</td>
+          <td class="text-end">{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
+          <td>{{ t.note|default_if_none:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted">ไม่มีทีมในการปรับครั้งนี้</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% comment %}
+  เรียงลำดับให้ตรงกับฟอร์มหน้าสร้าง/แก้ไข จะได้ไล่เทียบกับที่กรอกไปได้ทีละช่อง
+  {% endcomment %}
+  <dl class="ifr-version-fields mt-3 mb-1">
+    <dt>ระยะทาง</dt>
+    <dd>{{ v.obj.distance|default_if_none:"-" }} <span class="text-muted">กม.</span></dd>
+
+    <dt>ราคาน้ำมันฐาน</dt>
+    <dd>{{ v.obj.base_fuel_price|default_if_none:"-" }} <span class="text-muted">บาท/ลิตร</span></dd>
+
+    <dt>ใช้น้ำมัน</dt>
+    <dd>{{ v.obj.fuel_used_per_trip|default_if_none:"-" }} <span class="text-muted">ลิตร/เที่ยว</span></dd>
+
+    <dt>น้ำหนักบรรทุก</dt>
+    <dd>{{ v.obj.payload_weight|default_if_none:"-" }} <span class="text-muted">ตัน/เที่ยว</span></dd>
+
+    <dt>ปรับค่าขนส่งตามน้ำมัน</dt>
+    <dd>{{ v.obj.fuel_freight_adjustment|default_if_none:"-" }} <span class="text-muted">บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร</span></dd>
+
+    <dt>วันที่เริ่มใช้</dt>
+    <dd>{{ v.effective_th }}</dd>
+
+    <dt>หมายเหตุ</dt>
+    <dd>{{ v.obj.note|default_if_none:"-"|default:"-" }}</dd>
+  </dl>
+
+  <p class="text-muted mb-1">
+    <small>
+      ออกใบเมื่อ {{ v.obj.created_at|date:"d/m/Y H:i" }}
+      {% if v.obj.user_created %}โดย {{ v.obj.user_created.username }}{% endif %}
+    </small>
+  </p>
+
+  {% if v.approvals %}
+  {% comment %}บทสนทนาการอนุมัติ เรียงเก่าไปใหม่ อ่านไล่ลงเหมือนแชท{% endcomment %}
+  <div class="ifr-approval-thread">
+    {% for ap in v.approvals %}
+    <div class="ifr-approval-item">
+      <span class="badge {% if ap.action == 'approve' %}bg-success{% elif ap.action == 'reject' %}bg-danger{% else %}bg-secondary{% endif %}">
+        {{ ap.get_action_display }}
+      </span>
+      <span class="text-muted"><small>
+        {{ ap.created_at|date:"d/m/Y H:i" }}
+        {% if ap.user %}· {{ ap.user.username }}{% else %}· ระบบ{% endif %}
+      </small></span>
+      {% if ap.comment %}<div class="ms-1">{{ ap.comment }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

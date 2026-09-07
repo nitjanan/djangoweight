@@ -4,12 +4,13 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
+from weightapp import xlsx_template
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
 from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
@@ -18,15 +19,16 @@ import stripe, logging, datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Font, Color, NamedStyle, Side, Border
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from datetime import date, timedelta, datetime, time
 from django.views import generic
 from django.forms import formset_factory, modelformset_factory, inlineformset_factory, Select
 from django import forms
 from django.db.models import Sum, Subquery
 import random
-from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear
+from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear, TruncMonth, TruncYear, Least, NullIf
 from django.db.models import F, ExpressionWrapper, Case, When, OuterRef, Exists, Prefetch
-from django.db import models
+from django.db import models, transaction
 import pandas as pd
 import calendar
 from collections import defaultdict, OrderedDict
@@ -34,7 +36,9 @@ from re import escape as reescape
 from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat, Right
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.urls import reverse
+from urllib.parse import quote
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework import generics, viewsets, permissions, status
@@ -46,16 +50,18 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer, UserScaleSerializer
+from weightapp.serializers import BaseScoopSerializer, BaseMillSerializer, WeightSerializer, BaseCustomerSerializer, BaseStoneTypeSerializer, BaseCarTeamSerializer, BaseDriverSerializer, BaseCarRegistrationSerializer, BaseCarRegistrationSerializer, BaseCarSerializer, BaseSiteSerializer, BaseCarSerializer, BaseStoneTypeTestSerializer, BaseJobTypeSerializer, SignUpSerializer, BaseCustomerSiteSerializer, CarPartnerSerializer, DeliveryOrderSerializer, WeightDeliverySerializer, K2MDSerializer, AppReleaseSerializer, ClientUpdateLogSerializer, UserScaleSerializer, BaseCompanyMapBaseCustomerSerializer, InternationalFreightRateSerializer, InternationalFreightRateFuelPriceSerializer
 from rest_framework.decorators import api_view
 from django.contrib.auth.models import User
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from .tokens import create_jwt_pair_for_user
 import csv
 from io import StringIO
 from decimal import Decimal
 import ast
 import json
+import os
+import tempfile
 from django.conf import settings # calls the object written in settings.py
 from django.views.decorators.csrf import csrf_exempt
 from linebot import LineBotApi, WebhookHandler
@@ -10025,3 +10031,3144 @@ def appUpdateLog(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([])
+def baseCompanyCustomerMapCreate(request):
+    serializer = BaseCompanyMapBaseCustomerSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])    
+@permission_classes([])
+def baseCompanyCustomerMapDelete(request, id):
+    try:
+        obj = BaseCompanyMapBaseCustomer.objects.get(id=id)
+        obj.delete() # ลบข้อมูลจาก id นั้น
+        return Response({"message": "ลบสำเร็จ"}, status=status.HTTP_200_OK)
+    except BaseCompanyMapBaseCustomer.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+@permission_classes([])
+def internationalFreightRateCreate(request):
+    try:
+        print(request.data)
+        # ส่ง request เข้าไปด้วย serializer จะได้รู้ว่าใครเป็นคนออกใบ/ขออนุมัติ
+        serializer = InternationalFreightRateSerializer(
+            data=request.data, context={'request': request})
+        if serializer.is_valid():
+            # atomic : ถ้าทีมใดทีมหนึ่งสร้างไม่สำเร็จ ให้ rollback รายการหลักด้วย
+            # กันไม่ให้เหลือรายการค่าขนส่งที่ไม่มีทีมค้างอยู่ใน db
+            with transaction.atomic():
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([])
+def internationalFreightRateUpdate(request, id):
+    try:
+        obj = InternationalFreightRate.objects.get(id=id)
+    except InternationalFreightRate.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        # PATCH = แก้เฉพาะฟิลด์ที่ส่งมา / PUT = ต้องส่งมาให้ครบทุกฟิลด์
+        serializer = InternationalFreightRateSerializer(
+            obj, data=request.data, partial=(request.method == 'PATCH'),
+            context={'request': request}
+        )
+        if serializer.is_valid():
+            # atomic : ถ้าทีมใดทีมหนึ่งพัง ให้ย้อนกลับทั้งหมด ไม่ให้ทีมเดิมถูกลบทิ้งฟรีๆ
+            with transaction.atomic():
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+@permission_classes([])
+def internationalFreightRateDelete(request, id):
+    """ลบเส้นทาง = ลบทุกเวอร์ชันของเส้นทางนั้น พร้อมประวัติราคาน้ำมัน
+
+    ลบใบเดียวไม่ได้ เพราะ root ใช้ on_delete=PROTECT กันประวัติหายโดยไม่ตั้งใจ
+    ลำดับสำคัญ : ลบเวอร์ชันลูกก่อน แล้วค่อยตัดการชี้ตัวเองของใบแรกก่อนลบใบแรก
+    """
+    try:
+        obj = InternationalFreightRate.objects.get(id=id)
+    except InternationalFreightRate.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+
+    root_id = obj.root_id or obj.id
+    with transaction.atomic():
+        family = InternationalFreightRate.objects.filter(root_id=root_id)
+        removed = family.count()
+        family.exclude(id=root_id).delete()
+        # ใบแรกชี้ตัวเอง ต้องตัดออกก่อน ไม่งั้น PROTECT จะกันการลบตัวเอง
+        InternationalFreightRate.objects.filter(id=root_id).update(root=None)
+        InternationalFreightRate.objects.filter(id=root_id).delete()
+
+    return Response({"message": "ลบสำเร็จ (ลบไป %s รายการ)" % removed},
+                    status=status.HTTP_200_OK)
+
+
+################# ราคาน้ำมันเฉลี่ยรายวัน (แยกเป็นหน้าของตัวเอง) #################
+# แยกออกมาจากหน้าค่าขนส่ง เพราะราคาน้ำมันเป็นของ "บริษัท" ไม่ใช่ของ "เส้นทาง"
+# ถ้ากรอกในหน้าค่าขนส่ง บริษัทที่มี 10 เส้นทางต้องกรอกราคาเดียวกัน 10 รอบ
+# และถ้ากรอกไม่ครบทุกเส้นทาง ราคาของบริษัทเดียวกันจะไม่ตรงกันโดยไม่มีใครรู้
+
+
+@login_required(login_url='login')
+def viewInternationalFreightRateFuelPrice(request):
+    """หน้ากรอกราคาน้ำมันรายวัน แยกตามบริษัท
+
+    หน้าเดียวทำ 3 อย่าง
+      1. ฟอร์มกรอกราคาของ 1 วัน ทีเดียวครบทุกบริษัท (คนกรอกคิดเป็นวัน ไม่ได้คิดเป็นบริษัท)
+      2. ตารางราคาที่กรอกไว้แล้วในเดือนที่เลือก
+      3. สรุปค่าเฉลี่ยของเดือน ซึ่งเป็นตัวเลขที่ export เอกสารจะหยิบไปใช้จริง
+         แสดงไว้ให้เห็นกับตา จะได้ไม่ต้องเดาว่าไฟล์ที่ออกมาใช้ราคาเท่าไร
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    # บริษัทที่ step เป็น NULL คือแถวพิเศษ (เช่น ALL = ทุกบริษัท) ไม่ใช่บริษัทจริง
+    # ให้กรอกราคาไม่ได้ ไม่งั้นจะมีราคาของ "บริษัททั้งหมด" ที่ไม่มีเส้นทางไหน map ถึง
+    companies = list(BaseCompany.objects.exclude(step__isnull=True).order_by('step', 'id'))
+
+    # ทุกตารางในหน้านี้เดินตามแท็บบริษัทด้านบน เหมือนหน้าอื่นในระบบ
+    # แท็บที่อยู่ใน COMPANY_TAB_SEES_ALL (ร้อยเกาะ) เห็นครบทุกบริษัท กรอกรวดเดียวจบได้
+    # แท็บอื่นเห็นเฉพาะของตัวเอง
+    # กรองทั้งฟอร์ม ตารางราคาที่กรอกแล้ว และการ์ดสรุป ให้ตรงกัน
+    # ถ้ากรองแค่ฟอร์มอย่างเดียว จะเห็นราคาของบริษัทที่แก้ไม่ได้ค้างอยู่ในตารางด้านล่าง
+    if active not in COMPANY_TAB_SEES_ALL:
+        companies = [c for c in companies if c.code == active]
+    company_ids = [c.id for c in companies]
+
+    selected_month = request.GET.get('month') or date.today().strftime('%Y-%m')
+    first_day = _exportDocumentMonthDate(selected_month)
+    if first_day is None:
+        first_day = date.today().replace(day=1)
+        selected_month = first_day.strftime('%Y-%m')
+    last_day = first_day.replace(
+        day=calendar.monthrange(first_day.year, first_day.month)[1])
+
+    # วันที่ตั้งต้นของฟอร์ม : วันนี้ถ้ายังอยู่ในเดือนที่เลือก ไม่งั้นใช้วันแรกของเดือนนั้น
+    # กันไม่ให้เลื่อนไปดูเดือนเก่าแล้วเผลอบันทึกราคาลงวันนี้ของเดือนปัจจุบัน
+    today = date.today()
+    form_date = today if first_day <= today <= last_day else first_day
+    form_date = _ifrFuelFormDate(request, form_date)
+
+    # ช่วงวันคุมทั้งการ์ดสรุปและตารางราคาที่กรอกแล้ว ให้ตัวเลขบนจอตรงกันทั้งหน้า
+    range_from, range_to = _ifrFuelDateRange(request, first_day, last_day)
+
+    rows = list(InternationalFreightRateFuelPrice.objects
+                .select_related('base_comp')
+                .filter(base_comp_id__in=company_ids,
+                        date__gte=range_from, date__lte=range_to))
+    for r in rows:
+        r.date_th = _thaiDate(r.date)
+
+    # ราคาของวันที่กำลังกรอก เอาไปเติมในฟอร์มให้ครบ จะได้เห็นว่ากรอกไปแล้วเท่าไร
+    price_of_form_date = {r.base_comp_id: r for r in rows if r.date == form_date}
+    form_rows = [{
+        'company': c,
+        'price': price_of_form_date[c.id].average_fuel_price if c.id in price_of_form_date else '',
+        'note': (price_of_form_date[c.id].note or '') if c.id in price_of_form_date else '',
+    } for c in companies]
+
+    # เฉลี่ยตามช่วงวันที่เลือกไว้ด้านบน ไม่ใช่ทั้งเดือน
+    # ตอน export ใช้กติกาเดียวกัน ต่างแค่ที่นั่นรู้วันที่วิ่งจริงจากข้อมูลการชั่ง
+    avg_by_comp = _ifrFuelRangeAverage(range_from, range_to)
+    summary = [{
+        'company': c,
+        'avg_price': avg_by_comp[c.id][0] if c.id in avg_by_comp else None,
+        'day_count': avg_by_comp[c.id][1] if c.id in avg_by_comp else 0,
+    } for c in companies]
+
+    context = {
+        'ifr_fuel_page': 'active',
+        'fuel_rows': rows,
+        'fuel_form_rows': form_rows,
+        'fuel_summary': summary,
+        'fuel_selected_month': selected_month,
+        'fuel_selected_month_th': _exportDocumentThaiMonth(selected_month),
+        'fuel_prev_month': (first_day - timedelta(days=1)).strftime('%Y-%m'),
+        'fuel_next_month': (last_day + timedelta(days=1)).strftime('%Y-%m'),
+        'fuel_form_date': form_date.strftime('%Y-%m-%d'),
+        'fuel_form_date_th': _thaiDate(form_date),
+        'fuel_date_from': range_from.strftime('%Y-%m-%d'),
+        'fuel_date_to': range_to.strftime('%Y-%m-%d'),
+        'fuel_range_days': (range_to - range_from).days + 1,
+        'fuel_range_label': (_thaiDate(range_from) if range_from == range_to
+                             else '%s ถึง %s' % (_thaiDate(range_from), _thaiDate(range_to))),
+        'fuel_range_is_full_month': range_from == first_day and range_to == last_day,
+        'fuel_tab_code': active,
+        'fuel_tab_is_all': active in COMPANY_TAB_SEES_ALL,
+        active: 'active',
+    }
+    return render(request,
+                  'internationalFreightRate/viewInternationalFreightRateFuelPrice.html',
+                  context)
+
+
+def _ifrFuelDateRange(request, first_day, last_day):
+    """ช่วงวันที่ใช้คิดค่าเฉลี่ยบนหน้าราคาน้ำมัน ไม่กรอก = ทั้งเดือน
+
+    สลับให้เองถ้าใส่กลับหัว (เช่นเลือก 10 ถึง 5) เพราะเจตนาชัดว่าอยากได้ช่วงนั้น
+    ไม่ควรเด้ง error ใส่หน้าคนกรอก
+    หนีบไม่ให้หลุดออกนอกเดือนที่เลือก เพราะเดือนเป็นตัวคุมขอบเขตของทั้งหน้าอยู่แล้ว
+    """
+    def parse(key, fallback):
+        raw = request.GET.get(key)
+        if not raw:
+            return fallback
+        try:
+            return datetime.strptime(raw, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return fallback
+
+    start = parse('date_from', first_day)
+    end = parse('date_to', last_day)
+    if start > end:
+        start, end = end, start
+    return max(start, first_day), min(end, last_day)
+
+
+def _ifrFuelFormDate(request, fallback):
+    """วันที่ที่ฟอร์มกำลังกรอกอยู่ มาจาก query string ถ้าส่งมาถูกรูปแบบ"""
+    raw = request.GET.get('date')
+    if not raw:
+        return fallback
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return fallback
+
+
+@api_view(['POST'])
+@permission_classes([])
+def internationalFreightRateFuelPriceSaveDay(request):
+    """บันทึกราคาน้ำมันของ 1 วัน ทีเดียวหลายบริษัท
+
+    payload = {"date": "YYYY-MM-DD",
+               "prices": [{"base_comp": 1, "average_fuel_price": "33.20", "note": "..."}, ...]}
+
+    ช่องราคาที่เว้นว่าง = สั่งลบราคาของบริษัทนั้นในวันนั้น ไม่ใช่ "ข้ามไป"
+    เพราะฟอร์มเติมค่าที่มีอยู่มาให้แล้ว การลบข้อความออกจึงเป็นเจตนาชัดเจนของคนกรอก
+    ถ้าตีความว่า "ข้ามไป" คนกรอกจะลบราคาที่ใส่ผิดไม่ได้เลยจากหน้านี้
+
+    ตรวจทั้งชุดให้ผ่านก่อนแล้วค่อยเขียน (atomic) กรอกผิดบริษัทเดียวไม่ควรทำให้
+    บริษัทอื่นบันทึกไปครึ่ง ๆ กลาง ๆ แล้วคนกรอกไม่รู้ว่าอันไหนเข้าอันไหนไม่เข้า
+    """
+    raw_date = request.data.get('date')
+    try:
+        target_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return Response({"error": "กรุณาเลือกวันที่ให้ถูกต้อง"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    prices = request.data.get('prices')
+    if not isinstance(prices, list):
+        return Response({"error": "รูปแบบข้อมูลไม่ถูกต้อง"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    valid_company_ids = set(BaseCompany.objects
+                            .exclude(step__isnull=True)
+                            .values_list('id', flat=True))
+
+    to_save = []     # (id บริษัท, ราคา, หมายเหตุ)
+    to_delete = []   # id บริษัทที่ลบราคาของวันนี้ทิ้ง
+    for item in prices:
+        try:
+            company_id = int(item.get('base_comp'))
+        except (TypeError, ValueError):
+            return Response({"error": "ไม่รู้จักบริษัทที่ส่งมา"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if company_id not in valid_company_ids:
+            return Response({"error": "ไม่รู้จักบริษัท (id %s)" % company_id},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        raw_price = item.get('average_fuel_price')
+        if raw_price is None or str(raw_price).strip() == '':
+            to_delete.append(company_id)
+            continue
+        try:
+            price = Decimal(str(raw_price).strip())
+        except (InvalidOperation, ValueError):
+            return Response({"error": "ราคาน้ำมันต้องเป็นตัวเลข"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if price <= 0:
+            return Response({"error": "ราคาน้ำมันต้องมากกว่า 0"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        note = item.get('note')
+        note = note.strip() if isinstance(note, str) and note.strip() else None
+        to_save.append((company_id, price, note))
+
+    with transaction.atomic():
+        for company_id, price, note in to_save:
+            InternationalFreightRateFuelPrice.objects.update_or_create(
+                base_comp_id=company_id, date=target_date,
+                defaults={'average_fuel_price': price, 'note': note})
+        if to_delete:
+            InternationalFreightRateFuelPrice.objects.filter(
+                base_comp_id__in=to_delete, date=target_date).delete()
+
+    return Response({"message": "บันทึกสำเร็จ %s บริษัท" % len(to_save),
+                     "saved": len(to_save), "removed": len(to_delete)},
+                    status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([])
+def internationalFreightRateFuelPriceDelete(request, id):
+    """ลบราคาของบริษัทเดียว วันเดียว (ปุ่มลบในตาราง)"""
+    try:
+        InternationalFreightRateFuelPrice.objects.get(id=id).delete()
+    except InternationalFreightRateFuelPrice.DoesNotExist:
+        return Response({"error": "ไม่พบข้อมูล"}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"message": "ลบสำเร็จ"}, status=status.HTTP_200_OK)
+
+
+def _ifrLatestFuelPriceByCompany(company_ids=None):
+    """{id บริษัท -> ราคาน้ำมันล่าสุดที่กรอกไว้} ไม่จำกัดว่าต้องเป็นวันไหน
+
+    ใช้กับหน้าจอที่ถามว่า "ตอนนี้ราคาเท่าไร" เท่านั้น
+    ส่วนการ export เอกสารต้องใช้ _exportDocumentFuelPriceByGroup
+    ซึ่งจำกัดอยู่ในเดือนที่รายงาน ไม่หยิบราคาเดือนอื่นมาปน
+    """
+    qs = InternationalFreightRateFuelPrice.objects.all()
+    if company_ids is not None:
+        qs = qs.filter(base_comp_id__in=list(company_ids))
+    # เรียงเก่าไปใหม่แล้วให้ตัวหลังทับตัวหน้าใน dict ที่เหลือคือแถวล่าสุดของแต่ละบริษัท
+    latest = {}
+    for comp_id, price in (qs.order_by('date', 'id')
+                             .values_list('base_comp_id', 'average_fuel_price')):
+        latest[comp_id] = price
+    return latest
+
+
+################# หน้าเว็ป อัตราค่าขนส่งไปนอกประเทศ (ใช้ api create/delete ด้านบน) #################
+@login_required(login_url='login')
+def viewInternationalFreightRate(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    # prefetch ทีม (พร้อมข้อมูล base_car_team) มาในทีเดียว ไม่งั้นตารางจะยิง query ต่อ 1 แถว
+    # select_related ต้นทาง/ปลายทาง ด้วย เพราะตารางเรียก .name ทุกแถว
+    # เรียงตามทีม เพราะ template ใช้ {% regroup %} จับกลุ่ม ซึ่งจับได้เฉพาะแถวที่ติดกันเท่านั้น
+    # ถ้าไม่เรียงมาก่อน ทีมเดียวกันที่อยู่คนละที่ในลิสต์จะกลายเป็นคนละกลุ่ม
+    # แสดงเส้นทางละ 1 บรรทัด = ใบที่ใช้อยู่ตอนนี้ ไม่เอาทุกเวอร์ชันมากองรวมกัน
+    # ราคาน้ำมันไม่อยู่ในตารางนี้แล้ว ย้ายไปหน้า "ราคาน้ำมันเฉลี่ยรายวัน" ซึ่งเก็บต่อบริษัท
+    # ไม่ใช่ต่อเส้นทาง เอามาแปะตรงนี้จะเข้าใจผิดว่าแต่ละเส้นทางมีราคาน้ำมันของตัวเอง
+    data = InternationalFreightRate.effectiveOn(
+        date.today(),
+        InternationalFreightRate.objects
+        .select_related('origin', 'destination', 'root')
+        .prefetch_related(Prefetch(
+            'teams',
+            queryset=InternationalFreightRateTeam.objects
+                .select_related('team', 'weight_carried')
+                .order_by('team_id', 'id'),
+        )))
+
+    #สร้าง page
+    p = Paginator(data, 10)
+    page = request.GET.get('page')
+    ifr = p.get_page(page)
+
+    # ชื่อต้นทาง/ปลายทางใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
+    map_names = _baseCompanyMapDisplayNameById()
+
+    # นับจำนวนเวอร์ชันของทุกเส้นทางในครั้งเดียว ไม่ยิง query ต่อ 1 แถว
+    version_counts = dict(InternationalFreightRate.objects
+                          .values_list('root_id')
+                          .annotate(n=Count('id'))
+                          .values_list('root_id', 'n'))
+
+    for row in ifr:
+        teams = list(row.teams.all())
+        # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
+        # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
+        row.has_specific_team = any(t.team_id for t in teams)
+        # นับจำนวน "ทีม" ไม่ใช่จำนวนแถว เพราะทีมเดียวอาจมีหลายช่วงน้ำหนัก
+        row.team_group_count = len({t.team_id for t in teams})
+        row.origin_display = map_names.get(row.origin_id)
+        row.destination_display = map_names.get(row.destination_id)
+        # ป้ายสถานะคำนวณสด ไม่เก็บใน DB : ใบที่ effectiveOn เลือกมาคือใบที่ใช้อยู่
+        # ส่วนเวอร์ชันก่อนหน้ายังเป็น approved เหมือนกัน แต่แสดงว่า "เวอร์ชันเก่า"
+        row.version_count = version_counts.get(row.root_id, 1)
+        row.version_th = _ifrVersionLabel(row.version)
+        # จำนวน "ครั้งที่ปรับ" = จำนวนรายการทั้งหมด ลบครั้งที่สร้าง
+        row.change_count = max(row.version_count - 1, 0)
+        row.effective_th = _ifrEffectiveLabel(row.effective_date)
+
+    context = {'ifr_page':'active', 'ifr': ifr, active :"active",}
+    return render(request, "internationalFreightRate/viewInternationalFreightRate.html", context)
+
+################# export ตารางอัตราค่าขนส่งส่งออก เป็นรูปแบบบันทึกขออนุมัติ #################
+# ทำตามหน้าตาไฟล์ "ค่าขนส่ง ส่งออก 2568.xlsx" ของฝ่ายโลจิสติกส์ (sheet กันยายน 68)
+# หัวเป็นบันทึกถึงประธาน แล้วตามด้วยตารางที่แตกคอลัมน์ตามช่วงน้ำหนัก ช่วงละ 3 คอลัมน์
+# (เดิม / ใหม่ / น้ำมัน ± 1) ปิดท้ายด้วยบาทต่อตันต่อกม. กับหมายเหตุ
+#
+# ราคาน้ำมันฐานอยู่ในคอลัมน์คงที่ เพราะเป็นของ "เส้นทาง" ไม่ได้แยกตามช่วงน้ำหนักหรือทีม
+# ต้องมีในบันทึก เพราะช่อง "น้ำมัน ± 1" บอกแค่ว่าปรับกี่บาทต่อตัน แต่ไม่ได้บอกว่าปรับจากราคาไหน
+# แยกเป็น เดิม / ใหม่ เหมือนกลุ่มช่วงน้ำหนัก เพราะการขยับราคาน้ำมันฐานคือการเปลี่ยนจุดตั้งต้น
+# ของการคิดส่วนปรับทั้งเส้นทาง ผู้อนุมัติต้องเห็นว่าย้ายจากเท่าไรไปเท่าไร
+
+IFR_EXPORT_SHEET = 'อัตราค่าขนส่งส่งออก'
+IFR_EXPORT_HEAD_ROW = 8          # แถวหัวกลุ่มช่วงน้ำหนัก
+IFR_EXPORT_SUBHEAD_ROW = 9       # แถวหัวย่อย เดิม/ใหม่/น้ำมัน
+IFR_EXPORT_FIRST_DATA_ROW = 10
+IFR_EXPORT_FIXED_COLS = 6        # ที่ / ต้นทาง / ปลายทาง / ระยะทาง / น้ำมันฐาน (เดิม+ใหม่)
+IFR_EXPORT_BASE_FUEL_COL = 5     # คอลัมน์แรกของกลุ่มราคาน้ำมันฐาน (เดิม, ใหม่)
+IFR_EXPORT_BAND_WIDTH = 3        # เดิม / ใหม่ / น้ำมัน ± 1
+
+IFR_EXPORT_SUBJECT = '( ****ใส่เรื่อง**** )'
+IFR_EXPORT_TO = '( ****ใส่ชื่อผู้รับบันทึก**** )       ( ****ใส่ตำแหน่ง**** )'
+IFR_EXPORT_INTRO = '( ****ใส่เนื้อหาบันทึก**** )'
+IFR_EXPORT_SIGNER = '( ****ใส่ชื่อผู้มีอำนาจอนุมัติ**** )'
+IFR_EXPORT_SIGNER_TITLE = '( ****ใส่ตำแหน่งผู้ลงนาม**** )'
+IFR_EXPORT_FOOTNOTE = '( ****ใส่หมายเหตุ**** )'
+
+
+def _ifrExportPreviousRates(rates):
+    """อัตรารายทีมของ "ฉบับก่อนหน้า" ของแต่ละเส้นทาง เอาไว้เติมช่อง "เดิม" ในบันทึกขออนุมัติ
+
+    ตั้งแต่มีระบบเวอร์ชัน ทุกฉบับเก็บแถวทีมของตัวเองไว้ครบ (international_freight_rate_team)
+    อัตราเก่ารายทีมจึงดึงได้แล้ว ต่างจากตอนที่ยังใช้ตาราง log ซึ่งเก็บแค่ระดับเส้นทาง
+
+    "ฉบับก่อนหน้า" = ใบที่ผ่านอนุมัติของเส้นทางเดียวกัน ที่ id น้อยกว่าใบที่ใช้อยู่ แต่มากที่สุด
+    ใช้ id ไม่ใช่ effective_date เพราะกติกากลางของระบบคือ "ออกทีหลังชนะ" (ดู effectiveOn)
+    ถ้าเรียงด้วยวันที่ ใบที่ย้อนวันเริ่มใช้จะสลับลำดับกับความเป็นจริง
+
+    คืน (อัตราเดิม, ป้ายบอกที่มา, ใบฉบับก่อนหน้า)
+      อัตราเดิม     = {id ใบที่ใช้อยู่ -> {(id ทีม, id ช่วงแบก นน.) -> อัตราเดิม}}
+      ป้าย          = {id ใบที่ใช้อยู่ -> 'ช่อง "เดิม" = ราคาเริ่มต้น (1 ม.ค. 2543)'}
+      ใบฉบับก่อนหน้า = {id ใบที่ใช้อยู่ -> InternationalFreightRate} เอาไว้อ่านช่องอื่น
+                      เช่นราคาน้ำมันฐานเดิม ซึ่งเป็นของทั้งใบ ไม่ได้แยกรายทีม
+    """
+    roots = {r.root_id for r in rates}
+    if not roots:
+        return {}, {}, {}
+
+    versions_by_root = defaultdict(list)
+    for v in (InternationalFreightRate.objects
+              .filter(root_id__in=roots, status=InternationalFreightRateStatus.APPROVED)
+              .order_by('root_id', 'id')):
+        versions_by_root[v.root_id].append(v)
+
+    previous_of = {}
+    for rate in rates:
+        previous = None
+        for v in versions_by_root.get(rate.root_id, []):
+            if v.id == rate.id:
+                break
+            previous = v
+        if previous is not None:
+            previous_of[rate.id] = previous
+
+    rates_by_previous = defaultdict(dict)
+    if previous_of:
+        for team_rate in (InternationalFreightRateTeam.objects
+                          .filter(international_freight_rate_id__in=
+                                  [p.id for p in previous_of.values()])):
+            rates_by_previous[team_rate.international_freight_rate_id][
+                (team_rate.team_id, team_rate.weight_carried_id)] = team_rate.freight_rate
+
+    previous_rates, previous_labels = {}, {}
+    for rate_id, previous in previous_of.items():
+        previous_rates[rate_id] = rates_by_previous.get(previous.id, {})
+        previous_labels[rate_id] = 'ช่อง "เดิม" = %s (%s)' % (
+            _ifrVersionLabel(previous.version), _ifrEffectiveLabel(previous.effective_date))
+    return previous_rates, previous_labels, previous_of
+
+
+def _ifrExportBands(rates):
+    """คืนช่วงน้ำหนักที่ใช้จริงในข้อมูล เรียงจากเบาไปหนัก
+
+    ไม่ fix คอลัมน์ไว้ในโค้ด เพราะช่วงมาจากตาราง carryingweight_rate ที่เพิ่มลบได้
+    ถ้า fix ไว้จะมีทั้งคอลัมน์ว่างและช่วงที่ตกหล่นเวลาบัญชีแก้ตาราง
+    """
+    bands = {}
+    for rate in rates:
+        for team_rate in rate.teams.all():
+            band = team_rate.weight_carried
+            if band is not None:
+                bands[band.id] = band
+    used = sorted(bands.values(), key=lambda b: (b.min_weight, b.max_weight, b.name))
+
+    # ช่วงแบบเหมา (เช่น 0 ถึง 999999.99) ครอบช่วงย่อยอื่นไว้ทั้งหมด ไม่ควรได้คอลัมน์ของตัวเอง
+    # ราคาของมันจะถูกกระจายไปลงทุกคอลัมน์ย่อยแทน ตอนเขียนแถว
+    columns = [b for b in used
+               if not any(o.id != b.id and b.min_weight <= o.min_weight
+                          and o.max_weight <= b.max_weight for o in used)]
+    return columns or used
+
+
+@login_required(login_url='login')
+def exportExcelInternationalFreightRate(request):
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    # เอกสารนี้เป็นตารางอัตราที่ใช้อยู่ปัจจุบัน จึงเอาใบที่มีผล ณ ตอนนี้ เส้นทางละใบ
+    rates = InternationalFreightRate.effectiveOn(
+        date.today(),
+        InternationalFreightRate.objects
+        .select_related('origin', 'destination', 'root')
+        .prefetch_related('teams__team', 'teams__weight_carried'))
+    if not rates:
+        return HttpResponse("ยังไม่มีข้อมูลอัตราค่าขนส่งให้ export")
+
+    # ชื่อต้นทาง/ปลายทางใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
+    map_names = _baseCompanyMapDisplayNameById()
+
+    # อัตราของฉบับก่อนหน้า เอาไว้เติมช่อง "เดิม" ให้เห็นว่าปรับจากเท่าไรเป็นเท่าไร
+    previous_rates, previous_labels, previous_versions = _ifrExportPreviousRates(rates)
+
+    bands = _ifrExportBands(rates)
+    band_col = {}   # CarryingweightRate -> คอลัมน์เริ่มต้นของกลุ่ม (เดิม/ใหม่/น้ำมัน)
+    col = IFR_EXPORT_FIXED_COLS + 1
+    for band in bands:
+        band_col[band] = col
+        col += IFR_EXPORT_BAND_WIDTH
+    if not bands:
+        col += IFR_EXPORT_BAND_WIDTH
+    rate_per_km_col = col
+    note_col = col + 1
+    last_col = note_col
+
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = IFR_EXPORT_SHEET
+
+    thin = Side(style='thin')
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    head_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+
+    # ---- หัวบันทึก ----
+    worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+    title = worksheet.cell(row=1, column=1)
+    title.value = 'บันทึก'
+    title.font = Font(bold=True, size=16)
+    title.alignment = Alignment(horizontal='center')
+
+    today = date.today()
+    worksheet.cell(row=2, column=1).value = 'ที่ LT. ........./%s' % (today.year + 543)
+    worksheet.cell(row=2, column=max(1, last_col - 5)).value = 'วันที่ %s %s %s' % (
+        today.day, EXPORT_DOC_THAI_MONTHS[today.month - 1], today.year + 543)
+    worksheet.cell(row=3, column=1).value = 'เรื่อง       %s' % IFR_EXPORT_SUBJECT
+    worksheet.cell(row=4, column=1).value = 'เรียน      %s' % IFR_EXPORT_TO
+    worksheet.cell(row=5, column=2).value = IFR_EXPORT_INTRO
+
+    # ราคาน้ำมันอ้างอิง ถ้าทุกบริษัทต้นทางใช้ราคาเดียวกันก็เขียนตัวเลขให้เลย
+    # ราคาน้ำมันผูกกับบริษัท ไม่ได้ผูกกับเส้นทาง จึงหยิบราคาล่าสุดของบริษัทต้นทางแต่ละราย
+    # หน้านี้เป็นตารางอัตราปัจจุบัน ไม่ได้ผูกกับเดือนใดเดือนหนึ่ง จึงใช้ "ล่าสุด" ไม่ใช่ค่าเฉลี่ยรายเดือน
+    company_ids = {r.origin.base_company_id for r in rates
+                   if r.origin_id and r.origin.base_company_id}
+    fuel_prices = set(_ifrLatestFuelPriceByCompany(company_ids).values())
+    worksheet.cell(row=6, column=2).value = 'ราคานี้มีผลตั้งแต่วันที่ ................'
+    if len(fuel_prices) == 1:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ %.2f บาท' % fuel_prices.pop()
+    else:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ ............ บาท'
+
+    # ---- หัวตาราง 2 ชั้น ----
+    for band in bands:
+        start = band_col[band]
+        worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=start,
+                              end_row=IFR_EXPORT_HEAD_ROW,
+                              end_column=start + IFR_EXPORT_BAND_WIDTH - 1)
+        cell = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=start)
+        # ใช้คำอธิบายที่บัญชีเขียนไว้ในตาราง จะได้อ่านรู้เรื่องเป็นประโยค ไม่ต้องต่อคำเอง
+        cell.value = band.description or ('นน. %s ตัน' % band.name)
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        cell.fill = head_fill
+        for i, sub in enumerate(('เดิม', 'ใหม่', 'น้ำมัน\n± 1')):
+            sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW, column=start + i)
+            sub_cell.value = sub
+            sub_cell.font = Font(bold=True)
+            sub_cell.alignment = center
+            sub_cell.fill = head_fill
+
+    # กลุ่มราคาน้ำมันฐาน : หัวใหญ่คร่อม 2 คอลัมน์ แล้วแยก เดิม/ใหม่ ในแถวหัวย่อย
+    # ใช้หน้าตาเดียวกับกลุ่มช่วงน้ำหนัก จะได้อ่านเป็นภาษาเดียวกันทั้งตาราง
+    worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=IFR_EXPORT_BASE_FUEL_COL,
+                          end_row=IFR_EXPORT_HEAD_ROW, end_column=IFR_EXPORT_BASE_FUEL_COL + 1)
+    base_fuel_head = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=IFR_EXPORT_BASE_FUEL_COL)
+    base_fuel_head.value = 'ราคาน้ำมันฐาน (บาท/ลิตร)'
+    base_fuel_head.font = Font(bold=True)
+    base_fuel_head.alignment = center
+    base_fuel_head.fill = head_fill
+    for i, sub_text in enumerate(('เดิม', 'ใหม่')):
+        sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW,
+                                  column=IFR_EXPORT_BASE_FUEL_COL + i)
+        sub_cell.value = sub_text
+        sub_cell.font = Font(bold=True)
+        sub_cell.alignment = center
+        sub_cell.fill = head_fill
+
+    fixed_heads = [(1, 'ที่'), (2, 'ต้นทาง'), (3, 'ปลายทาง'), (4, 'ระยะทาง (กม.)')]
+    for column, text in fixed_heads + [(rate_per_km_col, 'ค่าขนส่ง\nบาท/ตัน/กม.'),
+                                       (note_col, 'หมายเหตุ')]:
+        worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=column,
+                              end_row=IFR_EXPORT_SUBHEAD_ROW, end_column=column)
+        cell = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=column)
+        cell.value = text
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        cell.fill = head_fill
+
+    # ---- ตัวตาราง ----
+    row = IFR_EXPORT_FIRST_DATA_ROW
+    for index, rate in enumerate(rates, start=1):
+        team_rows = list(rate.teams.all())
+        # แถวหลักของเส้นทาง ใส่อัตราของแถว "ทุกทีม" (team = NULL)
+        shared = [t for t in team_rows if not t.team_id]
+        specific = [t for t in team_rows if t.team_id]
+
+        worksheet.cell(row=row, column=1).value = index
+        worksheet.cell(row=row, column=2).value = map_names.get(rate.origin_id)
+        worksheet.cell(row=row, column=3).value = map_names.get(rate.destination_id)
+        worksheet.cell(row=row, column=4).value = float(rate.distance) if rate.distance is not None else None
+        # ราคาน้ำมันฐาน = จุดตั้งต้นที่ใช้เทียบกับราคาน้ำมันจริง ถึงจะรู้ว่าปรับขึ้นหรือลง
+        # ช่อง "เดิม" ว่างได้ถ้าเส้นทางนี้ยังไม่เคยปรับ ซึ่งแปลว่าไม่มีค่าเดิมจริง ๆ
+        previous_version = previous_versions.get(rate.id)
+        if previous_version is not None and previous_version.base_fuel_price is not None:
+            worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL).value = float(
+                previous_version.base_fuel_price)
+        worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL + 1).value = (
+            float(rate.base_fuel_price) if rate.base_fuel_price is not None else None)
+        # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
+        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, rate_per_km_col, note_col, rate,
+                               previous_rates.get(rate.id), previous_labels.get(rate.id))
+        for cell in worksheet[row][:last_col]:
+            cell.font = Font(bold=True)
+        row += 1
+
+        # ทีมเดียวกันที่มีหลายช่วงน้ำหนัก ต้องยุบเป็นแถวเดียวแล้วกระจายค่าไปตามคอลัมน์ช่วง
+        # ไม่ใช่แตกเป็นแถวละ record ไม่งั้นชื่อทีมจะซ้ำหลายบรรทัดในตารางเดียว
+        by_team = OrderedDict()
+        for team_rate in specific:
+            by_team.setdefault(team_rate.team_id, []).append(team_rate)
+
+        for team_index, team_rates in enumerate(by_team.values(), start=1):
+            worksheet.cell(row=row, column=2).value = '%d. %s' % (
+                team_index, team_rates[0].team.car_team_name)
+            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col,
+                                   rate_per_km_col, note_col, rate,
+                                   previous_rates.get(rate.id))
+            row += 1
+
+    last_data_row = row - 1
+    for r in range(IFR_EXPORT_HEAD_ROW, last_data_row + 1):
+        for c in range(1, last_col + 1):
+            worksheet.cell(row=r, column=c).border = box
+
+    # ---- ท้ายบันทึก ----
+    row += 1
+    worksheet.cell(row=row, column=2).value = 'จึงเรียนมาเพื่อโปรดพิจารณา'
+    sign_col = max(1, last_col - 5)
+    worksheet.cell(row=row + 1, column=sign_col).value = 'ขอแสดงความนับถือ'
+    worksheet.cell(row=row + 3, column=sign_col).value = IFR_EXPORT_SIGNER
+    worksheet.cell(row=row + 4, column=sign_col).value = IFR_EXPORT_SIGNER_TITLE
+    worksheet.cell(row=row + 6, column=1).value = IFR_EXPORT_FOOTNOTE
+
+    worksheet.column_dimensions['A'].width = 5
+    worksheet.column_dimensions['B'].width = 38
+    worksheet.column_dimensions['C'].width = 22
+    worksheet.column_dimensions['D'].width = 12
+    worksheet.column_dimensions['E'].width = 10
+    worksheet.column_dimensions['F'].width = 10
+    for c in range(IFR_EXPORT_FIXED_COLS + 1, rate_per_km_col):
+        worksheet.column_dimensions[get_column_letter(c)].width = 9
+    worksheet.column_dimensions[get_column_letter(rate_per_km_col)].width = 12
+    worksheet.column_dimensions[get_column_letter(note_col)].width = 34
+    worksheet.row_dimensions[IFR_EXPORT_HEAD_ROW].height = 32
+    worksheet.row_dimensions[IFR_EXPORT_SUBHEAD_ROW].height = 32
+    worksheet.freeze_panes = 'A%d' % IFR_EXPORT_FIRST_DATA_ROW
+    worksheet.page_setup.orientation = 'landscape'
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+    stream = BytesIO()
+    workbook.save(stream)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="freight_rate_export_%s_%s.xlsx"' % (
+        active, today.strftime('%Y%m%d'))
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col, note_col, rate,
+                           previous_rates=None, previous_label=None):
+    """ลงอัตราของทีมหนึ่ง (หรือของแถว "ทุกทีม") ลงในแถวเดียว กระจายไปตามคอลัมน์ช่วงน้ำหนัก
+
+    team_rates คือทุก record ของทีมนั้นในเส้นทางนี้ ทีมเดียวอาจมีหลายช่วงน้ำหนัก
+
+    ช่อง "เดิม" ดึงอัตราของฉบับก่อนหน้ามาจาก previous_rates ซึ่งจับคู่ด้วย (ทีม, ช่วงแบก นน.)
+    เว้นว่างได้ 2 กรณี : เป็นเส้นทางที่เพิ่งสร้าง (ยังไม่เคยปรับ)
+    หรือทีม/ช่วงนี้เพิ่งเพิ่มเข้ามาในฉบับนี้ ซึ่งทั้งคู่แปลว่า "ไม่มีอัตราเดิม" จริง ๆ
+    """
+    notes = []
+    per_km = None
+    for team_rate in team_rates:
+        band = team_rate.weight_carried
+        if band is None:
+            continue
+        # เติมลงทุกคอลัมน์ที่ช่วงของ record นี้ครอบคลุม
+        # ช่วงปกติจะครอบแค่คอลัมน์ตัวเอง ส่วนช่วงแบบเหมาจะครอบทุกคอลัมน์ ราคาเลยเท่ากันทั้งแถว
+        targets = [start for column_band, start in band_col.items()
+                   if band.min_weight <= column_band.min_weight
+                   and column_band.max_weight <= band.max_weight]
+        previous_rate = (previous_rates or {}).get((team_rate.team_id, band.id))
+        for start in targets:
+            if previous_rate is not None:
+                worksheet.cell(row=row, column=start).value = float(previous_rate)
+            if team_rate.freight_rate is not None:
+                worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
+            if rate.fuel_freight_adjustment is not None:
+                worksheet.cell(row=row, column=start + 2).value = (
+                    '± %.2f' % rate.fuel_freight_adjustment)
+        # บาท/ตัน/กม. มีคอลัมน์เดียวแต่แต่ละช่วงมีค่าของตัวเอง เอาช่วงแรกที่กรอกไว้
+        # เขียนตายตัวแบบนี้เพื่อให้ผลคงที่ ไม่ใช่แล้วแต่ว่า record ไหนวนมาทีหลัง
+        if per_km is None and team_rate.freight_rate_per_ton_km is not None:
+            per_km = float(team_rate.freight_rate_per_ton_km)
+        if team_rate.note and team_rate.note not in notes:
+            notes.append(team_rate.note)
+    if per_km is not None:
+        worksheet.cell(row=row, column=rate_per_km_col).value = per_km
+    if not notes and rate.note:
+        notes.append(rate.note)
+    if previous_label:
+        notes.append(previous_label)
+    if notes:
+        worksheet.cell(row=row, column=note_col).value = ' | '.join(notes)
+
+
+@login_required(login_url='login')
+def internationalFreightRate(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+    
+
+    context = {
+        'ifr_page': 'active',
+        # ส่ง choices ไปให้ template render dropdown ประเภทการแบกน้ำหนัก
+        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
+        'ifr_obj': None,
+        'ifr_teams_json': [],
+        'ifr_versions': [],
+        'ifr_version_count': 0,
+        'ifr_change_count': 0,
+        'ifr_version_th': '',
+        'ifr_is_in_use': False,
+        # เว้นว่างไว้ = ตั้งแต่เริ่มระบบ ใช้ได้กับทุกเดือนย้อนหลัง
+        'ifr_effective_date_value': '',
+        'ifr_effective_date_hint': 'เว้นว่าง = ใช้ได้ตั้งแต่เดือนแรกสุดที่มีข้อมูล (แนะนำสำหรับเส้นทางที่วิ่งมาก่อนแล้ว)',
+        active: "active",
+    }
+    return render(request, "internationalFreightRate/viewInternationalFreightRateCreate.html", context)
+
+
+@login_required(login_url='login')
+def editInternationalFreightRate(request, id):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    obj = get_object_or_404(InternationalFreightRate, id=id)
+
+    # ส่งทีมเดิมไปให้ JS สร้างแถวรอไว้ตอนเปิดหน้า
+    teams = list(obj.teams.values(
+        'team_id', 'weight_carried', 'freight_rate',
+        'discount_per_ton', 'freight_rate_per_ton_km', 'note',
+    ))
+    
+
+
+    # ราคาน้ำมันเฉลี่ยไม่อยู่ในหน้านี้แล้ว ย้ายไปหน้าของตัวเองที่เก็บเป็นรายวันต่อบริษัท
+    # (ดู viewInternationalFreightRateFuelPrice) ใบค่าขนส่งจึงเหลือแต่ตัวสัญญาล้วน ๆ
+
+    version_rows, in_use = _ifrVersionRows(obj)
+
+    context = {
+        'ifr_page': 'active',
+        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
+        'ifr_obj': obj,
+        'ifr_teams_json': teams,
+        'ifr_version_count': len(version_rows),
+        'ifr_change_count': max(len(version_rows) - 1, 0),
+        'ifr_version_th': _ifrVersionLabel(obj.version),
+        'ifr_is_in_use': in_use is not None and in_use.id == obj.id,
+        # เติมวันของราคาที่กำลังเปิดอยู่มาให้เลย ไม่ปล่อยว่าง
+        # ไม่แก้อะไร = ราคาใหม่เริ่มใช้วันเดียวกับราคาเดิม ซึ่งใช้ได้เพราะกฎคือ "อันล่าสุดชนะ"
+        # ถ้าปล่อยว่างแล้ว default เป็นวันนี้ คนที่แค่แก้ราคาจะเผลอเลื่อนวันเริ่มใช้ไปข้างหน้าโดยไม่รู้ตัว
+        'ifr_effective_date_value': (
+            obj.effective_date.strftime('%Y-%m-%d') if obj.effective_date else ''),
+        'ifr_effective_date_hint': (
+            'ดึงมาจาก%s (%s) — แก้ได้ · ไม่แก้ = ราคาใหม่เริ่มใช้วันเดียวกัน แล้วใช้แทนราคาเดิมทันที'
+            % (_ifrVersionLabel(obj.version), _ifrEffectiveLabel(obj.effective_date))),
+        active: "active",
+    }
+    return render(request, "internationalFreightRate/viewInternationalFreightRateCreate.html", context)
+
+
+# จำนวนเวอร์ชันที่กางให้เห็นทันทีในหน้าประวัติ ที่เหลืออยู่หลังปุ่ม "ดูเวอร์ชันเก่ากว่านี้"
+IFR_VERSIONS_SHOWN = 5
+
+
+def _ifrVersionRows(obj):
+    """ทุกเวอร์ชันของเส้นทางเดียวกัน ใหม่ไปเก่า พร้อมทีมและบทสนทนาการอนุมัติ
+
+    ป้าย "ใช้อยู่" คำนวณจากใบที่กฎกลางเลือกมา ไม่ได้อ่านจากคอลัมน์ status
+    เพราะทุกใบที่ผ่านอนุมัติเป็น approved เหมือนกันหมด ต่างกันแค่วันที่เริ่มใช้
+
+    คืนค่าเป็น (รายการเวอร์ชัน, ใบที่ใช้อยู่)
+    """
+    in_use = next((r for r in InternationalFreightRate.effectiveOn(date.today())
+                   if r.root_id == obj.root_id), None)
+    rows = []
+    for v in (InternationalFreightRate.objects
+              .filter(root_id=obj.root_id)
+              .select_related('user_created', 'origin', 'destination')
+              .prefetch_related('teams__team', 'teams__weight_carried', Prefetch(
+                  'approvals',
+                  queryset=InternationalFreightRateApproval.objects.select_related('user')))
+              .order_by('-version')):
+        rows.append({
+            'obj': v,
+            'is_in_use': in_use is not None and v.id == in_use.id,
+            'is_open': v.id == obj.id,
+            'approvals': list(v.approvals.all()),
+            'effective_th': _ifrEffectiveLabel(v.effective_date),
+            'version_th': _ifrVersionLabel(v.version),
+        })
+    return rows, in_use
+
+
+@login_required(login_url='login')
+def viewInternationalFreightRateVersions(request, id):
+    """หน้าประวัติเวอร์ชันของเส้นทาง แยกออกมาจากหน้าแก้ไข
+
+    แยกหน้าเพราะหน้าแก้ไขยาวมากอยู่แล้ว (ฟอร์ม + ทีม + ราคาน้ำมัน + ประวัติราคา)
+    ประวัติเวอร์ชันเป็นข้อมูลอ่านอย่างเดียว ไม่ได้ใช้ตอนกรอก จึงไม่ควรแทรกอยู่ในฟอร์ม
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    obj = get_object_or_404(InternationalFreightRate, id=id)
+    version_rows, in_use = _ifrVersionRows(obj)
+
+    # แสดง 5 เวอร์ชันล่าสุดเลย ที่เหลือซ่อนไว้หลังปุ่มเดียว จะได้ไม่ยาวเกินไปตอนมีหลายสิบเวอร์ชัน
+    shown = version_rows[:IFR_VERSIONS_SHOWN]
+    more = version_rows[IFR_VERSIONS_SHOWN:]
+
+    map_names = _baseCompanyMapDisplayNameById()
+    context = {
+        'ifr_page': 'active',
+        'ifr_obj': obj,
+        'ifr_versions': shown,
+        'ifr_versions_more': more,
+        'ifr_versions_more_count': len(more),
+        'ifr_version_count': len(version_rows),
+        'ifr_change_count': max(len(version_rows) - 1, 0),
+        'ifr_origin_display': map_names.get(obj.origin_id),
+        'ifr_destination_display': map_names.get(obj.destination_id),
+        'ifr_in_use_id': in_use.id if in_use else None,
+        active: "active",
+    }
+    return render(request, "internationalFreightRate/viewInternationalFreightRateVersions.html", context)
+
+
+################# api dropdown สำหรับฟอร์มสร้างอัตราค่าขนส่งไปนอกประเทศ #################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCarTeamOptions(request):
+    data = BaseCarTeam.objects.all().order_by('car_team_id').values('car_team_id', 'car_team_name')
+    return Response(list(data))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def baseCompanyCustomerMapOptions(request):
+    # ต้นทาง/ปลายทาง เลือกจากรายชื่อที่ผูกไว้ในตาราง map ไม่ใช่ base_customer ทั้งก้อน
+    # ชื่อที่โชว์ใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
+    data = [{'id': r['id'], 'name': r['display']} for r in _baseCompanyMapRows()]
+    data.sort(key=lambda x: x['name'] or '')
+    return Response(data)
+
+################# หน้า export เอกสาร : บันทึกรายเที่ยว (เคส 1 ลงท่าเรือของตัวเอง) #################
+# หน้านี้ทำตารางให้ตรงกับ sheet "บันทึกรายเที่ยว" ของไฟล์ รายเที่ยว_template_v11.xlsx
+# คอลัมน์ A-K เป็นข้อมูลดิบ ส่วน L (ส่วนต่าง) และ M (จ่ายค่าบรรทุก) เป็นค่าที่คิดจาก J/K ตามสูตรในไฟล์
+# ตอน export จะไม่เขียน L/M ลงไฟล์ ปล่อยให้สูตรในไฟล์คิดเอง หน้าเว็บคำนวณให้ดูเฉย ๆ
+
+# ท่าเรือของตัวเอง : bws ที่บริษัทเจ้าของมี biz = 2 (ขายหินส่งออก) ตอนนี้ได้ K1V กับ P1V
+# เก็บเป็นค่าคงที่ไว้เผื่อมีท่าใหม่ จะได้ไม่ต้องไล่แก้หลายที่
+EXPORT_DOC_OWN_PORT_BIZ_ID = 2
+EXPORT_DOC_CARRY_TYPE = 'ส่งให้'
+
+# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 6000 เที่ยว (แถว 6-6005)
+# ตัวเลขนี้ต้องตรงกับพื้นที่จริงในไฟล์ template (ดู xlsx_template.TRIP_REPORT_TEMPLATE)
+# ถ้าตั้งเกินพื้นที่จริง ข้อมูลส่วนเกินจะถูกเขียนลงชีตแต่ไม่มีสูตรไหนมองเห็น ยอดสรุปจะขาดไปโดยไม่มี error
+EXPORT_DOC_FIRST_DATA_ROW = 6
+EXPORT_DOC_MAX_TRIPS = 6000
+
+# ทีมรถร่วมห้ามเว้นว่างเด็ดขาด ต้องใส่ชื่อแทนเสมอ
+# sheet สรุปจ่ายรถร่วม จัดกลุ่มด้วย MATCH ชื่อทีม ถ้าเจอช่องว่าง INDEX จะคืน 0 แล้ว MATCH เป็น #N/A
+# ตัว #N/A ตัวเดียวจะไหลเข้า SMALL() ที่ใช้เรียงลำดับทั้งตาราง ทำให้ทั้ง sheet ว่างหมด
+# ไม่ใช่ว่างแค่แถวที่ทีมหาย และหน้าปะหน้าที่ดึงยอดจาก sheet นั้นก็เป็น 0 ตามไปด้วย
+EXPORT_DOC_NO_TEAM = 'ไม่ระบุทีม'
+
+# sheet รายการมาตรฐาน : dropdown อ้างช่วงแถว 2-302 ชื่อที่เราสร้างเองต้องไปลงทะเบียนในนี้
+EXPORT_DOC_STD_LIST_SHEET = 'รายการมาตรฐาน'
+EXPORT_DOC_STD_TEAM_COL = 6
+EXPORT_DOC_STD_LAST_ROW = 302
+
+# sheet อัตราค่าขนส่ง : ข้อมูลแถว 5-204 (200 ชุดราคา)
+# เขียนแค่ A-J ส่วน K (ส่วนปรับน้ำมัน) L (อัตราสุทธิ) M (คีย์ค้นหา) เป็นสูตรที่มีอยู่แล้ว
+# คีย์ที่ sheet สรุปจ่ายรถร่วมใช้จับคู่คือ M = ทีม|ต้นทาง - ปลายทาง(แบก นน.)|ชนิดหิน
+EXPORT_DOC_RATE_SHEET = 'อัตราค่าขนส่ง'
+EXPORT_DOC_RATE_FIRST_ROW = 5
+EXPORT_DOC_RATE_MAX_ROWS = 200
+
+# ช่วงน้ำหนักของประเภทแบก นน. อ่านจากตาราง carryingweight_rate ไม่ hardcode ในโค้ด
+# เพิ่มช่วงใหม่ = เพิ่มแถวในตาราง ไม่ต้องแก้โค้ดและไม่ต้อง migrate
+# ขอบเขตนับแบบรวมปลายทั้งสองข้าง (min <= นน.ต้นทาง <= max) ตามที่ชื่อช่วงเขียนไว้
+
+# ไฟล์แก้ไขรายเที่ยว : เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ๆ ไม่มีสูตร
+# จะได้แก้แล้วอัปกลับได้โดยไม่เสี่ยงไปทับสูตรของไฟล์รายงาน
+EXPORT_DOC_EDIT_SHEET = 'แก้ไขรายเที่ยว'
+EXPORT_DOC_EDIT_TEAM_LIST_SHEET = 'รายชื่อทีม'
+EXPORT_DOC_EDIT_HEADER_ROW = 2
+EXPORT_DOC_EDIT_FIRST_ROW = 3
+EXPORT_DOC_EDIT_MAX_ROWS = 5000
+EXPORT_DOC_EDIT_ID_COL = 1       # A weight_id ห้ามแก้ ใช้เป็นตัว map ตอนอัปกลับ
+EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม
+EXPORT_DOC_EDIT_ORIGIN_COL = 6   # F นน.ต้นทาง
+EXPORT_DOC_EDIT_DEST_COL = 7     # G นน.ปลายทาง
+EXPORT_DOC_EDIT_COLUMNS = [
+    'weight_id (ห้ามแก้)', 'วันที่', 'เหมืองต้นทาง', 'ท่าปลายทาง', 'ชนิดแร่/หิน',
+    'นน.ต้นทาง (ตัน)', 'นน.ปลายทาง (ตัน) *แก้ได้', 'ทะเบียนรถ', 'เลขที่ชั่ง',
+    'ทีมรถร่วม *แก้ได้',
+]
+
+# ช่องที่แก้แล้วมีผลจริง : (คอลัมน์, ป้ายที่โชว์ตอนพรีวิว, ฟิลด์ใน Weight, ชนิด)
+# ชื่อฟิลด์น้ำหนักในตารางสลับกับความหมาย weight_total = ต้นทาง / origin_weight = ปลายทาง
+#
+# นน.ต้นทาง (คอลัมน์ F) ตั้งใจไม่ให้แก้ เพราะเป็นค่าที่ชั่งจากเหมืองต้นทางซึ่งถือเป็นต้นฉบับ
+# ฝั่งที่ต้องแก้จริงคือปลายทางที่ท่าเรือ ถ้าอยากให้แก้ต้นทางได้อีก ให้เพิ่มบรรทัดกลับเข้ามา
+# แล้วเปลี่ยนสีช่องในตัว export ให้เป็น edit_fill ด้วย
+# ช่องน้ำหนักบอกเป็น "บทบาท" ไม่ใช่ชื่อฟิลด์ เพราะฟิลด์จริงสลับตามเคส
+# (ดู _exportDocumentRows : เคส 1 ตาชั่งอยู่ปลายทาง เคส 2 ตาชั่งอยู่ต้นทาง)
+# ถ้าตรึงชื่อฟิลด์ไว้ จะกลายเป็นเทียบผิดฝั่งแล้วมองว่าทุกแถวถูกแก้
+EXPORT_DOC_EDIT_FIELDS = [
+    (EXPORT_DOC_EDIT_DEST_COL, 'นน.ปลายทาง', 'dest_ton', 'ton'),
+    (EXPORT_DOC_EDIT_TEAM_COL, 'ทีมรถร่วม', 'car_team', 'team'),
+]
+# กันพิมพ์ตกจุดทศนิยม (เช่น 5885 แทน 58.85) รถบรรทุกจริงหนักสุดที่เคยเจอ 76.82 ตัน
+EXPORT_DOC_EDIT_MAX_TON = Decimal('500')
+# เก็บรายการที่จะแก้ไว้ใน session ระหว่างพรีวิวกับกดยืนยัน
+EXPORT_DOC_EDIT_SESSION_KEY = 'export_document_pending_team_changes'
+EXPORT_DOC_EDIT_MAX_CHANGES = 2000
+
+EXPORT_DOC_THAI_MONTHS = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+]
+
+
+def _exportDocumentMonthDate(selected_month):
+    """แปลง 'YYYY-MM' ที่มาจากตัวกรองหน้าเว็บ เป็นวันที่ 1 ของเดือนนั้น"""
+    if not selected_month:
+        return None
+    try:
+        year, month = selected_month.split('-')
+        return datetime(int(year), int(month), 1).date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _exportDocumentRateAsOf(selected_month):
+    """วันที่ที่ใช้ตัดสินว่าเอกสารเดือนนี้ต้องใช้อัตราใบไหน
+
+    เดือนปัจจุบัน   -> วันนี้                = ได้ใบล่าสุดที่อนุมัติแล้ว
+    เดือนย้อนหลัง   -> วันสุดท้ายของเดือนนั้น = ได้ใบที่ใช้อยู่ในเดือนนั้น ไม่ใช่ราคาวันนี้
+
+    ที่ใช้วันสุดท้ายของเดือน ไม่ใช่วันที่ 1 เพราะใบที่เริ่มใช้กลางเดือนก็ต้องนับเข้าเดือนนั้น
+    ถ้าเทียบวันที่ 1 ใบที่อนุมัติวันที่ 23 จะตกไปทั้งที่มีผลไปแล้วในเดือนนั้น
+
+    ครอบไม่ให้เกินวันนี้ เผื่อมีคนเลือกเดือนอนาคต จะได้ไม่หยิบใบที่ยังไม่ถึงวันมีผล
+    """
+    first = _exportDocumentMonthDate(selected_month)
+    if first is None:
+        return date.today()
+    last_day = calendar.monthrange(first.year, first.month)[1]
+    return min(first.replace(day=last_day), date.today())
+
+
+def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
+    """ราคาน้ำมันเฉลี่ยของแต่ละแถวอัตรา = เฉลี่ยราคารายวันของ "วันที่กลุ่มนั้นวิ่ง"
+
+    ราคาน้ำมันเป็นราคาตลาดของวันนั้น ไม่ได้ขึ้นกับว่าวันนั้นขนมากขนน้อย
+    จึงเฉลี่ยแบบ 1 วัน 1 เสียง ไม่ถ่วงด้วยจำนวนตัน
+        I = Σ ราคาน้ำมันของวันที่วิ่ง ÷ จำนวนวันที่วิ่ง
+
+    จัดกลุ่มด้วยคีย์ 5 ช่องเดียวกับแถวใน sheet (ทีม + ต้นทาง + ปลายทาง + แบก นน. + ชนิดหิน)
+    เพราะ 1 แถว = 1 บรรทัดที่จ่ายเงินจริง ทีมที่วิ่งคนละวันกันจะได้ราคาน้ำมันของวันตัวเอง
+    ไม่ถูกเฉลี่ยรวมกับทีมอื่นที่วิ่งคนละช่วง
+
+    ราคาน้ำมันใช้ของบริษัทเจ้าของต้นทาง ตามที่โมเดล InternationalFreightRateFuelPrice กำหนดไว้
+
+    billable_keys = ชุดคีย์ที่มีแถวอัตรารองรับจริง เที่ยวที่ไม่มีอัตราไม่ต้องเอามาคิด
+
+    คืน {คีย์ 5 ช่อง -> (ราคาเฉลี่ย, จำนวนวันที่มีราคา, จำนวนวันที่ขาดราคา)}
+    """
+    map_ids = {r['origin_map_id'] for r in trip_rows if r.get('origin_map_id')}
+    if not map_ids:
+        return {}
+    company_by_map = dict(BaseCompanyMapBaseCustomer.objects
+                          .filter(id__in=map_ids)
+                          .values_list('id', 'base_company_id'))
+
+    # คีย์ -> (id บริษัทเจ้าของต้นทาง, ชุดวันที่วิ่ง)  วันซ้ำนับครั้งเดียว
+    days_by_key = {}
+    for r in trip_rows:
+        origin_id = r.get('origin_map_id')
+        if origin_id is None or r.get('destination_map_id') is None or not r.get('date'):
+            continue
+        key = (r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
+        if billable_keys is not None and key not in billable_keys:
+            continue
+        company_id = company_by_map.get(origin_id)
+        if not company_id:
+            continue
+        if key not in days_by_key:
+            days_by_key[key] = (company_id, set())
+        days_by_key[key][1].add(r['date'])
+    if not days_by_key:
+        return {}
+
+    company_ids = {c for c, _ in days_by_key.values()}
+    all_dates = set()
+    for _, days in days_by_key.values():
+        all_dates |= days
+
+    price_by_key = {
+        (comp_id, day): price
+        for comp_id, day, price in (
+            InternationalFreightRateFuelPrice.objects
+            .filter(base_comp_id__in=list(company_ids), date__in=list(all_dates))
+            .values_list('base_comp_id', 'date', 'average_fuel_price'))
+    }
+
+    result = {}
+    for key, (company_id, days) in days_by_key.items():
+        priced = [d for d in days if (company_id, d) in price_by_key]
+        if not priced:
+            # วันที่วิ่งไม่มีราคาสักวัน ไม่หยิบวันอื่นมาแทน จะกลายเป็นตัวเลขที่อธิบายไม่ได้
+            continue
+        avg = sum(price_by_key[(company_id, d)] for d in priced) / Decimal(len(priced))
+        result[key] = (avg, len(priced), len(days) - len(priced))
+    return result
+
+
+# ---------- ราคาน้ำมันจากบิลเติมน้ำมันจริงในระบบ Express ----------
+# ทุกคอลัมน์ฝั่ง Express เป็น CHAR ค่าที่อ่านมาจึงมี space ต่อท้ายเสมอ
+# ('SLC       ', '92-V-012  ') ลืม strip เมื่อไหร่คือจับคู่ไม่เจอทั้งกระดาน
+def _pgText(value):
+    return (value or '').strip()
+
+
+def _exportDocumentFuelBranchesByPrefix():
+    """คำนำหน้าเลขที่เอกสาร -> สาขาของเราที่ออกบิลนั้น
+
+    Express ไม่ได้แยกสาขาด้วย comcod : ศิลาชัย 3 กับ ทุ่งใหญ่ ไม่มี comcod ของตัวเอง
+    ไปออกบิลใต้ SLC และ CMC ตามลำดับ สิ่งที่แยกสาขาได้จริงคือคำนำหน้าเลขที่เอกสาร
+    ซึ่งเก็บไว้ในคอลัมน์ oi_soc_code ของตาราง map (เช่น 'IL' -> 'IL6907001')
+
+    คำนำหน้าเดียวใช้ได้หลายสาขา (ศิลาชัย กับ 39 ศิลาทอง ใช้ 'IO' ทั้งคู่)
+    เคสนั้นค่อยแยกด้วย comcod ตอนอ่านบิล ดู _exportDocumentFuelBranchOf
+
+    คืน {คำนำหน้า -> [(id บริษัท, โค้ดบริษัท, ชื่อสาขา), ...]}
+    """
+    company_code = dict(BaseCompany.objects.values_list('id', 'code'))
+    branches = defaultdict(list)
+    for row in (BaseCompanyMapBaseCustomer.objects
+                .exclude(oi_soc_code__isnull=True).exclude(oi_soc_code='')
+                .values('name', 'oi_soc_code', 'base_company_id')):
+        company_id = row['base_company_id']
+        if not company_id:
+            # ไม่รู้บริษัท = หาราคาน้ำมันไม่ได้ ใส่เข้าไปก็ได้แต่ None
+            continue
+        branches[row['oi_soc_code'].strip()].append(
+            (company_id, company_code.get(company_id), row['name']))
+    return branches
+
+
+def _exportDocumentFuelBranchOf(branches, docnum, comcod):
+    """หาว่าบิลใบนี้เป็นของสาขาไหน คืน (id บริษัท, ชื่อสาขา) หรือ None
+
+    คำนำหน้าตรงกับสาขาเดียว = จบ ไม่ต้องดู comcod
+    จำเป็นต้องยอมแบบนี้ เพราะ comcod ของ Express ไม่ได้ตรงกับโค้ดบริษัทฝั่งเราเสมอไป
+    (ทุ่งใหญ่ ฝั่งเราเป็น TYM แต่ Express ออกบิลใต้ CMC)
+
+    ตรงหลายสาขา = ตัดสินด้วย comcod ที่ตรงกับโค้ดบริษัท
+    """
+    for length in (2, 3, 1):
+        found = branches.get(docnum[:length])
+        if not found:
+            continue
+        if len(found) == 1:
+            return found[0][0], found[0][2]
+        for company_id, code, name in found:
+            if code == comcod:
+                return company_id, name
+        return None
+    return None
+
+
+def _exportDocumentFuelRefills(selected_month):
+    """รายการเติมน้ำมันรายบรรทัดของทีมรถร่วม ในเดือนที่ระบุ
+
+    ส่วนนี้แยกออกมาเพราะเป็นส่วนเดียวที่ต้องยิงข้ามไป Postgres ของ Express
+    ซึ่งอยู่คนละเครื่องและกินเวลาหลายวินาที จึง cache ไว้สั้น ๆ
+    ส่วนการคูณราคาไม่ cache เพราะราคาอยู่ฐานเรา แก้แล้วต้องเห็นผลทันที
+
+    คืนรายบรรทัด ไม่ยุบเป็นตัวเลขสรุป เพราะมีคนใช้ 3 ที่ที่ต้องการคนละหน้าตา
+      ราคาน้ำมันเฉลี่ย -> ยุบเป็นจำนวนครั้ง ต่อ (ทีม, บริษัท, วัน)
+      sheet oil        -> ยุบเป็น ลิตร/เงิน ต่อ (ทีม, สาขา)
+      sheet express    -> ใช้รายบรรทัดตรง ๆ ให้ตรวจย้อนได้ถึงเลขที่บิล
+
+    คืน ([{date, docnum, comcod, branch, company_id, team, stkdes,
+           litre, unit_price, amount}, ...], stats)
+    """
+    cache_key = 'exportdoc:fuelrefill:%s' % selected_month
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = _exportDocumentFuelRefillsUncached(selected_month)
+    # 5 นาทีพอ : บิลเติมน้ำมันของเดือนที่ปิดไปแล้วแทบไม่ขยับ
+    # ส่วนเดือนปัจจุบันช้าไป 5 นาทีก็ไม่มีใครเดือดร้อน เพราะเอกสารออกทีเดียวตอนสิ้นเดือน
+    cache.set(cache_key, result, 300)
+    return result
+
+
+def _exportDocumentFuelRefillsUncached(selected_month):
+    """ตัวจริงของ _exportDocumentFuelRefills — อย่าเรียกตรง ๆ ให้เรียกตัวที่ cache แทน
+
+    บิลเติมน้ำมันอยู่ในระบบ Express (Postgres) คนละฐานกับระบบชั่ง เชื่อมกันด้วย
+      ทีม  : BaseCarTeam.oil_customer_id  ==  OEINVH.cuscod
+      สาขา : BaseCompanyMapBaseCustomer.oi_soc_code  ==  คำนำหน้า OEINVH.docnum
+
+    คำนำหน้า docnum คัดบิลน้ำมันออกจากบิลอื่นได้ 100% อยู่แล้ว
+    (ตรวจกับข้อมูลจริงแล้ว รายการใต้บิลชุดนี้เป็น OL-* น้ำมันดีเซล ล้วน ไม่มีหิน/อะไหล่ปน)
+    จึงไม่ต้องไปกรองชนิดสินค้าใน OEINVD ซ้ำอีก
+
+    นับ "ครั้ง" จากบรรทัดใน OEINVD แต่ต้องนับ (docnum, seqnum) ที่ไม่ซ้ำ
+    เพราะบิลของสาขาทุ่งใหญ่ถูกบันทึกซ้ำสองบริษัท (comcod 'CMC' กับ '01') เลขที่ วันที่
+    จำนวนลิตร เท่ากันหมด เดือนเดียวมี 325 ใบ ถ้านับตรง ๆ ทุ่งใหญ่จะถูกนับสองเท่า
+
+    ฐานข้อมูล Express อยู่นอกเน็ตเวิร์กเรา ต่อไม่ได้เมื่อไหร่ก็ได้ จึงห้ามปล่อยให้ error
+    หลุดขึ้นไป ไม่งั้นหน้า export พังทั้งหน้าเพราะเรื่องราคาน้ำมัน ผู้เรียกจะถอยไปใช้
+    วิธีเฉลี่ยรายวันจากวันที่วิ่งแทน
+    """
+    stats = {'bills': 0, 'refills': 0, 'teams': 0, 'no_team': 0,
+             'no_branch': 0, 'duplicate': 0, 'no_price': 0, 'error': None}
+
+    first = _exportDocumentMonthDate(selected_month)
+    if first is None:
+        return {}, stats
+    last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+
+    branches = _exportDocumentFuelBranchesByPrefix()
+    if not branches:
+        stats['error'] = 'ยังไม่ได้กรอกโค้ดขายเชื่อน้ำมัน (oi_soc_code) ให้สาขาไหนเลย'
+        return {}, stats
+
+    team_name = {
+        row['oil_customer_id'].strip(): row['car_team_name']
+        for row in (BaseCarTeam.objects
+                    .exclude(oil_customer_id__isnull=True).exclude(oil_customer_id='')
+                    .values('oil_customer_id', 'car_team_name'))}
+
+    prefix_filter = Q()
+    for prefix in branches:
+        prefix_filter |= Q(docnum__startswith=prefix)
+
+    try:
+        headers = list(ExOEINVH.objects.using('pg_db')
+                       .filter(prefix_filter, docdate__gte=first, docdate__lte=last)
+                       .values_list('docnum', 'docdate', 'cuscod', 'comcod'))
+    except Exception as exc:
+        stats['error'] = 'ต่อฐานข้อมูล Express ไม่ได้ : %s' % exc
+        return {}, stats
+
+    # เลขที่เอกสารดิบ (มี space ต่อท้าย) เอาไว้ยิง query ต่อ ห้าม strip ก่อนถึงตอนนั้น
+    # ส่วนคีย์ใน dict ใช้ตัวที่ strip แล้ว จะได้เทียบกับที่อ่านจาก OEINVD ได้ตรง
+    bill_of = {}
+    raw_docnums = []
+    for docnum, docdate, cuscod, comcod in headers:
+        stats['bills'] += 1
+        key = _pgText(docnum)
+        team = team_name.get(_pgText(cuscod))
+        if not team:
+            # Express ขายน้ำมันให้ลูกค้าทั่วไปด้วย ไม่ใช่แค่ทีมรถร่วม
+            stats['no_team'] += 1
+            continue
+        branch = _exportDocumentFuelBranchOf(branches, key, _pgText(comcod))
+        if branch is None:
+            stats['no_branch'] += 1
+            continue
+        if key in bill_of:
+            stats['duplicate'] += 1
+            continue
+        bill_of[key] = (team, branch[0], branch[1], docdate, _pgText(comcod))
+        raw_docnums.append(docnum)
+
+    if not bill_of:
+        return [], stats
+
+    lines = []
+    seen = set()
+    try:
+        # ยิงทีละก้อน เผื่อบิลเยอะจน IN (...) ยาวเกินจนฐานข้อมูลไม่รับ
+        for start in range(0, len(raw_docnums), 900):
+            chunk = raw_docnums[start:start + 900]
+            for row in (ExOEINVD.objects.using('pg_db')
+                        .filter(docnum__in=chunk)
+                        .values('docnum', 'seqnum', 'stkdes',
+                                'ordqty', 'unitpr', 'trnval')):
+                key = _pgText(row['docnum'])
+                if (key, row['seqnum']) in seen:
+                    stats['duplicate'] += 1
+                    continue
+                seen.add((key, row['seqnum']))
+                bill = bill_of.get(key)
+                if bill is None:
+                    continue
+                team, company_id, branch_name, docdate, comcod = bill
+                lines.append({
+                    'date': docdate,
+                    'docnum': key,
+                    'comcod': comcod,
+                    'branch': branch_name,
+                    'company_id': company_id,
+                    'team': team,
+                    'stkdes': _pgText(row['stkdes']),
+                    'litre': row['ordqty'] or Decimal(0),
+                    'unit_price': row['unitpr'] or Decimal(0),
+                    'amount': row['trnval'] or Decimal(0),
+                })
+    except Exception as exc:
+        stats['error'] = 'อ่านรายการเติมน้ำมันจาก Express ไม่ได้ : %s' % exc
+        return [], stats
+
+    # เรียงให้คงที่ ไม่งั้น sheet express สลับแถวไปมาทุกครั้งที่ export
+    lines.sort(key=lambda x: (x['team'], x['date'], x['docnum']))
+    return lines, stats
+
+
+def _exportDocumentFuelPriceByTeam(selected_month):
+    """ราคาน้ำมันเฉลี่ยของแต่ละทีมรถร่วม ถ่วงด้วย "จำนวนครั้งที่เติมน้ำมันจริง"
+
+        avg(ทีม) = Σ ( ราคาน้ำมัน(สาขาที่เติม, วันที่เติม) × จำนวนครั้ง ) ÷ Σ จำนวนครั้ง
+
+    ทีมเดียวกันได้ราคาเดียวกันทุกแถว ไม่ว่าวิ่งเส้นทางไหน เพราะน้ำมันที่เขาเติม
+    คือถังเดียวกัน ไม่ได้แยกตามเส้นทาง
+
+    ราคามาจาก InternationalFreightRateFuelPrice ของบริษัทเจ้าของสาขาที่ไปเติม
+    ไม่ใช่บริษัทเจ้าของต้นทางที่วิ่ง เพราะเงินค่าน้ำมันจ่ายที่ปั๊มที่เติม
+
+    คืน ({ชื่อทีม -> (ราคาเฉลี่ย, จำนวนครั้งที่มีราคา, จำนวนครั้งที่ขาดราคา)}, stats)
+    """
+    lines, cached_stats = _exportDocumentFuelRefills(selected_month)
+    # ก๊อปก่อนแก้เสมอ : dict ตัวนั้นอยู่ใน cache ถ้าบวกทับลงไปตรง ๆ
+    # ตัวเลขจะสะสมทบขึ้นเรื่อย ๆ ทุกครั้งที่เปิดหน้า
+    stats = dict(cached_stats)
+    stats['refills'] = stats['no_price'] = stats['teams'] = 0
+    if not lines:
+        return {}, stats
+
+    # ยุบรายบรรทัดเป็นจำนวนครั้ง : 1 บรรทัดใน OEINVD = เติม 1 ครั้ง
+    refills = defaultdict(int)
+    for ln in lines:
+        refills[(ln['team'], ln['company_id'], ln['date'])] += 1
+
+    first = _exportDocumentMonthDate(selected_month)
+    last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+    price_of = {
+        (comp_id, day): price
+        for comp_id, day, price in (
+            InternationalFreightRateFuelPrice.objects
+            .filter(base_comp_id__in={c for _, c, _ in refills},
+                    date__gte=first, date__lte=last)
+            .values_list('base_comp_id', 'date', 'average_fuel_price'))}
+
+    total = defaultdict(Decimal)     # ทีม -> Σ ราคา × ครั้ง
+    counted = defaultdict(int)       # ทีม -> Σ ครั้งที่มีราคา
+    missing = defaultdict(int)       # ทีม -> Σ ครั้งที่ขาดราคา
+    for (team, company_id, day), times in refills.items():
+        stats['refills'] += times
+        price = price_of.get((company_id, day))
+        if price is None:
+            # วันนั้นยังไม่ได้กรอกราคาของบริษัทนั้น ตัดครั้งนั้นทิ้งจากการเฉลี่ย
+            # ไม่เดาราคาแทน แต่รายงานจำนวนไว้ให้เห็นว่าเฉลี่ยจากไม่ครบ
+            missing[team] += times
+            stats['no_price'] += times
+            continue
+        total[team] += price * times
+        counted[team] += times
+
+    result = {}
+    for team, times in counted.items():
+        if times:
+            result[team] = (total[team] / times, times, missing.get(team, 0))
+    stats['teams'] = len(result)
+    return result, stats
+
+
+def _ifrFuelRangeAverage(start, end):
+    """ค่าเฉลี่ยของราคาที่กรอกไว้ในช่วงวันที่กำหนด ใช้แสดงบนหน้าราคาน้ำมัน
+
+    หน้าจอเลือกช่วงวันได้เอง เพื่อให้ลองดูได้ว่า "ถ้าวิ่งวันที่ 5-10 ราคาเฉลี่ยจะเป็นเท่าไร"
+    ซึ่งเป็นกติกาเดียวกับที่ export ใช้ ต่างกันแค่ export รู้วันที่วิ่งจริงจากข้อมูลการชั่ง
+    ส่วนหน้านี้ให้คนเลือกช่วงเอง (ดู _exportDocumentFuelPriceByGroup)
+
+    คืน {id บริษัท -> (ราคาเฉลี่ย, จำนวนวันที่กรอกไว้ในช่วงนั้น)}
+    """
+    if start is None or end is None:
+        return {}
+    rows = (InternationalFreightRateFuelPrice.objects
+            .filter(date__gte=start, date__lte=end)
+            .values('base_comp_id')
+            .annotate(avg_price=Avg('average_fuel_price'), day_count=Count('id')))
+    return {r['base_comp_id']: (r['avg_price'], r['day_count']) for r in rows}
+
+
+def _exportDocumentRatePlan(trip_rows, selected_month=None):
+    """เตรียมข้อมูลสำหรับ sheet อัตราค่าขนส่ง จากตาราง international_freight_rate
+
+    ใช้อัตราของ "เดือนที่ export" ไม่ใช่อัตราล่าสุด — 1 เส้นทางได้ 1 ใบเท่านั้น
+    export เดือน พ.ค. จึงได้ราคาที่ใช้ตอน พ.ค. ถึงแม้วันนี้จะขึ้นราคาไปแล้ว
+    ราคาน้ำมันก็หยิบจากเดือนเดียวกันนี้ จะได้ไม่มีทางหลุดไปคนละเดือนกับอัตรา
+
+    ปัญหาที่ต้องแก้ตอน map : ตารางในระบบเก็บอัตราด้วยคีย์ 4 ช่อง
+    (ต้นทาง + ปลายทาง + ทีม + ประเภทแบก นน.) แต่ sheet ใช้คีย์ 5 ช่อง คือมี "ชนิดหิน" เพิ่มมาด้วย
+    เลยต้องขยายแถว 1 อัตรา ออกเป็นหลายแถวตามชนิดหินที่วิ่งจริงในเส้นทางนั้น
+    ไม่งั้นคีย์ M จะไม่ตรงกับคีย์ฝั่งรายเที่ยว แล้วอัตราขึ้น 0 ทุกแถว
+
+    team = NULL ในตารางแปลว่า "ทุกทีม" ขยายเป็นทุกทีมที่วิ่งเส้นทางนั้นในรอบที่ export
+
+    การจับคู่ใช้ pk ของแถว base_company_map_base_customer ตรง ๆ ทั้งต้นทางและปลายทาง
+    เพราะ rate.origin / rate.destination เป็น FK ชี้มาที่แถวนั้นอยู่แล้ว
+    และฝั่งรายเที่ยวก็สลับข้างมาให้เรียบร้อยแล้วตามเคส (เคส 1 ท่าเรืออยู่ปลายทาง เคส 2 อยู่ต้นทาง)
+    ห้ามจับด้วยชื่อ เพราะชื่อในตาราง map ไม่ได้ unique
+    ส่วนชื่อที่เขียนลง sheet ดึงจากแถวรายเที่ยวโดยตรง จึงตรงกับ sheet บันทึกรายเที่ยวเสมอ
+    (ไฟล์ excel ผูกกันด้วยข้อความอย่างเดียว เลี่ยงไม่ได้ แต่บังคับให้สองฝั่งใช้ข้อความเดียวกันได้)
+
+    คืน (rate_rows, weight_carried_by_key, stats)
+      weight_carried_by_key ใช้ย้อนไปเติมคอลัมน์ E ของ sheet บันทึกรายเที่ยว
+    """
+    # เก็บว่าเส้นทางไหนมีทีมอะไรวิ่ง และมีหินอะไรบ้าง ใช้ขยายแถว — คีย์ทั้งหมดเป็น id
+    teams_by_route = defaultdict(set)
+    stones_by_route = defaultdict(set)
+    # id -> ข้อความที่ sheet บันทึกรายเที่ยวใช้จริง เอาไว้เขียนลง sheet อัตราให้ตรงกันเป๊ะ
+    origin_label = {}
+    dest_label = {}
+    team_label = {}
+    for r in trip_rows:
+        route = (r['origin_map_id'], r['destination_map_id'])
+        origin_label[r['origin_map_id']] = r['origin']
+        dest_label[r['destination_map_id']] = r['destination']
+        team_label[r['team_id']] = r['team']
+        teams_by_route[route].add(r['team_id'])
+        if r['stone']:
+            stones_by_route[route].add(r['stone'])
+
+    rate_as_of = _exportDocumentRateAsOf(selected_month)
+    rates = InternationalFreightRate.effectiveOn(
+        rate_as_of,
+        InternationalFreightRate.objects
+        .select_related('origin', 'destination')
+        .prefetch_related('teams__team', 'teams__weight_carried'))
+
+    rate_rows = []
+    # (map id ต้นทาง, map id ปลายทาง, id ทีม) -> ชุดประเภทแบก นน. ที่เจอ
+    weight_carried_by_key = defaultdict(set)
+    # เส้นทาง -> (ใบอัตรา, ชื่อที่เอาไว้แสดง) เก็บไว้ใช้ตอนเติมราคาน้ำมันในรอบที่ 2
+    rate_by_route = {}
+    stats = {'rate_in_db': 0, 'route_matched': 0, 'route_unmatched': 0, 'truncated': 0,
+             # แถวอัตราที่มีเที่ยวรองรับจริง กับแถวที่เตรียมไว้เฉย ๆ เผื่อบัญชีแก้ในไฟล์
+             # ดู _exportDocumentSortRateRowsByUsage
+             'rate_rows_used': 0, 'rate_rows_empty': 0, 'truncated_used': 0,
+             # ใช้บอกในไฟล์กับหน้าเว็บว่าอัตราชุดนี้เป็นข้อมูล ณ วันไหน
+             'rate_as_of': rate_as_of,
+             'rate_as_of_th': _thaiDate(rate_as_of),
+             'rate_versions': [],
+             # เส้นทางที่หาราคาน้ำมันไม่ได้ แยกเป็น 2 สาเหตุ เพราะแก้คนละวิธี
+             #   no_company = ต้นทางยังไม่ได้ผูกบริษัทในตาราง map ต้องไปแก้ที่ข้อมูลหลัก
+             #   no_price   = ผูกบริษัทแล้วแต่เดือนนั้นยังไม่ได้กรอกราคา ต้องไปกรอกในหน้าราคาน้ำมัน
+             'fuel_no_company': [],
+             'fuel_no_price': [],
+             # เส้นทางที่มีราคาแต่ไม่ครบทุกวันที่วิ่ง : ยังคิดเงินได้ แต่ค่าเฉลี่ยมาจากวันที่มีราคาเท่านั้น
+             'fuel_partial': [],
+             'fuel_days': {},
+             # ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันใน Express จึงต้องถอยไปเฉลี่ยจากวันที่วิ่ง
+             'fuel_no_bill': [],
+             # สรุปการอ่านบิลจาก Express (ดู _exportDocumentFuelPriceByTeam)
+             'fuel_bill': {}}
+
+    for rate in rates:
+        stats['rate_in_db'] += 1
+        origin_id = rate.origin_id
+        dest_id = rate.destination_id
+        route = (origin_id, dest_id)
+        stones = stones_by_route.get(route)
+        if origin_id is None or dest_id is None or not stones:
+            # อัตราของเส้นทางที่ไม่มีเที่ยววิ่งในรอบนี้ ไม่ต้องใส่ลง sheet ให้เปลืองแถว
+            stats['route_unmatched'] += 1
+            continue
+        stats['route_matched'] += 1
+
+        # ราคาน้ำมันเติมทีหลังในรอบที่ 2 (ใต้ลูปนี้) เพราะต้องรู้ก่อนว่าเที่ยวไหน
+        # จะตกเข้าคีย์ไหนจริง ๆ ถึงจะถ่วงน้ำหนักด้วยตันได้ถูก
+        # และการรู้ว่าเที่ยวไหนเข้าคีย์ไหน ต้องรอให้กำหนดช่วงแบก นน. เสร็จก่อน
+        # ซึ่งช่วงแบก นน. ก็มาจากลูปนี้อีกที (weight_carried_by_key)
+        rate_by_route[route] = (rate, '%s - %s' % (origin_label[origin_id],
+                                                   dest_label[dest_id]))
+
+        for team_rate in rate.teams.all():
+            if team_rate.weight_carried is None:
+                # แถวที่ยังไม่ได้เลือกประเภทแบก นน. เอาไปทำอะไรต่อไม่ได้ คีย์ของ sheet ต้องมีช่องนี้
+                continue
+            if team_rate.team_id:
+                team_ids = [team_rate.team_id]
+            else:
+                # ทุกทีม : ขยายเป็นทุกทีมที่วิ่งเส้นทางนี้ รวมแถวที่ไม่มีทีม (team_id = None) ด้วย
+                team_ids = sorted(teams_by_route.get(route, set()), key=lambda x: (x is None, x))
+
+            for team_id in team_ids:
+                if team_id not in team_label:
+                    continue
+                weight_carried_by_key[(origin_id, dest_id, team_id)].add(team_rate.weight_carried)
+                for stone in sorted(stones):
+                    version_note = '%s - %s : %s (%s)' % (
+                        origin_label[origin_id], dest_label[dest_id],
+                        _ifrVersionLabel(rate.version),
+                        _ifrEffectiveLabel(rate.effective_date))
+                    if version_note not in stats['rate_versions']:
+                        stats['rate_versions'].append(version_note)
+                    rate_rows.append({
+                        'team': team_label[team_id],                # A
+                        'origin': origin_label[origin_id],          # B
+                        'destination': dest_label[dest_id],         # C
+                        'weight_carried': team_rate.weight_carried.name,  # D
+                        'stone': stone,                             # E
+                        'distance': rate.distance,                  # F
+                        'freight_rate': team_rate.freight_rate,     # G
+                        'base_fuel_price': rate.base_fuel_price,    # H
+                        # I กับ N เติมในรอบที่ 2
+                        'average_fuel_price': None,                 # I
+                        'fuel_freight_adjustment': rate.fuel_freight_adjustment,  # J
+                        # หมายเหตุเขียนลงคอลัมน์ N (ช่องว่างที่ไม่มีสูตรไหนอ้างถึง)
+                        # ห้ามเขียนลง I เพราะสูตร K = (I-H)*J จะกลายเป็น #VALUE! ทั้งคอลัมน์
+                        'fuel_note': None,                          # N
+                        'route': route,
+                    })
+
+    rate_rows = _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows,
+                                                   weight_carried_by_key, stats)
+
+    _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
+                                 rate_by_route, stats, selected_month)
+
+    if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
+        stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
+        # เรียงมาแล้วให้แถวที่มีเที่ยวจริงอยู่ต้น ๆ ส่วนที่เกินจึงควรเป็นแถวเปล่าล้วน
+        # ถ้าเลขนี้ยังมากกว่า 0 แปลว่าแถวที่ต้องใช้จริงหลุดไป = เที่ยวนั้นจะได้เงิน 0
+        # ต้องเตือนคนละแบบกับการตัดแถวเปล่า จึงแยกตัวเลขไว้
+        stats['truncated_used'] = max(0, stats['rate_rows_used'] - EXPORT_DOC_RATE_MAX_ROWS)
+        rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
+
+    return rate_rows, weight_carried_by_key, stats
+
+
+def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
+    """เส้นทางที่ยังไม่มีอัตราค่าขนส่งเลย จัดกลุ่มเป็น "ปลายทาง แล้วแจกแจงต้นทาง"
+
+    จัดหัวข้อด้วยปลายทาง เพราะเป็นมุมที่ฝ่ายบัญชีใช้คุยกัน (ท่าไหนยังไม่ได้ตั้งราคา)
+    แต่ต้องบอกต้นทางกำกับด้วยเสมอ เพราะราคาตั้งเป็น "คู่ ต้นทาง-ปลายทาง"
+    ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งราคาแล้วและยังไม่ได้ตั้ง
+    ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+
+    นับเฉพาะเที่ยวที่ "ไม่มีสัญญาเลย" (wc_no_contract) ไม่รวมเที่ยวที่มีสัญญาแล้วแต่
+    น้ำหนักไม่เข้าช่วง (wc_out_of_range) เพราะสองอย่างนี้แก้คนละที่
+    อันแรกต้องเพิ่มเส้นทางใหม่ อันหลังแค่เพิ่มช่วงน้ำหนักในเส้นทางที่มีอยู่แล้ว
+    หน้าเว็บมีกล่องแยกให้อยู่แล้ว เอามาปนกันจะทำให้ไปแก้ผิดที่
+
+    คืน [{'destination': ..., 'trips': n, 'origins': [{'name':..., 'trips': n}, ...]}, ...]
+    เรียงจากปลายทางที่มีเที่ยวค้างมากไปน้อย
+    """
+    pending = defaultdict(lambda: defaultdict(int))
+    for row in trip_rows:
+        if weight_carried_by_key.get(
+                (row['origin_map_id'], row['destination_map_id'], row['team_id'])):
+            continue
+        pending[row['destination']][row['origin']] += 1
+
+    result = []
+    for destination, origins in pending.items():
+        result.append({
+            'destination': destination,
+            'trips': sum(origins.values()),
+            'origins': [{'name': name, 'trips': n}
+                        for name, n in sorted(origins.items(), key=lambda x: -x[1])],
+        })
+    result.sort(key=lambda x: -x['trips'])
+    return result
+
+
+def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_key, stats):
+    """เรียงแถวอัตราให้แถวที่มีเที่ยววิ่งจริงขึ้นก่อน แถวที่ยังไม่มีเที่ยวไปต่อท้าย
+
+    1 อัตราถูกขยายออกเป็นหลายแถวตาม ทีม x ช่วงแบก นน. x ชนิดหิน ซึ่งได้คู่ผสมเยอะมาก
+    แต่คู่ผสมส่วนใหญ่ไม่เคยเกิดขึ้นจริง (ทีมนั้นไม่เคยขนหินชนิดนั้นในช่วงน้ำหนักนั้น)
+    ของจริงเดือน ก.ค. 2026 สร้างออกมา 427 แถว มีเที่ยวรองรับแค่ 178 แถว
+
+    แถวเปล่าเองไม่ได้ทำอะไรผิด สูตรในไฟล์หาอัตราด้วยคีย์ของ "เที่ยว" เสมอ
+    แถวที่ไม่มีเที่ยวตรงกับมันก็แค่ไม่มีใครเรียกใช้ ยอดเงินไม่เพี้ยน
+    และยังมีประโยชน์ด้วย : ถ้าบัญชีแก้น้ำหนักหรือชนิดหินในไฟล์จนเที่ยวย้ายคีย์
+    แถวเปล่าที่เตรียมไว้จะรองรับให้พอดี ไม่ต้องกลับมา export ใหม่
+
+    ปัญหาอยู่ที่ sheet รับได้แค่ EXPORT_DOC_RATE_MAX_ROWS แถว และตัวตัดส่วนเกิน
+    ตัดตามลำดับที่สร้าง ไม่ได้ดูว่าแถวไหนจำเป็น จึงเผลอตัดแถวที่มีเที่ยวจริงทิ้ง
+    แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์โดยไม่มีใครสังเกต
+
+    เรียงใหม่แล้วส่วนที่ถูกตัดจะเป็นแถวเปล่าเสมอ ได้ทั้งสองอย่าง
+    แถวที่ต้องใช้ไม่มีทางหาย และแถวเปล่ายังอยู่เท่าที่ที่ว่างเหลือ
+
+    เรียงแบบ stable ลำดับเดิมภายในแต่ละกลุ่มจึงไม่เปลี่ยน sheet ยังอ่านไล่ได้เหมือนเดิม
+    ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้ว่าเที่ยวไหนตกคีย์ไหน
+    """
+    _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
+
+    used = {(r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
+            for r in trip_rows}
+
+    def hasTrip(row):
+        return (row['team'], row['origin'], row['destination'],
+                row['weight_carried'], row['stone']) in used
+
+    for row in rate_rows:
+        # ติดธงไว้ให้ขั้นตอนถัดไปแยกออกว่าแถวไหน "ไม่มีเที่ยว" กับแถวไหน "มีเที่ยวแต่ขาดราคา"
+        # สองอย่างนี้ต้องรายงานคนละแบบ ไม่งั้นหน้าเว็บจะฟ้องผิดสาเหตุ
+        row['has_trip'] = hasTrip(row)
+
+    ordered = ([row for row in rate_rows if row['has_trip']]
+               + [row for row in rate_rows if not row['has_trip']])
+    stats['rate_rows_used'] = sum(1 for row in rate_rows if row['has_trip'])
+    stats['rate_rows_empty'] = len(rate_rows) - stats['rate_rows_used']
+    return ordered
+
+
+def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
+                                 rate_by_route, stats, selected_month=None):
+    """เติมช่อง I (ราคาน้ำมัน) และ N (หมายเหตุ) ให้แถวอัตรา
+
+    ราคาน้ำมันของทีมหนึ่ง = ถ่วงน้ำหนักจากบิลเติมน้ำมันจริงในระบบ Express
+        Σ ( ราคาน้ำมัน(สาขาที่เติม, วันที่เติม) × จำนวนครั้ง ) ÷ Σ จำนวนครั้ง
+    ทีมเดียวกันจึงได้ราคาเดียวกันทุกแถว ไม่ว่าจะวิ่งเส้นทางไหน เพราะน้ำมันที่เขาเติม
+    คือถังเดียวกัน ไม่ได้แยกตามเส้นทาง
+
+    ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันเลย (หรือ Express ต่อไม่ติด) ถอยไปใช้วิธีเดิม
+    คือเฉลี่ยราคารายวันของวันที่กลุ่มนั้นวิ่ง 1 วัน 1 เสียง เพื่อไม่ให้แถวนั้นได้ 0
+    ซึ่งจะกลายเป็นจ่ายขาดโดยไม่มีใครสังเกต คอลัมน์ N บอกว่าแถวไหนใช้วิธีไหน
+
+    ต้องทำหลังจากมีแถวอัตราครบแล้ว เพราะต้องรู้ว่าเที่ยวไหนมีแถวอัตรารองรับบ้าง
+    เที่ยวที่ไม่มีแถวอัตรารองรับ (ทีมไม่มีสัญญา / น้ำหนักไม่เข้าช่วงไหน) ในไฟล์ได้เงิน 0 อยู่แล้ว
+    จึงไม่ต้องเอาวันของมันมาคิดราคาเฉลี่ย
+
+    ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้คีย์เต็มของแต่ละเที่ยว
+    (ฝั่งผู้เรียกจะสั่ง _exportDocumentAssignWeightCarried อีกรอบ ซึ่งได้ผลเดิม ไม่มีผลข้างเคียง)
+    """
+    _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
+
+    # คีย์ 5 ช่องแบบเดียวกับที่ sheet ใช้จับคู่ (ทีม + ต้นทาง + ปลายทาง + แบก นน. + ชนิดหิน)
+    billable = {(r['team'], r['origin'], r['destination'],
+                 r['weight_carried'], r['stone']) for r in rate_rows}
+
+    fuel_by_team, stats['fuel_bill'] = _exportDocumentFuelPriceByTeam(selected_month)
+    fuel_by_group = _exportDocumentFuelPriceByGroup(trip_rows, billable)
+
+    for row in rate_rows:
+        route = row.pop('route')
+        rate, route_label = rate_by_route[route]
+        company_id = rate.origin.base_company_id
+
+        # บิลน้ำมันจริงมาก่อนเสมอ เพราะเป็นราคาที่ทีมนั้นจ่ายไปจริง ๆ
+        fuel = fuel_by_team.get(row['team'])
+        from_bill = fuel is not None
+        if not from_bill:
+            group_key = (row['team'], row['origin'], row['destination'],
+                         row['weight_carried'], row['stone'])
+            fuel = fuel_by_group.get(group_key) if company_id else None
+            # นับเฉพาะแถวที่มีเที่ยวจริง แถวเผื่อไว้ไม่ได้จ่ายเงินอยู่แล้ว
+            # เอามารวมจะทำให้รายชื่อทีมในคำเตือนยาวเกินจริง
+            if row.get('has_trip') and row['team'] not in stats['fuel_no_bill']:
+                stats['fuel_no_bill'].append(row['team'])
+
+        if fuel is None:
+            if not row.get('has_trip'):
+                # แถวที่เตรียมไว้เผื่อบัญชีแก้ในไฟล์ ยังไม่มีเที่ยววิ่งจริงในกลุ่มนี้
+                # จึงไม่มีวันไหนให้เอาไปหาราคา ไม่ใช่ความผิดพลาด ห้ามเอาไปรวมในคำเตือน
+                row['fuel_note'] = 'ยังไม่มีเที่ยววิ่งในกลุ่มนี้ (แถวเผื่อไว้สำหรับแก้ในไฟล์)'
+                continue
+            bucket = 'fuel_no_company' if not company_id else 'fuel_no_price'
+            if route_label not in stats[bucket]:
+                stats[bucket].append(route_label)
+            row['fuel_note'] = ('ไม่มีราคาน้ำมัน (ต้นทางยังไม่ได้ผูกบริษัท)' if not company_id
+                                else 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)')
+            continue
+
+        price, counted, missing = fuel
+        # ปัดเหลือ 4 ตำแหน่ง : หารแล้วได้ทศนิยมยาวเหยียด อ่านไม่รู้เรื่อง
+        # และไม่มีประโยชน์ เพราะสูตร K ในไฟล์ปัดเป็น 2 ตำแหน่งอยู่แล้ว
+        row['average_fuel_price'] = price.quantize(Decimal('0.0001'))
+
+        if from_bill:
+            row['fuel_note'] = 'ถ่วงจากบิลเติมน้ำมัน %s ครั้ง' % counted
+            if missing:
+                row['fuel_note'] += ' (อีก %s ครั้งไม่มีราคาของวันนั้น)' % missing
+                note = '%s : ถ่วงจาก %s ครั้ง ขาดราคาอีก %s ครั้ง' % (
+                    row['team'], counted, missing)
+                if note not in stats['fuel_partial']:
+                    stats['fuel_partial'].append(note)
+        else:
+            stats['fuel_days'][route_label] = counted
+            row['fuel_note'] = 'ไม่มีบิลเติมน้ำมัน จึงเฉลี่ยจาก %s วันที่วิ่ง' % counted
+            if missing:
+                note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
+                    route_label, counted, missing)
+                if note not in stats['fuel_partial']:
+                    stats['fuel_partial'].append(note)
+                row['fuel_note'] += ' (ขาดราคา %s วัน)' % missing
+
+
+def _exportDocumentPickWeightCarried(options, pay_weight):
+    """เลือกประเภทแบก นน. ให้เที่ยวหนึ่ง จากช่วงที่สัญญาเส้นทาง+ทีมนั้นมี
+
+    options เป็น CarryingweightRate ที่ผูกอยู่กับสัญญานั้น
+    เทียบด้วย "นน.จ่ายค่าบรรทุก" (คอลัมน์ M) ซึ่งเป็นน้ำหนักที่ใช้จ่ายเงินจริง
+    ไม่ใช่ นน.ต้นทาง เพราะช่วงในสัญญาหมายถึงช่วงที่ใช้คิดเงิน
+    M = ค่าที่น้อยกว่าระหว่างต้นทางกับปลายทาง ถ้าชั่งมาข้างเดียวก็ใช้ข้างที่มี
+
+    ปกติช่วงในตารางต่อกันพอดีไม่ทับกัน แต่กันไว้เผื่อมีคนเพิ่มช่วงที่ทับกันทีหลัง
+    ถ้าเข้าได้หลายช่วงให้เลือกช่วงที่แคบที่สุด ผลลัพธ์จะได้คงที่ ไม่แล้วแต่ลำดับ
+    คืนชื่อช่วง (ข้อความที่ต้องเขียนลง excel) หรือ None ถ้าตัดสินไม่ได้
+    """
+    if pay_weight is None:
+        return None
+
+    matched = [o for o in options
+               if o.min_weight <= pay_weight <= o.max_weight]
+    if not matched:
+        return None
+    return min(matched, key=lambda o: o.max_weight - o.min_weight).name
+
+
+def _exportDocumentTonAttr(role, case):
+    """บทบาทน้ำหนัก (ต้นทาง/ปลายทาง) -> ชื่อฟิลด์จริงใน Weight ตามเคส
+
+    ต้องตรงกับที่ _exportDocumentRows ใช้เป๊ะ ๆ ไม่งั้นไฟล์โชว์ค่าหนึ่งแต่ไปเทียบกับอีกค่าหนึ่ง
+      เคส 1 ชั่งที่ท่าเรือ : ต้นทาง = origin_weight | ปลายทาง = weight_total
+      เคส 2 ชั่งที่เหมือง  : ต้นทาง = weight_total  | ปลายทาง = origin_weight
+    """
+    own_port = case == EXPORT_DOC_CASE_OWN_PORT
+    if role == 'origin_ton':
+        return 'origin_weight' if own_port else 'weight_total'
+    return 'weight_total' if own_port else 'origin_weight'
+
+
+def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
+    """เติมคอลัมน์ E (แบก นน.) โดยเทียบ นน.จ่ายค่าบรรทุก (คอลัมน์ M) กับช่วงของสัญญาเที่ยวนั้น
+
+    ช่วงที่เอามาเทียบไม่ใช่ทุกช่วงในตาราง แต่เป็นเฉพาะช่วงที่ "ทีมนี้ ในเส้นทางนี้" มีจริง
+    เพราะแต่ละทีมทำสัญญาไว้ไม่เท่ากัน บางทีม 2 ช่วง บางทีม 3 ช่วง
+    น้ำหนักเท่ากันแต่คนละทีม จึงตกคนละช่วงได้ ซึ่งเป็นเรื่องปกติ
+
+    weight_carried_by_key มาจาก _exportDocumentRatePlan คีย์เป็น
+    (map id ต้นทาง, map id ปลายทาง, id ทีม) และขยายแถว team = NULL (ทุกทีม) ให้แล้ว
+
+    คืน (filled, no_contract, out_of_range)
+      no_contract   = ทีมนี้ไม่มีสัญญาในเส้นทางนี้ ไม่มีช่วงให้เลือก จึงเว้นว่าง
+      out_of_range  = มีสัญญา แต่น้ำหนักไม่ตกช่วงไหนเลย (หรือไม่มีน้ำหนัก) จึงเว้นว่าง
+    """
+    filled = 0
+    no_contract = 0
+    out_of_range = 0
+    for r in trip_rows:
+        options = weight_carried_by_key.get(
+            (r['origin_map_id'], r['destination_map_id'], r['team_id']))
+        if not options:
+            # ไม่มีสัญญา = ไม่มีอัตรา ใส่ช่วงไปก็ไม่ได้เงิน เว้นว่างไว้ให้เห็นว่าต้องไปเพิ่มสัญญา
+            no_contract += 1
+            continue
+        picked = _exportDocumentPickWeightCarried(options, r['pay_weight'])
+        if picked:
+            r['weight_carried'] = picked
+            filled += 1
+        else:
+            out_of_range += 1
+    return filled, no_contract, out_of_range
+
+
+# คอลัมน์ N ของ sheet อัตรา : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (M เป็นคีย์ O/P เป็นตารางกลุ่มจ่าย)
+# ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง I ว่าง
+EXPORT_DOC_RATE_NOTE_COL = 14
+
+
+def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
+    """เขียน sheet อัตราค่าขนส่ง เฉพาะคอลัมน์ A-J และ N (K/L/M เป็นสูตรในไฟล์ ห้ามทับ)
+
+    G1/G2 ใช้ประทับว่าอัตราชุดนี้เป็นข้อมูล ณ วันไหน และไฟล์ออกเมื่อไหร่
+    เลือก G เพราะแถว 1-2 มีแค่ A1/A2 ส่วนคอลัมน์ M,O,P,R,S เป็นช่องช่วยของ template ห้ามแตะ
+    """
+    worksheet = workbook[EXPORT_DOC_RATE_SHEET]
+
+    if rate_stats:
+        worksheet['G1'] = 'อัตราที่ใช้ในไฟล์นี้ : ข้อมูล ณ วันที่ %s' % rate_stats.get('rate_as_of_th', '-')
+        worksheet['G1'].font = Font(bold=True)
+        worksheet['G2'] = 'ออกไฟล์เมื่อ %s' % _thaiDate(date.today())
+
+    # หัวคอลัมน์ N ใส่ตอน export ไม่ได้ใส่ไว้ในไฟล์ template เพื่อให้ไฟล์ที่บัญชีส่งมาวางทับได้เลย
+    worksheet.cell(row=EXPORT_DOC_RATE_FIRST_ROW - 1,
+                   column=EXPORT_DOC_RATE_NOTE_COL).value = 'หมายเหตุราคาน้ำมัน'
+
+    # แถว 5 ในไฟล์ template เป็นแถวตัวอย่างสีเหลือง ต้องล้างก่อนตามที่หน้า "วิธีกรอก" บอก
+    for row in range(EXPORT_DOC_RATE_FIRST_ROW,
+                     EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+        for col in range(1, 11):
+            worksheet.cell(row=row, column=col).value = None
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = None
+
+    for i, r in enumerate(rate_rows):
+        row = EXPORT_DOC_RATE_FIRST_ROW + i
+        worksheet.cell(row=row, column=1).value = r['team']
+        worksheet.cell(row=row, column=2).value = r['origin']
+        worksheet.cell(row=row, column=3).value = r['destination']
+        worksheet.cell(row=row, column=4).value = r['weight_carried']
+        worksheet.cell(row=row, column=5).value = r['stone']
+        for col, key in ((6, 'distance'), (7, 'freight_rate'), (8, 'base_fuel_price'),
+                         (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment')):
+            value = r[key]
+            worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
+        # ช่อง I ว่าง = หาราคาน้ำมันไม่ได้ เขียนเหตุผลไว้ข้าง ๆ ไม่ใส่ 0 เพราะ 0 อ่านเหมือนราคาจริง
+        # และไม่เขียนข้อความลง I เด็ดขาด สูตร K = (I-H)*J จะพังทั้งคอลัมน์
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = r.get('fuel_note')
+
+
+# sheet oil : แถวข้อมูลอยู่ 4-63 (60 ทีม) และมีช่องรับได้ 8 "หนังสือที่" ต่อทีม
+# แต่ละหนังสือกิน 3 คอลัมน์ (ลิตร / ราคาต่อลิตร / จำนวนเงิน) เริ่มที่คอลัมน์ C
+EXPORT_DOC_OIL_FIRST_ROW = 4
+EXPORT_DOC_OIL_MAX_ROWS = 60
+EXPORT_DOC_OIL_MAX_BOOKS = 8
+EXPORT_DOC_OIL_FIRST_COL = 3
+
+EXPORT_DOC_EXPRESS_SHEET = 'express'
+
+
+def _exportDocumentWriteExpressSheet(workbook, lines, stats):
+    """สร้าง sheet express : รายการเติมน้ำมันดิบที่ดึงมาจากระบบ Express
+
+    มีไว้ให้ตรวจย้อนได้ว่าตัวเลขในช่องราคาน้ำมันกับ sheet oil มาจากบิลใบไหนบ้าง
+    ไม่มีสูตรไหนอ้างถึง sheet นี้ ลบทิ้งได้ถ้าไม่อยากให้ติดไปกับไฟล์
+    """
+    index = workbook.sheetnames.index('oil') + 1 if 'oil' in workbook.sheetnames else None
+    worksheet = workbook.create_sheet(EXPORT_DOC_EXPRESS_SHEET, index)
+
+    worksheet['A1'] = 'รายการเติมน้ำมันของทีมรถร่วม (ดึงจากระบบ Express)'
+    worksheet['A1'].font = Font(bold=True, size=14)
+    worksheet['A2'] = ('sheet นี้เป็นข้อมูลดิบไว้ตรวจสอบอย่างเดียว ไม่มีสูตรไหนอ้างถึง '
+                       '| คัดบิลด้วยคำนำหน้าเลขที่เอกสาร ซึ่งบอกว่าเติมที่สาขาไหน '
+                       '| "ราคาอ้างอิง" คือราคาน้ำมันรายวันที่กรอกในระบบ ไม่ใช่ราคาบนบิล')
+    if stats.get('error'):
+        worksheet['A3'] = 'อ่านข้อมูลไม่ได้ : %s' % stats['error']
+        worksheet['A3'].font = Font(bold=True, color='9C0006')
+        return
+    worksheet['A3'] = ('บิลทั้งหมด %s ใบ | เป็นของทีมรถร่วม %s รายการ | ไม่ใช่ทีมรถร่วม %s ใบ '
+                       '| บิลซ้ำที่ตัดออก %s' % (
+                           stats.get('bills', 0), len(lines),
+                           stats.get('no_team', 0), stats.get('duplicate', 0)))
+
+    headers = ['วันที่', 'เลขที่บิล', 'สาขาที่เติม', 'comcod', 'ทีมรถร่วม',
+               'ชนิดน้ำมัน', 'ลิตร', 'ราคา/ลิตร', 'จำนวนเงิน', 'ราคาอ้างอิงของวันนั้น']
+    for col, name in enumerate(headers, start=1):
+        cell = worksheet.cell(row=4, column=col)
+        cell.value = name
+        cell.font = Font(bold=True)
+
+    price_of = {}
+    if lines:
+        days = {ln['date'] for ln in lines}
+        price_of = {
+            (comp_id, day): price
+            for comp_id, day, price in (
+                InternationalFreightRateFuelPrice.objects
+                .filter(base_comp_id__in={ln['company_id'] for ln in lines},
+                        date__in=list(days))
+                .values_list('base_comp_id', 'date', 'average_fuel_price'))}
+
+    for i, ln in enumerate(lines):
+        row = 5 + i
+        worksheet.cell(row=row, column=1).value = ln['date']
+        worksheet.cell(row=row, column=2).value = ln['docnum']
+        worksheet.cell(row=row, column=3).value = ln['branch']
+        worksheet.cell(row=row, column=4).value = ln['comcod']
+        worksheet.cell(row=row, column=5).value = ln['team']
+        worksheet.cell(row=row, column=6).value = ln['stkdes']
+        worksheet.cell(row=row, column=7).value = float(ln['litre'])
+        worksheet.cell(row=row, column=8).value = float(ln['unit_price'])
+        worksheet.cell(row=row, column=9).value = float(ln['amount'])
+        ref = price_of.get((ln['company_id'], ln['date']))
+        worksheet.cell(row=row, column=10).value = float(ref) if ref is not None else None
+        worksheet.cell(row=row, column=1).number_format = 'DD/MM/YYYY'
+        for col in (7, 8, 10):
+            worksheet.cell(row=row, column=col).number_format = '0.00'
+        worksheet.cell(row=row, column=9).number_format = '#,##0.00'
+
+    for col, width in zip('ABCDEFGHIJ', (11, 14, 30, 9, 30, 26, 10, 10, 13, 13)):
+        worksheet.column_dimensions[col].width = width
+    worksheet.freeze_panes = 'A5'
+
+
+def _exportDocumentOilBooks(lines):
+    """จัดสาขาที่ไปเติมน้ำมัน ลงช่อง "หนังสือที่ 1-8" ของ sheet oil
+
+    1 หนังสือ = 1 สาขาที่ไปเติม ตามที่ฝ่ายบัญชีใช้กันอยู่
+    หัวคอลัมน์เป็นของทั้ง sheet ไม่ใช่ของทีมใดทีมหนึ่ง ลำดับสาขาจึงต้องตายตัวทั้งไฟล์
+    เรียงตามลิตรรวมมากไปน้อย สาขาที่ใช้บ่อยจะได้อยู่ต้น ๆ อ่านง่าย
+
+    ตอนนี้มีสาขาที่ขายเชื่อน้ำมัน 7 แห่ง ยังพอดีกับช่อง 8 ช่อง
+    ถ้าวันหน้าเกิน 8 สาขา ส่วนที่เกินจะไม่มีที่ลง ต้องรายงานให้เห็น ไม่ใช่หายเงียบ
+
+    คืน (รายชื่อสาขาเรียงตามช่อง, ชุดสาขาที่ล้นช่อง)
+    """
+    litre_of = defaultdict(Decimal)
+    for ln in lines:
+        litre_of[ln['branch']] += ln['litre']
+    ordered = sorted(litre_of, key=lambda b: (-litre_of[b], b))
+    return ordered[:EXPORT_DOC_OIL_MAX_BOOKS], set(ordered[EXPORT_DOC_OIL_MAX_BOOKS:])
+
+
+def _exportDocumentWriteOilSheet(workbook, lines, trip_teams, stats):
+    """กรอก sheet oil ด้วยยอดน้ำมันจริงของแต่ละทีม แยกตามสาขาที่ไปเติม
+
+    เดิม sheet นี้ให้ฝ่ายบัญชีกรอกมือ ตอนนี้เติมให้จากบิลใน Express แล้ว แก้ทับได้เหมือนเดิม
+
+    ยอดในนี้ไม่ใช่แค่ข้อมูลประกอบ แต่ถูกหักออกจากเงินที่จ่ายทีมรถร่วมจริง ๆ
+    (สรุปจ่ายรถร่วม!AJ = SUMIF(oil!B, ชื่อทีม, oil!AE) แล้วไปโผล่ที่คอลัมน์ "หักค่าใช้จ่าย")
+    ก่อนหน้านี้ sheet นี้ว่าง ยอดหักจึงเป็น 0 มาตลอด
+
+    เขียนเฉพาะทีมที่มีเที่ยววิ่งในรอบนี้ เพราะช่องตรวจ AI4 ในไฟล์จะฟ้องทันที
+    ถ้ามีชื่อทีมใน oil ที่ไม่มีในสรุปจ่ายรถร่วม (ยอดหักจะหายไปเฉย ๆ)
+    ทีมที่เติมน้ำมันแต่ไม่ได้วิ่งงานส่งออกเดือนนี้ ก็ไม่มีเงินให้หักอยู่แล้ว
+
+    ราคาต่อลิตรคิดย้อนจาก เงินรวม ÷ ลิตรรวม เพราะเดือนหนึ่งเติมหลายครั้ง ราคาไม่เท่ากัน
+
+    เก็บราคาไว้ 6 ตำแหน่งแต่ตั้งรูปแบบให้แสดง 2 ตำแหน่ง เพราะช่องตรวจ AF ในไฟล์
+    เช็คว่า ลิตร x ราคา ต่างจากเงินได้ไม่เกิน 1 บาท ถ้าปัดราคาเหลือ 2 ตำแหน่งจริง ๆ
+    ทีมที่เติมเยอะจะคลาดเกิน 1 บาททันที (เช่น 1,495 ลิตร คลาด 6 บาท) แล้วโดนฟ้องทั้งที่ไม่ผิด
+    ยอดเงินต้องเป๊ะเพราะเป็นเงินที่ Express เรียกเก็บจริง จึงยอมให้ราคาเป็นตัวที่ละเอียดแทน
+    """
+    worksheet = workbook['oil']
+    books, overflow = _exportDocumentOilBooks(lines)
+    stats['oil_books'] = books
+    stats['oil_overflow'] = sorted(overflow)
+
+    # (ทีม, สาขา) -> [ลิตรรวม, เงินรวม]
+    total = defaultdict(lambda: [Decimal(0), Decimal(0)])
+    for ln in lines:
+        if ln['team'] not in trip_teams or ln['branch'] in overflow:
+            continue
+        bucket = total[(ln['team'], ln['branch'])]
+        bucket[0] += ln['litre']
+        bucket[1] += ln['amount']
+
+    teams = sorted({team for team, _ in total})
+    stats['oil_teams'] = len(teams)
+    stats['oil_truncated'] = max(0, len(teams) - EXPORT_DOC_OIL_MAX_ROWS)
+
+    # หัวคอลัมน์ของแต่ละหนังสือ เขียนชื่อสาขาแทนคำว่า "(หนังสือที่ N)"
+    for slot, branch in enumerate(books):
+        cell = worksheet.cell(row=2, column=EXPORT_DOC_OIL_FIRST_COL + slot * 3)
+        cell.value = '(หนังสือที่ %s) %s' % (slot + 1, branch)
+
+    for i, team in enumerate(teams[:EXPORT_DOC_OIL_MAX_ROWS]):
+        row = EXPORT_DOC_OIL_FIRST_ROW + i
+        worksheet.cell(row=row, column=2).value = team
+        for slot, branch in enumerate(books):
+            litre, amount = total.get((team, branch), (Decimal(0), Decimal(0)))
+            col = EXPORT_DOC_OIL_FIRST_COL + slot * 3
+            if not litre:
+                # เว้นว่างไว้ ไม่ใส่ 0 เพราะ 0 อ่านเหมือน "เติมแล้วแต่ไม่เสียเงิน"
+                for offset in range(3):
+                    worksheet.cell(row=row, column=col + offset).value = None
+                continue
+            worksheet.cell(row=row, column=col).value = float(litre)
+            worksheet.cell(row=row, column=col + 1).value = float(
+                (amount / litre).quantize(Decimal('0.000001')))
+            worksheet.cell(row=row, column=col + 2).value = float(amount)
+            worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+            worksheet.cell(row=row, column=col + 1).number_format = '0.00'
+            worksheet.cell(row=row, column=col + 2).number_format = '#,##0.00'
+
+
+def _exportDocumentHoistNoTeam(workbook):
+    """ดันกลุ่ม "ไม่ระบุทีม" ขึ้นเป็นบล็อกแรกของ sheet สรุปจ่ายรถร่วม (ปะหน้าไล่ตามลำดับนี้เอง)
+
+    sheet นั้นเรียงบล็อกด้วยคอลัมน์ช่วย U = AL*10000000 + T*1000 + ลำดับกลุ่ม
+      AL = กลุ่มจ่าย (ปกติ = 1, ร้อยเกาะ = 2)
+      T  = MATCH(ชื่อทีม, บันทึกรายเที่ยว!F) คือเลขแถวแรกที่ทีมนั้นโผล่ใน sheet ดิบ
+    บังคับให้ทีม "ไม่ระบุทีม" ใช้ T = 0 คีย์จึงต่ำสุดในกลุ่มจ่ายของตัวเอง แล้วขึ้นก่อนทุกทีม
+
+    แก้ตอน export ไม่ได้แก้ลงไฟล์ template ที่เก็บไว้ ไฟล์นั้นจะได้เหมือนที่ฝ่ายบัญชีใช้เป๊ะ
+    เวลาเขาส่ง v12 มาก็วางทับได้เลย
+    """
+    worksheet = workbook['สรุปจ่ายรถร่วม']
+    for row in range(5, 405):
+        seq = row - 4
+        worksheet.cell(row=row, column=21).value = (
+            '=IF($Q{r}="","",$AL{r}*10000000+IF($S{r}="{no_team}",0,$T{r})*1000+{seq})'
+            .format(r=row, no_team=EXPORT_DOC_NO_TEAM, seq=seq)
+        )
+
+
+# ---------- ความคืบหน้าของการสร้างไฟล์ ----------
+# ปุ่มดาวน์โหลดเป็นลิงก์ธรรมดา หน้าเว็บจึงไม่มีทางรู้ว่า server ทำถึงไหนแล้ว
+# ให้ view เขียนความคืบหน้าลงไฟล์เล็ก ๆ ตาม token ที่ js แนบมากับ query string (?dl=)
+# แล้วหน้าเว็บ poll อ่านผ่าน endpoint แยก (exportDocumentProgress)
+#
+# ที่เก็บเป็นไฟล์แทน cache เพราะโปรเจกต์นี้ไม่ได้ตั้ง CACHES จึงเป็น LocMemCache
+# ซึ่งแยกกันคนละ process ถ้า production รันหลาย worker คำขอ poll อาจไปตกคนละ process
+# กับตัวที่กำลังสร้างไฟล์ แล้วอ่านไม่เจอตลอด ส่วนไฟล์ใน temp ใช้ร่วมกันได้ทุก process บนเครื่องเดียวกัน
+EXPORT_DOC_PROGRESS_DIR = os.path.join(tempfile.gettempdir(), 'weightapp_export_progress')
+
+# ไฟล์ที่เก่ากว่านี้ถือว่าค้าง (ผู้ใช้ปิดแท็บกลางคัน) เก็บกวาดทิ้งตอนเริ่ม export รอบใหม่
+EXPORT_DOC_PROGRESS_MAX_AGE = 1800
+
+# token มาจาก js ต้องกรองก่อนเอาไปต่อเป็นชื่อไฟล์ ไม่งั้นใส่ ../ มาแล้วเขียนทับไฟล์อื่นได้
+EXPORT_DOC_PROGRESS_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+
+def _exportProgressPath(token):
+    """path ของไฟล์ความคืบหน้า คืน None ถ้า token ไม่ผ่านการกรอง"""
+    if not token or not EXPORT_DOC_PROGRESS_TOKEN_RE.match(token):
+        return None
+    return os.path.join(EXPORT_DOC_PROGRESS_DIR, '%s.json' % token)
+
+
+def _exportProgressSet(request, percent, label, done=False):
+    """บันทึกว่าตอนนี้ทำถึงไหนแล้ว
+
+    ห้ามให้ขั้นตอนนี้ทำให้ export ล้มเด็ดขาด เขียนไม่ได้ก็แค่ไม่มี % ให้ดู
+    ไฟล์ยังต้องโหลดได้ตามปกติ จึงกลืน exception ทั้งหมดไว้ตรงนี้
+    """
+    path = _exportProgressPath(request.GET.get('dl'))
+    if path is None:
+        return
+    try:
+        os.makedirs(EXPORT_DOC_PROGRESS_DIR, exist_ok=True)
+        # เขียนลงไฟล์ชั่วคราวก่อนแล้วค่อย replace ทับ เพราะ replace เป็น atomic
+        # ถ้าเขียนทับตรง ๆ ฝั่ง poll มีจังหวะอ่านเจอไฟล์ที่เขียนค้างครึ่งทาง
+        # แล้ว json.loads พัง กลายเป็น percent = None แถบจะกระตุกเป็นระยะ
+        tmp = path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(json.dumps({'percent': percent, 'label': label, 'done': done},
+                               ensure_ascii=False))
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def _exportProgressSweep():
+    """ลบไฟล์ความคืบหน้าที่ค้างไว้ กันไฟล์กองในโฟลเดอร์ temp
+
+    เรียกตอนเริ่ม export รอบใหม่ ซึ่งนาน ๆ ครั้ง ไม่ต้องมี cron แยก
+    """
+    try:
+        now = time.time()
+        for name in os.listdir(EXPORT_DOC_PROGRESS_DIR):
+            path = os.path.join(EXPORT_DOC_PROGRESS_DIR, name)
+            if now - os.path.getmtime(path) > EXPORT_DOC_PROGRESS_MAX_AGE:
+                os.remove(path)
+    except OSError:
+        pass
+
+
+@login_required(login_url='login')
+def exportDocumentProgress(request):
+    """ให้หน้าเว็บถามว่าไฟล์สร้างถึงไหนแล้ว
+
+    percent = None แปลว่า "ยังไม่รู้" ซึ่งเกิดได้ 2 กรณี คือยังไม่เริ่มเขียน
+    กับเขียนอยู่คนละเครื่อง (กรณีมีหลาย server) หน้าเว็บต้องไม่ตีความว่าเสร็จแล้ว
+    ให้หมุนรอต่อไปจนกว่า cookie จะกลับมา
+    """
+    path = _exportProgressPath(request.GET.get('dl'))
+    if path is None or not os.path.exists(path):
+        return JsonResponse({'percent': None})
+    try:
+        with open(path, encoding='utf-8') as f:
+            return JsonResponse(json.loads(f.read()))
+    except (OSError, ValueError):
+        return JsonResponse({'percent': None})
+
+
+def _exportDocumentMarkDownloadDone(request, response):
+    """ส่ง cookie บอกฝั่งหน้าเว็บว่าไฟล์พร้อมแล้ว
+
+    การกดลิงก์ดาวน์โหลดไม่ทำให้หน้าเปลี่ยน หน้าเว็บเลยไม่มีทางรู้เองว่าเสร็จเมื่อไหร่
+    จึงให้ js แนบ token มากับ query string แล้วเราส่ง token เดิมกลับไปเป็น cookie
+    js คอยดู cookie นี้เพื่อหยุดวงกลมหมุนตอนไฟล์เริ่มโหลดจริง
+    """
+    token = request.GET.get('dl')
+    if token:
+        response.set_cookie('exportDownloadToken', token, max_age=300, samesite='Lax')
+    return response
+
+
+def _exportDocumentThaiMonth(month_str):
+    # '2026-07' -> 'กรกฎาคม 2569' ตามที่ไฟล์ template ใช้ในช่อง B3
+    try:
+        y, m = month_str.split('-')
+        return '%s %s' % (EXPORT_DOC_THAI_MONTHS[int(m) - 1], int(y) + 543)
+    except (ValueError, TypeError, IndexError):
+        return month_str
+
+
+def _thaiDate(value):
+    """วันที่แบบไทยเต็ม เช่น '23 สิงหาคม 2569'"""
+    if value is None:
+        return '-'
+    return '%s %s %s' % (value.day, EXPORT_DOC_THAI_MONTHS[value.month - 1], value.year + 543)
+
+
+def _ifrVersionLabel(version):
+    """ชื่อที่แสดงบนจอแทนคำว่า "เวอร์ชัน" ให้คนไทยอ่านเข้าใจ
+
+    เลขในฐานข้อมูล (version) เริ่มที่ 1 = ครั้งที่สร้างเส้นทาง ซึ่งยังไม่ได้ปรับอะไร
+    บนจอจึงเรียกอันแรกว่า "ราคาเริ่มต้น" แล้วนับการปรับจริงตั้งแต่อันที่ 2 เป็นครั้งที่ 1
+    ผลคือ 14 รายการ = สร้าง 1 + ปรับ 13 ครั้ง ซึ่งตรงกับที่คนใช้งานเข้าใจ
+    """
+    if version is None:
+        return '-'
+    if version <= 1:
+        return 'ราคาเริ่มต้น'
+    return 'ปรับครั้งที่ %s' % (version - 1)
+
+
+def _ifrEffectiveLabel(effective_date):
+    """ข้อความ "เริ่มใช้เมื่อไหร่" ของใบอัตรา 1 ใบ
+
+    เวอร์ชันแรกใช้ค่าพิเศษ 2000-01-01 ที่แปลว่า "ครอบคลุมทุกเดือนย้อนหลัง"
+    ถ้าแสดงเป็นวันที่จริงจะทำให้เข้าใจผิดว่าเริ่มใช้ปี 2543
+    """
+    if effective_date == INTERNATIONAL_FREIGHT_RATE_FIRST_DATE:
+        return 'ตั้งแต่เริ่มระบบ'
+    return _thaiDate(effective_date)
+
+
+# เคส 2 เอาเฉพาะตาชั่งประเภทที่ 1 (ตาชั่งขาย) ตาชั่งประเภทอื่นของเหมืองไม่เกี่ยวกับการส่งออก
+EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
+
+EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท : ชั่งที่ท่าเรือเรา -> bws คือปลายทาง
+EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น : ชั่งที่เหมืองเรา -> bws คือต้นทาง
+EXPORT_DOC_CASE_LABELS = {
+    EXPORT_DOC_CASE_OWN_PORT: 'ลงท่าเรือของบริษัท',
+    EXPORT_DOC_CASE_OTHER_PORT: 'ลงท่าเรือบริษัทอื่น',
+}
+
+
+def _exportDocumentCaseOf(bws_id, own_port_bws):
+    """เที่ยวนี้เป็นเคสไหน
+
+    ตัวแบ่งคือ "ตาชั่งที่ออกใบเป็นของท่าเรือเราหรือเปล่า"
+    - อยู่ในท่าเรือเรา  = ชั่งตอนรถมาลง  -> bws คือปลายทาง, customer คือต้นทาง (เคส 1)
+    - ไม่อยู่           = ชั่งตอนรถออกจากเหมืองเรา -> bws คือต้นทาง, customer คือปลายทาง (เคส 2)
+
+    ถ้าวันหลังต้องจำกัดเคส 2 ให้แคบลง (เช่นเอาเฉพาะลูกค้าที่เป็นท่าเรือจริง ๆ)
+    ให้แก้ที่ฟังก์ชันนี้กับ _exportDocumentApplyCaseFilter ที่เดียว
+    """
+    return EXPORT_DOC_CASE_OWN_PORT if bws_id in own_port_bws else EXPORT_DOC_CASE_OTHER_PORT
+
+
+def _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws):
+    # base_qs กรองขอบเขตของทั้งสองเคสไว้แล้ว ตรงนี้แค่เลือกดูเคสเดียว
+    if selected_case == EXPORT_DOC_CASE_OWN_PORT:
+        return qs.filter(bws_id__in=own_port_bws)
+    if selected_case == EXPORT_DOC_CASE_OTHER_PORT:
+        return qs.filter(bws_id__in=other_bws)
+    return qs
+
+
+def _exportDocumentOwnPortBwsIds():
+    # คืน bws ของท่าเรือตัวเอง อ่านจาก biz ของบริษัทเจ้าของตาชั่ง ไม่ hardcode รหัสตาชั่ง
+    return list(BaseWeightStation.objects
+                .filter(company__biz_id=EXPORT_DOC_OWN_PORT_BIZ_ID)
+                .values_list('id', flat=True))
+
+
+# รหัสลูกค้าที่ขึ้นต้นด้วยนี้เป็น "ฝากขาย" ไม่ใช่ทั้งส่งออกและขายในประเทศ
+# ไม่ต้องคิดค่าขนส่งส่งออก จึงตัดออกตั้งแต่ชั้นดึงข้อมูล
+# ลูกค้ากลุ่มนี้มีรหัสคู่แฝดในชุดอื่นอยู่แล้ว (เช่น 77-V-007 คู่กับ 06-V-024)
+EXPORT_DOC_CONSIGN_PREFIX = '77-'
+
+
+def _exportDocumentConsignCustomerIds():
+    """รหัสลูกค้าฝากขายทั้งหมด (ขึ้นต้นด้วย 77-)
+
+    ดึงรายชื่อมาเป็น list แล้วค่อยกรองด้วย IN แทนการ join base_customer
+    เพราะ weight มีเป็นล้านแถว การ join เพื่อเช็ค prefix ทำให้ query ช้าโดยไม่จำเป็น
+    ส่วนตัว weight เองก็เก็บ customer_id ไว้ตรง ๆ อยู่แล้ว กรองที่คอลัมน์นี้ได้เลย
+    """
+    ids = cache.get('exportdoc_consign_customer_ids')
+    if ids is None:
+        ids = list(BaseCustomer.objects
+                   .filter(customer_id__startswith=EXPORT_DOC_CONSIGN_PREFIX)
+                   .values_list('customer_id', flat=True))
+        cache.set('exportdoc_consign_customer_ids', ids, 60 * 60)
+    return ids
+
+
+def _exportDocumentExportCustomerIds():
+    """รหัสลูกค้าที่ถือว่าเป็น "ปลายทางส่งออก"
+
+    เอามาจากปลายทางที่บันทึกไว้ในตารางอัตราค่าขนส่งไปนอกประเทศ :
+        weight.customer_id  ==  international_freight_rate.destination -> base_customer_id
+
+    ใช้ตารางเรทเป็นตัวกำหนดเอง แทนการเดาจากชื่อลูกค้าหรือเพิ่มธงใหม่
+    เพิ่มเส้นทางในหน้าค่าขนส่งต่างประเทศ = เที่ยวปลายทางนั้นเข้ารายงานทันที
+
+    ผลข้างเคียงที่ต้องรู้ : เที่ยวส่งออกที่ยังไม่ได้บันทึกเรท จะไม่ขึ้นในหน้านี้เลย
+    """
+    return set(BaseCompanyMapBaseCustomer.objects
+               .filter(id__in=InternationalFreightRate.objects
+                       .exclude(destination__isnull=True)
+                       .values_list('destination_id', flat=True))
+               .exclude(base_customer__isnull=True)
+               .values_list('base_customer_id', flat=True))
+
+
+def _baseCompanyMapRowName(row, customer_names, company_names):
+    """ชื่อที่ใช้แสดงของแถว map 1 แถว เรียงลำดับที่มาตามนี้
+        1. base_customer.customer_name
+        2. ถ้าไม่มี  -> base_comp.name
+        3. ถ้าไม่มีอีก -> name ที่ตั้งไว้ในตาราง map เอง
+    1 แถว map = 1 ชื่อ เปลี่ยนแค่ที่มาของข้อความ จำนวนชื่อจึงเท่าเดิม
+    """
+    return (customer_names.get(row['base_customer_id'])
+            or company_names.get(row['base_company_id'])
+            or row['name'])
+
+
+def _baseCompanyMapDisplayNameById():
+    """{id ของแถว map : ชื่อที่ใช้แสดง} สำหรับที่ที่มี FK ชี้มาตรง ๆ อยู่แล้ว
+    เช่นตารางอัตราค่าขนส่งที่เก็บ origin_id / destination_id"""
+    return {r['id']: r['display'] for r in _baseCompanyMapRows()}
+
+
+def _baseCompanyMapRows():
+    """แถวในตาราง map พร้อมชื่อที่ resolve แล้ว ใช้ร่วมกันทุกที่ที่ต้องใช้ชื่อ"""
+    rows = list(BaseCompanyMapBaseCustomer.objects
+                .values('id', 'base_customer_id', 'base_company_id', 'name')
+                .order_by('id'))
+    customer_names = {cid: nm for cid, nm in
+                      BaseCustomer.objects.values_list('customer_id', 'customer_name') if nm}
+    company_names = {coid: nm for coid, nm in
+                     BaseCompany.objects.values_list('id', 'name') if nm}
+    for row in rows:
+        row['display'] = _baseCompanyMapRowName(row, customer_names, company_names)
+    return rows
+
+
+# โค้ดบริษัทของแท็ป "บริษัททั้งหมด" ถ้าเลือกแท็ปนี้ dropdown ต้นทางจะไม่ถูกกรอง
+EXPORT_DOC_ALL_COMPANY_CODE = 'ALL'
+
+# แท็บบริษัทที่เห็นข้อมูลของ "ทุกบริษัท" ไม่ใช่แค่ของตัวเอง
+#   ROI = ร้อยเกาะ เป็นบริษัทรถขนส่ง วิ่งให้ทุกเหมืองในเครือ ไม่ได้มีเหมืองเป็นของตัวเอง
+#   ALL = แท็บรวม ตอนนี้ยังไม่ได้ผูกกับ UserProfile ของใคร แต่กันไว้เผื่อเปิดใช้
+# ใช้ร่วมกันทั้งตัวกรองต้นทางในหน้า export และตารางราคาน้ำมันรายวัน
+# กติกาเดียวกันต้องอยู่ที่เดียว ไม่งั้นแก้ที่หนึ่งแล้วลืมอีกที่
+COMPANY_TAB_SEES_ALL = ('ROI', 'ALL')
+
+
+def _exportDocumentOriginNames(company_code=None):
+    """ชื่อต้นทางที่เลือกได้ = ชื่อของแถว map แต่ละแถว (1 แถว 1 ชื่อ)
+
+    กรองตามแท็ปบริษัทที่เลือกอยู่ด้านบน (แท็ปมาจาก base_comp เหมือนกัน)
+        base_company_map_base_customer.base_company_id == base_comp.id ของแท็ปนั้น
+
+    แถวที่ base_company_id เป็น NULL จับคู่กับแท็ปไหนไม่ได้ จึงไม่ขึ้นในแท็ปใดเลย
+    ต้องไปผูก base_comp ให้แถวนั้นก่อนถึงจะเลือกได้ (แท็ป ALL ยังเห็นทุกแถวเหมือนเดิม)
+    """
+    rows = [r for r in _baseCompanyMapRows() if r['display']]
+
+    if company_code and company_code != EXPORT_DOC_ALL_COMPANY_CODE:
+        # base_company_map_base_customer.base_company_id == base_comp.id ของแท็ปที่เลือก
+        company_id = (BaseCompany.objects
+                      .filter(code=company_code)
+                      .values_list('id', flat=True)
+                      .first())
+        rows = [r for r in rows if r['base_company_id'] == company_id]
+
+    return sorted({r['display'] for r in rows})
+
+
+def _exportDocumentOriginFilter(origin_name, own_port_bws, other_bws):
+    """เงื่อนไขกรอง "ต้นทาง" ที่ใช้ได้กับทั้งสองเคส
+
+    ต้นทางของสองเคสมาจากคนละฟิลด์ แต่ชื่อมาจากตาราง map เดียวกัน
+      เคส 1 ชั่งที่ท่าเรือเรา  -> ต้นทางคือ customer  จึงกรองด้วย customer_id
+      เคส 2 ชั่งที่เหมืองเรา   -> ต้นทางคือ bws       จึงกรองด้วยบริษัทเจ้าของตาชั่ง
+    คืน Q ที่รวมทั้งสองทางไว้แล้ว คนใช้เห็นแค่ชื่อเดียวไม่ต้องรู้ว่าเป็นเคสไหน
+    """
+    # หาย้อนจาก "ชื่อที่แสดง" กลับไปเป็น id ด้วยกติกาเดียวกับตอนแสดงผล
+    # ไม่งั้นเปลี่ยนที่มาของชื่อเมื่อไหร่ ตัวกรองจะเพี้ยนทันที
+    rows = [r for r in _baseCompanyMapRows() if r['display'] == origin_name]
+    customer_ids = [r['base_customer_id'] for r in rows if r['base_customer_id']]
+    company_ids = [r['base_company_id'] for r in rows if r['base_company_id']]
+
+    condition = Q(pk__in=[])   # ไม่ตรงอะไรเลย ใช้เป็นตัวตั้งต้น
+    if customer_ids:
+        condition |= Q(bws_id__in=own_port_bws, customer_id__in=customer_ids)
+    if company_ids:
+        condition |= Q(bws_id__in=other_bws, bws__company_id__in=company_ids)
+    return condition
+
+
+def _exportDocumentOtherBwsIds():
+    """ตาชั่งของเคส 2 : บริษัทเจ้าของตาชั่งไม่ใช่ธุรกิจท่าเรือ (biz_id != 2) และ weight_type = 1
+
+    ใช้ exclude แทน filter(company__biz_id__ne) เพราะตาชั่งที่ไม่ได้ผูกบริษัทไว้ (company = NULL)
+    ต้องไม่หลุดเข้ามา เนื่องจากยังบอกไม่ได้ว่าเป็นเคสไหน
+    """
+    return list(BaseWeightStation.objects
+                .filter(weight_type_id=EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID)
+                .exclude(company__isnull=True)
+                .exclude(company__biz_id=EXPORT_DOC_OWN_PORT_BIZ_ID)
+                .values_list('id', flat=True))
+
+
+def _exportDocumentNameMaps():
+    # base_company_map_base_customer คือตัวแปลงจากรหัสลูกค้า/บริษัท เป็นชื่อสั้นที่ใช้ในไฟล์ excel
+    # เช่น 06-V-011 -> "ศิลาชัย", บริษัท STPS -> "ท่าเรือสุราษฏร์" ซึ่งตรงกับ dropdown ในไฟล์ template
+    #
+    # ตารางนี้ใช้เป็นคอลัมน์ G (นามที่จ่าย) ไม่ได้ เพราะ map.name กับ base_company.name
+    # มีค่าเท่ากันทุกแถว คอลัมน์ G จึงจะกลายเป็นคอลัมน์ B ซ้ำ ไม่ได้ข้อมูลใหม่
+    # ของจริงเป็นการยุบหลายเหมืองเข้านิติบุคคลเดียว (กงตาก 1 / กงตาก 3 / ทุ่งใหญ่ -> โชคพนาไมนิ่ง)
+    # ซึ่งยังไม่มีที่เก็บใน db จึงเว้นว่างไว้
+    # ตารางนี้มี unique แค่ (base_company_id, base_customer_id) และ MySQL ยอมให้มี NULL ซ้ำได้
+    # ลูกค้ารายเดียวจึงมีได้หลายแถว เช่น 06-V-009 มีทั้งแถวที่ผูกบริษัทไว้ กับแถวที่ company เป็น NULL
+    # ถ้าปล่อยให้แถวหลังทับแถวแรกไปเรื่อย ๆ จะได้แถวไหนก็แล้วแต่ลำดับ id ซึ่งไม่แน่นอน
+    # เลือกแถวที่ "ผูกบริษัทไว้" ก่อนเสมอ เพราะตารางอัตราอ้างถึงแถวพวกนั้น
+    # เสมอกันค่อยเอา id น้อยสุด ผลลัพธ์จะได้คงที่
+    rows = _baseCompanyMapRows()
+
+    def preferred(current, candidate):
+        if current is None:
+            return True
+        if (current['base_company_id'] is None) != (candidate['base_company_id'] is None):
+            return candidate['base_company_id'] is not None
+        return candidate['id'] < current['id']
+
+    chosen_by_customer = {}
+    chosen_by_company = {}
+    for r in rows:
+        key = r['base_customer_id']
+        if preferred(chosen_by_customer.get(key), r):
+            chosen_by_customer[key] = r
+        if r['base_company_id'] is not None:
+            key = r['base_company_id']
+            if preferred(chosen_by_company.get(key), r):
+                chosen_by_company[key] = r
+
+    # ชื่อของแถว map ที่ resolve แล้ว (base_customer -> base_comp -> map.name)
+    origin_by_customer = {k: v['display'] for k, v in chosen_by_customer.items()}
+    port_by_company = {k: v['display'] for k, v in chosen_by_company.items()}
+    # id ของแถว map เอาไว้จับคู่กับตารางอัตราโดยตรง เพราะ rate.origin / rate.destination
+    # เป็น FK ชี้มาที่แถวนี้อยู่แล้ว จับด้วย pk จึงตรงที่สุด ไม่ต้องแปลงผ่านชื่อหรือรหัสอื่น
+    map_id_by_customer = {k: v['id'] for k, v in chosen_by_customer.items()}
+    map_id_by_company = {k: v['id'] for k, v in chosen_by_company.items()}
+    return origin_by_customer, port_by_company, map_id_by_customer, map_id_by_company
+
+
+def _exportDocumentQuerySet(request):
+    """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
+    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
+    _exportProgressSet(request, 3, 'กำลังตรวจรายชื่อตาชั่งและลูกค้าส่งออก')
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    other_bws = _exportDocumentOtherBwsIds()
+    export_customers = _exportDocumentExportCustomerIds()
+
+    # หน้านี้รวมทั้ง 2 เคสไว้ด้วยกัน เงื่อนไขร่วมคือประเภทการบรรทุก "ส่งให้"
+    # เคส 1 : ชั่งที่ท่าเรือเรา
+    # เคส 2 : ชั่งที่เหมืองเรา และปลายทาง (customer) ต้องอยู่ในตารางอัตราค่าขนส่งไปนอกประเทศ
+    #         ถ้าไม่กรองด้วยปลายทาง จะกวาดการขายในประเทศเข้ามาทั้งหมด (~150,000 เที่ยว)
+    base_qs = Weight.objects.filter(
+        Q(bws_id__in=own_port_bws)
+        | Q(bws_id__in=other_bws, customer_id__in=export_customers),
+        carry_type_name=EXPORT_DOC_CARRY_TYPE,
+    ).exclude(customer_id__in=_exportDocumentConsignCustomerIds())
+
+    # เดือนที่มีข้อมูล ใช้ทำ dropdown และหาเดือนตั้งต้น
+    #
+    # DISTINCT ตรงนี้ต้องกวาดทุกเดือนของข้อมูล (ราวแสนแถว) ใช้เวลา ~1.2 วินาที
+    # และผลลัพธ์แทบไม่เปลี่ยน (เพิ่มเดือนใหม่เดือนละครั้ง) จึง cache ไว้
+    # ผลข้างเคียงที่ยอมรับได้ : เดือนใหม่จะโผล่ใน dropdown ช้าที่สุด 10 นาที
+    cache_key = 'exportdoc_month_list_%s' % hash((tuple(sorted(own_port_bws)),
+                                                  tuple(sorted(other_bws)),
+                                                  tuple(sorted(export_customers))))
+    _exportProgressSet(request, 10, 'กำลังหาเดือนที่มีข้อมูล')
+    month_list = cache.get(cache_key)
+    if month_list is None:
+        month_rows = (base_qs.exclude(date__isnull=True)
+                      .annotate(m=TruncMonth('date'))
+                      .values_list('m', flat=True)
+                      .distinct()
+                      .order_by('-m'))
+        month_list = [m.strftime('%Y-%m') for m in month_rows]
+        cache.set(cache_key, month_list, 600)
+
+    _exportProgressSet(request, 26, 'กำลังกรองรายการชั่งตามเงื่อนไข')
+
+    selected_month = request.GET.get('month') or (month_list[0] if month_list else '')
+    # ตัวกรองเคสกับตาชั่งยุบเป็น dropdown เดียว เพราะตาชั่ง 1 ตัวอยู่ได้เคสเดียวอยู่แล้ว
+    # ค่าที่ส่งมาเป็นได้ 3 แบบ : ว่าง = ทั้งหมด | 'case:1'/'case:2' = ทุกตาชั่งของเคสนั้น | รหัสตาชั่ง
+    # ยังรับพารามิเตอร์ case แยกอยู่ เผื่อลิงก์เก่าที่ bookmark ไว้
+    raw_bws = request.GET.get('bws') or ''
+    selected_team = request.GET.get('team') or ''
+    # ชนิดหินเก็บเป็นชื่อใน Weight ไม่มีตารางอ้างอิง จึงกรองด้วยชื่อตรง ๆ
+    selected_stone = request.GET.get('stone') or ''
+    # ต้นทาง : เลือกด้วย "ชื่อ" ในตาราง map เพราะเป็นชื่อเดียวที่ใช้ร่วมกันได้ทั้งสองเคส
+    #
+    # หน้านี้ดูได้เฉพาะต้นทางที่อยู่ใต้แท็บบริษัทที่เลือกอยู่ ไม่มีตัวเลือก "ทั้งหมด"
+    # ยกเว้นแท็บร้อยเกาะซึ่งเป็นบริษัทรถ วิ่งให้ทุกเหมือง จึงเห็นทุกต้นทางและเลือกทั้งหมดได้
+    #
+    # ไม่ส่งมาหรือส่งชื่อที่ไม่อยู่ในแท็บนี้ (เช่นกดสลับแท็บแล้ว location.reload()
+    # คง query string เดิมไว้) ก็ถอยไปใช้ตัวแรกของแท็บ ไม่ปล่อยให้กลายเป็น "ทั้งหมด"
+    # เพราะจะได้สภาพที่ dropdown ขึ้นชื่อบริษัทหนึ่ง แต่ข้อมูลเป็นของทุกบริษัท ซึ่งหลอกตา
+    company_code = request.session.get('company_code')
+    origin_sees_all = company_code in COMPANY_TAB_SEES_ALL
+    allowed_origins = _exportDocumentOriginNames(None if origin_sees_all else company_code)
+
+    selected_origin = request.GET.get('origin') or ''
+    if selected_origin not in allowed_origins:
+        # แท็บร้อยเกาะ : ว่าง = ทั้งหมด ซึ่งเป็นค่าตั้งต้นที่ถูกต้องของแท็บนั้น
+        selected_origin = '' if origin_sees_all else (allowed_origins[0] if allowed_origins else '')
+
+    # แท็บที่ยังไม่มีต้นทางผูกไว้ในตาราง map เลย (ตอนนี้คือ JOB กับ NSM)
+    # เลือกต้นทางไม่ได้ = ไม่มีขอบเขตข้อมูลให้ดู จึงไม่แสดงอะไรเลยแล้วบอกเหตุผลบนหน้าจอ
+    # ปล่อยให้เห็นทุกบริษัทแทนไม่ได้ เพราะขัดกับกติกาที่ว่าดูได้เฉพาะของแท็บตัวเอง
+    origin_unmapped = not allowed_origins and not origin_sees_all
+    # ค่าว่าง = แสดงทั้งสองเคสรวมกัน
+    selected_case = request.GET.get('case') or ''
+    selected_bws = ''
+    if raw_bws.startswith('case:'):
+        selected_case = raw_bws.split(':', 1)[1]
+    else:
+        selected_bws = raw_bws
+    if selected_case not in (EXPORT_DOC_CASE_OWN_PORT, EXPORT_DOC_CASE_OTHER_PORT):
+        selected_case = ''
+
+    if selected_bws:
+        bws_case = (EXPORT_DOC_CASE_OWN_PORT if selected_bws in own_port_bws
+                    else EXPORT_DOC_CASE_OTHER_PORT if selected_bws in other_bws else '')
+        if selected_case and bws_case and selected_case != bws_case:
+            # ลิงก์เก่าที่ส่ง case กับ bws มาขัดกัน : ยึดตาชั่งเป็นหลัก เพราะเจาะจงกว่า
+            selected_case = bws_case
+        elif not selected_case and bws_case:
+            selected_case = bws_case
+
+    # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
+    include_cancel = request.GET.get('include_cancel') == '1'
+
+    qs = base_qs
+    if selected_month:
+        try:
+            y, m = selected_month.split('-')
+            qs = qs.filter(date__year=int(y), date__month=int(m))
+        except (ValueError, TypeError):
+            selected_month = ''
+
+    # กรองรายวัน : ต่อยอดจากเดือนที่เลือกไว้แล้ว ไม่ใช่ตัวกรองแยกอิสระ
+    # เพราะราคาที่ใช้คิดเงิน (ดู _exportDocumentRateAsOf) อิงกับ "เดือน" ทั้งเดือนอยู่แล้ว
+    # เลือกวันที่ได้แค่เพื่อ "ดูย่อยลงไป" ในเดือนนั้น ไม่ได้เปลี่ยนราคาที่ใช้
+    # วันที่นอกเดือนที่เลือกจะไม่มีผล เพราะ qs ถูกกรองด้วยเดือนไปก่อนหน้านี้แล้ว
+    selected_date_from = request.GET.get('date_from') or ''
+    selected_date_to = request.GET.get('date_to') or ''
+    try:
+        if selected_date_from:
+            datetime.strptime(selected_date_from, '%Y-%m-%d')
+    except ValueError:
+        selected_date_from = ''
+    try:
+        if selected_date_to:
+            datetime.strptime(selected_date_to, '%Y-%m-%d')
+    except ValueError:
+        selected_date_to = ''
+    # ใส่กลับด้านมา (เผลอเอา "ตั้งแต่" ไว้หลัง "ถึง") ไม่ต้องบังคับให้แก้เอง สลับให้เลย
+    # ผู้ใช้พิมพ์ 2 วันมาแล้วคาดหวังว่าจะได้ช่วงระหว่างนั้น ไม่ว่าจะพิมพ์ลงช่องไหนก่อน
+    if selected_date_from and selected_date_to and selected_date_from > selected_date_to:
+        selected_date_from, selected_date_to = selected_date_to, selected_date_from
+    if selected_date_from:
+        qs = qs.filter(date__gte=datetime.strptime(selected_date_from, '%Y-%m-%d').date())
+    if selected_date_to:
+        qs = qs.filter(date__lte=datetime.strptime(selected_date_to, '%Y-%m-%d').date())
+
+    # ตัวเลือกใน dropdown ทีม/ชนิดหิน คิดจากเดือน+ช่วงวันที่ที่เลือกเท่านั้น
+    # ถ้าใช้ base_qs (ทุกเดือน) จะเป็น DISTINCT ทั้งช่วงข้อมูล ~1.5 วินาทีต่อ dropdown
+    # และต้องแยกจาก qs ด้วย ไม่งั้นพอเลือกทีมแล้ว dropdown จะเหลือทีมเดียว
+    option_qs = qs
+
+    if selected_bws:
+        qs = qs.filter(bws_id=selected_bws)
+    if selected_team:
+        qs = qs.filter(car_team_id=selected_team)
+    if selected_stone:
+        qs = qs.filter(stone_type_name=selected_stone)
+    if selected_origin:
+        qs = qs.filter(_exportDocumentOriginFilter(selected_origin, own_port_bws, other_bws))
+    elif origin_unmapped:
+        qs = qs.none()
+    qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws)
+    if not include_cancel:
+        qs = qs.filter(is_cancel=False)
+
+    # เรียงวันที่ล่าสุดขึ้นก่อน ทั้งหน้าเว็บและ sheet บันทึกรายเที่ยว
+    # การดันกลุ่ม "ไม่ระบุทีม" ขึ้นก่อน ทำที่หน้าสรุปจ่ายรถร่วมแทน (ดู _exportDocumentHoistNoTeam)
+    # ไม่ทำด้วยการสลับลำดับแถวใน sheet ดิบ ลำดับตรงนี้จึงเปลี่ยนได้อิสระ
+    qs = (qs.select_related('bws', 'bws__company')
+            .order_by('-date', '-weight_id'))
+
+    filters = {
+        'selected_month': selected_month,
+        'selected_date_from': selected_date_from,
+        'selected_date_to': selected_date_to,
+        'selected_bws': selected_bws,
+        'selected_team': selected_team,
+        'selected_stone': selected_stone,
+        'selected_origin': selected_origin,
+        'origin_unmapped': origin_unmapped,
+        # ส่งรายการออกไปด้วย ไม่ให้หน้าเว็บไปคำนวณเองซ้ำ ไม่งั้นมีโอกาสที่ตัวเลือกบนจอ
+        # กับตัวที่ใช้กรองจริงไม่ตรงกัน เวลาแก้กติกาแล้วลืมแก้อีกฝั่ง
+        'origin_options': allowed_origins,
+        'origin_sees_all': origin_sees_all,
+        'selected_case': selected_case,
+        # ค่าที่ dropdown รวมต้องโชว์ว่าเลือกอยู่
+        'bws_filter_value': selected_bws or ('case:%s' % selected_case if selected_case else ''),
+        'include_cancel': include_cancel,
+        'base_qs': base_qs,
+        'option_qs': option_qs,
+        'own_port_bws': own_port_bws,
+    }
+    return qs, filters, month_list
+
+
+def _exportDocumentRows(weights, own_port_bws=None):
+    """ปั้นแถวให้ตรงคอลัมน์ A-M ของ sheet บันทึกรายเที่ยว
+
+    ต้นทาง/ปลายทางสลับกันตามเคส เพราะตาชั่งอยู่คนละฝั่งของเที่ยว
+    - เคส 1 ชั่งที่ท่าเรือเรา  : customer = ต้นทาง (เหมือง)   | bws = ปลายทาง (ท่าเรือ)
+    - เคส 2 ชั่งที่เหมืองเรา   : bws = ต้นทาง (เหมือง)        | customer = ปลายทาง (ท่าเรือบริษัทอื่น)
+    """
+    if own_port_bws is None:
+        own_port_bws = _exportDocumentOwnPortBwsIds()
+    (origin_by_customer, port_by_company,
+     map_id_by_customer, map_id_by_company) = _exportDocumentNameMaps()
+
+    rows = []
+    for w in weights:
+        bws_company_id = w.bws.company_id if w.bws else None
+        case = _exportDocumentCaseOf(w.bws_id, own_port_bws)
+
+        # weight_total คือน้ำหนักที่ "ตาชั่งใบนั้นชั่งได้เอง" (= weight_in - weight_out)
+        # ตาชั่งอยู่คนละฝั่งของเที่ยวตามเคส การจับคู่จึงต้องสลับตาม
+        #   เคส 1 ชั่งที่ท่าเรือ (ปลายทาง) : origin_weight = ต้นทาง | weight_total = ปลายทาง
+        #   เคส 2 ชั่งที่เหมือง (ต้นทาง)   : weight_total = ต้นทาง
+        # ฝั่งที่ไม่ได้ชั่งจะเก็บเป็น 0 ไม่ใช่ NULL ต้องมองว่าเป็น "ไม่มีค่า"
+        # ให้ตรงกับไฟล์ excel ที่เว้นช่องว่าง ไม่งั้น M จะกลายเป็น MIN(0, อีกฝั่ง) = 0 แล้วยอดหายทั้งแถว
+        if case == EXPORT_DOC_CASE_OWN_PORT:
+            origin_weight = w.origin_weight or None
+            dest_weight = w.weight_total or None
+        else:
+            origin_weight = w.weight_total or None
+            dest_weight = w.origin_weight or None
+
+        # คอลัมน์ L = J - K | คอลัมน์ M = ค่าที่น้อยกว่าระหว่าง J กับ K
+        # ถ้ากรอกมาข้างเดียว M ใช้ข้างที่มี ถ้าไม่มีทั้งคู่ปล่อยว่าง (ตามสูตรในไฟล์ template)
+        diff_weight = None
+        pay_weight = None
+        if origin_weight is not None or dest_weight is not None:
+            diff_weight = (origin_weight or 0) - (dest_weight or 0)
+            if origin_weight is not None and dest_weight is not None:
+                pay_weight = min(origin_weight, dest_weight)
+            else:
+                pay_weight = origin_weight if origin_weight is not None else dest_weight
+
+        # ชื่อฝั่ง customer กับฝั่ง bws หามาก่อน แล้วค่อยจัดว่าใครเป็นต้นทาง/ปลายทางตามเคส
+        customer_side = origin_by_customer.get(w.customer_id) or w.customer_name
+        bws_side = port_by_company.get(bws_company_id) or w.bws_id
+        # id ของแถว map ที่ใช้จับคู่กับตารางอัตรา สลับข้างตามเคสเหมือนกับชื่อ
+        customer_map_id = map_id_by_customer.get(w.customer_id)
+        bws_map_id = map_id_by_company.get(bws_company_id)
+        if case == EXPORT_DOC_CASE_OWN_PORT:
+            origin_name, destination_name = customer_side, bws_side
+            origin_company_id, destination_company_id = None, bws_company_id
+            origin_map_id, destination_map_id = customer_map_id, bws_map_id
+        else:
+            origin_name, destination_name = bws_side, customer_side
+            origin_company_id, destination_company_id = bws_company_id, None
+            origin_map_id, destination_map_id = bws_map_id, customer_map_id
+
+        rows.append({
+            'weight_id': w.weight_id,
+            'case': case,
+            'case_label': EXPORT_DOC_CASE_LABELS.get(case, ''),
+            'date': w.date,                                                   # A วันที่
+            'origin': origin_name,                                            # B ต้นทาง
+            'origin_raw': w.customer_name,
+            'customer_id': w.customer_id,
+            'destination': destination_name,                                  # C ปลายทาง
+            'port_company_id': destination_company_id,
+            'origin_company_id': origin_company_id,
+            # คีย์จับคู่กับตารางอัตรา : เป็น pk ของแถว base_company_map_base_customer
+            # ใช้ได้ทั้งสองเคสเพราะสลับข้างมาแล้วตั้งแต่ตรงนี้
+            'origin_map_id': origin_map_id,
+            'destination_map_id': destination_map_id,
+            'bws_id': w.bws_id,
+            'stone': w.stone_type_name,                                       # D ชนิดแร่/หิน
+            'weight_carried': '',                                             # E แบก นน. : ยังไม่มีใน db เว้นว่าง
+            'team': w.car_team_name or EXPORT_DOC_NO_TEAM,                    # F ทีมรถร่วม : ห้ามว่าง
+            'team_missing': not w.car_team_name,
+            'team_id': w.car_team_id,
+            'payer': '',                                                      # G นามที่จ่าย : ยังไม่มีใน db เว้นว่าง
+            'car_registration': w.car_registration_name,                      # H ทะเบียนรถ
+            'doc_id': w.doc_id,                                               # I เลขที่ชั่ง
+            'origin_weight': origin_weight,                                   # J นน.ต้นทาง
+            'dest_weight': dest_weight,                                       # K นน.ปลายทาง
+            'diff_weight': diff_weight,                                       # L นน.ส่วนต่าง
+            'pay_weight': pay_weight,                                         # M นน.จ่ายค่าบรรทุก
+            'pay_group': 'ร้อยเกาะ' if (w.transport or '').startswith('ร้อยเกาะ') else 'ปกติ',
+            'site_name': w.site_name,
+            'is_cancel': w.is_cancel,
+        })
+    return rows
+
+
+@login_required(login_url='login')
+def viewExportDocument(request):
+    #active : active คือแท็ปบริษัท active
+    try:
+        active = request.session['company_code']
+    except:
+        return redirect('logout')
+
+    qs, filters, month_list = _exportDocumentQuerySet(request)
+    base_qs = filters['base_qs']
+    selected_month = filters['selected_month']
+    selected_date_from = filters['selected_date_from']
+    selected_date_to = filters['selected_date_to']
+    selected_bws = filters['selected_bws']
+    selected_team = filters['selected_team']
+    selected_stone = filters['selected_stone']
+    selected_origin = filters['selected_origin']
+    selected_case = filters['selected_case']
+    own_port_bws = filters['own_port_bws']
+    include_cancel = filters['include_cancel']
+
+    # ยอดรวมคิดจากทั้งเดือน ไม่ใช่เฉพาะหน้าที่เปิดอยู่ จะได้เทียบกับช่อง O5/O6 ในไฟล์ excel ได้
+    # NullIf(...,0) : ฝั่งที่ไม่ได้ชั่งเก็บเป็น 0 ต้องตัดออกก่อน ไม่งั้นยอดจ่ายค่าบรรทุกจะเพี้ยน
+    # ชื่อคอลัมน์ในตารางชั่งสลับกับความหมายที่ใช้ในรายงาน
+    # weight_total = นน.ต้นทาง (คอลัมน์ J) | origin_weight = นน.ปลายทาง (คอลัมน์ K)
+    ton_field = models.DecimalField(max_digits=10, decimal_places=3)
+    origin_val = NullIf('weight_total', Value(0), output_field=ton_field)
+    dest_val = NullIf('origin_weight', Value(0), output_field=ton_field)
+    pay_val = Least(Coalesce(origin_val, dest_val), Coalesce(dest_val, origin_val))
+
+    summary = qs.aggregate(
+        trip_count=Count('weight_id'),
+        origin_sum=Sum(origin_val),
+        dest_sum=Sum(dest_val),
+        pay_sum=Sum(pay_val),
+        no_team_count=Count('weight_id', filter=Q(car_team_name__isnull=True) | Q(car_team_name='')),
+    )
+
+    p = Paginator(qs, 100)
+    page = request.GET.get('page')
+    trips = p.get_page(page)
+
+    rows = _exportDocumentRows(trips, own_port_bws)
+
+    # เช็คความครอบคลุมของตารางอัตราค่าขนส่ง จากทั้งเดือน ไม่ใช่แค่หน้าที่เปิดอยู่
+    # จะได้รู้ก่อนกดปุ่มว่าไฟล์ที่ได้จะมีตัวเงินหรือจะขึ้น 0
+    all_rows = _exportDocumentRows(qs, own_port_bws)
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
+        all_rows, selected_month)
+    # แบก นน. คิดจาก นน.จ่ายค่าบรรทุก เทียบเฉพาะช่วงที่ทีมนั้นมีสัญญาไว้ในเส้นทางนั้น
+    wc_filled, wc_no_contract, wc_out_of_range = _exportDocumentAssignWeightCarried(
+        all_rows, weight_carried_by_key)
+    # ยอดรวม 3 กลุ่มนี้ = ทุกเที่ยวของเดือน ใช้ทำสัดส่วนให้เห็นว่าคิดเงินได้กี่ %
+    # ไม่มีสัดส่วนแล้วเลข 429 กับ 2,253 ลอย ๆ ตีความไม่ได้ว่าดีหรือแย่
+    wc_total = wc_filled + wc_no_contract + wc_out_of_range
+    rate_stats.update({
+        'sheet_rows': len(rate_rows),
+        'wc_filled': wc_filled,
+        'wc_no_contract': wc_no_contract,
+        'wc_out_of_range': wc_out_of_range,
+        'wc_total': wc_total,
+        'wc_filled_pct': round(100.0 * wc_filled / wc_total) if wc_total else 0,
+        'wc_no_contract_pct': round(100.0 * wc_no_contract / wc_total) if wc_total else 0,
+        'wc_out_of_range_pct': round(100.0 * wc_out_of_range / wc_total) if wc_total else 0,
+        'wc_missing_routes': _exportDocumentMissingRoutes(all_rows, weight_carried_by_key),
+    })
+    # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+
+    # ไฟล์ template รับได้ 3000 เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
+    over_limit = (summary['trip_count'] or 0) > EXPORT_DOC_MAX_TRIPS
+
+    # ตัวเลือกตาชั่ง : ต้องมีทั้งของท่าเรือ (เคส 1) และของเหมือง (เคส 2)
+    # เพราะเคส 2 ตาชั่งคือ "ต้นทาง" ไม่ใช่ปลายทาง ถ้าใส่แต่ท่าเรือจะกรองเคส 2 ไม่ได้เลย
+    # ติดป้ายเคสไว้กับทุกตัวเลือก เพื่อให้หน้าเว็บแยกกลุ่มและซ่อนกลุ่มที่ไม่เกี่ยวได้
+    own_port_set = set(own_port_bws)
+    bws_options = [
+        {
+            'id': b.id,
+            'label': '%s - %s' % (b.id, b.company.name if b.company else '-'),
+            'case': (EXPORT_DOC_CASE_OWN_PORT if b.id in own_port_set
+                     else EXPORT_DOC_CASE_OTHER_PORT),
+        }
+        for b in (BaseWeightStation.objects
+                  .filter(id__in=own_port_bws + _exportDocumentOtherBwsIds())
+                  .select_related('company')
+                  .order_by('id'))
+    ]
+    option_qs = filters['option_qs']
+    team_options = (option_qs.exclude(car_team_id__isnull=True)
+                    .values('car_team_id', 'car_team_name')
+                    .distinct()
+                    .order_by('car_team_name'))
+    # ตัวเลือกชนิดหิน ดึงจากข้อมูลที่มีจริงในเดือนที่เลือก
+    # ไม่ดึงจากตาราง master ทั้งก้อน จะได้ไม่มีตัวเลือกที่เลือกแล้วไม่เจอข้อมูลเลย
+    stone_options = (option_qs.exclude(stone_type_name__isnull=True)
+                     .exclude(stone_type_name='')
+                     .values_list('stone_type_name', flat=True)
+                     .distinct()
+                     .order_by('stone_type_name'))
+
+    context = {
+        'export_document_page': 'active',
+        active: "active",
+        'rows': rows,
+        'trips': trips,
+        'summary': summary,
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'selected_date_from': selected_date_from,
+        'selected_date_to': selected_date_to,
+        'selected_bws': selected_bws,
+        'selected_team': selected_team,
+        'selected_stone': selected_stone,
+        'selected_origin': selected_origin,
+        'origin_options': filters['origin_options'],
+        'origin_unmapped': filters['origin_unmapped'],
+        'origin_sees_all': filters['origin_sees_all'],
+        'selected_case': selected_case,
+        'bws_filter_value': filters['bws_filter_value'],
+        'case_options': [
+            (EXPORT_DOC_CASE_OWN_PORT, EXPORT_DOC_CASE_LABELS[EXPORT_DOC_CASE_OWN_PORT]),
+            (EXPORT_DOC_CASE_OTHER_PORT, EXPORT_DOC_CASE_LABELS[EXPORT_DOC_CASE_OTHER_PORT]),
+        ],
+        'include_cancel': include_cancel,
+        'bws_options': bws_options,
+        'team_options': team_options,
+        'stone_options': stone_options,
+        'over_limit': over_limit,
+        'max_trips': EXPORT_DOC_MAX_TRIPS,
+        'rate_stats': rate_stats,
+        # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
+        'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
+    }
+    return render(request, "exportDocument/viewExportDocument.html", context)
+
+
+@login_required(login_url='login')
+def exportExcelTripEdit(request):
+    """ไฟล์สำหรับแก้ไขรายเที่ยว แล้วอัปกลับมาอัปเดต db
+
+    เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ไม่มีสูตรและมีแค่ sheet เดียว
+    คอลัมน์ A เก็บ weight_id ไว้ map ตอนอัปกลับ ช่องอื่นเป็นข้อมูลประกอบให้ดูว่าเป็นเที่ยวไหน
+    แก้ได้จริงช่องเดียวคือ J ทีมรถร่วม
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    # ไฟล์นี้ไม่ได้เปิด template ใหญ่เหมือนรายงาน เวลาจึงไปกองที่ดึงข้อมูลกับบันทึกไฟล์
+    _exportProgressSet(request, 2, 'กำลังดึงข้อมูลรายเที่ยว')
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    rows = _exportDocumentRows(qs, filters['own_port_bws'])
+    if not rows:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้แก้ไข")
+    if len(rows) > EXPORT_DOC_EDIT_MAX_ROWS:
+        return HttpResponse("มี %s เที่ยว เกิน %s ที่ไฟล์แก้ไขรองรับ กรุณากรองให้แคบลงก่อน"
+                            % (len(rows), EXPORT_DOC_EDIT_MAX_ROWS))
+
+    _exportProgressSet(request, 50, 'กำลังเขียนข้อมูลลงไฟล์ %s เที่ยว' % len(rows))
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = EXPORT_DOC_EDIT_SHEET
+
+    worksheet.cell(row=1, column=1).value = (
+        'แก้ได้เฉพาะช่องพื้นเหลือง : G นน.ปลายทาง / J ทีมรถร่วม (เลือกจาก dropdown) | '
+        'ช่องอื่นรวมถึง F นน.ต้นทาง แก้แล้วระบบจะไม่นำไปใช้ | '
+        'ห้ามแก้หรือลบคอลัมน์ A (weight_id) เพราะใช้เป็นตัวอ้างอิงตอนอัปกลับ | '
+        'ห้ามสลับหรือแทรกคอลัมน์ | ช่องที่เว้นว่างไว้ = ไม่เปลี่ยนแปลง')
+    worksheet.cell(row=1, column=1).font = Font(color='C00000', italic=True)
+
+    header_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    locked_fill = PatternFill(start_color='E7E6E6', end_color='E7E6E6', fill_type='solid')
+    edit_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+
+    for i, title in enumerate(EXPORT_DOC_EDIT_COLUMNS, start=1):
+        cell = worksheet.cell(row=EXPORT_DOC_EDIT_HEADER_ROW, column=i)
+        cell.value = title
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+
+    for i, r in enumerate(rows):
+        row = EXPORT_DOC_EDIT_FIRST_ROW + i
+        worksheet.cell(row=row, column=1).value = r['weight_id']
+        worksheet.cell(row=row, column=1).fill = locked_fill
+        worksheet.cell(row=row, column=2).value = r['date']
+        worksheet.cell(row=row, column=3).value = r['origin']
+        worksheet.cell(row=row, column=4).value = r['destination']
+        worksheet.cell(row=row, column=5).value = r['stone']
+        origin_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_ORIGIN_COL)
+        origin_cell.value = float(r['origin_weight']) if r['origin_weight'] is not None else None
+        # นน.ต้นทางแสดงไว้ให้เทียบเฉยๆ แก้ไม่ได้ จึงใช้สีเดียวกับช่อง weight_id
+        origin_cell.fill = locked_fill
+        dest_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_DEST_COL)
+        dest_cell.value = float(r['dest_weight']) if r['dest_weight'] is not None else None
+        dest_cell.fill = edit_fill
+        worksheet.cell(row=row, column=8).value = r['car_registration']
+        worksheet.cell(row=row, column=9).value = r['doc_id']
+        team_cell = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_TEAM_COL)
+        # เที่ยวที่ยังไม่มีทีมให้เว้นว่างไว้จริง ๆ ไม่ต้องใส่คำว่า "ไม่ระบุทีม"
+        # ไฟล์นี้เป็นไฟล์กรอกข้อมูล ช่องว่างสื่อว่า "ยังไม่ได้ระบุ" ตรงกว่า
+        team_cell.value = None if r['team_missing'] else r['team']
+        team_cell.fill = edit_fill
+
+    # dropdown ชื่อทีม กันพิมพ์ผิด เก็บรายชื่อไว้อีก sheet เพราะรายการยาวเกินใส่ในสูตรตรง ๆ
+    teams = list(BaseCarTeam.objects.order_by('car_team_name')
+                 .values_list('car_team_name', flat=True))
+    teams = [t for t in teams if t]
+    if teams:
+        listsheet = workbook.create_sheet(EXPORT_DOC_EDIT_TEAM_LIST_SHEET)
+        for i, name in enumerate(teams, start=1):
+            listsheet.cell(row=i, column=1).value = name
+        listsheet.sheet_state = 'hidden'
+
+        validation = DataValidation(
+            type='list',
+            formula1="='%s'!$A$1:$A$%d" % (EXPORT_DOC_EDIT_TEAM_LIST_SHEET, len(teams)),
+            allow_blank=True, showDropDown=False)
+        validation.error = 'ชื่อทีมนี้ไม่มีในระบบ ให้เลือกจาก dropdown'
+        validation.errorTitle = 'ชื่อทีมไม่ถูกต้อง'
+        worksheet.add_data_validation(validation)
+        last_row = EXPORT_DOC_EDIT_FIRST_ROW + len(rows) - 1
+        validation.add('%s%d:%s%d' % (
+            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), EXPORT_DOC_EDIT_FIRST_ROW,
+            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), last_row))
+
+    for i, width in enumerate((14, 12, 18, 18, 22, 14, 14, 14, 12, 34), start=1):
+        worksheet.column_dimensions[get_column_letter(i)].width = width
+    worksheet.freeze_panes = 'A%d' % EXPORT_DOC_EDIT_FIRST_ROW
+
+    _exportProgressSet(request, 72, 'กำลังบันทึกไฟล์')
+    stream = BytesIO()
+    workbook.save(stream)
+
+    _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="trip_edit_%s_%s.xlsx"' % (
+        active, filters['selected_month'] or 'all')
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+@login_required(login_url='login')
+def uploadTripEdit(request):
+    """อ่านไฟล์ที่แก้แล้ว เทียบกับ db แล้วพักรายการที่จะเปลี่ยนไว้ใน session เพื่อให้ดูก่อนยืนยัน
+    ขั้นนี้ยังไม่เขียนอะไรลง db"""
+    if request.method != 'POST':
+        return redirect('viewExportDocument')
+
+    upload = request.FILES.get('trip_edit_file')
+    if not upload:
+        messages.error(request, 'ยังไม่ได้เลือกไฟล์')
+        return redirect('viewExportDocument')
+
+    _exportProgressSweep()
+    _exportProgressSet(request, 5, 'กำลังอ่านไฟล์ที่อัปโหลด')
+    try:
+        workbook = openpyxl.load_workbook(upload, data_only=True)
+        worksheet = workbook[EXPORT_DOC_EDIT_SHEET]
+    except KeyError:
+        messages.error(request, 'ไม่พบ sheet "%s" ในไฟล์ กรุณาใช้ไฟล์ที่โหลดจากปุ่ม '
+                                '"Export ไฟล์สำหรับแก้ไข"' % EXPORT_DOC_EDIT_SHEET)
+        return redirect('viewExportDocument')
+    except Exception:
+        messages.error(request, 'อ่านไฟล์ไม่ได้ ต้องเป็นไฟล์ .xlsx เท่านั้น')
+        return redirect('viewExportDocument')
+
+    # อ้างอิงจาก db เสมอ ไม่เชื่อค่าอื่นในไฟล์นอกจาก weight_id กับชื่อทีม
+    # รับได้ทั้ง 2 เคส ตาชั่งที่อยู่นอกทั้งสองลิสต์เท่านั้นที่ถือว่าไม่อยู่ในขอบเขตของหน้านี้
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    allowed_bws = set(own_port_bws) | set(_exportDocumentOtherBwsIds())
+    team_by_name = {t.car_team_name: t.car_team_id
+                    for t in BaseCarTeam.objects.all() if t.car_team_name}
+
+    changes = []
+    errors = []
+    seen_ids = set()
+
+    _exportProgressSet(request, 60, 'กำลังเทียบข้อมูลกับระบบ')
+    last_row = worksheet.max_row
+    row_span = max(last_row - EXPORT_DOC_EDIT_FIRST_ROW, 1)
+
+    for row in range(EXPORT_DOC_EDIT_FIRST_ROW, last_row + 1):
+        # รายงานทุก 200 แถว ไม่ใช่ทุกแถว เพราะแต่ละครั้งเขียนไฟล์ 1 ที
+        # ถี่กว่านี้จะเสียเวลาไปกับการเขียนไฟล์มากกว่างานจริง
+        if row % 200 == 0:
+            _exportProgressSet(
+                request,
+                60 + int(38 * (row - EXPORT_DOC_EDIT_FIRST_ROW) / row_span),
+                'กำลังเทียบข้อมูลกับระบบ แถวที่ %s จาก %s' % (row, last_row))
+
+        raw_id = worksheet.cell(row=row, column=EXPORT_DOC_EDIT_ID_COL).value
+        if raw_id in (None, ''):
+            continue
+        try:
+            weight_id = int(raw_id)
+        except (TypeError, ValueError):
+            errors.append('แถว %s : weight_id "%s" ไม่ใช่ตัวเลข' % (row, raw_id))
+            continue
+        if weight_id in seen_ids:
+            errors.append('แถว %s : weight_id %s ซ้ำกับแถวก่อนหน้า' % (row, weight_id))
+            continue
+        seen_ids.add(weight_id)
+
+        # อ่านทุกช่องที่แก้ได้ก่อน ถ้าไม่มีช่องไหนกรอกมาเลยก็ข้ามไป ไม่ต้องยิง query
+        raw_values = {}
+        for col, label, attr, kind in EXPORT_DOC_EDIT_FIELDS:
+            value = worksheet.cell(row=row, column=col).value
+            if isinstance(value, str):
+                value = value.strip()
+            # ช่องว่าง = ไม่เปลี่ยน | คำว่า "ไม่ระบุทีม" ก็ถือว่าไม่เปลี่ยน เพราะเป็นคำที่ระบบเติมให้เอง
+            if value in (None, '') or (kind == 'team' and value == EXPORT_DOC_NO_TEAM):
+                continue
+            raw_values[attr] = (col, label, kind, value)
+        if not raw_values:
+            continue
+
+
+        weight = Weight.objects.filter(pk=weight_id).first()
+        if weight is None:
+            errors.append('แถว %s : ไม่พบ weight_id %s ในระบบ' % (row, weight_id))
+            continue
+        # กันอัปไฟล์ผิดแล้วไปแก้เที่ยวที่ไม่ได้อยู่ในขอบเขตของหน้านี้
+        if weight.bws_id not in allowed_bws or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE:
+            errors.append('แถว %s : weight_id %s ไม่ได้อยู่ในเงื่อนไขของหน้านี้ (ส่งให้ + ตาชั่งของเคส 1 หรือ 2)'
+                          % (row, weight_id))
+            continue
+
+        # เคสเป็นตัวกำหนดว่าน้ำหนักฝั่งไหนเก็บอยู่ฟิลด์ไหน ต้องหาก่อนถึงจะเทียบค่าเก่าได้ถูก
+        case = _exportDocumentCaseOf(weight.bws_id, own_port_bws)
+
+        fields = []
+        apply_values = {}
+        for attr, (col, label, kind, value) in raw_values.items():
+            if kind == 'ton':
+                attr = _exportDocumentTonAttr(attr, case)
+            if kind == 'team':
+                if value not in team_by_name:
+                    errors.append('แถว %s : ไม่มีทีมชื่อ "%s" ในระบบ' % (row, value))
+                    continue
+                old = weight.car_team_name or ''
+                if old == value:
+                    continue
+                apply_values['car_team_id'] = team_by_name[value]
+                apply_values['car_team_name'] = value
+                fields.append({'label': label, 'old': old or '(ไม่มีทีม)', 'new': value})
+            else:
+                try:
+                    new_ton = Decimal(str(value)).quantize(Decimal('0.001'))
+                except (InvalidOperation, TypeError, ValueError):
+                    errors.append('แถว %s : %s "%s" ไม่ใช่ตัวเลข' % (row, label, value))
+                    continue
+                if new_ton < 0:
+                    errors.append('แถว %s : %s ติดลบ (%s)' % (row, label, value))
+                    continue
+                if new_ton > EXPORT_DOC_EDIT_MAX_TON:
+                    errors.append('แถว %s : %s = %s เกิน %s ตัน น่าจะพิมพ์ตกจุดทศนิยม'
+                                  % (row, label, value, EXPORT_DOC_EDIT_MAX_TON))
+                    continue
+                old_ton = getattr(weight, attr)
+                if old_ton is not None and Decimal(old_ton).quantize(Decimal('0.001')) == new_ton:
+                    continue
+                apply_values[attr] = str(new_ton)
+                fields.append({
+                    'label': label,
+                    'old': '%.3f' % old_ton if old_ton is not None else '(ว่าง)',
+                    'new': '%.3f' % new_ton,
+                })
+
+        if not fields:
+            continue
+
+        changes.append({
+            'weight_id': weight_id,
+            'date': weight.date.strftime('%d/%m/%Y') if weight.date else '',
+            'doc_id': weight.doc_id or '',
+            'fields': fields,
+            'apply': apply_values,
+        })
+
+    if len(changes) > EXPORT_DOC_EDIT_MAX_CHANGES:
+        messages.error(request, 'มีรายการจะเปลี่ยน %s แถว เกิน %s ที่รับได้ในรอบเดียว'
+                                % (len(changes), EXPORT_DOC_EDIT_MAX_CHANGES))
+        return redirect('viewExportDocument')
+
+    request.session[EXPORT_DOC_EDIT_SESSION_KEY] = {
+        'changes': changes,
+        'errors': errors[:50],
+        'error_count': len(errors),
+        'filename': upload.name,
+    }
+    _exportProgressSet(request, 100,
+                       'ตรวจไฟล์เสร็จแล้ว พบรายการจะเปลี่ยน %s แถว' % len(changes),
+                       done=True)
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def confirmTripEdit(request):
+    """เขียนรายการที่พักไว้ลง db จริง
+
+    save ทีละแถวเพราะ signal pre_save บน Weight เป็นตัวเก็บค่าเก่าลง WeightHistory
+    ถ้าใช้ bulk_update จะข้าม signal แล้วประวัติหาย
+    """
+    if request.method != 'POST':
+        return redirect('viewExportDocument')
+
+    pending = request.session.get(EXPORT_DOC_EDIT_SESSION_KEY) or {}
+    changes = pending.get('changes') or []
+    if not changes:
+        messages.error(request, 'ไม่มีรายการรอยืนยัน')
+        return redirect('viewExportDocument')
+
+    allowed_bws = set(_exportDocumentOwnPortBwsIds()) | set(_exportDocumentOtherBwsIds())
+    applied = 0
+    skipped = 0
+
+    with transaction.atomic():
+        for change in changes:
+            weight = Weight.objects.filter(pk=change['weight_id']).first()
+            # ตรวจซ้ำอีกรอบ เผื่อมีคนแก้ระหว่างที่ค้างพรีวิวอยู่
+            if (weight is None
+                    or weight.bws_id not in allowed_bws
+                    or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE):
+                skipped += 1
+                continue
+
+            for attr, value in (change.get('apply') or {}).items():
+                setattr(weight, attr, value)
+            weight.save()
+
+            history = (WeightHistory.objects.filter(weight_id=weight.pk)
+                       .order_by('-update').first())
+            if history:
+                history.user_update = request.user
+                history.save()
+            applied += 1
+
+    request.session.pop(EXPORT_DOC_EDIT_SESSION_KEY, None)
+    messages.success(request, 'อัปเดตแล้ว %s เที่ยว%s'
+                              % (applied, ' (ข้าม %s เที่ยวที่ข้อมูลเปลี่ยนไปแล้ว)' % skipped
+                                 if skipped else ''))
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def cancelTripEdit(request):
+    """ทิ้งรายการที่พักไว้ ไม่เขียนอะไร"""
+    request.session.pop(EXPORT_DOC_EDIT_SESSION_KEY, None)
+    return redirect('viewExportDocument')
+
+
+@login_required(login_url='login')
+def exportExcelExportDocument(request):
+    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+
+    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
+    ถ้าเขียนทับจะเสียสูตรถาวร เหมือนที่หน้า "วิธีกรอก" ในไฟล์เตือนไว้
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    # ตัวเลข % ตั้งจากสัดส่วนเวลาจริงของแต่ละขั้น วัดกับเดือนที่เที่ยวเยอะสุด
+    # (3,595 เที่ยว รวม ~31 วินาที) : เตรียมข้อมูล 26% · ดึงรายเที่ยว 3% · เปิด template 40%
+    # · เขียน 4% · บันทึกไฟล์ 27%
+    # ไม่ได้แบ่งเท่า ๆ กัน เพราะจะทำให้แถบค้างอยู่ที่เดียวนานแล้วกระโดดทีเดียวจบ
+    # และเวลาที่เหลือที่หน้าเว็บคำนวณจะเพี้ยนไปด้วย
+    _exportProgressSet(request, 2, 'กำลังอ่านเงื่อนไขที่เลือก')
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    selected_month = filters['selected_month']
+
+    _exportProgressSet(request, 27, 'กำลังนับจำนวนเที่ยว')
+    trip_count = qs.count()
+    if trip_count == 0:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
+    if trip_count > EXPORT_DOC_MAX_TRIPS:
+        return HttpResponse(
+            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
+            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
+            % (trip_count, EXPORT_DOC_MAX_TRIPS)
+        )
+
+    _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
+    rows = _exportDocumentRows(qs, filters['own_port_bws'])
+
+    # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
+    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
+        rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+
+    _exportProgressSet(request, 33, 'กำลังเปิดไฟล์ต้นแบบ')
+    workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+    worksheet = workbook['บันทึกรายเที่ยว']
+
+    # หัวฟอร์ม : B3 ประจำเดือน (D3 เลขที่หนังสือ กับ F3 นามที่จ่าย ปล่อยให้บัญชีกรอกเอง)
+    if selected_month:
+        worksheet['B3'] = _exportDocumentThaiMonth(selected_month)
+
+    # ทาสีแดงช่องทีมที่เราเติม "ไม่ระบุทีม" ให้ จะได้ไล่หาแล้วไปตามทีมจริงมาใส่ทีหลังได้
+    no_team_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+    no_team_font = Font(color='9C0006', bold=True)
+    has_no_team = False
+
+    _exportProgressSet(request, 73, 'กำลังเขียนข้อมูลลงไฟล์')
+
+    for i, r in enumerate(rows):
+        excel_row = EXPORT_DOC_FIRST_DATA_ROW + i
+        # ช่องที่ไม่มีข้อมูลเขียน None ไม่ใช่ '' จะได้เป็นช่องว่างจริง ๆ
+        # ถ้าเขียน '' ลงไป excel จะนับว่าเป็นช่องที่มีค่า แล้วช่องตรวจในไฟล์จะรายงานเพี้ยน
+        worksheet.cell(row=excel_row, column=1).value = r['date']                     # A วันที่
+        worksheet.cell(row=excel_row, column=2).value = r['origin'] or None           # B เหมืองต้นทาง
+        worksheet.cell(row=excel_row, column=3).value = r['destination'] or None      # C ท่าปลายทาง
+        worksheet.cell(row=excel_row, column=4).value = r['stone'] or None            # D ชนิดแร่/หิน
+        worksheet.cell(row=excel_row, column=5).value = r['weight_carried'] or None   # E แบก นน. (ยังว่าง)
+        team_cell = worksheet.cell(row=excel_row, column=6)                           # F ทีมรถร่วม
+        team_cell.value = r['team']
+        if r['team_missing']:
+            team_cell.fill = no_team_fill
+            team_cell.font = no_team_font
+            has_no_team = True
+        worksheet.cell(row=excel_row, column=7).value = r['payer'] or None            # G นามที่จ่าย (ยังว่าง)
+        worksheet.cell(row=excel_row, column=8).value = r['car_registration'] or None # H ทะเบียนรถ
+        worksheet.cell(row=excel_row, column=9).value = r['doc_id'] or None           # I เลขที่ชั่ง
+        # J/K เป็นตัวเลข ต้องแปลง Decimal เป็น float ไม่งั้น excel มองเป็นข้อความแล้วสูตรไม่คิด
+        worksheet.cell(row=excel_row, column=10).value = (
+            float(r['origin_weight']) if r['origin_weight'] is not None else None)   # J นน.ต้นทาง
+        worksheet.cell(row=excel_row, column=11).value = (
+            float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
+
+    _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats)
+
+    # บิลน้ำมันจาก Express : ใช้ทั้งกรอก sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)
+    # อ่านจาก cache ตัวเดียวกับที่ราคาน้ำมันเฉลี่ยใช้ ไม่ได้ยิงซ้ำ
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentWriteOilSheet(workbook, fuel_lines,
+                                 {r['team'] for r in rows}, rate_stats)
+    _exportDocumentWriteExpressSheet(workbook, fuel_lines, fuel_stats)
+
+    # "ไม่ระบุทีม" เป็นชื่อที่เราตั้งขึ้นเอง ต้องไปลงทะเบียนใน sheet รายการมาตรฐาน
+    # ไม่งั้นช่องตรวจ O10 จะนับเป็น "ชื่อที่ไม่อยู่ในรายการ" ทุกแถวที่เราเติมให้
+    if has_no_team:
+        _exportDocumentHoistNoTeam(workbook)
+
+        std = workbook[EXPORT_DOC_STD_LIST_SHEET]
+        col = EXPORT_DOC_STD_TEAM_COL
+        already = any(std.cell(row=row, column=col).value == EXPORT_DOC_NO_TEAM
+                      for row in range(2, EXPORT_DOC_STD_LAST_ROW + 1))
+        if not already:
+            for row in range(2, EXPORT_DOC_STD_LAST_ROW + 1):
+                if std.cell(row=row, column=col).value in (None, ''):
+                    std.cell(row=row, column=col).value = EXPORT_DOC_NO_TEAM
+                    break
+
+    _exportProgressSet(request, 77, 'กำลังบันทึกไฟล์')
+    content = xlsx_template.save_with_template_extensions(
+        workbook, xlsx_template.TRIP_REPORT_TEMPLATE)
+
+    _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
+    response = HttpResponse(
+        content,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    # ใส่ชื่อต้นทางลงชื่อไฟล์ด้วย เพราะจุดประสงค์ของการกรองคือแยกไฟล์ตามนาม
+    # ถ้าไม่ใส่ ดาวน์โหลดหลายนามแล้วไฟล์จะชื่อซ้ำกันหมด แยกไม่ออกว่าอันไหนของใคร
+    origin_part = ' นาม%s' % filters['selected_origin'] if filters['selected_origin'] else ''
+    # ถ้ากรองเฉพาะบางวันในเดือน ใส่ช่วงวันลงชื่อไฟล์ด้วย จะได้แยกออกจากไฟล์เต็มเดือน
+    date_part = ''
+    if filters['selected_date_from'] or filters['selected_date_to']:
+        date_part = ' %sถึง%s' % (filters['selected_date_from'] or 'ต้นเดือน',
+                                  filters['selected_date_to'] or 'สิ้นเดือน')
+    filename = 'trip_report_%s_%s%s%s.xlsx' % (active, selected_month or 'all', date_part, origin_part)
+    response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
+    return _exportDocumentMarkDownloadDone(request, response)

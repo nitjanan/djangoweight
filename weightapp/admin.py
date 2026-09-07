@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
 from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
@@ -296,6 +296,9 @@ class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['name', 'code', 'biz', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
+    # จำเป็นต้องมี เพราะ BaseCompanyMapBaseCustomerAdmin ใช้ autocomplete_fields ชี้มาที่ BaseCompany
+    # ถ้าไม่มี Django จะขึ้น admin.E040 ตั้งแต่ตอน system check แล้วรันคำสั่งอะไรไม่ได้เลยทั้งโปรเจกต์
+    search_fields = ('name', 'code')
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
 PASSWORD_PLACEHOLDER = '●' * 8  # ●●●●●●●● shown when a password is already set
@@ -622,4 +625,37 @@ class ClientUpdateLogAdmin(admin.ModelAdmin):
     ordering = ('-checked_at',)
 
 
+class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'name', 'base_company', 'base_customer', 'oi_soc_code')
+    search_fields = ('base_company__name', 'base_customer__customer_name', 'oi_soc_code')
+    autocomplete_fields = ['base_company', 'base_customer']
+    list_per_page = 20
 
+class InternationalFreightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'origin', 'destination', 'version', 'status', 'effective_date', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('id', 'origin__base_company__name', 'origin__base_customer__customer_name', 'destination__base_company__name', 'destination__base_customer__customer_name')
+    list_per_page = 20
+
+admin.site.register(BaseCompanyMapBaseCustomer, BaseCompanyMapBaseCustomerAdmin)
+admin.site.register(InternationalFreightRate, InternationalFreightRateAdmin)
+
+class InternationalFreightRateFuelPriceAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'base_comp', 'date', 'average_fuel_price')
+    list_filter = ('base_comp',)
+    search_fields = ('base_comp__name', 'base_comp__code')
+    list_per_page = 20
+
+class CarryingweightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'name', 'description', 'min_weight', 'max_weight')
+    search_fields = ('name', 'description')
+    list_per_page = 20
+
+class InternationalFreightRateTeamAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'international_freight_rate', 'team', 'weight_carried', 'freight_rate', 'discount_per_ton')
+    search_fields = ('team__car_team_name',)
+    list_per_page = 20
+
+admin.site.register(InternationalFreightRateFuelPrice, InternationalFreightRateFuelPriceAdmin)
+admin.site.register(InternationalFreightRateTeam, InternationalFreightRateTeamAdmin)
+admin.site.register(CarryingweightRate, CarryingweightRateAdmin)

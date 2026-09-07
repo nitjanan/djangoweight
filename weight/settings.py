@@ -223,3 +223,11 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False # เปิดเมื่อใช้ HTTPS
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+# แยก cookie ของแต่ละโปรเจกต์ (browser ไม่แยก cookie ตาม port)
+SESSION_COOKIE_NAME = 'djangoweight_sessionid'
+SESSION_COOKIE_PATH = '/'
+SESSION_COOKIE_DOMAIN = None
+CSRF_COOKIE_NAME = 'djangoweight_csrftoken'
+CSRF_COOKIE_PATH = '/'
+CSRF_COOKIE_DOMAIN = None

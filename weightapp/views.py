@@ -11523,37 +11523,28 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
 
 
 def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
-    """เส้นทางที่ยังไม่มีอัตราค่าขนส่งเลย จัดกลุ่มเป็น "ปลายทาง แล้วแจกแจงต้นทาง"
+    """เส้นทางที่ยังไม่มีอัตราค่าขนส่งเลย บรรทัดละ 1 เส้นทาง
 
-    จัดหัวข้อด้วยปลายทาง เพราะเป็นมุมที่ฝ่ายบัญชีใช้คุยกัน (ท่าไหนยังไม่ได้ตั้งราคา)
-    แต่ต้องบอกต้นทางกำกับด้วยเสมอ เพราะราคาตั้งเป็น "คู่ ต้นทาง-ปลายทาง"
-    ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งราคาแล้วและยังไม่ได้ตั้ง
-    ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
+    ต้องบอกเป็นคู่ ต้นทาง-ปลายทาง เพราะราคาตั้งเป็นคู่ ปลายทางเดียวกันจึงมีทั้งเส้นที่
+    ตั้งราคาแล้วและยังไม่ได้ตั้ง ถ้าบอกแต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
 
     นับเฉพาะเที่ยวที่ "ไม่มีสัญญาเลย" (wc_no_contract) ไม่รวมเที่ยวที่มีสัญญาแล้วแต่
     น้ำหนักไม่เข้าช่วง (wc_out_of_range) เพราะสองอย่างนี้แก้คนละที่
     อันแรกต้องเพิ่มเส้นทางใหม่ อันหลังแค่เพิ่มช่วงน้ำหนักในเส้นทางที่มีอยู่แล้ว
     หน้าเว็บมีกล่องแยกให้อยู่แล้ว เอามาปนกันจะทำให้ไปแก้ผิดที่
 
-    คืน [{'destination': ..., 'trips': n, 'origins': [{'name':..., 'trips': n}, ...]}, ...]
-    เรียงจากปลายทางที่มีเที่ยวค้างมากไปน้อย
+    คืน [{'origin': ..., 'destination': ..., 'trips': n}, ...] เรียงจากเที่ยวมากไปน้อย
     """
-    pending = defaultdict(lambda: defaultdict(int))
+    pending = defaultdict(int)
     for row in trip_rows:
         if weight_carried_by_key.get(
                 (row['origin_map_id'], row['destination_map_id'], row['team_id'])):
             continue
-        pending[row['destination']][row['origin']] += 1
+        pending[(row['origin'], row['destination'])] += 1
 
-    result = []
-    for destination, origins in pending.items():
-        result.append({
-            'destination': destination,
-            'trips': sum(origins.values()),
-            'origins': [{'name': name, 'trips': n}
-                        for name, n in sorted(origins.items(), key=lambda x: -x[1])],
-        })
-    result.sort(key=lambda x: -x['trips'])
+    result = [{'origin': origin, 'destination': destination, 'trips': trips}
+              for (origin, destination), trips in pending.items()]
+    result.sort(key=lambda x: (-x['trips'], x['origin']))
     return result
 
 

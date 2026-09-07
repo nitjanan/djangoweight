@@ -596,8 +596,17 @@
             <li>
               เดือนนี้มีเที่ยววิ่ง {{ rate_stats.route_matched }} เส้นทาง
               จากที่ตั้งราคาไว้ {{ rate_stats.rate_in_db }} เส้นทาง
-              {% if rate_stats.truncated %}
-              <span class="text-danger">(ตัดทิ้ง {{ rate_stats.truncated|intcomma }} แถว เพราะเกินที่ไฟล์รับได้)</span>
+              {% comment %}
+              แถวอัตราเรียงให้แถวที่มีเที่ยววิ่งจริงอยู่ต้น ๆ ส่วนที่ล้นเพดานจึงเป็นแถวเปล่า
+              ซึ่งไม่มีผลกับยอดเงิน บอกเป็นข้อความเทา ๆ พอ
+              จะเป็นเรื่องใหญ่ก็ต่อเมื่อแถวที่มีเที่ยวจริงล้นออกไปด้วย (truncated_used)
+              {% endcomment %}
+              {% if rate_stats.truncated_used %}
+              <span class="text-danger">(ตัดทิ้ง {{ rate_stats.truncated_used|intcomma }} แถวที่มีเที่ยววิ่งจริง
+                เพราะเกินที่ไฟล์รับได้ — เที่ยวพวกนั้นจะเป็นเงิน 0)</span>
+              {% elif rate_stats.truncated %}
+              <span class="text-muted">(ตัดแถวที่ยังไม่มีเที่ยววิ่งออก {{ rate_stats.truncated|intcomma }} แถว
+                เพราะเกินที่ไฟล์รับได้ ไม่มีผลกับยอดเงิน)</span>
               {% endif %}
             </li>
             {% for v in rate_stats.rate_versions %}

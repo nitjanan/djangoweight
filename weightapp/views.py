@@ -10903,9 +10903,11 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col
                 worksheet.cell(row=row, column=start).value = float(previous_rate)
             if team_rate.freight_rate is not None:
                 worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
-            if rate.fuel_freight_adjustment is not None:
+            # ค่าปรับตามน้ำมันเป็นของแถวทีม (ทีม + ช่วงแบก นน.) ไม่ใช่ของทั้งใบแล้ว
+            # ช่อง "น้ำมัน ± 1" เป็นคอลัมน์ย่อยใต้ช่วงน้ำหนักอยู่แล้ว จึงลงตรงนี้ได้เลยไม่ต้องแก้โครง
+            if team_rate.fuel_freight_adjustment is not None:
                 worksheet.cell(row=row, column=start + 2).value = (
-                    '± %.2f' % rate.fuel_freight_adjustment)
+                    '± %.2f' % team_rate.fuel_freight_adjustment)
         # บาท/ตัน/กม. มีคอลัมน์เดียวแต่แต่ละช่วงมีค่าของตัวเอง เอาช่วงแรกที่กรอกไว้
         # เขียนตายตัวแบบนี้เพื่อให้ผลคงที่ ไม่ใช่แล้วแต่ว่า record ไหนวนมาทีหลัง
         if per_km is None and team_rate.freight_rate_per_ton_km is not None:
@@ -10962,7 +10964,7 @@ def editInternationalFreightRate(request, id):
 
     # ส่งทีมเดิมไปให้ JS สร้างแถวรอไว้ตอนเปิดหน้า
     teams = list(obj.teams.values(
-        'team_id', 'weight_carried', 'freight_rate',
+        'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note',
     ))
     
@@ -11654,7 +11656,8 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'base_fuel_price': rate.base_fuel_price,    # H
                         # I กับ N เติมในรอบที่ 2
                         'average_fuel_price': None,                 # I
-                        'fuel_freight_adjustment': rate.fuel_freight_adjustment,  # J
+                        # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = (I-H)*J ในไฟล์ไม่ต้องแก้
+                        'fuel_freight_adjustment': team_rate.fuel_freight_adjustment,
                         # หมายเหตุเขียนลงคอลัมน์ N (ช่องว่างที่ไม่มีสูตรไหนอ้างถึง)
                         # ห้ามเขียนลง I เพราะสูตร K = (I-H)*J จะกลายเป็น #VALUE! ทั้งคอลัมน์
                         'fuel_note': None,                          # N

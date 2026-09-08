@@ -1476,11 +1476,12 @@ class InternationalFreightRate(models.Model):
     destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_destinations', null=True, blank=True, verbose_name="ปลายทาง")
     base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")#
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
-    payload_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="น้ำหนักบรรทุก")#
-    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมันที่ใช้ ลิตรละ 1 บาท")#
     fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")#
     # ราคาน้ำมันเฉลี่ยย้ายไปตาราง InternationalFreightRateFuelPrice เพราะเปลี่ยนทุกเดือน
-    # ส่วน base_fuel_price กับ fuel_freight_adjustment ยังอยู่ที่นี่ เป็นเงื่อนไขในสัญญาที่ไม่เปลี่ยนรายเดือน
+    # ส่วน base_fuel_price ยังอยู่ที่นี่ เป็นเงื่อนไขในสัญญาที่ไม่เปลี่ยนรายเดือน
+    # ส่วนค่าปรับตามน้ำมันย้ายไปอยู่รายแถวทีม (ดู InternationalFreightRateTeam) เพราะแต่ละทีม
+    # และแต่ละช่วงแบก นน. ต่อรองกันคนละอัตรา เก็บค่าเดียวทั้งใบทำให้กรอกค่าจริงไม่ได้
+    # น้ำหนักบรรทุก (payload_weight) ถูกลบทิ้งใน migration 0297 ไม่มีสูตรไหนเคยใช้
     note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")#
 
     # --- การทำเวอร์ชัน ---
@@ -1666,6 +1667,10 @@ class InternationalFreightRateTeam(models.Model):
     # weight_carried = models.CharField(max_length=50, choices=CarryingweightTeam.choices, verbose_name="ประเภทการแบกน้ำหนัก")
     weight_carried = models.ForeignKey(CarryingweightRate, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ประเภทการแบกน้ำหนัก")
     freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ค่าขนส่ง")
+    # ย้ายมาจากตัวใบใน migration 0296 : อัตรานี้ต่อรองกันรายทีมและรายช่วงแบก นน.
+    # null ได้ที่ระดับ DB เพราะใบเก่าบางใบไม่เคยกรอก แต่ API บังคับกรอกทุกแถวสำหรับใบที่บันทึกใหม่
+    # (แบบเดียวกับ freight_rate ที่ null=True แต่หน้าเว็บบังคับ)
+    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมัน (บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร)")
     discount_per_ton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ลดบาท/ตัน")
     freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")
     note = models.TextField(null=True, blank=True, verbose_name="หมายเหตุ")

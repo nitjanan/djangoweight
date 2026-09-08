@@ -119,14 +119,6 @@
               <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_used_per_trip" placeholder="เช่น 120.00" value="{{ ifr_obj.fuel_used_per_trip|default_if_none:'' }}" />
             </div>
             <div class="form-group col-md-3">
-              <label for="ifr_payload_weight">น้ำหนักบรรทุก (ตัน/เที่ยว) <span class="text-danger">*</span></label>
-              <input type="text" inputmode="decimal" class="form-control" id="ifr_payload_weight" placeholder="เช่น 25.00" value="{{ ifr_obj.payload_weight|default_if_none:'' }}" />
-            </div>
-            <div class="form-group col-md-3">
-              <label for="ifr_fuel_freight_adjustment">ปรับค่าขนส่งตามน้ำมัน (ลิตรละ 1 บาท) <span class="text-danger">*</span></label>
-              <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_freight_adjustment" placeholder="เช่น 1.00" value="{{ ifr_obj.fuel_freight_adjustment|default_if_none:'' }}" />
-            </div>
-            <div class="form-group col-md-3">
               <label for="ifr_effective_date">
                 {% if ifr_obj %}วันที่เริ่มใช้ของราคาใหม่{% else %}วันที่เริ่มใช้{% endif %}
               </label>
@@ -158,10 +150,11 @@
                   <th style="min-width: 180px;">ทีม <span class="text-danger">*</span></th>
                   <th style="min-width: 200px;">ประเภทการแบกน้ำหนัก <span class="text-danger">*</span></th>
                   <th style="min-width: 120px;">ค่าขนส่ง</th>
+                  <th style="min-width: 150px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small> <span class="text-danger">*</span></th>
                   <th style="min-width: 120px;">ลดบาท/ตัน</th>
                   <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.</th>
                   <th style="min-width: 160px;">หมายเหตุ</th>
-                  <th style="width: 60px;">ลบ</th>
+                  <th style="width: 96px;">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="ifr_team_rows"></tbody>
@@ -169,6 +162,7 @@
           </div>
           <div id="ifr_team_empty" class="alert alert-light-warning color-warning">
             <i class="bi bi-exclamation-triangle"></i> ยังไม่มีทีม กด "เพิ่มทีม" เพื่อเพิ่มแถว (จะไม่ใส่ทีมเลยก็ได้)
+            — ทีมที่เพิ่มแล้วถ้าต้องการอีกช่วงน้ำหนัก ให้กดปุ่ม <i class="fas fa-plus"></i> ท้ายแถวของทีมนั้น
           </div>
         </div>
       </div>
@@ -498,11 +492,16 @@
         + escapeHtml(teamValueForSelect) + '">' + teamOptionsHtml() + '</select></td>' +
       '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-fuel-adjustment" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-rate-per-ton-km" /></td>' +
       '<td><input type="text" class="form-control ifr-team-note" /></td>' +
-      '<td class="text-center">' +
-        '<button type="button" class="btn btn-danger btn-sm ifr-remove-team">' +
+      '<td class="text-center text-nowrap">' +
+        '<button type="button" class="btn btn-success btn-sm ifr-add-band" ' +
+                'title="เพิ่มช่วงน้ำหนักให้ทีมนี้">' +
+          '<i class="fas fa-plus"></i>' +
+        '</button> ' +
+        '<button type="button" class="btn btn-danger btn-sm ifr-remove-team" title="ลบแถวนี้">' +
           '<i class="fas fa-trash-alt"></i>' +
         '</button>' +
       '</td>';
@@ -510,6 +509,7 @@
     tr.querySelector('.ifr-team-select').value = teamValueForSelect;
     tr.querySelector('.ifr-weight-carried').value = row.weight_carried || '';
     tr.querySelector('.ifr-freight-rate').value = row.freight_rate == null ? '' : row.freight_rate;
+    tr.querySelector('.ifr-fuel-adjustment').value = row.fuel_freight_adjustment == null ? '' : row.fuel_freight_adjustment;
     tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
     tr.querySelector('.ifr-rate-per-ton-km').value = row.freight_rate_per_ton_km == null ? '' : row.freight_rate_per_ton_km;
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
@@ -518,6 +518,20 @@
     // ห่อไว้ ไม่ส่งฟังก์ชันตรงๆ ไม่งั้น Event object จะกลายเป็นพารามิเตอร์ force
     tr.querySelector('.ifr-team-select').addEventListener('change', function () {
       refreshAllTeamsLabel();
+    });
+
+    // เพิ่มช่วงน้ำหนักให้ทีมเดิม : ทีมเดียวมักมีหลายช่วงคนละราคา ถ้าให้ไปกด "เพิ่มทีม"
+    // แล้วค้นหาชื่อทีมซ้ำทุกครั้ง จะเสียเวลาและพิมพ์ผิดง่าย ปุ่มนี้ยกทีมมาให้เลย
+    // ช่องอื่นเว้นว่างไว้ทั้งหมด เพราะคนละช่วงน้ำหนักคือคนละราคา ไม่ควรเดาค่าให้
+    // แถวใหม่ต่อท้ายกลุ่มของทีมนั้นเอง เพราะ groupTeamRows() จัดเรียงตามทีมให้อยู่แล้ว
+    tr.querySelector('.ifr-add-band').addEventListener('click', function () {
+      const select = tr.querySelector('.ifr-team-select');
+      if (select.value === '') {
+        showAlert('เลือกทีมในแถวนี้ก่อน แล้วค่อยกดเพิ่มช่วงน้ำหนัก', true);
+        return;
+      }
+      // ALL_TEAMS เก็บลง db เป็น team = null ต้องแปลงกลับให้ addTeamRow อ่านออก
+      addTeamRow({ team_id: select.value === ALL_TEAMS ? null : select.value });
     });
 
     tr.querySelector('.ifr-remove-team').addEventListener('click', function () {
@@ -558,6 +572,16 @@
     return rows;
   }
 
+  // ค่าปรับตามน้ำมันบังคับกรอกทุกแถว ดักตั้งแต่ฝั่งหน้าเว็บเพื่อบอกเลขแถวได้ตรง ๆ
+  // ไม่ปล่อยให้ backend ตอบ เพราะต้องรอ round trip แล้วข้อความก็อ้างแถวยากกว่า
+  function findRowsWithoutFuelAdjustment() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      if (tr.querySelector('.ifr-fuel-adjustment').value.trim() === '') rows.push(index + 1);
+    });
+    return rows;
+  }
+
   function collectTeams() {
     const teams = [];
     document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
@@ -565,6 +589,7 @@
         team_id: teamValue(tr.querySelector('.ifr-team-select')),
         weight_carried: orNull(tr.querySelector('.ifr-weight-carried').value),
         freight_rate: orNull(tr.querySelector('.ifr-freight-rate').value),
+        fuel_freight_adjustment: orNull(tr.querySelector('.ifr-fuel-adjustment').value),
         discount_per_ton: orNull(tr.querySelector('.ifr-discount-per-ton').value),
         freight_rate_per_ton_km: orNull(tr.querySelector('.ifr-rate-per-ton-km').value),
         note: orNull(tr.querySelector('.ifr-team-note').value),
@@ -583,9 +608,8 @@
     destination: 'ปลายทาง',
     distance: 'ระยะทาง',
     base_fuel_price: 'ราคาน้ำมันฐาน',
-    fuel_freight_adjustment: 'ปรับค่าขนส่งต่อน้ำมัน 1 บาท',
     fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
-    payload_weight: 'น้ำหนักบรรทุก',
+    fuel_freight_adjustment: 'ปรับตามน้ำมัน (ลิตรละ 1 บาท)',
     weight_carried: 'ประเภทการแบกน้ำหนัก',
     freight_rate: 'ค่าขนส่ง',
     team_id: 'ทีมขนส่ง',
@@ -654,6 +678,13 @@
       return;
     }
 
+    const rowsWithoutAdjustment = findRowsWithoutFuelAdjustment();
+    if (rowsWithoutAdjustment.length > 0) {
+      showAlert('กรุณากรอก "ปรับตามน้ำมัน (ลิตรละ 1 บาท)" ในแถวที่ '
+                + rowsWithoutAdjustment.join(', ') + ' (ถ้าเส้นทางนี้ไม่ปรับตามน้ำมัน ให้ใส่ 0)', true);
+      return;
+    }
+
     btn.disabled = true;
 
     const payload = {
@@ -661,9 +692,7 @@
       destination: orNull(document.getElementById('ifr_destination').value),
       base_fuel_price: orNull(document.getElementById('ifr_base_fuel_price').value),
       distance: orNull(document.getElementById('ifr_distance').value),
-      payload_weight: orNull(document.getElementById('ifr_payload_weight').value),
       fuel_used_per_trip: orNull(document.getElementById('ifr_fuel_used_per_trip').value),
-      fuel_freight_adjustment: orNull(document.getElementById('ifr_fuel_freight_adjustment').value),
       note: orNull(document.getElementById('ifr_note').value),
       effective_date: orNull(document.getElementById('ifr_effective_date').value),
       // ความเห็นตอนขออนุมัติ ไม่ใช่หมายเหตุของค่าขนส่ง คนละช่องกัน

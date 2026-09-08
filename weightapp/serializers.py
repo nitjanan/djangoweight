@@ -292,6 +292,10 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
         exclude = ['international_freight_rate', 'team']
         extra_kwargs = {
             'weight_carried_id': {'required': True, 'allow_null': False, 'allow_blank': False},
+            # ค่าปรับตามน้ำมันย้ายมาจากตัวใบ บังคับกรอกทุกแถว เพราะสูตรในไฟล์ export
+            # คือ (ราคาน้ำมันเฉลี่ย - ราคาน้ำมันฐาน) x ค่านี้ ปล่อยว่างแล้วเที่ยวนั้นจะไม่ถูกปรับเลย
+            # ซึ่งไม่ใช่เจตนา แต่จะดูไม่ออกจากในไฟล์ว่าลืมกรอกหรือจงใจไม่ปรับ
+            'fuel_freight_adjustment': {'required': True, 'allow_null': False},
         }
 
 
@@ -357,8 +361,6 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             'destination': {'required': True, 'allow_null': False},
             'base_fuel_price': {'required': True, 'allow_null': False},
             'distance': {'required': True, 'allow_null': False},
-            'payload_weight': {'required': True, 'allow_null': False},
-            'fuel_freight_adjustment': {'required': True, 'allow_null': False},
             'fuel_used_per_trip': {'required': True, 'allow_null': False},
             # ระบบเป็นคนใส่เวลาเอง ไม่ให้ client ส่งมาทับ
             'created_at': {'read_only': True},
@@ -489,8 +491,8 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
     # ช่องที่ถือว่าเป็น "ตัวค่าขนส่ง" จริง ๆ ถ้าช่องพวกนี้เปลี่ยนถึงจะนับเป็นการปรับราคา
     # effective_date รวมอยู่ด้วย เพราะการเปลี่ยนวันเริ่มใช้ต้อง save ลง DB จริง
-    _RATE_FIELDS = ('origin', 'destination', 'base_fuel_price', 'distance', 'payload_weight',
-                    'fuel_freight_adjustment', 'fuel_used_per_trip', 'note', 'effective_date')
+    _RATE_FIELDS = ('origin', 'destination', 'base_fuel_price', 'distance',
+                    'fuel_used_per_trip', 'note', 'effective_date')
 
     @staticmethod
     def _teamKey(team_data):
@@ -513,6 +515,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             s(getattr(team, 'pk', team)),
             s(getattr(band, 'pk', band)),
             s(get('freight_rate')),
+            s(get('fuel_freight_adjustment')),
             s(get('discount_per_ton')),
             s(get('freight_rate_per_ton_km')),
             s(get('note')),
@@ -547,8 +550,8 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         rate = InternationalFreightRate(root=root, version=last_version + 1)
         # ยกค่าทุกช่องจากใบเดิมมาก่อน แล้วค่อยทับเฉพาะช่องที่ส่งมาแก้
-        for field in ('origin', 'destination', 'base_fuel_price', 'distance', 'payload_weight',
-                      'fuel_freight_adjustment', 'fuel_used_per_trip', 'note'):
+        for field in ('origin', 'destination', 'base_fuel_price', 'distance',
+                      'fuel_used_per_trip', 'note'):
             setattr(rate, field, getattr(instance, field))
         for attr, value in validated_data.items():
             setattr(rate, attr, value)
@@ -563,6 +566,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         source_teams = teams_data if teams_data is not None else [
             {'team': t.team, 'weight_carried': t.weight_carried, 'freight_rate': t.freight_rate,
+             'fuel_freight_adjustment': t.fuel_freight_adjustment,
              'discount_per_ton': t.discount_per_ton,
              'freight_rate_per_ton_km': t.freight_rate_per_ton_km, 'note': t.note}
             for t in instance.teams.all()

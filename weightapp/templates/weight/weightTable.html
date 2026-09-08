@@ -105,6 +105,17 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                 </span>
               </button>
 
+              <button id="wtb_download-btn" class="btn btn-primary" style="position: relative; overflow: hidden;">
+                <span id="wtb_btn-text"><i class="fas fa-file-excel"></i> Export Excel</span>
+                <div id="wtb_btn-progress"
+                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%;
+                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
+                <span id="wtb_btn-percent" style="position: absolute; left: 50%; top: 50%;
+                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
+                    0%
+                </span>
+              </button>
+
               <button id="sd_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#5dade2 ;color: black;">
                 <span id="sd_btn-text">ยอดขายตามประเภทหินรายวัน</span>
                 <div id="sd_btn-progress" 
@@ -371,6 +382,22 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     const queryString = "{{ request.GET.urlencode|escapejs }}";
     const py_url = "{% url 'exportExcelProductionByStoneAndMonth' %}" + (queryString ? "?" + queryString : "");
     const file_name = "sales_monthly("+'{{ request.session.company_code }}'+") "+  $('#id_start_created').val() + " to "+ $('#id_end_created').val() +".xlsx";
+
+    progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
+  });
+
+  document.getElementById('wtb_download-btn').addEventListener('click', () => {
+    const btn = document.getElementById('wtb_download-btn');
+    const btnText = document.getElementById('wtb_btn-text');
+    const btnProgress = document.getElementById('wtb_btn-progress');
+    const btnPercent = document.getElementById('wtb_btn-percent');
+
+    const queryString = "{{ request.GET.urlencode|escapejs }}";
+    const py_url = "{% url 'exportExcelWeightTable' %}" + (queryString ? "?" + queryString : "");
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const file_name = "weight_table_" + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate())
+                      + "_" + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + ".xlsx";
 
     progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
   });

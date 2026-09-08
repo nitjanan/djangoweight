@@ -20,6 +20,7 @@ urlpatterns = [
     path('jwt/verify/', TokenVerifyView.as_view(), name="token_verify"),
 
     path('weight/table', views.weightTable,name="weightTable"),
+    path('weight/table/export/', views.exportExcelWeightTable,name="exportExcelWeightTable"),
     path('weight/edit/<int:mode>/<int:weight_id>', views.editWeight,name="editWeight"),
     path('autocompalteCustomer/',views.autocompalteCustomer,name="autocompalteCustomer"),
     path('autocompalteSite/',views.autocompalteSite,name="autocompalteSite"),

@@ -20,6 +20,7 @@ import openpyxl
 from openpyxl.styles import PatternFill, Alignment, Font, Color, NamedStyle, Side, Border
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.cell import WriteOnlyCell
 from datetime import date, timedelta, datetime, time
 from django.views import generic
 from django.forms import formset_factory, modelformset_factory, inlineformset_factory, Select
@@ -1423,6 +1424,165 @@ def logoutUser(request):
     logout(request)
     return redirect('login')
 
+#queryset และตัวกรองของหน้า weight/table ใช้ร่วมกันระหว่างหน้าเว็บกับ export excel
+WEIGHT_TABLE_VALUES = ('is_apw', 'doc_id', 'do_doc_no', 'date', 'time_in', 'time_out', 'pay', 'is_s', 'is_cancel',
+    'line_type', 'car_registration_name', 'customer__customer_name', 'province', 'driver_name', 'car_team_name',
+    'transport', 'carry_type_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'stone_desc', 'stone_color',
+    'clean_type', 'scoop_name', 'site', 'site__base_site_name', 'site_name', 'note', 'weight_in', 'weight_out',
+    'weight_total', 'q', 'origin_weight', 'origin_q', 'vat_type', 'oil_content', 'price_per_ton', 'amount', 'vat',
+    'amount_vat', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id')
+
+#คอลัมน์ export = ทุกฟิลด์ที่แสดง/แก้ไขได้ใน editWeightPort + editWeightSell + editWeightStock (รวมฟิลด์ซ้ำแค่ครั้งเดียว)
+#และฟิลด์ของหน้า weight/table เดิม (สถานะตรวจสอบ, เวลาเข้า/ออก, lc., ผู้ชั่ง) ที่ไม่มีในฟอร์มแก้ไขทั้งสามหน้า
+#format: (key ใน values(), หัวคอลัมน์, excel number_format หรือ None)
+WEIGHT_TABLE_EXPORT_COLUMNS = (
+    ('is_apw', Weight._meta.get_field('is_apw').verbose_name, None),                 # weight/table เดิม
+    ('doc_id', 'เลขที่เอกสาร', None),                                                  # ทั้ง 3 ฟอร์ม
+    ('do_doc_no', 'เลขที่ใบส่งของ', None),                                             # editWeightSell
+    ('date', 'วันที่', 'DD/MM/YYYY'),                                                  # ทั้ง 3 ฟอร์ม
+    ('time_in', 'เวลาเข้า', 'HH:MM:SS'),                                               # weight/table เดิม
+    ('time_out', 'เวลาออก', 'HH:MM:SS'),                                               # weight/table เดิม
+    ('pay', 'จ่ายเงิน', None),                                                         # editWeightPort, editWeightSell
+    ('is_s', 'S.', None),                                                              # editWeightSell
+    ('is_cancel', Weight._meta.get_field('is_cancel').verbose_name, None),            # ทั้ง 3 ฟอร์ม
+    ('line_type', 'ประเภทสาย', None),                                                  # editWeightPort
+    ('customer__customer_name', 'ลูกค้า', None),                                       # ทั้ง 3 ฟอร์ม
+    ('car_registration_name', 'ทะเบียนรถ', None),                                      # ทั้ง 3 ฟอร์ม
+    ('province', 'จังหวัด', None),                                                     # editWeightPort, editWeightSell
+    ('driver_name', 'ผู้ขับ', None),                                                    # ทั้ง 3 ฟอร์ม
+    ('car_team_name', 'ทีม', None),                                                     # editWeightPort, editWeightSell
+    ('transport', 'รหัสขนส่ง', None),                                                    # editWeightPort, editWeightSell (form.transport)
+    ('carry_type_name', 'ขนส่ง', None),                                                 # editWeightPort, editWeightSell
+    ('mill__mill_name', 'ต้นทาง', None),                                                # ทั้ง 3 ฟอร์ม
+    ('stone_type__base_stone_type_name', 'ชนิดหิน', None),                             # ทั้ง 3 ฟอร์ม
+    ('stone_desc', 'รายละเอียดหิน', None),                                              # ทั้ง 3 ฟอร์ม
+    ('stone_color', 'ประเภทหิน', None),                                                 # editWeightSell
+    ('clean_type', 'การล้าง', None),                                                    # editWeightSell
+    ('scoop_name', 'ผู้ตัก', None),                                                      # editWeightSell, editWeightStock
+    ('site_display', 'ปลายทาง', None),                                                  # ทั้ง 3 ฟอร์ม
+    ('note', 'หมายเหตุ', None),                                                         # ทั้ง 3 ฟอร์ม
+    ('weight_in', 'น้ำหนักเข้า', '#,##0.000'),                                          # ทั้ง 3 ฟอร์ม
+    ('weight_out', 'น้ำหนักออก', '#,##0.000'),                                          # ทั้ง 3 ฟอร์ม
+    ('weight_total', 'น้ำหนักสุทธิ', '#,##0.000'),                                      # ทั้ง 3 ฟอร์ม
+    ('q', 'คิว', '#,##0.00'),                                                          # editWeightPort, editWeightSell
+    ('origin_weight', 'น้ำหนักสุทธิต้นทาง', '#,##0.000'),                               # editWeightPort
+    ('origin_q', 'คิวต้นทาง', '#,##0.00'),                                             # editWeightPort
+    ('vat_type', 'ภาษี', None),                                                        # editWeightPort, editWeightSell
+    ('oil_content', 'น้ำมัน', '#,##0.00'),                                             # editWeightPort, editWeightSell
+    ('price_per_ton', 'ราคา/ตัน', '#,##0.00'),                                         # editWeightPort, editWeightSell
+    ('amount', 'จำนวนเงิน', '#,##0.00'),                                               # editWeightPort, editWeightSell
+    ('vat', 'vat 7%', '#,##0.00'),                                                     # editWeightPort, editWeightSell
+    ('amount_vat', 'จำนวนเงินสุทธิ', '#,##0.00'),                                       # editWeightPort, editWeightSell
+    ('base_weight_station_name', 'lc.', None),                                         # weight/table เดิม
+    ('scale_name', 'ผู้ชั่ง', None),                                                     # weight/table เดิม
+)
+
+#คีย์ที่ต้องแปลงเป็นข้อความ (boolean -> ข้อความ) แทนการใส่ True/False ดิบ
+#ค่า false ใช้ None (เซลล์ว่าง) เพราะ openpyxl/Excel ไม่เก็บสตริงว่างแยกจากเซลล์ว่างอยู่แล้ว
+WEIGHT_TABLE_EXPORT_BOOL_LABELS = {
+    'is_cancel': ('ยกเลิก', None),
+    'is_s': ('ใช่', None),
+}
+
+#is_apw แสดงเป็นไอคอน (✔ สีเขียว / ✘ สีแดง) แบบเดียวกับ badge บนหน้า weight/table
+WEIGHT_TABLE_EXPORT_ICON_TRUE = '✔'   # ✔
+WEIGHT_TABLE_EXPORT_ICON_FALSE = '✘'  # ✘
+WEIGHT_TABLE_EXPORT_ICON_FONT_TRUE = Font(bold=True, color='1E7E34')   # เขียว
+WEIGHT_TABLE_EXPORT_ICON_FONT_FALSE = Font(bold=True, color='C0392B')  # แดง
+WEIGHT_TABLE_EXPORT_ICON_ALIGN = Alignment(horizontal='center', vertical='center')
+
+def weightTableFilter(request, company_in):
+    data = Weight.objects.filter(bws__company__code__in = company_in
+                ).values(*WEIGHT_TABLE_VALUES
+                ).order_by('-date','weight_id')
+    return WeightFilter(request.GET, queryset = data)
+
+@login_required(login_url='login')
+def exportExcelWeightTable(request):
+    try:
+        active = request.session['company_code']
+        company_in = findCompanyIn(request)
+    except:
+        return redirect('logout')
+
+    #ใช้ queryset และตัวกรองชุดเดียวกับหน้า weight/table (ไม่แบ่งหน้า เอาทุกรายการที่ตรงตัวกรอง)
+    data = weightTableFilter(request, company_in).qs
+
+    #write_only=True เขียนแบบ stream ทีละแถวโดยไม่เก็บทุกเซลล์ไว้ในหน่วยความจำ/โครงสร้างสไตล์แบบปกติ
+    #เร็วกว่า Workbook() ปกติมากสำหรับไฟล์ที่มีหลายพันแถว
+    workbook = openpyxl.Workbook(write_only=True)
+    worksheet = workbook.create_sheet('Weight Table')
+
+    head_font = Font(bold=True, color='FFFFFF')
+    head_fill = PatternFill(start_color='4F4F4F', end_color='4F4F4F', fill_type='solid')
+    head_align = Alignment(horizontal='center', vertical='center')
+
+    header_row = []
+    widths = []
+    for label in (col[1] for col in WEIGHT_TABLE_EXPORT_COLUMNS):
+        cell = WriteOnlyCell(worksheet, value=label)
+        cell.font = head_font
+        cell.fill = head_fill
+        cell.alignment = head_align
+        header_row.append(cell)
+        widths.append(len(str(label)))
+    worksheet.append(header_row)
+
+    #ตรึงหัวตาราง
+    worksheet.freeze_panes = 'A2'
+
+    for i in data.iterator(chunk_size=2000):
+        #ปลายทางใช้กติกาเดียวกับหน้า weight/table : site -> site_name -> '-'
+        if i.get('site'):
+            site_display = i.get('site__base_site_name')
+        elif i.get('site_name'):
+            site_display = i.get('site_name')
+        else:
+            site_display = '-'
+
+        is_apw_val = i.get('is_apw')
+        out_row = []
+        for col, (key, label, number_format) in enumerate(WEIGHT_TABLE_EXPORT_COLUMNS):
+            if key == 'site_display':
+                value = site_display
+            elif key == 'mill__mill_name':
+                value = i.get('mill__mill_name') or '-'
+            elif key == 'is_apw':
+                value = WEIGHT_TABLE_EXPORT_ICON_TRUE if is_apw_val else WEIGHT_TABLE_EXPORT_ICON_FALSE
+            elif key in WEIGHT_TABLE_EXPORT_BOOL_LABELS:
+                true_label, false_label = WEIGHT_TABLE_EXPORT_BOOL_LABELS[key]
+                value = true_label if i.get(key) else false_label
+            else:
+                value = i.get(key)
+
+            #เซลล์ธรรมดาไม่ต้องมี style จะถูกสร้างเป็นค่าดิบ (เร็วกว่า WriteOnlyCell)
+            if key == 'is_apw':
+                cell = WriteOnlyCell(worksheet, value=value)
+                cell.font = WEIGHT_TABLE_EXPORT_ICON_FONT_TRUE if is_apw_val else WEIGHT_TABLE_EXPORT_ICON_FONT_FALSE
+                cell.alignment = WEIGHT_TABLE_EXPORT_ICON_ALIGN
+                out_row.append(cell)
+            elif value is not None and number_format:
+                cell = WriteOnlyCell(worksheet, value=value)
+                cell.number_format = number_format
+                out_row.append(cell)
+            else:
+                out_row.append(value)
+
+            length = len(str(value)) if value is not None else 0
+            if length > widths[col]:
+                widths[col] = length
+
+        worksheet.append(out_row)
+
+    for col, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = min(max(width + 2, 10), 40)
+
+    file_name = 'weight_table_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.xlsx'
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="' + file_name + '"'
+    workbook.save(response)
+    return response
+
 @login_required(login_url='login')
 def weightTable(request):
     ''' old บริษัทเดียว
@@ -1450,12 +1610,8 @@ def weightTable(request):
     elif request.user.is_superuser or is_view_weight(request.user) or is_edit_weight(request.user) or is_account(request.user):
         data = Weight.objects.filter(bws__company__code__in = company_in).order_by('-date','weight_id')    
     '''
-    data = Weight.objects.filter(bws__company__code__in = company_in
-                ).values('is_apw', 'doc_id', 'date', 'time_in', 'time_out', 'car_registration_name', 'customer__customer_name', 'stone_type__base_stone_type_name', 'mill__mill_name', 'site', 'site__base_site_name', 'site_name', 'weight_in', 'weight_out', 'weight_total', 'base_weight_station_name', 'scale_name', 'bws__weight_type__id', 'weight_id'
-                ).order_by('-date','weight_id')
-
-    #กรองข้อมูล
-    myFilter = WeightFilter(request.GET, queryset = data)
+    #ใช้ queryset และตัวกรองชุดเดียวกับ export excel
+    myFilter = weightTableFilter(request, company_in)
     data = myFilter.qs
 
     #สร้าง page

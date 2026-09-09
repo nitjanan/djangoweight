@@ -11664,19 +11664,13 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'route': route,
                     })
 
+    # เลือกแถวที่จะลงไฟล์ + จำกัดจำนวน + เรียงตามตัวอักษร ทำในฟังก์ชันเดียวกัน
+    # เพราะสามอย่างนี้ต้องตัดสินใจพร้อมกัน (ดูเหตุผลในนั้น)
     rate_rows = _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows,
                                                    weight_carried_by_key, stats)
 
     _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                                  rate_by_route, stats, selected_month)
-
-    if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
-        stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
-        # เรียงมาแล้วให้แถวที่มีเที่ยวจริงอยู่ต้น ๆ ส่วนที่เกินจึงควรเป็นแถวเปล่าล้วน
-        # ถ้าเลขนี้ยังมากกว่า 0 แปลว่าแถวที่ต้องใช้จริงหลุดไป = เที่ยวนั้นจะได้เงิน 0
-        # ต้องเตือนคนละแบบกับการตัดแถวเปล่า จึงแยกตัวเลขไว้
-        stats['truncated_used'] = max(0, stats['rate_rows_used'] - EXPORT_DOC_RATE_MAX_ROWS)
-        rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
 
     return rate_rows, weight_carried_by_key, stats
 
@@ -11716,8 +11710,21 @@ def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
     return result
 
 
+def _exportDocumentRateRowSortKey(row):
+    """ลำดับการเรียงของ sheet อัตราค่าขนส่ง : ทีม -> ต้นทาง -> ปลายทาง -> แบก นน. -> ชนิดหิน
+
+    เรียงตามชื่อทีมเป็นหลัก เพราะฝ่ายบัญชีไล่จ่ายเงินทีละทีม ทีมเดียวกันต้องอยู่ติดกันหมด
+    ไม่งั้นต้องกวาดตาหาทั้งหน้าว่าทีมนี้มีอีกกี่แถวและอยู่ตรงไหนบ้าง
+
+    เรียงข้อความไทยด้วยลำดับ unicode ตรง ๆ ซึ่งเรียงพยัญชนะไทยได้ตามตัวอักษรอยู่แล้ว
+    (ก < ข < ค ... < ฮ) พอสำหรับการไล่อ่าน ไม่ได้ต้องการ collation ตามราชบัณฑิตฯ
+    """
+    return (row['team'] or '', row['origin'] or '', row['destination'] or '',
+            row['weight_carried'] or '', row['stone'] or '')
+
+
 def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_key, stats):
-    """เรียงแถวอัตราให้แถวที่มีเที่ยววิ่งจริงขึ้นก่อน แถวที่ยังไม่มีเที่ยวไปต่อท้าย
+    """เลือกแถวอัตราที่จะใส่ลงไฟล์ แล้วเรียงตามตัวอักษร
 
     1 อัตราถูกขยายออกเป็นหลายแถวตาม ทีม x ช่วงแบก นน. x ชนิดหิน ซึ่งได้คู่ผสมเยอะมาก
     แต่คู่ผสมส่วนใหญ่ไม่เคยเกิดขึ้นจริง (ทีมนั้นไม่เคยขนหินชนิดนั้นในช่วงน้ำหนักนั้น)
@@ -11732,10 +11739,14 @@ def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_k
     ตัดตามลำดับที่สร้าง ไม่ได้ดูว่าแถวไหนจำเป็น จึงเผลอตัดแถวที่มีเที่ยวจริงทิ้ง
     แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์โดยไม่มีใครสังเกต
 
-    เรียงใหม่แล้วส่วนที่ถูกตัดจะเป็นแถวเปล่าเสมอ ได้ทั้งสองอย่าง
-    แถวที่ต้องใช้ไม่มีทางหาย และแถวเปล่ายังอยู่เท่าที่ที่ว่างเหลือ
+    จึงต้อง "เลือกก่อน แล้วค่อยเรียง" ไม่ใช่ "เรียงแล้วค่อยตัดท้าย"
+      เลือก : แถวที่มีเที่ยวเอาทั้งหมด แล้วเติมแถวเปล่าเท่าที่ที่ว่างเหลือ
+      เรียง : เรียงตามตัวอักษรทั้งก้อน (ดู _exportDocumentRateRowSortKey)
 
-    เรียงแบบ stable ลำดับเดิมภายในแต่ละกลุ่มจึงไม่เปลี่ยน sheet ยังอ่านไล่ได้เหมือนเดิม
+    ถ้าเรียงก่อนแล้วตัดท้าย จะได้ sheet ที่ทีมเดียวกันแยกอยู่คนละที่
+    (แถวที่มีเที่ยวอยู่ต้นไฟล์ แถวเปล่าของทีมเดียวกันไปโผล่ท้ายไฟล์)
+    ฝ่ายบัญชีไล่จ่ายเงินทีละทีม เจอแบบนั้นแล้วหาไม่เจอว่าทีมนี้มีอีกกี่แถว
+
     ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้ว่าเที่ยวไหนตกคีย์ไหน
     """
     _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
@@ -11752,11 +11763,22 @@ def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_k
         # สองอย่างนี้ต้องรายงานคนละแบบ ไม่งั้นหน้าเว็บจะฟ้องผิดสาเหตุ
         row['has_trip'] = hasTrip(row)
 
-    ordered = ([row for row in rate_rows if row['has_trip']]
-               + [row for row in rate_rows if not row['has_trip']])
-    stats['rate_rows_used'] = sum(1 for row in rate_rows if row['has_trip'])
-    stats['rate_rows_empty'] = len(rate_rows) - stats['rate_rows_used']
-    return ordered
+    with_trip = [row for row in rate_rows if row['has_trip']]
+    empty = [row for row in rate_rows if not row['has_trip']]
+    stats['rate_rows_used'] = len(with_trip)
+    stats['rate_rows_empty'] = len(empty)
+
+    # แถวที่มีเที่ยวต้องได้ไปทั้งหมดก่อน ที่เหลือค่อยแบ่งให้แถวเปล่า
+    # ตัดแถวเปล่าจากท้ายรายการที่เรียงแล้ว จะได้ตัดแบบเดิมทุกครั้งที่ export ซ้ำ
+    empty.sort(key=_exportDocumentRateRowSortKey)
+    room = max(0, EXPORT_DOC_RATE_MAX_ROWS - len(with_trip))
+    kept = with_trip + empty[:room]
+    stats['truncated'] = len(rate_rows) - len(kept)
+    # เกินเพราะแถวที่มีเที่ยวล้นเอง = เที่ยวจริงจะกลายเป็นเงิน 0 ต้องเตือนคนละแบบ
+    stats['truncated_used'] = max(0, len(with_trip) - EXPORT_DOC_RATE_MAX_ROWS)
+
+    kept.sort(key=_exportDocumentRateRowSortKey)
+    return kept
 
 
 def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,

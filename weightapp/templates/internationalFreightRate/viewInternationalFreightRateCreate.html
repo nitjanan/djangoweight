@@ -64,14 +64,14 @@
   <div class="page-title">
     <div class="row">
       <div class="col-12 col-md-6 order-md-1 order-last">
-        <h3>{% if ifr_obj %}แก้ไข{% else %}เพิ่ม{% endif %}ค่าขนส่งต่างประเทศ</h3>
+        <h3>{% if ifr_obj %}แก้ไข{% else %}เพิ่ม{% endif %}ค่าขนส่ง ส่งออก</h3>
       </div>
       <div class="col-12 col-md-6 order-md-2 order-first">
         <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
             <li class="breadcrumb-item">
-              <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่งต่างประเทศ</a>
+              <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a>
             </li>
             <li class="breadcrumb-item active" aria-current="page">{% if ifr_obj %}แก้ไขรายการ{% else %}เพิ่มรายการ{% endif %}</li>
           </ol>

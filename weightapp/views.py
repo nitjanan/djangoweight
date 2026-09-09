@@ -12108,10 +12108,12 @@ def _exportDocumentWriteOilSheet(workbook, lines, trip_teams, stats):
     stats['oil_teams'] = len(teams)
     stats['oil_truncated'] = max(0, len(teams) - EXPORT_DOC_OIL_MAX_ROWS)
 
-    # หัวคอลัมน์ของแต่ละหนังสือ เขียนชื่อสาขาแทนคำว่า "(หนังสือที่ N)"
+    # หัวคอลัมน์ของแต่ละหนังสือ ใส่แค่ชื่อสาขาที่ไปเติม ไม่ต้องมีคำว่า "(หนังสือที่ N)"
+    # เลขลำดับไม่ได้บอกอะไรกับคนอ่าน สิ่งที่เขาต้องรู้คือเงินก้อนนี้เติมมาจากที่ไหน
+    # ช่องที่เหลือปล่อยข้อความเดิมของ template ไว้ เป็นที่ว่างให้บัญชีกรอกเพิ่มเองได้
     for slot, branch in enumerate(books):
         cell = worksheet.cell(row=2, column=EXPORT_DOC_OIL_FIRST_COL + slot * 3)
-        cell.value = '(หนังสือที่ %s) %s' % (slot + 1, branch)
+        cell.value = branch
 
     for i, team in enumerate(teams[:EXPORT_DOC_OIL_MAX_ROWS]):
         row = EXPORT_DOC_OIL_FIRST_ROW + i

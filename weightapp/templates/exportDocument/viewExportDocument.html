@@ -213,12 +213,10 @@
             {% comment %}
             รายการมาจากแท็บบริษัทด้านบนเท่านั้น
             (base_company_map_base_customer.base_company_id == base_comp.id)
-            ไม่มีตัวเลือก "ทั้งหมด" ในนี้ ถ้าอยากได้ทุกต้นทางให้ติ๊กช่อง "ทุกต้นทาง"
-            ซึ่งเป็นคนละความหมายกัน : ในนี้คือเลือกดูต้นทางไหนภายในแท็บ
-            ส่วนช่องติ๊กคือเลิกใช้ขอบเขตแท็บไปเลย
+            มีตัวเลือก "ทั้งหมด" เฉพาะแท็บร้อยเกาะ ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
             {% endcomment %}
             <select class="form-select" id="origin" name="origin"
-                    {% if origin_unmapped or all_origin %}disabled{% endif %}>
+                    {% if origin_unmapped %}disabled{% endif %}>
               {% if origin_sees_all %}
               <option value="">ทั้งหมด</option>
               {% endif %}
@@ -257,19 +255,6 @@
           </div>
 
           <div class="form-group col-md-3">
-            {% comment %}
-            ข้ามขอบเขตของแท็บบริษัท ได้ทุกต้นทางของทุกบริษัทในไฟล์เดียว
-            รวมเที่ยวที่ต้นทางยังไม่ได้ผูกในตาราง map ด้วย ซึ่งเลือกจาก dropdown ไม่ได้
-            ติ๊กแล้วปิด dropdown ต้นทางไปเลย จะได้ไม่เข้าใจผิดว่ายังกรองอยู่
-            {% endcomment %}
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="all_origin" name="all_origin"
-                     value="1" {% if all_origin %}checked{% endif %}
-                     onchange="document.getElementById('origin').disabled = this.checked;">
-              <label class="form-check-label" for="all_origin">
-                ทุกต้นทาง <span class="text-muted">(ข้ามแท็บบริษัท)</span>
-              </label>
-            </div>
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
                      value="1" {% if include_cancel %}checked{% endif %}>

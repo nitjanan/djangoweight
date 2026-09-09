@@ -25,6 +25,7 @@
           <th style="min-width: 140px;">ทีม</th>
           <th style="min-width: 170px;">ประเภทการแบกน้ำหนัก</th>
           <th class="text-end" style="min-width: 110px;">ค่าขนส่ง</th>
+          <th class="text-end" style="min-width: 130px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small></th>
           <th class="text-end" style="min-width: 110px;">ลดบาท/ตัน</th>
           <th class="text-end" style="min-width: 120px;">บาท/ตัน/กม.</th>
           <th>หมายเหตุ</th>
@@ -36,12 +37,13 @@
           <td>{% if t.team %}{{ t.team.car_team_name }}{% else %}ทุกทีม{% endif %}</td>
           <td>{% if t.weight_carried %}{{ t.weight_carried.name }}{% else %}-{% endif %}</td>
           <td class="text-end">{{ t.freight_rate|default_if_none:"-" }}</td>
+          <td class="text-end">{{ t.fuel_freight_adjustment|default_if_none:"-" }}</td>
           <td class="text-end">{{ t.discount_per_ton|default_if_none:"-" }}</td>
           <td class="text-end">{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
           <td>{{ t.note|default_if_none:"-" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-muted">ไม่มีทีมในการปรับครั้งนี้</td></tr>
+        <tr><td colspan="7" class="text-center text-muted">ไม่มีทีมในการปรับครั้งนี้</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -55,16 +57,10 @@
     <dd>{{ v.obj.distance|default_if_none:"-" }} <span class="text-muted">กม.</span></dd>
 
     <dt>ราคาน้ำมันฐาน</dt>
-    <dd>{{ v.obj.base_fuel_price|default_if_none:"-" }} <span class="text-muted">บาท/ลิตร</span></dd>
+    <dd>{{ v.obj.baseFuelPriceLabel|default_if_none:"-" }} <span class="text-muted">บาท/ลิตร</span></dd>
 
     <dt>ใช้น้ำมัน</dt>
     <dd>{{ v.obj.fuel_used_per_trip|default_if_none:"-" }} <span class="text-muted">ลิตร/เที่ยว</span></dd>
-
-    <dt>น้ำหนักบรรทุก</dt>
-    <dd>{{ v.obj.payload_weight|default_if_none:"-" }} <span class="text-muted">ตัน/เที่ยว</span></dd>
-
-    <dt>ปรับค่าขนส่งตามน้ำมัน</dt>
-    <dd>{{ v.obj.fuel_freight_adjustment|default_if_none:"-" }} <span class="text-muted">บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร</span></dd>
 
     <dt>วันที่เริ่มใช้</dt>
     <dd>{{ v.effective_th }}</dd>

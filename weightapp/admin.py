@@ -652,7 +652,7 @@ class CarryingweightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20
 
 class InternationalFreightRateTeamAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'international_freight_rate', 'team', 'weight_carried', 'freight_rate', 'discount_per_ton')
+    list_display = ('id', 'international_freight_rate', 'team', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment', 'discount_per_ton')
     search_fields = ('team__car_team_name',)
     list_per_page = 20
 

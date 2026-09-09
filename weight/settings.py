@@ -14,10 +14,13 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ชี้ path ของ .env ที่รากโปรเจกต์ตรง ๆ : load_dotenv() เปล่า ๆ จะไล่หาจาก cwd ขึ้นไป
+# ถ้าสั่ง runserver จากโฟลเดอร์อื่นจะหาไม่เจอ ค่า PG_DB_* จะว่างโดยไม่มี error
+# แล้วหน้า export จะฟ้อง "fe_sendauth: no password supplied"
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production

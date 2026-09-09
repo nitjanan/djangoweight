@@ -10903,9 +10903,11 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col
                 worksheet.cell(row=row, column=start).value = float(previous_rate)
             if team_rate.freight_rate is not None:
                 worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
-            if rate.fuel_freight_adjustment is not None:
+            # ค่าปรับตามน้ำมันเป็นของแถวทีม (ทีม + ช่วงแบก นน.) ไม่ใช่ของทั้งใบแล้ว
+            # ช่อง "น้ำมัน ± 1" เป็นคอลัมน์ย่อยใต้ช่วงน้ำหนักอยู่แล้ว จึงลงตรงนี้ได้เลยไม่ต้องแก้โครง
+            if team_rate.fuel_freight_adjustment is not None:
                 worksheet.cell(row=row, column=start + 2).value = (
-                    '± %.2f' % rate.fuel_freight_adjustment)
+                    '± %.2f' % team_rate.fuel_freight_adjustment)
         # บาท/ตัน/กม. มีคอลัมน์เดียวแต่แต่ละช่วงมีค่าของตัวเอง เอาช่วงแรกที่กรอกไว้
         # เขียนตายตัวแบบนี้เพื่อให้ผลคงที่ ไม่ใช่แล้วแต่ว่า record ไหนวนมาทีหลัง
         if per_km is None and team_rate.freight_rate_per_ton_km is not None:
@@ -10962,7 +10964,7 @@ def editInternationalFreightRate(request, id):
 
     # ส่งทีมเดิมไปให้ JS สร้างแถวรอไว้ตอนเปิดหน้า
     teams = list(obj.teams.values(
-        'team_id', 'weight_carried', 'freight_rate',
+        'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note',
     ))
     
@@ -11654,26 +11656,21 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'base_fuel_price': rate.base_fuel_price,    # H
                         # I กับ N เติมในรอบที่ 2
                         'average_fuel_price': None,                 # I
-                        'fuel_freight_adjustment': rate.fuel_freight_adjustment,  # J
+                        # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = (I-H)*J ในไฟล์ไม่ต้องแก้
+                        'fuel_freight_adjustment': team_rate.fuel_freight_adjustment,
                         # หมายเหตุเขียนลงคอลัมน์ N (ช่องว่างที่ไม่มีสูตรไหนอ้างถึง)
                         # ห้ามเขียนลง I เพราะสูตร K = (I-H)*J จะกลายเป็น #VALUE! ทั้งคอลัมน์
                         'fuel_note': None,                          # N
                         'route': route,
                     })
 
+    # เลือกแถวที่จะลงไฟล์ + จำกัดจำนวน + เรียงตามตัวอักษร ทำในฟังก์ชันเดียวกัน
+    # เพราะสามอย่างนี้ต้องตัดสินใจพร้อมกัน (ดูเหตุผลในนั้น)
     rate_rows = _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows,
                                                    weight_carried_by_key, stats)
 
     _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                                  rate_by_route, stats, selected_month)
-
-    if len(rate_rows) > EXPORT_DOC_RATE_MAX_ROWS:
-        stats['truncated'] = len(rate_rows) - EXPORT_DOC_RATE_MAX_ROWS
-        # เรียงมาแล้วให้แถวที่มีเที่ยวจริงอยู่ต้น ๆ ส่วนที่เกินจึงควรเป็นแถวเปล่าล้วน
-        # ถ้าเลขนี้ยังมากกว่า 0 แปลว่าแถวที่ต้องใช้จริงหลุดไป = เที่ยวนั้นจะได้เงิน 0
-        # ต้องเตือนคนละแบบกับการตัดแถวเปล่า จึงแยกตัวเลขไว้
-        stats['truncated_used'] = max(0, stats['rate_rows_used'] - EXPORT_DOC_RATE_MAX_ROWS)
-        rate_rows = rate_rows[:EXPORT_DOC_RATE_MAX_ROWS]
 
     return rate_rows, weight_carried_by_key, stats
 
@@ -11713,8 +11710,21 @@ def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
     return result
 
 
+def _exportDocumentRateRowSortKey(row):
+    """ลำดับการเรียงของ sheet อัตราค่าขนส่ง : ทีม -> ต้นทาง -> ปลายทาง -> แบก นน. -> ชนิดหิน
+
+    เรียงตามชื่อทีมเป็นหลัก เพราะฝ่ายบัญชีไล่จ่ายเงินทีละทีม ทีมเดียวกันต้องอยู่ติดกันหมด
+    ไม่งั้นต้องกวาดตาหาทั้งหน้าว่าทีมนี้มีอีกกี่แถวและอยู่ตรงไหนบ้าง
+
+    เรียงข้อความไทยด้วยลำดับ unicode ตรง ๆ ซึ่งเรียงพยัญชนะไทยได้ตามตัวอักษรอยู่แล้ว
+    (ก < ข < ค ... < ฮ) พอสำหรับการไล่อ่าน ไม่ได้ต้องการ collation ตามราชบัณฑิตฯ
+    """
+    return (row['team'] or '', row['origin'] or '', row['destination'] or '',
+            row['weight_carried'] or '', row['stone'] or '')
+
+
 def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_key, stats):
-    """เรียงแถวอัตราให้แถวที่มีเที่ยววิ่งจริงขึ้นก่อน แถวที่ยังไม่มีเที่ยวไปต่อท้าย
+    """เลือกแถวอัตราที่จะใส่ลงไฟล์ แล้วเรียงตามตัวอักษร
 
     1 อัตราถูกขยายออกเป็นหลายแถวตาม ทีม x ช่วงแบก นน. x ชนิดหิน ซึ่งได้คู่ผสมเยอะมาก
     แต่คู่ผสมส่วนใหญ่ไม่เคยเกิดขึ้นจริง (ทีมนั้นไม่เคยขนหินชนิดนั้นในช่วงน้ำหนักนั้น)
@@ -11729,10 +11739,14 @@ def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_k
     ตัดตามลำดับที่สร้าง ไม่ได้ดูว่าแถวไหนจำเป็น จึงเผลอตัดแถวที่มีเที่ยวจริงทิ้ง
     แล้วเที่ยวพวกนั้นกลายเป็นเงิน 0 ในไฟล์โดยไม่มีใครสังเกต
 
-    เรียงใหม่แล้วส่วนที่ถูกตัดจะเป็นแถวเปล่าเสมอ ได้ทั้งสองอย่าง
-    แถวที่ต้องใช้ไม่มีทางหาย และแถวเปล่ายังอยู่เท่าที่ที่ว่างเหลือ
+    จึงต้อง "เลือกก่อน แล้วค่อยเรียง" ไม่ใช่ "เรียงแล้วค่อยตัดท้าย"
+      เลือก : แถวที่มีเที่ยวเอาทั้งหมด แล้วเติมแถวเปล่าเท่าที่ที่ว่างเหลือ
+      เรียง : เรียงตามตัวอักษรทั้งก้อน (ดู _exportDocumentRateRowSortKey)
 
-    เรียงแบบ stable ลำดับเดิมภายในแต่ละกลุ่มจึงไม่เปลี่ยน sheet ยังอ่านไล่ได้เหมือนเดิม
+    ถ้าเรียงก่อนแล้วตัดท้าย จะได้ sheet ที่ทีมเดียวกันแยกอยู่คนละที่
+    (แถวที่มีเที่ยวอยู่ต้นไฟล์ แถวเปล่าของทีมเดียวกันไปโผล่ท้ายไฟล์)
+    ฝ่ายบัญชีไล่จ่ายเงินทีละทีม เจอแบบนั้นแล้วหาไม่เจอว่าทีมนี้มีอีกกี่แถว
+
     ต้องกำหนดช่วงแบก นน. ให้เที่ยวก่อน ถึงจะรู้ว่าเที่ยวไหนตกคีย์ไหน
     """
     _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key)
@@ -11749,11 +11763,22 @@ def _exportDocumentSortRateRowsByUsage(rate_rows, trip_rows, weight_carried_by_k
         # สองอย่างนี้ต้องรายงานคนละแบบ ไม่งั้นหน้าเว็บจะฟ้องผิดสาเหตุ
         row['has_trip'] = hasTrip(row)
 
-    ordered = ([row for row in rate_rows if row['has_trip']]
-               + [row for row in rate_rows if not row['has_trip']])
-    stats['rate_rows_used'] = sum(1 for row in rate_rows if row['has_trip'])
-    stats['rate_rows_empty'] = len(rate_rows) - stats['rate_rows_used']
-    return ordered
+    with_trip = [row for row in rate_rows if row['has_trip']]
+    empty = [row for row in rate_rows if not row['has_trip']]
+    stats['rate_rows_used'] = len(with_trip)
+    stats['rate_rows_empty'] = len(empty)
+
+    # แถวที่มีเที่ยวต้องได้ไปทั้งหมดก่อน ที่เหลือค่อยแบ่งให้แถวเปล่า
+    # ตัดแถวเปล่าจากท้ายรายการที่เรียงแล้ว จะได้ตัดแบบเดิมทุกครั้งที่ export ซ้ำ
+    empty.sort(key=_exportDocumentRateRowSortKey)
+    room = max(0, EXPORT_DOC_RATE_MAX_ROWS - len(with_trip))
+    kept = with_trip + empty[:room]
+    stats['truncated'] = len(rate_rows) - len(kept)
+    # เกินเพราะแถวที่มีเที่ยวล้นเอง = เที่ยวจริงจะกลายเป็นเงิน 0 ต้องเตือนคนละแบบ
+    stats['truncated_used'] = max(0, len(with_trip) - EXPORT_DOC_RATE_MAX_ROWS)
+
+    kept.sort(key=_exportDocumentRateRowSortKey)
+    return kept
 
 
 def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
@@ -12083,10 +12108,12 @@ def _exportDocumentWriteOilSheet(workbook, lines, trip_teams, stats):
     stats['oil_teams'] = len(teams)
     stats['oil_truncated'] = max(0, len(teams) - EXPORT_DOC_OIL_MAX_ROWS)
 
-    # หัวคอลัมน์ของแต่ละหนังสือ เขียนชื่อสาขาแทนคำว่า "(หนังสือที่ N)"
+    # หัวคอลัมน์ของแต่ละหนังสือ ใส่แค่ชื่อสาขาที่ไปเติม ไม่ต้องมีคำว่า "(หนังสือที่ N)"
+    # เลขลำดับไม่ได้บอกอะไรกับคนอ่าน สิ่งที่เขาต้องรู้คือเงินก้อนนี้เติมมาจากที่ไหน
+    # ช่องที่เหลือปล่อยข้อความเดิมของ template ไว้ เป็นที่ว่างให้บัญชีกรอกเพิ่มเองได้
     for slot, branch in enumerate(books):
         cell = worksheet.cell(row=2, column=EXPORT_DOC_OIL_FIRST_COL + slot * 3)
-        cell.value = '(หนังสือที่ %s) %s' % (slot + 1, branch)
+        cell.value = branch
 
     for i, team in enumerate(teams[:EXPORT_DOC_OIL_MAX_ROWS]):
         row = EXPORT_DOC_OIL_FIRST_ROW + i
@@ -12331,7 +12358,7 @@ def _exportDocumentExportCustomerIds():
         weight.customer_id  ==  international_freight_rate.destination -> base_customer_id
 
     ใช้ตารางเรทเป็นตัวกำหนดเอง แทนการเดาจากชื่อลูกค้าหรือเพิ่มธงใหม่
-    เพิ่มเส้นทางในหน้าค่าขนส่งต่างประเทศ = เที่ยวปลายทางนั้นเข้ารายงานทันที
+    เพิ่มเส้นทางในหน้าค่าขนส่ง ส่งออก = เที่ยวปลายทางนั้นเข้ารายงานทันที
 
     ผลข้างเคียงที่ต้องรู้ : เที่ยวส่งออกที่ยังไม่ได้บันทึกเรท จะไม่ขึ้นในหน้านี้เลย
     """

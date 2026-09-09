@@ -213,13 +213,14 @@
             {% comment %}
             รายการมาจากแท็บบริษัทด้านบนเท่านั้น
             (base_company_map_base_customer.base_company_id == base_comp.id)
-            "ทั้งหมด" ของแท็บบริษัท = ทุกต้นทางของแท็บนั้น ไม่ข้ามไปเห็นของบริษัทอื่น
-            ส่วนแท็บร้อยเกาะ/ALL ซึ่งเป็นบริษัทรถวิ่งให้ทุกเหมือง = ทุกต้นทางในระบบ
+            ไม่มีตัวเลือก "ทั้งหมด" ในนี้ ถ้าอยากได้ทุกต้นทางให้ติ๊กช่อง "ทุกต้นทาง"
+            ซึ่งเป็นคนละความหมายกัน : ในนี้คือเลือกดูต้นทางไหนภายในแท็บ
+            ส่วนช่องติ๊กคือเลิกใช้ขอบเขตแท็บไปเลย
             {% endcomment %}
             <select class="form-select" id="origin" name="origin"
-                    {% if origin_unmapped %}disabled{% endif %}>
-              {% if not origin_unmapped %}
-              <option value="">ทั้งหมด{% if not origin_sees_all %} ({{ origin_options|length }} ต้นทาง){% endif %}</option>
+                    {% if origin_unmapped or all_origin %}disabled{% endif %}>
+              {% if origin_sees_all %}
+              <option value="">ทั้งหมด</option>
               {% endif %}
               {% for o in origin_options %}
                 <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
@@ -256,6 +257,19 @@
           </div>
 
           <div class="form-group col-md-3">
+            {% comment %}
+            ข้ามขอบเขตของแท็บบริษัท ได้ทุกต้นทางของทุกบริษัทในไฟล์เดียว
+            รวมเที่ยวที่ต้นทางยังไม่ได้ผูกในตาราง map ด้วย ซึ่งเลือกจาก dropdown ไม่ได้
+            ติ๊กแล้วปิด dropdown ต้นทางไปเลย จะได้ไม่เข้าใจผิดว่ายังกรองอยู่
+            {% endcomment %}
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="all_origin" name="all_origin"
+                     value="1" {% if all_origin %}checked{% endif %}
+                     onchange="document.getElementById('origin').disabled = this.checked;">
+              <label class="form-check-label" for="all_origin">
+                ทุกต้นทาง <span class="text-muted">(ข้ามแท็บบริษัท)</span>
+              </label>
+            </div>
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
                      value="1" {% if include_cancel %}checked{% endif %}>

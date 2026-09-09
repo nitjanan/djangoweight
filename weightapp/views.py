@@ -12582,9 +12582,16 @@ def _exportDocumentQuerySet(request):
     origin_sees_all = company_code in COMPANY_TAB_SEES_ALL
     allowed_origins = _exportDocumentOriginNames(None if origin_sees_all else company_code)
 
+    # ติ๊ก "ทุกต้นทาง" = ข้ามขอบเขตของแท็บไปเลย ได้ทุกต้นทางของทุกบริษัทในไฟล์เดียว
+    # แยกเป็นช่องติ๊กต่างหาก ไม่ยัดเป็นตัวเลือกใน dropdown ต้นทาง เพราะเป็นคนละความหมาย
+    # dropdown = เลือกดูต้นทางไหน (ในขอบเขตแท็บ) · ช่องติ๊ก = เลิกใช้ขอบเขตแท็บ
+    all_origin = request.GET.get('all_origin') == '1'
+
+    # แท็บร้อยเกาะ/ALL : ว่าง = ทุกต้นทาง ซึ่งเป็นค่าตั้งต้นเดิมของสองแท็บนั้น
+    # แท็บบริษัทอื่น : ถอยไปใช้ต้นทางแรกของแท็บ ไม่ปล่อยให้ว่างแล้วกวาดของทุกบริษัทเข้ามา
     selected_origin = request.GET.get('origin') or ''
     if selected_origin not in allowed_origins:
-        selected_origin = ''
+        selected_origin = '' if origin_sees_all else (allowed_origins[0] if allowed_origins else '')
 
     # แท็บที่ยังไม่มีต้นทางผูกไว้ในตาราง map เลย (ตอนนี้คือ JOB กับ NSM)
     # เลือกต้นทางไม่ได้ = ไม่มีขอบเขตข้อมูลให้ดู จึงไม่แสดงอะไรเลยแล้วบอกเหตุผลบนหน้าจอ
@@ -12656,14 +12663,13 @@ def _exportDocumentQuerySet(request):
         qs = qs.filter(car_team_id=selected_team)
     if selected_stone:
         qs = qs.filter(stone_type_name=selected_stone)
-    if selected_origin:
+    if all_origin:
+        # ไม่กรองต้นทางเลย = ทุกต้นทางของทุกบริษัท รวมเที่ยวที่ต้นทางยังไม่ได้ผูกใน map ด้วย
+        pass
+    elif selected_origin:
         qs = qs.filter(_exportDocumentOriginFilter(selected_origin, own_port_bws, other_bws))
     elif origin_unmapped:
         qs = qs.none()
-    elif not origin_sees_all:
-        # "ทั้งหมด" ของแท็บบริษัท = ทุกต้นทางของแท็บนั้น ต้องกรองด้วยเสมอ
-        # ปล่อยไม่กรองจะกวาดของทุกบริษัทเข้ามา ทั้งที่หน้าจอขึ้นชื่อแท็บเดียว
-        qs = qs.filter(_exportDocumentOriginFilter(allowed_origins, own_port_bws, other_bws))
     qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws)
     if not include_cancel:
         qs = qs.filter(is_cancel=False)
@@ -12682,6 +12688,7 @@ def _exportDocumentQuerySet(request):
         'selected_team': selected_team,
         'selected_stone': selected_stone,
         'selected_origin': selected_origin,
+        'all_origin': all_origin,
         'origin_unmapped': origin_unmapped,
         # ส่งรายการออกไปด้วย ไม่ให้หน้าเว็บไปคำนวณเองซ้ำ ไม่งั้นมีโอกาสที่ตัวเลือกบนจอ
         # กับตัวที่ใช้กรองจริงไม่ตรงกัน เวลาแก้กติกาแล้วลืมแก้อีกฝั่ง
@@ -12904,6 +12911,7 @@ def viewExportDocument(request):
         'selected_team': selected_team,
         'selected_stone': selected_stone,
         'selected_origin': selected_origin,
+        'all_origin': filters['all_origin'],
         'origin_options': filters['origin_options'],
         'origin_unmapped': filters['origin_unmapped'],
         'origin_sees_all': filters['origin_sees_all'],

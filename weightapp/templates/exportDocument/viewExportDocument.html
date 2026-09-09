@@ -213,12 +213,13 @@
             {% comment %}
             รายการมาจากแท็บบริษัทด้านบนเท่านั้น
             (base_company_map_base_customer.base_company_id == base_comp.id)
-            มีตัวเลือก "ทั้งหมด" เฉพาะแท็บร้อยเกาะ ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
+            "ทั้งหมด" ของแท็บบริษัท = ทุกต้นทางของแท็บนั้น ไม่ข้ามไปเห็นของบริษัทอื่น
+            ส่วนแท็บร้อยเกาะ/ALL ซึ่งเป็นบริษัทรถวิ่งให้ทุกเหมือง = ทุกต้นทางในระบบ
             {% endcomment %}
             <select class="form-select" id="origin" name="origin"
                     {% if origin_unmapped %}disabled{% endif %}>
-              {% if origin_sees_all %}
-              <option value="">ทั้งหมด</option>
+              {% if not origin_unmapped %}
+              <option value="">ทั้งหมด{% if not origin_sees_all %} ({{ origin_options|length }} ต้นทาง){% endif %}</option>
               {% endif %}
               {% for o in origin_options %}
                 <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>

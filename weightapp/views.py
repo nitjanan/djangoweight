@@ -12442,10 +12442,15 @@ def _exportDocumentOriginFilter(origin_name, own_port_bws, other_bws):
       เคส 1 ชั่งที่ท่าเรือเรา  -> ต้นทางคือ customer  จึงกรองด้วย customer_id
       เคส 2 ชั่งที่เหมืองเรา   -> ต้นทางคือ bws       จึงกรองด้วยบริษัทเจ้าของตาชั่ง
     คืน Q ที่รวมทั้งสองทางไว้แล้ว คนใช้เห็นแค่ชื่อเดียวไม่ต้องรู้ว่าเป็นเคสไหน
+
+    รับได้ทั้งชื่อเดียวและรายชื่อ (ตัวเลือก "ทั้งหมด" ส่งทุกต้นทางของแท็บนั้นเข้ามา)
     """
+    if isinstance(origin_name, str):
+        origin_name = [origin_name]
+    wanted = set(origin_name)
     # หาย้อนจาก "ชื่อที่แสดง" กลับไปเป็น id ด้วยกติกาเดียวกับตอนแสดงผล
     # ไม่งั้นเปลี่ยนที่มาของชื่อเมื่อไหร่ ตัวกรองจะเพี้ยนทันที
-    rows = [r for r in _baseCompanyMapRows() if r['display'] == origin_name]
+    rows = [r for r in _baseCompanyMapRows() if r['display'] in wanted]
     customer_ids = [r['base_customer_id'] for r in rows if r['base_customer_id']]
     company_ids = [r['base_company_id'] for r in rows if r['base_company_id']]
 
@@ -12562,20 +12567,24 @@ def _exportDocumentQuerySet(request):
     selected_stone = request.GET.get('stone') or ''
     # ต้นทาง : เลือกด้วย "ชื่อ" ในตาราง map เพราะเป็นชื่อเดียวที่ใช้ร่วมกันได้ทั้งสองเคส
     #
-    # หน้านี้ดูได้เฉพาะต้นทางที่อยู่ใต้แท็บบริษัทที่เลือกอยู่ ไม่มีตัวเลือก "ทั้งหมด"
-    # ยกเว้นแท็บร้อยเกาะซึ่งเป็นบริษัทรถ วิ่งให้ทุกเหมือง จึงเห็นทุกต้นทางและเลือกทั้งหมดได้
+    # ทุกแท็บเลือก "ทั้งหมด" ได้ แต่ความหมายต่างกันตามแท็บ
+    #   แท็บร้อยเกาะ/ALL : ทั้งหมด = ทุกต้นทางในระบบ (เป็นบริษัทรถ วิ่งให้ทุกเหมือง)
+    #   แท็บบริษัทอื่น   : ทั้งหมด = ทุกต้นทาง "ของแท็บนั้น" ไม่ข้ามไปเห็นของบริษัทอื่น
     #
-    # ไม่ส่งมาหรือส่งชื่อที่ไม่อยู่ในแท็บนี้ (เช่นกดสลับแท็บแล้ว location.reload()
-    # คง query string เดิมไว้) ก็ถอยไปใช้ตัวแรกของแท็บ ไม่ปล่อยให้กลายเป็น "ทั้งหมด"
-    # เพราะจะได้สภาพที่ dropdown ขึ้นชื่อบริษัทหนึ่ง แต่ข้อมูลเป็นของทุกบริษัท ซึ่งหลอกตา
+    # เดิมแท็บบริษัทเลือกทั้งหมดไม่ได้ ต้องไล่ export ทีละต้นทาง เพราะกลัวสภาพที่
+    # dropdown ขึ้นชื่อบริษัทหนึ่งแต่ข้อมูลเป็นของทุกบริษัท ซึ่งหลอกตา
+    # แก้ด้วยการให้ "ทั้งหมด" ของแท็บบริษัทกรองด้วยรายชื่อต้นทางของแท็บนั้น
+    # ขอบเขตข้อมูลจึงยังตรงกับแท็บเสมอ และ export รวดเดียวจบได้
+    #
+    # ส่งชื่อที่ไม่อยู่ในแท็บนี้มา (เช่นสลับแท็บแล้ว location.reload() คง query string เดิม)
+    # ถือเป็น "ทั้งหมด" ของแท็บใหม่ ไม่ใช่ค้างชื่อของแท็บเก่าซึ่งจะได้ข้อมูลว่าง
     company_code = request.session.get('company_code')
     origin_sees_all = company_code in COMPANY_TAB_SEES_ALL
     allowed_origins = _exportDocumentOriginNames(None if origin_sees_all else company_code)
 
     selected_origin = request.GET.get('origin') or ''
     if selected_origin not in allowed_origins:
-        # แท็บร้อยเกาะ : ว่าง = ทั้งหมด ซึ่งเป็นค่าตั้งต้นที่ถูกต้องของแท็บนั้น
-        selected_origin = '' if origin_sees_all else (allowed_origins[0] if allowed_origins else '')
+        selected_origin = ''
 
     # แท็บที่ยังไม่มีต้นทางผูกไว้ในตาราง map เลย (ตอนนี้คือ JOB กับ NSM)
     # เลือกต้นทางไม่ได้ = ไม่มีขอบเขตข้อมูลให้ดู จึงไม่แสดงอะไรเลยแล้วบอกเหตุผลบนหน้าจอ
@@ -12651,6 +12660,10 @@ def _exportDocumentQuerySet(request):
         qs = qs.filter(_exportDocumentOriginFilter(selected_origin, own_port_bws, other_bws))
     elif origin_unmapped:
         qs = qs.none()
+    elif not origin_sees_all:
+        # "ทั้งหมด" ของแท็บบริษัท = ทุกต้นทางของแท็บนั้น ต้องกรองด้วยเสมอ
+        # ปล่อยไม่กรองจะกวาดของทุกบริษัทเข้ามา ทั้งที่หน้าจอขึ้นชื่อแท็บเดียว
+        qs = qs.filter(_exportDocumentOriginFilter(allowed_origins, own_port_bws, other_bws))
     qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws)
     if not include_cancel:
         qs = qs.filter(is_cancel=False)

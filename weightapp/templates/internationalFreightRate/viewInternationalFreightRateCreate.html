@@ -112,7 +112,19 @@
             </div>
             <div class="form-group col-md-3">
               <label for="ifr_base_fuel_price">ราคาน้ำมันฐาน (บาท/ลิตร) <span class="text-danger">*</span></label>
-              <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price" placeholder="เช่น 32.50" value="{{ ifr_obj.base_fuel_price|default_if_none:'' }}" />
+              {% comment %}
+              สัญญาตกลงราคาน้ำมันฐานเป็นช่วง เช่น 30.00 - 30.99 แปลว่าน้ำมันยังอยู่ในช่วงนี้
+              ค่าขนส่งไม่ต้องปรับ แต่ตอนคิดเงินใช้ขอบล่างเสมอ จึงต้องบอกไว้ใต้ช่อง
+              ไม่งั้นคนกรอกจะเดาไม่ออกว่าเลขไหนถูกเอาไปคิด
+              {% endcomment %}
+              <div class="input-group">
+                <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price"
+                       placeholder="30.00" value="{{ ifr_obj.base_fuel_price|default_if_none:'' }}" />
+                <span class="input-group-text">ถึง</span>
+                <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price_max"
+                       placeholder="30.99" value="{{ ifr_obj.base_fuel_price_max|default_if_none:'' }}" />
+              </div>
+              <small class="text-muted">คิดค่าขนส่งจากเลขซ้าย · ตกลงเป็นราคาเดียวให้เว้นช่องขวาไว้</small>
             </div>
             <div class="form-group col-md-3">
               <label for="ifr_fuel_used_per_trip">ใช้น้ำมัน (ลิตร/เที่ยว) <span class="text-danger">*</span></label>
@@ -607,7 +619,8 @@
     origin: 'ต้นทาง',
     destination: 'ปลายทาง',
     distance: 'ระยะทาง',
-    base_fuel_price: 'ราคาน้ำมันฐาน',
+    base_fuel_price: 'ราคาน้ำมันฐาน (ขอบล่าง)',
+    base_fuel_price_max: 'ราคาน้ำมันฐาน (ขอบบน)',
     fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
     fuel_freight_adjustment: 'ปรับตามน้ำมัน (ลิตรละ 1 บาท)',
     weight_carried: 'ประเภทการแบกน้ำหนัก',
@@ -691,6 +704,7 @@
       origin: orNull(document.getElementById('ifr_origin').value),
       destination: orNull(document.getElementById('ifr_destination').value),
       base_fuel_price: orNull(document.getElementById('ifr_base_fuel_price').value),
+      base_fuel_price_max: orNull(document.getElementById('ifr_base_fuel_price_max').value),
       distance: orNull(document.getElementById('ifr_distance').value),
       fuel_used_per_trip: orNull(document.getElementById('ifr_fuel_used_per_trip').value),
       note: orNull(document.getElementById('ifr_note').value),

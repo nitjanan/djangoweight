@@ -1474,7 +1474,18 @@ class InternationalFreightRate(models.Model):
     # ชื่อดึงจาก origin.name เอา ไม่เก็บซ้ำในตารางนี้ กันข้อมูลขัดกันเองเวลามีคนแก้ชื่อในตาราง map
     origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_origins', null=True, blank=True, verbose_name="ต้นทาง")
     destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_destinations', null=True, blank=True, verbose_name="ปลายทาง")
-    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน")#
+    # ราคาน้ำมันฐานในสัญญาเป็น "ช่วง" ไม่ใช่ตัวเลขเดียว เช่น 30.00 - 30.99
+    # แปลว่าตราบใดที่ราคาน้ำมันจริงยังอยู่ในช่วงนี้ ค่าขนส่งไม่ต้องปรับ
+    #
+    # เก็บเป็นสองช่อง และให้ช่องล่างชื่อเดิมคือ base_fuel_price เพราะเป็นตัวที่เอาไปคิดเงิน
+    # สูตร K ในไฟล์ excel คือ (ราคาน้ำมันเฉลี่ย - ราคาน้ำมันฐาน) x อัตราปรับ
+    # ต้องใช้ขอบล่างเสมอ ตามที่เจ้าของงานกำหนด ("เอาเลขด้านหน้ามาคิด")
+    # ถ้าเปลี่ยนไปใช้ขอบบนหรือค่ากลาง ยอดเงินที่จ่ายรถร่วมจะเปลี่ยนทันทีทั้งระบบ
+    #
+    # base_fuel_price_max มีไว้แสดงและไว้ให้คนกรอกเห็นช่วงที่ตกลงกันไว้ ไม่มีสูตรไหนใช้คิดเงิน
+    # ว่างได้ = สัญญานั้นตกลงเป็นราคาเดียว ไม่ได้ตกลงเป็นช่วง
+    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน (ขอบล่าง)")#
+    base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน (ขอบบน)")
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
     fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")#
     # ราคาน้ำมันเฉลี่ยย้ายไปตาราง InternationalFreightRateFuelPrice เพราะเปลี่ยนทุกเดือน
@@ -1565,6 +1576,18 @@ class InternationalFreightRate(models.Model):
     def isFirstVersion(self):
         """ใบแรกของเส้นทาง แก้ทับได้เลยไม่ต้องขึ้นเวอร์ชัน ถ้ายังไม่มีใบอื่นตามมา"""
         return self.root_id == self.id
+
+    def baseFuelPriceLabel(self):
+        """ราคาน้ำมันฐานสำหรับเอาไปแสดง เช่น "30.00 - 30.99" หรือ "30.00" ถ้าไม่ได้ตกลงเป็นช่วง
+
+        รวมไว้ที่เดียวเพราะมีหลายหน้าที่ต้องแสดงค่านี้ (ตารางรายการ การ์ดเวอร์ชัน ฟอร์มแก้ไข)
+        ถ้าปล่อยให้แต่ละ template ประกอบเอง เดี๋ยวจะแสดงไม่เหมือนกัน
+        """
+        if self.base_fuel_price is None:
+            return None
+        if self.base_fuel_price_max is None:
+            return '%s' % self.base_fuel_price
+        return '%s - %s' % (self.base_fuel_price, self.base_fuel_price_max)
 
     def __str__(self):
         origin = self.origin.name if self.origin else "-"

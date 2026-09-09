@@ -57,7 +57,7 @@
     <dd>{{ v.obj.distance|default_if_none:"-" }} <span class="text-muted">กม.</span></dd>
 
     <dt>ราคาน้ำมันฐาน</dt>
-    <dd>{{ v.obj.base_fuel_price|default_if_none:"-" }} <span class="text-muted">บาท/ลิตร</span></dd>
+    <dd>{{ v.obj.baseFuelPriceLabel|default_if_none:"-" }} <span class="text-muted">บาท/ลิตร</span></dd>
 
     <dt>ใช้น้ำมัน</dt>
     <dd>{{ v.obj.fuel_used_per_trip|default_if_none:"-" }} <span class="text-muted">ลิตร/เที่ยว</span></dd>

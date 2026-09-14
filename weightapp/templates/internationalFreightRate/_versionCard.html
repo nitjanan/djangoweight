@@ -28,6 +28,7 @@
           <th class="text-end" style="min-width: 130px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small></th>
           <th class="text-end" style="min-width: 110px;">ลดบาท/ตัน</th>
           <th class="text-end" style="min-width: 120px;">บาท/ตัน/กม.</th>
+          <th style="min-width: 110px;">การชำระเงิน</th>
           <th>หมายเหตุ</th>
         </tr>
       </thead>
@@ -40,10 +41,11 @@
           <td class="text-end">{{ t.fuel_freight_adjustment|default_if_none:"-" }}</td>
           <td class="text-end">{{ t.discount_per_ton|default_if_none:"-" }}</td>
           <td class="text-end">{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
+          <td>{{ t.paymentTermLabel|default_if_none:"ยังไม่ระบุ" }}</td>
           <td>{{ t.note|default_if_none:"-" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-center text-muted">ไม่มีทีมในการปรับครั้งนี้</td></tr>
+        <tr><td colspan="8" class="text-center text-muted">ไม่มีทีมในการปรับครั้งนี้</td></tr>
         {% endfor %}
       </tbody>
     </table>

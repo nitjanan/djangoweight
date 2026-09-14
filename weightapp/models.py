@@ -1695,8 +1695,14 @@ class InternationalFreightRateTeam(models.Model):
     # (แบบเดียวกับ freight_rate ที่ null=True แต่หน้าเว็บบังคับ)
     fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ปรับค่าขนส่งตามน้ำมัน (บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร)")
     discount_per_ton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ลดบาท/ตัน")
-    freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")
+    # คำนวณอัตโนมัติ = ค่าขนส่ง / ระยะทางของใบ ปัด 2 ตำแหน่ง (ดู serializers._perTonKm)
+    freight_rate_per_ton_km = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ค่าขนส่ง บาท/ตัน/กม.")
     note = models.TextField(null=True, blank=True, verbose_name="หมายเหตุ")
+    # เงื่อนไขการชำระเงินเก็บช่องเดียวแบบเดียวกับ paytrm ของ Express (ใบตั้งหนี้ APTRNH)
+    # 0 = เงินสด / 1 ขึ้นไป = เครดิตกี่วัน / NULL = ยังไม่ระบุ
+    # ไม่แยกช่อง "ประเภท" อีกช่อง เพราะจะเก็บเรื่องเดียวกันซ้ำสองที่แล้วขัดกันได้ (เช่น เครดิต + 0 วัน)
+    # แถวเก่าปล่อยเป็น NULL ไม่ตั้ง default เป็นเงินสด เพราะจะเท่ากับระบบยืนยันแทนว่าทีมรับเงินสด
+    credit_days = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="เครดิต (วัน) 0 = เงินสด")
 
     class Meta:
         db_table = 'international_freight_rate_team'
@@ -1707,6 +1713,14 @@ class InternationalFreightRateTeam(models.Model):
     def __str__(self):
         team_name = self.team.car_team_name if self.team else "ทุกทีม"
         return f"{team_name} - {self.weight_carried}"
+
+    def paymentTermLabel(self):
+        """ข้อความเงื่อนไขการชำระเงินสำหรับแสดงผล คืน None ถ้ายังไม่ระบุ"""
+        if self.credit_days is None:
+            return None
+        if self.credit_days == 0:
+            return "เงินสด"
+        return f"เครดิต {self.credit_days} วัน"
 
 
 

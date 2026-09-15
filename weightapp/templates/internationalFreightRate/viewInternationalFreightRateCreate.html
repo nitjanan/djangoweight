@@ -40,7 +40,22 @@
   #ifr_team_rows tr.ifr-team-cont .ifr-team-cell {
     position: relative;
     padding-left: 2rem;
+  }
+  /* ทำให้จางเฉพาะกล่องที่แสดงชื่อทีม ห้ามใส่ opacity ที่ตัวช่อง td
+     opacity < 1 ทำให้ td กลายเป็น stacking context ของตัวเอง รายการ dropdown ของ choices.js
+     ที่อยู่ข้างในจะถูกขังไว้ใน td นั้น z-index ไม่มีผลข้ามออกไป
+     เลยโดนการ์ด "ความเห็นตอนขออนุมัติ" ด้านล่างทับ และรายการยังจางตามไปด้วย
+     .choices__inner เป็นพี่น้องกับรายการ dropdown ไม่ได้ครอบมัน จางตรงนี้จึงไม่กระทบ dropdown */
+  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell .choices__inner,
+  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell > select.form-select {
     opacity: .55;
+  }
+  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell .choices.is-open .choices__inner {
+    opacity: 1;
+  }
+  /* dropdown ที่กางอยู่ต้องลอยเหนือการ์ดถัดไปเสมอ ไม่ว่าอยู่แถวไหน */
+  .ifr-team-table-wrap .choices.is-open {
+    z-index: 10;
   }
   #ifr_team_rows tr.ifr-team-cont .ifr-team-cell::before {
     content: "↳";

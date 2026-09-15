@@ -10877,12 +10877,17 @@ def exportExcelInternationalFreightRate(request):
         worksheet.cell(row=row, column=4).value = float(rate.distance) if rate.distance is not None else None
         # ราคาน้ำมันฐาน = จุดตั้งต้นที่ใช้เทียบกับราคาน้ำมันจริง ถึงจะรู้ว่าปรับขึ้นหรือลง
         # ช่อง "เดิม" ว่างได้ถ้าเส้นทางนี้ยังไม่เคยปรับ ซึ่งแปลว่าไม่มีค่าเดิมจริง ๆ
+        # ราคาน้ำมันฐานตกลงกันเป็นช่วงแล้ว (เช่น 30.00 - 30.99) ใส่เป็นข้อความตาม baseFuelPriceLabel
+        # ให้ตรงกับที่หน้าเว็บแสดง ใบที่ตกลงราคาเดียวจะออกเป็นตัวเลขเดียวเหมือนเดิม
+        # ไฟล์นี้เป็นเอกสารขออนุมัติ ไม่มีสูตรไหนเอาช่องนี้ไปคำนวณ จึงเป็นข้อความได้
         previous_version = previous_versions.get(rate.id)
-        if previous_version is not None and previous_version.base_fuel_price is not None:
-            worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL).value = float(
-                previous_version.base_fuel_price)
-        worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL + 1).value = (
-            float(rate.base_fuel_price) if rate.base_fuel_price is not None else None)
+        if previous_version is not None:
+            previous_cell = worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL)
+            previous_cell.value = previous_version.baseFuelPriceLabel()
+            previous_cell.alignment = Alignment(horizontal='right')
+        current_cell = worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL + 1)
+        current_cell.value = rate.baseFuelPriceLabel()
+        current_cell.alignment = Alignment(horizontal='right')
         # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
         _ifrExportWriteTeamRow(worksheet, row, shared, band_col, rate_per_km_col, note_col, rate,
                                previous_rates.get(rate.id), previous_labels.get(rate.id))
@@ -10922,8 +10927,9 @@ def exportExcelInternationalFreightRate(request):
     worksheet.column_dimensions['B'].width = 38
     worksheet.column_dimensions['C'].width = 22
     worksheet.column_dimensions['D'].width = 12
-    worksheet.column_dimensions['E'].width = 10
-    worksheet.column_dimensions['F'].width = 10
+    # ราคาน้ำมันฐานเป็นช่วง "30.00 - 30.99" ยาว 13 ตัวอักษร กว้าง 10 จะโดนตัด
+    worksheet.column_dimensions['E'].width = 15
+    worksheet.column_dimensions['F'].width = 15
     for c in range(IFR_EXPORT_FIXED_COLS + 1, rate_per_km_col):
         worksheet.column_dimensions[get_column_letter(c)].width = 9
     worksheet.column_dimensions[get_column_letter(rate_per_km_col)].width = 12

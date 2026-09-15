@@ -20,21 +20,47 @@
     border-right: 2px solid rgba(0, 0, 0, .12);
     white-space: nowrap;
   }
-  /* หัวกลุ่มต้นทาง : กดทั้งแถบเพื่อพับ/กาง */
+  /* หัวกลุ่มต้นทาง : เป็น header ของตารางปลายทางด้านล่าง กดทั้งแถบเพื่อพับ/กาง
+     เดิมพื้นฟ้าจางตัวอักษรเทา กลืนกับหัวตารางจนแยกไม่ออกว่ากลุ่มไหนเริ่มตรงไหน
+     ใช้พื้นน้ำเงินเข้มทึบ ตัวอักษรขาว สีตายตัวไม่ตามธีม เพราะสีเข้มอ่านชัดได้ทั้งธีมสว่างและมืด */
   .ifr-origin-head {
     display: flex;
     align-items: center;
-    gap: .5rem;
+    gap: .6rem;
     width: 100%;
-    padding: .65rem .9rem;
+    padding: .8rem 1rem;
     border: 0;
     border-radius: .5rem;
-    background-color: rgba(67, 94, 190, .08);
-    color: inherit;
+    background: linear-gradient(135deg, #2f438f 0%, #435ebe 100%);
+    color: #fff;
     text-align: left;
+    box-shadow: 0 2px 8px rgba(47, 67, 143, .25);
   }
   .ifr-origin-head:hover {
-    background-color: rgba(67, 94, 190, .14);
+    background: linear-gradient(135deg, #263777 0%, #3a52a8 100%);
+  }
+  .ifr-origin-head .ifr-origin-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .ifr-origin-head .ifr-chevron,
+  .ifr-origin-head .ifr-origin-icon {
+    color: #fff;
+  }
+  .ifr-origin-head .ifr-origin-count {
+    background-color: #fff;
+    color: #2f438f;
+    font-weight: 700;
+  }
+  /* ธีมมืดของ Mazer บังคับสีตัวอักษรของ .badge เป็นสีขาวด้วย selector ที่เจาะจงกว่า
+     ป้ายจำนวนปลายทางเลยกลายเป็นขาวบนขาว มองไม่เห็น ต้องเขียนซ้ำให้เจาะจงกว่า */
+  html[data-bs-theme=dark] .ifr-origin-head .ifr-origin-count {
+    background-color: #fff;
+    color: #2f438f;
+  }
+  html[data-bs-theme=dark] .ifr-origin-head {
+    border-radius: .5rem;
   }
   .ifr-origin-head .ifr-chevron {
     transition: transform .15s ease;
@@ -133,9 +159,10 @@
         <div class="ifr-origin-group">
           <button type="button" class="ifr-origin-head" aria-expanded="true"
                   data-target="ifr-origin-{{ forloop.counter }}">
-            <i class="fa-solid fa-chevron-down ifr-chevron text-muted"></i>
-            <span class="fw-bold">{{ g.origin_name }}</span>
-            <span class="badge bg-light text-dark border ms-auto">{{ g.rows|length }} ปลายทาง</span>
+            <i class="fa-solid fa-chevron-down ifr-chevron"></i>
+            <i class="fa-solid fa-location-dot ifr-origin-icon"></i>
+            <span class="ifr-origin-name">{{ g.origin_name }}</span>
+            <span class="badge ifr-origin-count ms-auto">{{ g.rows|length }} ปลายทาง</span>
           </button>
 
           <div id="ifr-origin-{{ forloop.counter }}" class="table-responsive mt-2">

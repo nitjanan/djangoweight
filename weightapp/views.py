@@ -10543,10 +10543,9 @@ def viewInternationalFreightRate(request):
                 .order_by('team_id', 'id'),
         )))
 
-    #สร้าง page
-    p = Paginator(data, 10)
-    page = request.GET.get('page')
-    ifr = p.get_page(page)
+    # ไม่แบ่งหน้าแล้ว : จับกลุ่มตามต้นทาง ถ้าตัดหน้าละ 10 แถว กลุ่มเดียวกันจะขาดข้ามหน้า
+    # เส้นทางที่ใช้อยู่มีหลักสิบ (ต้นทาง x ท่าเรือ) แสดงหน้าเดียวไหว และมีตัวเลือกต้นทางไว้กรองแทน
+    rows = list(data)
 
     # ชื่อต้นทาง/ปลายทางใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
     map_names = _baseCompanyMapDisplayNameById()
@@ -10557,7 +10556,7 @@ def viewInternationalFreightRate(request):
                           .annotate(n=Count('id'))
                           .values_list('root_id', 'n'))
 
-    for row in ifr:
+    for row in rows:
         teams = list(row.teams.all())
         # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
         # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
@@ -10574,8 +10573,78 @@ def viewInternationalFreightRate(request):
         row.change_count = max(row.version_count - 1, 0)
         row.effective_th = _ifrEffectiveLabel(row.effective_date)
 
-    context = {'ifr_page':'active', 'ifr': ifr, active :"active",}
+    def originName(origin_id):
+        return map_names.get(origin_id) or IFR_NO_ORIGIN_NAME
+
+    def nameSortKey(name):
+        # แถวที่หาชื่อไม่เจอไปไว้ท้ายสุด ไม่ให้ขึ้นมาคั่นกลางรายการที่มีชื่อจริง
+        return (name == IFR_NO_ORIGIN_NAME, _thaiSortKey(name))
+
+    # ตัวเลือกต้นทาง : เอาเฉพาะต้นทางที่มีเส้นทางใช้อยู่ ไม่ใช่ทุกแถวในตาราง map
+    # เพราะตาราง map ปนทั้งเหมืองและท่าเรือ ใส่ครบจะเลือกเจอแล้วว่างเปล่า
+    route_count = {}
+    for row in rows:
+        route_count[row.origin_id] = route_count.get(row.origin_id, 0) + 1
+    origin_options = sorted(
+        ({'id': origin_id, 'name': originName(origin_id), 'count': count}
+         for origin_id, count in route_count.items()),
+        key=lambda option: nameSortKey(option['name']))
+
+    # ต้นทางที่เลือกเก็บไว้ใน URL (?origin=) กดแก้ไขแล้วย้อนกลับยังอยู่ที่เดิม ส่งลิงก์ต่อก็เปิดเจอหน้าเดียวกัน
+    # ค่าที่ไม่ใช่ตัวเลขถือว่าไม่ได้เลือก ส่วนตัวเลขที่ไม่มีเส้นทาง จะขึ้นกล่องบอกว่าไม่พบ
+    try:
+        selected_origin = int(request.GET.get('origin') or '')
+    except ValueError:
+        selected_origin = None
+    shown = rows if selected_origin is None else [r for r in rows if r.origin_id == selected_origin]
+
+    groups_by_origin = {}
+    for row in shown:
+        groups_by_origin.setdefault(row.origin_id, []).append(row)
+    groups = [
+        {'origin_id': origin_id,
+         'origin_name': originName(origin_id),
+         # ปลายทางในกลุ่มเรียงตามชื่อ ไม่ใช่ตามลำดับที่เพิ่มเข้าระบบ
+         'rows': sorted(group_rows, key=lambda r: nameSortKey(r.destination_display or IFR_NO_ORIGIN_NAME))}
+        for origin_id, group_rows in groups_by_origin.items()
+    ]
+    groups.sort(key=lambda group: nameSortKey(group['origin_name']))
+
+    context = {
+        'ifr_page': 'active',
+        'ifr_groups': groups,
+        'ifr_origin_options': origin_options,
+        'ifr_selected_origin': selected_origin,
+        'ifr_route_total': len(rows),
+        active: "active",
+    }
     return render(request, "internationalFreightRate/viewInternationalFreightRate.html", context)
+
+
+IFR_NO_ORIGIN_NAME = 'ไม่ระบุชื่อ'
+# สระหน้า : เขียนก่อนพยัญชนะแต่ในพจนานุกรมเรียงตามพยัญชนะตัวถัดไป
+_THAI_LEADING_VOWELS = 'เแโใไ'
+
+
+def _thaiSortKey(text):
+    """คีย์เรียงข้อความไทยให้ใกล้ลำดับพจนานุกรม โดยไม่ต้องลง ICU
+
+    เรียงด้วย unicode ตรง ๆ จะพลาดเรื่องสระหน้า เพราะรหัสของ เ แ โ ใ ไ อยู่หลังพยัญชนะทุกตัว
+    เช่น "โชคพนา" จะไปอยู่หลัง "ศิลา" ทั้งที่ ช มาก่อน ศ
+    แก้โดยสลับสระหน้ากับพยัญชนะตัวถัดไปก่อนเทียบ ("โช" -> "ชโ") ลำดับที่เหลือเป็นไปตาม unicode
+    """
+    chars = text or ''
+    out = []
+    i = 0
+    while i < len(chars):
+        if chars[i] in _THAI_LEADING_VOWELS and i + 1 < len(chars):
+            out.append(chars[i + 1])
+            out.append(chars[i])
+            i += 2
+        else:
+            out.append(chars[i])
+            i += 1
+    return ''.join(out)
 
 ################# export ตารางอัตราค่าขนส่งส่งออก เป็นรูปแบบบันทึกขออนุมัติ #################
 # ทำตามหน้าตาไฟล์ "ค่าขนส่ง ส่งออก 2568.xlsx" ของฝ่ายโลจิสติกส์ (sheet กันยายน 68)
@@ -10808,12 +10877,17 @@ def exportExcelInternationalFreightRate(request):
         worksheet.cell(row=row, column=4).value = float(rate.distance) if rate.distance is not None else None
         # ราคาน้ำมันฐาน = จุดตั้งต้นที่ใช้เทียบกับราคาน้ำมันจริง ถึงจะรู้ว่าปรับขึ้นหรือลง
         # ช่อง "เดิม" ว่างได้ถ้าเส้นทางนี้ยังไม่เคยปรับ ซึ่งแปลว่าไม่มีค่าเดิมจริง ๆ
+        # ราคาน้ำมันฐานตกลงกันเป็นช่วงแล้ว (เช่น 30.00 - 30.99) ใส่เป็นข้อความตาม baseFuelPriceLabel
+        # ให้ตรงกับที่หน้าเว็บแสดง ใบที่ตกลงราคาเดียวจะออกเป็นตัวเลขเดียวเหมือนเดิม
+        # ไฟล์นี้เป็นเอกสารขออนุมัติ ไม่มีสูตรไหนเอาช่องนี้ไปคำนวณ จึงเป็นข้อความได้
         previous_version = previous_versions.get(rate.id)
-        if previous_version is not None and previous_version.base_fuel_price is not None:
-            worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL).value = float(
-                previous_version.base_fuel_price)
-        worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL + 1).value = (
-            float(rate.base_fuel_price) if rate.base_fuel_price is not None else None)
+        if previous_version is not None:
+            previous_cell = worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL)
+            previous_cell.value = previous_version.baseFuelPriceLabel()
+            previous_cell.alignment = Alignment(horizontal='right')
+        current_cell = worksheet.cell(row=row, column=IFR_EXPORT_BASE_FUEL_COL + 1)
+        current_cell.value = rate.baseFuelPriceLabel()
+        current_cell.alignment = Alignment(horizontal='right')
         # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
         _ifrExportWriteTeamRow(worksheet, row, shared, band_col, rate_per_km_col, note_col, rate,
                                previous_rates.get(rate.id), previous_labels.get(rate.id))
@@ -10853,8 +10927,9 @@ def exportExcelInternationalFreightRate(request):
     worksheet.column_dimensions['B'].width = 38
     worksheet.column_dimensions['C'].width = 22
     worksheet.column_dimensions['D'].width = 12
-    worksheet.column_dimensions['E'].width = 10
-    worksheet.column_dimensions['F'].width = 10
+    # ราคาน้ำมันฐานเป็นช่วง "30.00 - 30.99" ยาว 13 ตัวอักษร กว้าง 10 จะโดนตัด
+    worksheet.column_dimensions['E'].width = 15
+    worksheet.column_dimensions['F'].width = 15
     for c in range(IFR_EXPORT_FIXED_COLS + 1, rate_per_km_col):
         worksheet.column_dimensions[get_column_letter(c)].width = 9
     worksheet.column_dimensions[get_column_letter(rate_per_km_col)].width = 12
@@ -10965,7 +11040,7 @@ def editInternationalFreightRate(request, id):
     # ส่งทีมเดิมไปให้ JS สร้างแถวรอไว้ตอนเปิดหน้า
     teams = list(obj.teams.values(
         'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
-        'discount_per_ton', 'freight_rate_per_ton_km', 'note',
+        'discount_per_ton', 'freight_rate_per_ton_km', 'note', 'credit_days',
     ))
     
 

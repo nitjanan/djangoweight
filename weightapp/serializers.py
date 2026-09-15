@@ -296,6 +296,10 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
             # คือ (ราคาน้ำมันเฉลี่ย - ราคาน้ำมันฐาน) x ค่านี้ ปล่อยว่างแล้วเที่ยวนั้นจะไม่ถูกปรับเลย
             # ซึ่งไม่ใช่เจตนา แต่จะดูไม่ออกจากในไฟล์ว่าลืมกรอกหรือจงใจไม่ปรับ
             'fuel_freight_adjustment': {'required': True, 'allow_null': False},
+            # 0 = เงินสด ไม่บังคับกรอก (null = ยังไม่ระบุ) กันพิมพ์เกินปีไว้ เพราะบัญชีใช้สูงสุด 60 วัน
+            'credit_days': {'required': False, 'allow_null': True, 'min_value': 0, 'max_value': 365},
+            # คำนวณเองจาก ค่าขนส่ง / ระยะทาง ของใบ (ดู _perTonKm) client ส่งมาก็ไม่รับ
+            'freight_rate_per_ton_km': {'read_only': True},
         }
 
 
@@ -303,6 +307,19 @@ THAI_MONTH_NAMES = [
     'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ]
+
+
+def _perTonKm(freight_rate, distance):
+    """ค่าขนส่ง บาท/ตัน/กม. = ค่าขนส่ง (บาท/ตัน) / ระยะทาง (กม.) ปัด 2 ตำแหน่ง (ปัดครึ่งขึ้น) ตามคอลัมน์ใน db
+
+    คำนวณฝั่ง server ทุกครั้งที่บันทึก ไม่เชื่อค่าจาก client เพราะเป็นค่าที่ได้มาจากช่องอื่นล้วน ๆ
+    ถ้าให้กรอกเองได้ พอแก้ค่าขนส่งหรือระยะทางแล้วลืมแก้ช่องนี้ ตัวเลขจะขัดกันเงียบ ๆ
+    ขาดตัวใดตัวหนึ่ง หรือระยะทางเป็น 0 = คำนวณไม่ได้ คืน None
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    if freight_rate is None or not distance:
+        return None
+    return (Decimal(freight_rate) / Decimal(distance)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def _thaiMonthLabel(month_date):
@@ -408,6 +425,13 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
                 'base_fuel_price_max':
                     'ราคาน้ำมันฐานขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s) '
                     '— ถ้าตกลงเป็นราคาเดียวให้เว้นช่องขอบบนไว้' % (high, low)})
+
+        # บาท/ตัน/กม. ของทุกแถวทีม คิดจากระยะทางของใบ ตอนแก้ใบเดิมแล้วไม่ได้ส่งระยะทางมา ใช้ของเดิม
+        teams = attrs.get('teams')
+        if teams is not None:
+            distance = attrs['distance'] if 'distance' in attrs else getattr(self.instance, 'distance', None)
+            for team_data in teams:
+                team_data['freight_rate_per_ton_km'] = _perTonKm(team_data.get('freight_rate'), distance)
         return attrs
 
     def validate_teams(self, teams_data):
@@ -435,6 +459,18 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
                             'ทีม "%s" มีช่วงน้ำหนักทับกัน : "%s" กับ "%s" '
                             '— ทีมเดียวกันต้องไม่มีช่วงซ้อนกัน ให้ลบออกอันหนึ่ง'
                             % (self._teamLabel(team_pk), first.name, second.name))
+
+        # เงื่อนไขการชำระเงินเป็นของทีม ไม่ใช่ของช่วงน้ำหนัก ทีมเดียวกันในใบเดียวกันต้องได้ค่าเดียว
+        # ไม่งั้นบัญชีไม่รู้ว่าจะจ่ายทีมนั้นกี่วัน ("ทุกทีม" ก็นับเป็นกลุ่มหนึ่งเหมือนกัน)
+        terms_by_team = {}
+        for team_data in teams_data:
+            team = team_data.get('team')
+            terms_by_team.setdefault(team.pk if team else None, set()).add(team_data.get('credit_days'))
+        for team_pk, terms in terms_by_team.items():
+            if len(terms) > 1:
+                raise serializers.ValidationError(
+                    'ทีม "%s" มีเงื่อนไขการชำระเงินไม่ตรงกันในแต่ละช่วงน้ำหนัก '
+                    '— ทีมเดียวกันต้องใช้เงื่อนไขเดียวกันทุกแถว' % self._teamLabel(team_pk))
         return teams_data
 
     def _currentUser(self):
@@ -541,8 +577,10 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             s(get('freight_rate')),
             s(get('fuel_freight_adjustment')),
             s(get('discount_per_ton')),
-            s(get('freight_rate_per_ton_km')),
+            # ไม่เทียบ freight_rate_per_ton_km : คำนวณจาก freight_rate กับระยะทางที่เทียบอยู่แล้ว
+            # ถ้าเทียบด้วย แถวเก่าที่ช่องนี้ยังว่างจะถูกนับว่าเปลี่ยน แล้วออกเวอร์ชันใหม่ทั้งที่ไม่ได้แก้อะไร
             s(get('note')),
+            s(get('credit_days')),
         )
 
     def _rateChanged(self, instance, validated_data, teams_data):
@@ -592,7 +630,9 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             {'team': t.team, 'weight_carried': t.weight_carried, 'freight_rate': t.freight_rate,
              'fuel_freight_adjustment': t.fuel_freight_adjustment,
              'discount_per_ton': t.discount_per_ton,
-             'freight_rate_per_ton_km': t.freight_rate_per_ton_km, 'note': t.note}
+             # ระยะทางของใบใหม่อาจเปลี่ยน ต้องคิดใหม่ ไม่ยกค่าเดิมมาตรง ๆ
+             'freight_rate_per_ton_km': _perTonKm(t.freight_rate, rate.distance), 'note': t.note,
+             'credit_days': t.credit_days}
             for t in instance.teams.all()
         ]
         for team_data in source_teams:
@@ -606,6 +646,12 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        if teams_data is None:
+            # ไม่ได้ส่งทีมมา แต่ระยะทางอาจถูกแก้ ต้องคิดบาท/ตัน/กม. ของแถวเดิมใหม่
+            for team in instance.teams.all():
+                team.freight_rate_per_ton_km = _perTonKm(team.freight_rate, instance.distance)
+                team.save(update_fields=['freight_rate_per_ton_km'])
 
         if teams_data is not None:
             instance.teams.all().delete()

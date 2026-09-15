@@ -164,7 +164,8 @@
                   <th style="min-width: 120px;">ค่าขนส่ง</th>
                   <th style="min-width: 150px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small> <span class="text-danger">*</span></th>
                   <th style="min-width: 120px;">ลดบาท/ตัน</th>
-                  <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.</th>
+                  <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.<br /><small class="fw-normal">คำนวณอัตโนมัติ</small></th>
+                  <th style="min-width: 200px;">เงื่อนไขการชำระเงิน</th>
                   <th style="min-width: 160px;">หมายเหตุ</th>
                   <th style="width: 96px;">จัดการ</th>
                 </tr>
@@ -506,7 +507,17 @@
       '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-fuel-adjustment" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-rate-per-ton-km" /></td>' +
+      '<td><input type="text" class="form-control ifr-rate-per-ton-km bg-light" readonly tabindex="-1" ' +
+             'title="ค่าขนส่ง ÷ ระยะทาง" placeholder="กรอกค่าขนส่งและระยะทาง" /></td>' +
+      '<td><div class="d-flex gap-1">' +
+        '<select class="form-select ifr-pay-type">' +
+          '<option value="">ยังไม่ระบุ</option>' +
+          '<option value="cash">เงินสด</option>' +
+          '<option value="credit">เครดิต</option>' +
+        '</select>' +
+        '<input type="number" min="1" max="365" step="1" inputmode="numeric" list="ifr_credit_days_list" ' +
+               'class="form-control ifr-credit-days d-none" placeholder="วัน" style="width: 80px;" />' +
+      '</div></td>' +
       '<td><input type="text" class="form-control ifr-team-note" /></td>' +
       '<td class="text-center text-nowrap">' +
         '<button type="button" class="btn btn-success btn-sm ifr-add-band" ' +
@@ -523,8 +534,27 @@
     tr.querySelector('.ifr-freight-rate').value = row.freight_rate == null ? '' : row.freight_rate;
     tr.querySelector('.ifr-fuel-adjustment').value = row.fuel_freight_adjustment == null ? '' : row.fuel_freight_adjustment;
     tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
-    tr.querySelector('.ifr-rate-per-ton-km').value = row.freight_rate_per_ton_km == null ? '' : row.freight_rate_per_ton_km;
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
+    setPayment(tr, row.credit_days);
+
+    // บาท/ตัน/กม. ไม่ได้อ่านจากค่าที่เก็บไว้ คิดสดจากช่องบนจอเสมอ ให้ตรงกับที่ server จะคิดตอนบันทึก
+    updatePerTonKm(tr);
+    tr.querySelector('.ifr-freight-rate').addEventListener('input', function () {
+      updatePerTonKm(tr);
+    });
+
+    // เงื่อนไขการชำระเงินเป็นของทีม ไม่ใช่ของช่วงน้ำหนัก แก้แถวไหนให้แถวอื่นของทีมเดียวกันเปลี่ยนตาม
+    // backend บังคับให้ทีมเดียวกันต้องเป็นค่าเดียวอยู่แล้ว ทำตรงนี้ไว้ให้ผู้ใช้ไม่ต้องแก้ทีละแถว
+    tr.querySelector('.ifr-pay-type').addEventListener('change', function () {
+      toggleCreditDays(tr);
+      if (tr.querySelector('.ifr-pay-type').value === 'credit') {
+        tr.querySelector('.ifr-credit-days').focus();
+      }
+      syncTeamPayment(tr);
+    });
+    tr.querySelector('.ifr-credit-days').addEventListener('input', function () {
+      syncTeamPayment(tr);
+    });
 
     // เปลี่ยนทีมในแถวไหนก็ตาม อาจทำให้แถว "ทุกทีม" กลายเป็น "ทีมที่เหลือ" หรือกลับกัน
     // ห่อไว้ ไม่ส่งฟังก์ชันตรงๆ ไม่งั้น Event object จะกลายเป็นพารามิเตอร์ force
@@ -543,7 +573,11 @@
         return;
       }
       // ALL_TEAMS เก็บลง db เป็น team = null ต้องแปลงกลับให้ addTeamRow อ่านออก
-      addTeamRow({ team_id: select.value === ALL_TEAMS ? null : select.value });
+      // เงื่อนไขการชำระเงินยกตามมาด้วย ต่างจากราคาที่เว้นว่าง เพราะเป็นของทีม ไม่ขึ้นกับช่วงน้ำหนัก
+      addTeamRow({
+        team_id: select.value === ALL_TEAMS ? null : select.value,
+        credit_days: creditDaysOf(tr),
+      });
     });
 
     tr.querySelector('.ifr-remove-team').addEventListener('click', function () {
@@ -594,6 +628,104 @@
     return rows;
   }
 
+  // ---------- เงื่อนไขการชำระเงิน ----------
+  // เก็บลง db ช่องเดียวแบบ paytrm ของ Express : null = ยังไม่ระบุ / 0 = เงินสด / 1+ = เครดิตกี่วัน
+  // บนหน้าจอแยกเป็นตัวเลือก + ช่องวัน ให้คนกรอกเข้าใจง่าย แล้วค่อยแปลงตอนส่ง
+
+  // ค่าวันที่บัญชีใช้บ่อย (จากใบตั้งหนี้จริง) ให้เลือกได้เร็ว ยังพิมพ์เลขอื่นได้
+  (function ensureCreditDaysList() {
+    if (document.getElementById('ifr_credit_days_list')) return;
+    const list = document.createElement('datalist');
+    list.id = 'ifr_credit_days_list';
+    [15, 30, 45, 60].forEach(function (d) {
+      const opt = document.createElement('option');
+      opt.value = d;
+      list.appendChild(opt);
+    });
+    document.body.appendChild(list);
+  })();
+
+  function toggleCreditDays(tr) {
+    const isCredit = tr.querySelector('.ifr-pay-type').value === 'credit';
+    const days = tr.querySelector('.ifr-credit-days');
+    days.classList.toggle('d-none', !isCredit);
+    if (!isCredit) days.value = '';
+  }
+
+  function setPayment(tr, creditDays) {
+    const type = tr.querySelector('.ifr-pay-type');
+    const days = tr.querySelector('.ifr-credit-days');
+    if (creditDays === null || creditDays === undefined || creditDays === '') {
+      type.value = '';
+    } else if (Number(creditDays) === 0) {
+      type.value = 'cash';
+    } else {
+      type.value = 'credit';
+    }
+    toggleCreditDays(tr);
+    if (type.value === 'credit') days.value = creditDays;
+  }
+
+  // คืนค่าที่จะส่งให้ backend  เลือกเครดิตแต่ยังไม่กรอกวัน = '' ให้ findRowsCreditWithoutDays ดักไว้ก่อนส่ง
+  function creditDaysOf(tr) {
+    const type = tr.querySelector('.ifr-pay-type').value;
+    if (type === '') return null;
+    if (type === 'cash') return 0;
+    const raw = tr.querySelector('.ifr-credit-days').value.trim();
+    return raw === '' ? '' : Number(raw);
+  }
+
+  function syncTeamPayment(source) {
+    const teamValue = source.querySelector('.ifr-team-select').value;
+    if (teamValue === '') return;
+    const value = creditDaysOf(source);
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
+      if (tr === source || tr.querySelector('.ifr-team-select').value !== teamValue) return;
+      setPayment(tr, value === '' ? null : value);
+      // เลือกเครดิตแต่ยังไม่พิมพ์วัน ต้องให้แถวอื่นเป็นเครดิตตามไปด้วย ไม่ใช่ถอยกลับเป็น "ยังไม่ระบุ"
+      if (value === '') {
+        tr.querySelector('.ifr-pay-type').value = 'credit';
+        toggleCreditDays(tr);
+      }
+    });
+  }
+
+  function findRowsCreditWithoutDays() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      const days = creditDaysOf(tr);
+      if (days === '' || (typeof days === 'number' && tr.querySelector('.ifr-pay-type').value === 'credit'
+                          && (!Number.isInteger(days) || days < 1 || days > 365))) {
+        rows.push(index + 1);
+      }
+    });
+    return rows;
+  }
+
+  // ---------- ค่าขนส่ง บาท/ตัน/กม. ----------
+  // = ค่าขนส่ง / ระยะทาง  แสดงให้ดูเฉย ๆ ไม่ส่งไป server เพราะ server คิดเองตอนบันทึก (ปัด 2 ตำแหน่ง)
+  function parseNumber(value) {
+    const text = String(value == null ? '' : value).replace(/,/g, '').trim();
+    return text === '' ? NaN : Number(text);
+  }
+
+  // toFixed(2) ของ JS ปัดตามเลขฐานสองจริง เช่น 1.005 ได้ 1.00 แต่ server ปัดครึ่งขึ้นได้ 1.01
+  // เลื่อนจุดด้วย exponent ก่อนปัด ตัวเลขบนจอจะตรงกับค่าที่ server บันทึก
+  function roundHalfUp2(value) {
+    return Number(Math.round(Number(value + 'e2')) + 'e-2').toFixed(2);
+  }
+
+  function updatePerTonKm(tr) {
+    const rate = parseNumber(tr.querySelector('.ifr-freight-rate').value);
+    const distance = parseNumber(document.getElementById('ifr_distance').value);
+    const out = tr.querySelector('.ifr-rate-per-ton-km');
+    out.value = (isNaN(rate) || isNaN(distance) || distance <= 0) ? '' : roundHalfUp2(rate / distance);
+  }
+
+  function updateAllPerTonKm() {
+    document.querySelectorAll('#ifr_team_rows tr').forEach(updatePerTonKm);
+  }
+
   function collectTeams() {
     const teams = [];
     document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
@@ -603,7 +735,7 @@
         freight_rate: orNull(tr.querySelector('.ifr-freight-rate').value),
         fuel_freight_adjustment: orNull(tr.querySelector('.ifr-fuel-adjustment').value),
         discount_per_ton: orNull(tr.querySelector('.ifr-discount-per-ton').value),
-        freight_rate_per_ton_km: orNull(tr.querySelector('.ifr-rate-per-ton-km').value),
+        credit_days: creditDaysOf(tr),
         note: orNull(tr.querySelector('.ifr-team-note').value),
       });
     });
@@ -625,6 +757,7 @@
     fuel_freight_adjustment: 'ปรับตามน้ำมัน (ลิตรละ 1 บาท)',
     weight_carried: 'ประเภทการแบกน้ำหนัก',
     freight_rate: 'ค่าขนส่ง',
+    credit_days: 'เครดิต (วัน)',
     team_id: 'ทีมขนส่ง',
     teams: 'ทีมขนส่ง',
     non_field_errors: 'ข้อมูลไม่ถูกต้อง',
@@ -698,6 +831,13 @@
       return;
     }
 
+    const rowsCreditWithoutDays = findRowsCreditWithoutDays();
+    if (rowsCreditWithoutDays.length > 0) {
+      showAlert('เลือก "เครดิต" แล้ว กรุณากรอกจำนวนวันเครดิต (1-365) ในแถวที่ '
+                + rowsCreditWithoutDays.join(', '), true);
+      return;
+    }
+
     btn.disabled = true;
 
     const payload = {
@@ -753,6 +893,9 @@
     // ถ้าไม่ต้องการก็กดถังขยะลบแถวทิ้งได้
     addTeamRow({ team_id: null });
   }
+
+  // ระยะทางอยู่บนตัวใบ แก้ทีเดียวต้องคิดบาท/ตัน/กม. ใหม่ทุกแถวทีม
+  document.getElementById('ifr_distance').addEventListener('input', updateAllPerTonKm);
 
   loadDropdowns();
   syncTeamEmptyState();

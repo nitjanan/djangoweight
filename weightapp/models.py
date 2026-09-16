@@ -1703,6 +1703,12 @@ class InternationalFreightRateTeam(models.Model):
     # ไม่แยกช่อง "ประเภท" อีกช่อง เพราะจะเก็บเรื่องเดียวกันซ้ำสองที่แล้วขัดกันได้ (เช่น เครดิต + 0 วัน)
     # แถวเก่าปล่อยเป็น NULL ไม่ตั้ง default เป็นเงินสด เพราะจะเท่ากับระบบยืนยันแทนว่าทีมรับเงินสด
     credit_days = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="เครดิต (วัน) 0 = เงินสด")
+    # ขั้นการปรับตามราคาน้ำมัน (บาท/ลิตร)
+    # 0 = คิดทุกบาททุกสตางค์ (พฤติกรรมเดิมของระบบ) / มากกว่า 0 = ขยับครบขั้นละเท่านี้ถึงปรับ 1 ครั้ง
+    # แถวเดิมทั้งหมดเป็น 0 เพราะตรงกับที่ระบบคิดอยู่จริง ไม่ใช่การเดาแทนผู้ใช้
+    # สูตรที่ใช้จริงอยู่ในไฟล์ excel ดู _exportDocumentWriteRateSheet และ template v13
+    fuel_adjust_step = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           verbose_name="ขั้นการปรับน้ำมัน (บาท/ลิตร) 0 = ทุกบาททุกสตางค์")
 
     class Meta:
         db_table = 'international_freight_rate_team'
@@ -1713,6 +1719,12 @@ class InternationalFreightRateTeam(models.Model):
     def __str__(self):
         team_name = self.team.car_team_name if self.team else "ทุกทีม"
         return f"{team_name} - {self.weight_carried}"
+
+    def fuelAdjustStepLabel(self):
+        """ข้อความขั้นการปรับน้ำมันสำหรับแสดงผล"""
+        if not self.fuel_adjust_step:
+            return "ทุกบาททุกสตางค์"
+        return "ขั้นละ %s บาท" % self.fuel_adjust_step.normalize()
 
     def paymentTermLabel(self):
         """ข้อความเงื่อนไขการชำระเงินสำหรับแสดงผล คืน None ถ้ายังไม่ระบุ"""

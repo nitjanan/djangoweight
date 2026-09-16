@@ -178,6 +178,7 @@
                   <th style="min-width: 200px;">ประเภทการแบกน้ำหนัก <span class="text-danger">*</span></th>
                   <th style="min-width: 120px;">ค่าขนส่ง</th>
                   <th style="min-width: 150px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small> <span class="text-danger">*</span></th>
+                  <th style="min-width: 150px;">ขั้นการปรับน้ำมัน<br /><small class="fw-normal">0 = ทุกบาททุกสตางค์</small></th>
                   <th style="min-width: 120px;">ลดบาท/ตัน</th>
                   <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.<br /><small class="fw-normal">คำนวณอัตโนมัติ</small></th>
                   <th style="min-width: 200px;">เงื่อนไขการชำระเงิน</th>
@@ -521,6 +522,8 @@
       '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-fuel-adjustment" /></td>' +
+      '<td><input type="number" min="0" max="10" step="0.01" inputmode="decimal" list="ifr_fuel_step_list" ' +
+             'class="form-control ifr-fuel-step" placeholder="0" title="ต้องขยับครบขั้นละเท่านี้ถึงจะปรับ" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
       '<td><input type="text" class="form-control ifr-rate-per-ton-km bg-light" readonly tabindex="-1" ' +
              'title="ค่าขนส่ง ÷ ระยะทาง" placeholder="กรอกค่าขนส่งและระยะทาง" /></td>' +
@@ -551,6 +554,11 @@
     tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
     setPayment(tr, row.credit_days);
+    // ขั้นการปรับน้ำมัน : ไม่ได้ส่งมา (แถวใหม่) = 0 คือคิดทุกบาททุกสตางค์เหมือนเดิม
+    tr.querySelector('.ifr-fuel-step').value = row.fuel_adjust_step == null ? '0' : row.fuel_adjust_step;
+    tr.querySelector('.ifr-fuel-step').addEventListener('input', function () {
+      syncTeamStep(tr);
+    });
 
     // บาท/ตัน/กม. ไม่ได้อ่านจากค่าที่เก็บไว้ คิดสดจากช่องบนจอเสมอ ให้ตรงกับที่ server จะคิดตอนบันทึก
     updatePerTonKm(tr);
@@ -592,6 +600,7 @@
       addTeamRow({
         team_id: select.value === ALL_TEAMS ? null : select.value,
         credit_days: creditDaysOf(tr),
+        fuel_adjust_step: tr.querySelector('.ifr-fuel-step').value,
       });
     });
 
@@ -717,6 +726,47 @@
     return rows;
   }
 
+  // ---------- ขั้นการปรับน้ำมัน ----------
+  // 0 = คิดทุกบาททุกสตางค์ (เหมือนที่ระบบทำมาตลอด) / มากกว่า 0 = ต้องขยับครบขั้นถึงจะปรับ
+  // เป็นข้อตกลงระดับทีม ไม่ได้ตกลงแยกตามช่วงน้ำหนัก แถวของทีมเดียวกันจึงต้องเท่ากัน
+  // (backend บังคับอยู่แล้ว ตรงนี้ทำให้ผู้ใช้ไม่ต้องไล่แก้ทีละแถว)
+  (function ensureFuelStepList() {
+    if (document.getElementById('ifr_fuel_step_list')) return;
+    const list = document.createElement('datalist');
+    list.id = 'ifr_fuel_step_list';
+    ['0', '1', '2'].forEach(function (v) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      list.appendChild(opt);
+    });
+    document.body.appendChild(list);
+  })();
+
+  function syncTeamStep(source) {
+    const teamValue = source.querySelector('.ifr-team-select').value;
+    if (teamValue === '') return;
+    const value = source.querySelector('.ifr-fuel-step').value;
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
+      if (tr === source || tr.querySelector('.ifr-team-select').value !== teamValue) return;
+      tr.querySelector('.ifr-fuel-step').value = value;
+    });
+  }
+
+  // เว้นว่าง = 0 ไม่ใช่ "ไม่ระบุ" เพราะช่องนี้ต้องมีค่าเสมอ ถึงจะรู้ว่าคิดเงินแบบไหน
+  function fuelStepOf(tr) {
+    const raw = tr.querySelector('.ifr-fuel-step').value.trim();
+    return raw === '' ? '0' : raw;
+  }
+
+  function findRowsWithBadStep() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      const value = Number(fuelStepOf(tr));
+      if (isNaN(value) || value < 0 || value > 10) rows.push(index + 1);
+    });
+    return rows;
+  }
+
   // ---------- ค่าขนส่ง บาท/ตัน/กม. ----------
   // = ค่าขนส่ง / ระยะทาง  แสดงให้ดูเฉย ๆ ไม่ส่งไป server เพราะ server คิดเองตอนบันทึก (ปัด 2 ตำแหน่ง)
   function parseNumber(value) {
@@ -751,6 +801,7 @@
         fuel_freight_adjustment: orNull(tr.querySelector('.ifr-fuel-adjustment').value),
         discount_per_ton: orNull(tr.querySelector('.ifr-discount-per-ton').value),
         credit_days: creditDaysOf(tr),
+        fuel_adjust_step: fuelStepOf(tr),
         note: orNull(tr.querySelector('.ifr-team-note').value),
       });
     });
@@ -773,6 +824,7 @@
     weight_carried: 'ประเภทการแบกน้ำหนัก',
     freight_rate: 'ค่าขนส่ง',
     credit_days: 'เครดิต (วัน)',
+    fuel_adjust_step: 'ขั้นการปรับน้ำมัน',
     team_id: 'ทีมขนส่ง',
     teams: 'ทีมขนส่ง',
     non_field_errors: 'ข้อมูลไม่ถูกต้อง',
@@ -843,6 +895,13 @@
     if (rowsWithoutAdjustment.length > 0) {
       showAlert('กรุณากรอก "ปรับตามน้ำมัน (ลิตรละ 1 บาท)" ในแถวที่ '
                 + rowsWithoutAdjustment.join(', ') + ' (ถ้าเส้นทางนี้ไม่ปรับตามน้ำมัน ให้ใส่ 0)', true);
+      return;
+    }
+
+    const rowsWithBadStep = findRowsWithBadStep();
+    if (rowsWithBadStep.length > 0) {
+      showAlert('ขั้นการปรับน้ำมันต้องเป็นตัวเลข 0 ถึง 10 ในแถวที่ '
+                + rowsWithBadStep.join(', ') + ' (ถ้าคิดทุกบาททุกสตางค์ ให้ใส่ 0)', true);
       return;
     }
 

@@ -10662,7 +10662,8 @@ IFR_EXPORT_SUBHEAD_ROW = 9       # แถวหัวย่อย เดิม/�
 IFR_EXPORT_FIRST_DATA_ROW = 10
 IFR_EXPORT_FIXED_COLS = 6        # ที่ / ต้นทาง / ปลายทาง / ระยะทาง / น้ำมันฐาน (เดิม+ใหม่)
 IFR_EXPORT_BASE_FUEL_COL = 5     # คอลัมน์แรกของกลุ่มราคาน้ำมันฐาน (เดิม, ใหม่)
-IFR_EXPORT_BAND_WIDTH = 3        # เดิม / ใหม่ / น้ำมัน ± 1
+# เดิม / ใหม่ / น้ำมัน ± 1 / ค่าขนส่ง บาท/ตัน/กม. / ลดบาท/ตัน / หมายเหตุ
+IFR_EXPORT_BAND_WIDTH = 6
 
 IFR_EXPORT_SUBJECT = '( ****ใส่เรื่อง**** )'
 IFR_EXPORT_TO = '( ****ใส่ชื่อผู้รับบันทึก**** )       ( ****ใส่ตำแหน่ง**** )'
@@ -10769,15 +10770,21 @@ def exportExcelInternationalFreightRate(request):
     previous_rates, previous_labels, previous_versions = _ifrExportPreviousRates(rates)
 
     bands = _ifrExportBands(rates)
-    band_col = {}   # CarryingweightRate -> คอลัมน์เริ่มต้นของกลุ่ม (เดิม/ใหม่/น้ำมัน)
+    band_col = {}   # CarryingweightRate -> คอลัมน์เริ่มต้นของกลุ่ม (เดิม/ใหม่/น้ำมัน/บาทต่อตันต่อกม.)
     col = IFR_EXPORT_FIXED_COLS + 1
     for band in bands:
         band_col[band] = col
         col += IFR_EXPORT_BAND_WIDTH
     if not bands:
         col += IFR_EXPORT_BAND_WIDTH
-    rate_per_km_col = col
-    note_col = col + 1
+    # บาท/ตัน/กม. กับ ลดบาท/ตัน ไม่มีคอลัมน์เดี่ยว เป็นช่องย่อยของแต่ละช่วงน้ำหนัก
+    # เพราะสองค่านี้แยกตามช่วงน้ำหนัก (บาท/ตัน/กม. คิดจากค่าขนส่งของช่วงนั้นหารระยะทาง)
+    #
+    # ส่วนขั้นการปรับน้ำมันกับเงื่อนไขการชำระเงินเป็นข้อตกลงระดับทีม ทุกช่วงของทีมเดียวกัน
+    # ต้องเป็นค่าเดียวกัน (serializer บังคับไว้) จึงให้คอลัมน์เดียวต่อแถวทีม ไม่ต้องซ้ำทุกช่วง
+    step_col = col
+    payment_col = col + 1
+    note_col = col + 2
     last_col = note_col
 
     workbook = openpyxl.Workbook()
@@ -10828,7 +10835,8 @@ def exportExcelInternationalFreightRate(request):
         cell.font = Font(bold=True)
         cell.alignment = center
         cell.fill = head_fill
-        for i, sub in enumerate(('เดิม', 'ใหม่', 'น้ำมัน\n± 1')):
+        for i, sub in enumerate(('เดิม', 'ใหม่', 'น้ำมัน\n± 1',
+                                 'ค่าขนส่ง\nบาท/ตัน/กม.', 'ลด\nบาท/ตัน', 'หมายเหตุ')):
             sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW, column=start + i)
             sub_cell.value = sub
             sub_cell.font = Font(bold=True)
@@ -10853,8 +10861,9 @@ def exportExcelInternationalFreightRate(request):
         sub_cell.fill = head_fill
 
     fixed_heads = [(1, 'ที่'), (2, 'ต้นทาง'), (3, 'ปลายทาง'), (4, 'ระยะทาง (กม.)')]
-    for column, text in fixed_heads + [(rate_per_km_col, 'ค่าขนส่ง\nบาท/ตัน/กม.'),
-                                       (note_col, 'หมายเหตุ')]:
+    for column, text in fixed_heads + [(step_col, 'ขั้นการปรับน้ำมัน\n(บาท/ลิตร)'),
+                                       (payment_col, 'เงื่อนไขการชำระเงิน'),
+                                       (note_col, 'หมายเหตุของเส้นทาง')]:
         worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=column,
                               end_row=IFR_EXPORT_SUBHEAD_ROW, end_column=column)
         cell = worksheet.cell(row=IFR_EXPORT_HEAD_ROW, column=column)
@@ -10889,8 +10898,9 @@ def exportExcelInternationalFreightRate(request):
         current_cell.value = rate.baseFuelPriceLabel()
         current_cell.alignment = Alignment(horizontal='right')
         # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
-        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, rate_per_km_col, note_col, rate,
-                               previous_rates.get(rate.id), previous_labels.get(rate.id))
+        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, step_col, payment_col, note_col, rate,
+                               previous_rates.get(rate.id), previous_labels.get(rate.id),
+                               is_route_row=True)
         for cell in worksheet[row][:last_col]:
             cell.font = Font(bold=True)
         row += 1
@@ -10905,7 +10915,7 @@ def exportExcelInternationalFreightRate(request):
             worksheet.cell(row=row, column=2).value = '%d. %s' % (
                 team_index, team_rates[0].team.car_team_name)
             _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col,
-                                   rate_per_km_col, note_col, rate,
+                                   step_col, payment_col, note_col, rate,
                                    previous_rates.get(rate.id))
             row += 1
 
@@ -10930,9 +10940,13 @@ def exportExcelInternationalFreightRate(request):
     # ราคาน้ำมันฐานเป็นช่วง "30.00 - 30.99" ยาว 13 ตัวอักษร กว้าง 10 จะโดนตัด
     worksheet.column_dimensions['E'].width = 15
     worksheet.column_dimensions['F'].width = 15
-    for c in range(IFR_EXPORT_FIXED_COLS + 1, rate_per_km_col):
-        worksheet.column_dimensions[get_column_letter(c)].width = 9
-    worksheet.column_dimensions[get_column_letter(rate_per_km_col)].width = 12
+    for c in range(IFR_EXPORT_FIXED_COLS + 1, step_col):
+        worksheet.column_dimensions[get_column_letter(c)].width = 11
+    # ช่องหมายเหตุของแต่ละช่วงน้ำหนักเป็นข้อความ ต้องกว้างกว่าช่องตัวเลข
+    for start in band_col.values():
+        worksheet.column_dimensions[get_column_letter(start + 5)].width = 22
+    worksheet.column_dimensions[get_column_letter(step_col)].width = 16
+    worksheet.column_dimensions[get_column_letter(payment_col)].width = 18
     worksheet.column_dimensions[get_column_letter(note_col)].width = 34
     worksheet.row_dimensions[IFR_EXPORT_HEAD_ROW].height = 32
     worksheet.row_dimensions[IFR_EXPORT_SUBHEAD_ROW].height = 32
@@ -10951,8 +10965,8 @@ def exportExcelInternationalFreightRate(request):
     return _exportDocumentMarkDownloadDone(request, response)
 
 
-def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col, note_col, rate,
-                           previous_rates=None, previous_label=None):
+def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, step_col, payment_col, note_col,
+                           rate, previous_rates=None, previous_label=None, is_route_row=False):
     """ลงอัตราของทีมหนึ่ง (หรือของแถว "ทุกทีม") ลงในแถวเดียว กระจายไปตามคอลัมน์ช่วงน้ำหนัก
 
     team_rates คือทุก record ของทีมนั้นในเส้นทางนี้ ทีมเดียวอาจมีหลายช่วงน้ำหนัก
@@ -10961,8 +10975,6 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col
     เว้นว่างได้ 2 กรณี : เป็นเส้นทางที่เพิ่งสร้าง (ยังไม่เคยปรับ)
     หรือทีม/ช่วงนี้เพิ่งเพิ่มเข้ามาในฉบับนี้ ซึ่งทั้งคู่แปลว่า "ไม่มีอัตราเดิม" จริง ๆ
     """
-    notes = []
-    per_km = None
     for team_rate in team_rates:
         band = team_rate.weight_carried
         if band is None:
@@ -10983,20 +10995,32 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, rate_per_km_col
             if team_rate.fuel_freight_adjustment is not None:
                 worksheet.cell(row=row, column=start + 2).value = (
                     '± %.2f' % team_rate.fuel_freight_adjustment)
-        # บาท/ตัน/กม. มีคอลัมน์เดียวแต่แต่ละช่วงมีค่าของตัวเอง เอาช่วงแรกที่กรอกไว้
-        # เขียนตายตัวแบบนี้เพื่อให้ผลคงที่ ไม่ใช่แล้วแต่ว่า record ไหนวนมาทีหลัง
-        if per_km is None and team_rate.freight_rate_per_ton_km is not None:
-            per_km = float(team_rate.freight_rate_per_ton_km)
-        if team_rate.note and team_rate.note not in notes:
-            notes.append(team_rate.note)
-    if per_km is not None:
-        worksheet.cell(row=row, column=rate_per_km_col).value = per_km
-    if not notes and rate.note:
-        notes.append(rate.note)
-    if previous_label:
-        notes.append(previous_label)
-    if notes:
-        worksheet.cell(row=row, column=note_col).value = ' | '.join(notes)
+            # บาท/ตัน/กม. ของช่วงนี้ คิดจากค่าขนส่งของช่วงนี้หารระยะทาง จึงต้องลงทีละช่วง
+            if team_rate.freight_rate_per_ton_km is not None:
+                worksheet.cell(row=row, column=start + 3).value = float(
+                    team_rate.freight_rate_per_ton_km)
+            if team_rate.discount_per_ton is not None:
+                worksheet.cell(row=row, column=start + 4).value = float(team_rate.discount_per_ton)
+            # หมายเหตุผูกกับ (ทีม + ช่วงน้ำหนัก) จึงต้องอยู่ในกลุ่มของช่วงนั้น
+            # ถ้ารวมไว้ช่องเดียวแล้วต่อกันด้วย | จะอ่านไม่ออกว่าข้อความไหนเป็นของช่วงไหน
+            if team_rate.note:
+                note_cell = worksheet.cell(row=row, column=start + 5)
+                note_cell.value = team_rate.note
+                note_cell.alignment = Alignment(wrap_text=True, vertical='top')
+        # ขั้นการปรับน้ำมันกับเงื่อนไขการชำระเงินเป็นของทีม ทุกช่วงค่าเท่ากัน เขียนทับซ้ำได้ไม่มีปัญหา
+        worksheet.cell(row=row, column=step_col).value = team_rate.fuelAdjustStepLabel()
+        payment = team_rate.paymentTermLabel()
+        if payment:
+            worksheet.cell(row=row, column=payment_col).value = payment
+
+    # หมายเหตุของเส้นทางเป็นของทั้งใบ ไม่ใช่ของทีมใดทีมหนึ่ง ใส่แค่แถวหลักของเส้นทาง
+    # เดิมใส่ท้ายช่องเดียวกับหมายเหตุของทีม แล้วถูกทับหายไปเมื่อทีมนั้นกรอกหมายเหตุของตัวเอง
+    if is_route_row:
+        parts = [text for text in (rate.note, previous_label) if text]
+        if parts:
+            route_note = worksheet.cell(row=row, column=note_col)
+            route_note.value = '\n'.join(parts)
+            route_note.alignment = Alignment(wrap_text=True, vertical='top')
 
 
 @login_required(login_url='login')
@@ -11041,6 +11065,7 @@ def editInternationalFreightRate(request, id):
     teams = list(obj.teams.values(
         'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note', 'credit_days',
+        'fuel_adjust_step',
     ))
     
 
@@ -11733,6 +11758,11 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'average_fuel_price': None,                 # I
                         # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = (I-H)*J ในไฟล์ไม่ต้องแก้
                         'fuel_freight_adjustment': team_rate.fuel_freight_adjustment,
+                        # T : ขั้นการปรับน้ำมันของทีม (0 = ทุกบาททุกสตางค์)
+                        'fuel_adjust_step': team_rate.fuel_adjust_step,
+                        # U : ขอบบนของช่วงราคาน้ำมันฐาน ราคาเฉลี่ยที่ยังอยู่ในช่วง H ถึง U จะไม่ถูกปรับ
+                        # ใบที่ตกลงเป็นราคาเดียว (ไม่มีขอบบน) ใช้ขอบล่างซ้ำ ผลจึงเท่ากับวัดจากจุดเดียว
+                        'base_fuel_price_max': rate.base_fuel_price_max or rate.base_fuel_price,
                         # หมายเหตุเขียนลงคอลัมน์ N (ช่องว่างที่ไม่มีสูตรไหนอ้างถึง)
                         # ห้ามเขียนลง I เพราะสูตร K = (I-H)*J จะกลายเป็น #VALUE! ทั้งคอลัมน์
                         'fuel_note': None,                          # N
@@ -12010,6 +12040,11 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
 # คอลัมน์ N ของ sheet อัตรา : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (M เป็นคีย์ O/P เป็นตารางกลุ่มจ่าย)
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง I ว่าง
 EXPORT_DOC_RATE_NOTE_COL = 14
+# คอลัมน์ที่เพิ่มใน template v13 ต่อท้ายของเดิม (A-S ถูกใช้หมดแล้ว และ sheet สรุปจ่ายรถร่วม
+# อ้างคอลัมน์ของ sheet นี้แบบตายตัวอยู่ 2,700 สูตร แทรกกลางตารางไม่ได้)
+EXPORT_DOC_RATE_STEP_COL = 20      # T ขั้นการปรับน้ำมัน
+EXPORT_DOC_RATE_BASE_MAX_COL = 21  # U ราคาน้ำมันฐาน ขอบบน
+# V เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
 
 
 def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
@@ -12044,7 +12079,9 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
         worksheet.cell(row=row, column=4).value = r['weight_carried']
         worksheet.cell(row=row, column=5).value = r['stone']
         for col, key in ((6, 'distance'), (7, 'freight_rate'), (8, 'base_fuel_price'),
-                         (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment')):
+                         (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment'),
+                         (EXPORT_DOC_RATE_STEP_COL, 'fuel_adjust_step'),
+                         (EXPORT_DOC_RATE_BASE_MAX_COL, 'base_fuel_price_max')):
             value = r[key]
             worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
         # ช่อง I ว่าง = หาราคาน้ำมันไม่ได้ เขียนเหตุผลไว้ข้าง ๆ ไม่ใส่ 0 เพราะ 0 อ่านเหมือนราคาจริง

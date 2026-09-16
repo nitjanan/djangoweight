@@ -29,7 +29,14 @@ _EXTLST_RE = re.compile(r'<extLst>.*?</extLst>\s*</worksheet>\s*$', re.S)
 _XR_UID_RE = re.compile(r'\s+xr:uid="[^"]*"')
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exceltemplate')
-TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v12.xlsx')
+TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v13.xlsx')
+# v13 = v12 ที่เปลี่ยนวิธีคิดส่วนปรับน้ำมันใน sheet อัตราค่าขนส่ง
+#   T ขั้นการปรับน้ำมัน (ระบบเติม) 0 = คิดทุกบาททุกสตางค์
+#   U ราคาน้ำมันฐานขอบบน (ระบบเติม) ราคาเฉลี่ยที่อยู่ระหว่าง H ถึง U ไม่ถูกปรับ
+#   V ส่วนต่างที่ใช้คิด (สูตร) วัดจากขอบที่หลุดออกไป
+#   K คิดจาก V แล้วตัดให้ครบขั้นด้วย TRUNC ก่อนคูณอัตราปรับ
+# เพิ่มต่อท้ายที่ T เท่านั้น ห้ามแทรกกลาง A-S เพราะ sheet สรุปจ่ายรถร่วม
+# อ้างคอลัมน์ของ sheet นี้แบบตายตัวอยู่ 2,700 สูตร
 # v12 = v11 ที่ขยายพื้นที่ข้อมูลจากแถว 6-3005 (3,000 เที่ยว) เป็น 6-6005 (6,000 เที่ยว)
 # ถ้าจะขยายอีกต้องขยายทั้งสามอย่างพร้อมกัน ไม่งั้นยอดในหน้าสรุปจะขาดไปเงียบ ๆ :
 #   1) แถวในชีต บันทึกรายเที่ยว   2) ช่วงที่สูตรทุกชีตอ้างถึง   3) EXPORT_DOC_MAX_TRIPS ใน views.py

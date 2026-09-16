@@ -300,6 +300,8 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
             'credit_days': {'required': False, 'allow_null': True, 'min_value': 0, 'max_value': 365},
             # คำนวณเองจาก ค่าขนส่ง / ระยะทาง ของใบ (ดู _perTonKm) client ส่งมาก็ไม่รับ
             'freight_rate_per_ton_km': {'read_only': True},
+            # ขั้นการปรับน้ำมัน 0 = ทุกบาททุกสตางค์ เพดาน 10 บาทกันพิมพ์ผิด (ที่ใช้จริงคือ 1-2 บาท)
+            'fuel_adjust_step': {'required': False, 'min_value': 0, 'max_value': 10},
         }
 
 
@@ -462,15 +464,22 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         # เงื่อนไขการชำระเงินเป็นของทีม ไม่ใช่ของช่วงน้ำหนัก ทีมเดียวกันในใบเดียวกันต้องได้ค่าเดียว
         # ไม่งั้นบัญชีไม่รู้ว่าจะจ่ายทีมนั้นกี่วัน ("ทุกทีม" ก็นับเป็นกลุ่มหนึ่งเหมือนกัน)
-        terms_by_team = {}
+        # ขั้นการปรับน้ำมันก็เป็นของทีมเหมือนกัน ตกลงกันทีละทีม ไม่ได้ตกลงแยกตามช่วงน้ำหนัก
+        by_team = {}
         for team_data in teams_data:
             team = team_data.get('team')
-            terms_by_team.setdefault(team.pk if team else None, set()).add(team_data.get('credit_days'))
-        for team_pk, terms in terms_by_team.items():
-            if len(terms) > 1:
-                raise serializers.ValidationError(
-                    'ทีม "%s" มีเงื่อนไขการชำระเงินไม่ตรงกันในแต่ละช่วงน้ำหนัก '
-                    '— ทีมเดียวกันต้องใช้เงื่อนไขเดียวกันทุกแถว' % self._teamLabel(team_pk))
+            key = team.pk if team else None
+            bucket = by_team.setdefault(key, {'credit_days': set(), 'fuel_adjust_step': set()})
+            bucket['credit_days'].add(team_data.get('credit_days'))
+            bucket['fuel_adjust_step'].add(team_data.get('fuel_adjust_step'))
+        labels = {'credit_days': 'เงื่อนไขการชำระเงิน', 'fuel_adjust_step': 'ขั้นการปรับน้ำมัน'}
+        for team_pk, buckets in by_team.items():
+            for field, values in buckets.items():
+                if len(values) > 1:
+                    raise serializers.ValidationError(
+                        'ทีม "%s" มี%sไม่ตรงกันในแต่ละช่วงน้ำหนัก '
+                        '— ทีมเดียวกันต้องใช้ค่าเดียวกันทุกแถว'
+                        % (self._teamLabel(team_pk), labels[field]))
         return teams_data
 
     def _currentUser(self):
@@ -581,6 +590,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             # ถ้าเทียบด้วย แถวเก่าที่ช่องนี้ยังว่างจะถูกนับว่าเปลี่ยน แล้วออกเวอร์ชันใหม่ทั้งที่ไม่ได้แก้อะไร
             s(get('note')),
             s(get('credit_days')),
+            s(get('fuel_adjust_step')),
         )
 
     def _rateChanged(self, instance, validated_data, teams_data):
@@ -632,7 +642,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
              'discount_per_ton': t.discount_per_ton,
              # ระยะทางของใบใหม่อาจเปลี่ยน ต้องคิดใหม่ ไม่ยกค่าเดิมมาตรง ๆ
              'freight_rate_per_ton_km': _perTonKm(t.freight_rate, rate.distance), 'note': t.note,
-             'credit_days': t.credit_days}
+             'credit_days': t.credit_days, 'fuel_adjust_step': t.fuel_adjust_step}
             for t in instance.teams.all()
         ]
         for team_data in source_teams:

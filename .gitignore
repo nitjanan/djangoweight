@@ -18,3 +18,6 @@ backup_*.json
 # ตัวที่ระบบใช้จริงคือ trip_report_template_v12.xlsx (อยู่ใน git แล้ว)
 # v11 รับได้ 3,000 เที่ยว ซึ่งไม่พอตั้งแต่เดือน ก.ค. ที่มี 3,595 เที่ยว
 weightapp/exceltemplate/trip_report_template_v11.xlsx
+
+# เอกสาร/คู่มือที่ทำไว้ใช้เองในเครื่อง ไม่เอาขึ้น git
+docs/

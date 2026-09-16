@@ -227,6 +227,7 @@
                           <th>ประเภทการแบกน้ำหนัก</th>
                           <th>ค่าขนส่ง</th>
                           <th>ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small></th>
+                          <th>ขั้นการปรับ</th>
                           <th>ลดบาท/ตัน</th>
                           <th>บาท/ตัน/กม.</th>
                           <th>การชำระเงิน</th>
@@ -258,6 +259,7 @@
                             <td>{{ t.weight_carried.description|default_if_none:"-" }}</td>
                             <td>{{ t.freight_rate|default_if_none:"-" }}</td>
                             <td>{{ t.fuel_freight_adjustment|default_if_none:"-" }}</td>
+                            <td>{{ t.fuelAdjustStepLabel }}</td>
                             <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
                             <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
                             <td>{{ t.paymentTermLabel|default_if_none:"ยังไม่ระบุ" }}</td>

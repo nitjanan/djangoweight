@@ -11224,18 +11224,17 @@ EXPORT_DOC_RATE_MAX_ROWS = 200
 # ไฟล์แก้ไขรายเที่ยว : เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ๆ ไม่มีสูตร
 # จะได้แก้แล้วอัปกลับได้โดยไม่เสี่ยงไปทับสูตรของไฟล์รายงาน
 EXPORT_DOC_EDIT_SHEET = 'แก้ไขรายเที่ยว'
-EXPORT_DOC_EDIT_TEAM_LIST_SHEET = 'รายชื่อทีม'
 EXPORT_DOC_EDIT_HEADER_ROW = 2
 EXPORT_DOC_EDIT_FIRST_ROW = 3
 EXPORT_DOC_EDIT_MAX_ROWS = 5000
 EXPORT_DOC_EDIT_ID_COL = 1       # A weight_id ห้ามแก้ ใช้เป็นตัว map ตอนอัปกลับ
-EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม
+EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม (ดูได้อย่างเดียว)
 EXPORT_DOC_EDIT_ORIGIN_COL = 6   # F นน.ต้นทาง
 EXPORT_DOC_EDIT_DEST_COL = 7     # G นน.ปลายทาง
 EXPORT_DOC_EDIT_COLUMNS = [
     'weight_id (ห้ามแก้)', 'วันที่', 'เหมืองต้นทาง', 'ท่าปลายทาง', 'ชนิดแร่/หิน',
     'นน.ต้นทาง (ตัน)', 'นน.ปลายทาง (ตัน) *แก้ได้', 'ทะเบียนรถ', 'เลขที่ชั่ง',
-    'ทีมรถร่วม *แก้ได้',
+    'ทีมรถร่วม',
 ]
 
 # ช่องที่แก้แล้วมีผลจริง : (คอลัมน์, ป้ายที่โชว์ตอนพรีวิว, ฟิลด์ใน Weight, ชนิด)
@@ -11247,9 +11246,10 @@ EXPORT_DOC_EDIT_COLUMNS = [
 # ช่องน้ำหนักบอกเป็น "บทบาท" ไม่ใช่ชื่อฟิลด์ เพราะฟิลด์จริงสลับตามเคส
 # (ดู _exportDocumentRows : เคส 1 ตาชั่งอยู่ปลายทาง เคส 2 ตาชั่งอยู่ต้นทาง)
 # ถ้าตรึงชื่อฟิลด์ไว้ จะกลายเป็นเทียบผิดฝั่งแล้วมองว่าทุกแถวถูกแก้
+#
+# ทีมรถร่วม (คอลัมน์ J) เลิกให้แก้ผ่านไฟล์นี้แล้ว เหลือไว้ในไฟล์ให้ดูประกอบว่าเป็นเที่ยวของใคร
 EXPORT_DOC_EDIT_FIELDS = [
     (EXPORT_DOC_EDIT_DEST_COL, 'นน.ปลายทาง', 'dest_ton', 'ton'),
-    (EXPORT_DOC_EDIT_TEAM_COL, 'ทีมรถร่วม', 'car_team', 'team'),
 ]
 # กันพิมพ์ตกจุดทศนิยม (เช่น 5885 แทน 58.85) รถบรรทุกจริงหนักสุดที่เคยเจอ 76.82 ตัน
 EXPORT_DOC_EDIT_MAX_TON = Decimal('500')
@@ -11753,7 +11753,11 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'stone': stone,                             # E
                         'distance': rate.distance,                  # F
                         'freight_rate': team_rate.freight_rate,     # G
-                        'base_fuel_price': rate.base_fuel_price,    # H
+                        # H : ช่วงราคาฐานแบบข้อความ เช่น "31.00 - 31.99" ให้บัญชีเห็นในตารางหลัก
+                        # แสดงผลเท่านั้น สูตรไม่ได้อ่านช่องนี้
+                        'base_fuel_range': rate.baseFuelPriceLabel(),
+                        # W : ขอบล่างแบบตัวเลข สูตร V ใช้ค่านี้ (คู่กับขอบบนที่ U)
+                        'base_fuel_price': rate.base_fuel_price,
                         # I กับ N เติมในรอบที่ 2
                         'average_fuel_price': None,                 # I
                         # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = (I-H)*J ในไฟล์ไม่ต้องแก้
@@ -12044,6 +12048,9 @@ EXPORT_DOC_RATE_NOTE_COL = 14
 # อ้างคอลัมน์ของ sheet นี้แบบตายตัวอยู่ 2,700 สูตร แทรกกลางตารางไม่ได้)
 EXPORT_DOC_RATE_STEP_COL = 20      # T ขั้นการปรับน้ำมัน
 EXPORT_DOC_RATE_BASE_MAX_COL = 21  # U ราคาน้ำมันฐาน ขอบบน
+EXPORT_DOC_RATE_BASE_MIN_COL = 23  # W ราคาน้ำมันฐาน ขอบล่าง
+# H แสดงช่วงราคาฐานเป็นข้อความ ย้ายได้เพราะไม่มี sheet อื่นอ้างถึง H
+EXPORT_DOC_RATE_BASE_RANGE_COL = 8
 # V เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
 
 
@@ -12078,12 +12085,16 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
         worksheet.cell(row=row, column=3).value = r['destination']
         worksheet.cell(row=row, column=4).value = r['weight_carried']
         worksheet.cell(row=row, column=5).value = r['stone']
-        for col, key in ((6, 'distance'), (7, 'freight_rate'), (8, 'base_fuel_price'),
+        for col, key in ((6, 'distance'), (7, 'freight_rate'),
                          (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment'),
                          (EXPORT_DOC_RATE_STEP_COL, 'fuel_adjust_step'),
-                         (EXPORT_DOC_RATE_BASE_MAX_COL, 'base_fuel_price_max')):
+                         (EXPORT_DOC_RATE_BASE_MAX_COL, 'base_fuel_price_max'),
+                         (EXPORT_DOC_RATE_BASE_MIN_COL, 'base_fuel_price')):
             value = r[key]
             worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
+        range_cell = worksheet.cell(row=row, column=EXPORT_DOC_RATE_BASE_RANGE_COL)
+        range_cell.value = r['base_fuel_range']
+        range_cell.alignment = Alignment(horizontal='right')
         # ช่อง I ว่าง = หาราคาน้ำมันไม่ได้ เขียนเหตุผลไว้ข้าง ๆ ไม่ใส่ 0 เพราะ 0 อ่านเหมือนราคาจริง
         # และไม่เขียนข้อความลง I เด็ดขาด สูตร K = (I-H)*J จะพังทั้งคอลัมน์
         worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = r.get('fuel_note')
@@ -13031,7 +13042,7 @@ def exportExcelTripEdit(request):
 
     เป็นคนละไฟล์กับรายงาน template ตั้งใจให้เรียบ ไม่มีสูตรและมีแค่ sheet เดียว
     คอลัมน์ A เก็บ weight_id ไว้ map ตอนอัปกลับ ช่องอื่นเป็นข้อมูลประกอบให้ดูว่าเป็นเที่ยวไหน
-    แก้ได้จริงช่องเดียวคือ J ทีมรถร่วม
+    แก้ได้จริงช่องเดียวคือ G นน.ปลายทาง
     """
     try:
         active = request.session['company_code']
@@ -13055,8 +13066,8 @@ def exportExcelTripEdit(request):
     worksheet.title = EXPORT_DOC_EDIT_SHEET
 
     worksheet.cell(row=1, column=1).value = (
-        'แก้ได้เฉพาะช่องพื้นเหลือง : G นน.ปลายทาง / J ทีมรถร่วม (เลือกจาก dropdown) | '
-        'ช่องอื่นรวมถึง F นน.ต้นทาง แก้แล้วระบบจะไม่นำไปใช้ | '
+        'แก้ได้เฉพาะช่องพื้นเหลือง : G นน.ปลายทาง | '
+        'ช่องอื่นรวมถึง F นน.ต้นทาง และ J ทีมรถร่วม แก้แล้วระบบจะไม่นำไปใช้ | '
         'ห้ามแก้หรือลบคอลัมน์ A (weight_id) เพราะใช้เป็นตัวอ้างอิงตอนอัปกลับ | '
         'ห้ามสลับหรือแทรกคอลัมน์ | ช่องที่เว้นว่างไว้ = ไม่เปลี่ยนแปลง')
     worksheet.cell(row=1, column=1).font = Font(color='C00000', italic=True)
@@ -13092,29 +13103,8 @@ def exportExcelTripEdit(request):
         # เที่ยวที่ยังไม่มีทีมให้เว้นว่างไว้จริง ๆ ไม่ต้องใส่คำว่า "ไม่ระบุทีม"
         # ไฟล์นี้เป็นไฟล์กรอกข้อมูล ช่องว่างสื่อว่า "ยังไม่ได้ระบุ" ตรงกว่า
         team_cell.value = None if r['team_missing'] else r['team']
-        team_cell.fill = edit_fill
-
-    # dropdown ชื่อทีม กันพิมพ์ผิด เก็บรายชื่อไว้อีก sheet เพราะรายการยาวเกินใส่ในสูตรตรง ๆ
-    teams = list(BaseCarTeam.objects.order_by('car_team_name')
-                 .values_list('car_team_name', flat=True))
-    teams = [t for t in teams if t]
-    if teams:
-        listsheet = workbook.create_sheet(EXPORT_DOC_EDIT_TEAM_LIST_SHEET)
-        for i, name in enumerate(teams, start=1):
-            listsheet.cell(row=i, column=1).value = name
-        listsheet.sheet_state = 'hidden'
-
-        validation = DataValidation(
-            type='list',
-            formula1="='%s'!$A$1:$A$%d" % (EXPORT_DOC_EDIT_TEAM_LIST_SHEET, len(teams)),
-            allow_blank=True, showDropDown=False)
-        validation.error = 'ชื่อทีมนี้ไม่มีในระบบ ให้เลือกจาก dropdown'
-        validation.errorTitle = 'ชื่อทีมไม่ถูกต้อง'
-        worksheet.add_data_validation(validation)
-        last_row = EXPORT_DOC_EDIT_FIRST_ROW + len(rows) - 1
-        validation.add('%s%d:%s%d' % (
-            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), EXPORT_DOC_EDIT_FIRST_ROW,
-            get_column_letter(EXPORT_DOC_EDIT_TEAM_COL), last_row))
+        # ดูได้อย่างเดียว สีเดียวกับช่องที่ห้ามแก้ ทีมรถร่วมเลิกให้แก้ผ่านไฟล์นี้แล้ว
+        team_cell.fill = locked_fill
 
     for i, width in enumerate((14, 12, 18, 18, 22, 14, 14, 14, 12, 34), start=1):
         worksheet.column_dimensions[get_column_letter(i)].width = width
@@ -13158,12 +13148,10 @@ def uploadTripEdit(request):
         messages.error(request, 'อ่านไฟล์ไม่ได้ ต้องเป็นไฟล์ .xlsx เท่านั้น')
         return redirect('viewExportDocument')
 
-    # อ้างอิงจาก db เสมอ ไม่เชื่อค่าอื่นในไฟล์นอกจาก weight_id กับชื่อทีม
+    # อ้างอิงจาก db เสมอ ไม่เชื่อค่าอื่นในไฟล์นอกจาก weight_id กับ นน.ปลายทาง
     # รับได้ทั้ง 2 เคส ตาชั่งที่อยู่นอกทั้งสองลิสต์เท่านั้นที่ถือว่าไม่อยู่ในขอบเขตของหน้านี้
     own_port_bws = _exportDocumentOwnPortBwsIds()
     allowed_bws = set(own_port_bws) | set(_exportDocumentOtherBwsIds())
-    team_by_name = {t.car_team_name: t.car_team_id
-                    for t in BaseCarTeam.objects.all() if t.car_team_name}
 
     changes = []
     errors = []
@@ -13201,8 +13189,8 @@ def uploadTripEdit(request):
             value = worksheet.cell(row=row, column=col).value
             if isinstance(value, str):
                 value = value.strip()
-            # ช่องว่าง = ไม่เปลี่ยน | คำว่า "ไม่ระบุทีม" ก็ถือว่าไม่เปลี่ยน เพราะเป็นคำที่ระบบเติมให้เอง
-            if value in (None, '') or (kind == 'team' and value == EXPORT_DOC_NO_TEAM):
+            # ช่องว่าง = ไม่เปลี่ยน
+            if value in (None, ''):
                 continue
             raw_values[attr] = (col, label, kind, value)
         if not raw_values:
@@ -13225,19 +13213,9 @@ def uploadTripEdit(request):
         fields = []
         apply_values = {}
         for attr, (col, label, kind, value) in raw_values.items():
+            # ไฟล์นี้แก้ได้แค่น้ำหนักปลายทาง ทีมรถร่วมในคอลัมน์ J เป็นข้อมูลประกอบ ไม่ถูกอ่านกลับ
             if kind == 'ton':
                 attr = _exportDocumentTonAttr(attr, case)
-            if kind == 'team':
-                if value not in team_by_name:
-                    errors.append('แถว %s : ไม่มีทีมชื่อ "%s" ในระบบ' % (row, value))
-                    continue
-                old = weight.car_team_name or ''
-                if old == value:
-                    continue
-                apply_values['car_team_id'] = team_by_name[value]
-                apply_values['car_team_name'] = value
-                fields.append({'label': label, 'old': old or '(ไม่มีทีม)', 'new': value})
-            else:
                 try:
                     new_ton = Decimal(str(value)).quantize(Decimal('0.001'))
                 except (InvalidOperation, TypeError, ValueError):

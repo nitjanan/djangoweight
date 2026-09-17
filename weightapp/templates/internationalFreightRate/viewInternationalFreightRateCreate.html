@@ -4,11 +4,18 @@
 {% block css %}
 <link rel="stylesheet" href="{% static 'extensions/choices.js/public/assets/styles/choices.min.css' %}" />
 <style>
-  /* .table-responsive ตั้ง overflow-x: auto ซึ่งทำให้แกน y กลายเป็น auto ตามไปด้วย
-     รายการ dropdown ของ choices.js ที่กางลงมาจึงโดนตัดขาด
-     จอใหญ่ปล่อยให้ล้นออกมาได้ ส่วนจอเล็กคงการเลื่อนแนวนอนไว้เหมือนเดิม */
-  @media (min-width: 992px) {
-    .ifr-team-table-wrap { overflow: visible; }
+  /* ตารางทีมมีหลายคอลัมน์จนกว้างเกินการ์ด ต้องเลื่อนแนวนอนได้ทุกขนาดจอ (.table-responsive)
+     แต่ overflow-x: auto ทำให้แกน y เป็น auto ตามไปด้วย dropdown ของ choices.js ที่กางลงมาจะโดนตัด
+     เดิมแก้ด้วยการปิด overflow บนจอใหญ่ ซึ่งทำให้ตารางล้นการ์ดออกไป
+     ตอนนี้ให้ dropdown ที่กางอยู่ลอยด้วย position: fixed แทน (ดู floatTeamDropdown)
+     กรอบที่เลื่อนได้จึงตัดมันไม่ได้ และยังลอยทับการ์ดด้านล่างได้เหมือนเดิม */
+  .ifr-team-table-wrap .choices__list--dropdown.ifr-dropdown-floating {
+    position: fixed;
+    z-index: 1060;
+    margin-top: 0;
+    /* choices.js ใส่ is-flipped ตั้ง bottom: 100% เวลากางขึ้นด้านบน
+       ถ้าปล่อยไว้คู่กับ top ที่เราคำนวณเอง รายการจะถูกบีบจนหายไป เราเลือกทิศเองอยู่แล้ว */
+    bottom: auto !important;
   }
   /* choices.js ใส่ margin-bottom มาให้เอง ในตารางไม่ต้องการ */
   .ifr-team-table-wrap .choices { margin-bottom: 0; }
@@ -403,8 +410,58 @@
         noChoicesText: 'ไม่มีรายการ',
         searchPlaceholderValue: 'พิมพ์เพื่อค้นหา',
       }));
+      bindFloatingDropdown(select);
     }
   }
+
+  // ---------- dropdown ทีมแบบลอย ----------
+  // ตารางทีมเลื่อนแนวนอนได้ ถ้าปล่อย dropdown เป็น position: absolute ตามปกติ
+  // กรอบที่เลื่อนได้จะตัดรายการทิ้ง ตอนกางจึงสลับเป็น position: fixed แล้ววางตามตำแหน่งช่องจริง
+  let FLOATING_SELECT = null;
+
+  function floatTeamDropdown(select) {
+    const box = select.closest('.choices');
+    if (!box) return;
+    const list = box.querySelector('.choices__list--dropdown');
+    if (!list) return;
+    const rect = box.getBoundingClientRect();
+    list.classList.add('ifr-dropdown-floating');
+    list.style.left = rect.left + 'px';
+    list.style.minWidth = rect.width + 'px';
+    // พื้นที่ด้านล่างไม่พอ ให้กางขึ้นด้านบนแทน ไม่งั้นรายการจะหลุดขอบจอ
+    const height = list.offsetHeight;
+    const below = window.innerHeight - rect.bottom;
+    const top = (below < height && rect.top > height) ? rect.top - height : rect.bottom;
+    list.style.top = top + 'px';
+    FLOATING_SELECT = select;
+  }
+
+  function unfloatTeamDropdown(select) {
+    const box = select.closest('.choices');
+    const list = box && box.querySelector('.choices__list--dropdown');
+    if (list) {
+      list.classList.remove('ifr-dropdown-floating');
+      list.style.left = list.style.top = list.style.minWidth = '';
+    }
+    if (FLOATING_SELECT === select) FLOATING_SELECT = null;
+  }
+
+  // choices.js ส่ง event showDropdown / hideDropdown มาที่ <select> ตัวเดิม
+  // destroy แล้วสร้างใหม่ใช้ <select> ตัวเดิม จึงต้องกันผูก event ซ้ำ
+  function bindFloatingDropdown(select) {
+    if (select.dataset.floatBound) return;
+    select.dataset.floatBound = '1';
+    // choices.js กางรายการเสร็จก่อนส่ง event นี้ จึงวัดความสูงได้ทันที ไม่ต้องรอเฟรมถัดไป
+    select.addEventListener('showDropdown', function () { floatTeamDropdown(select); });
+    select.addEventListener('hideDropdown', function () { unfloatTeamDropdown(select); });
+  }
+
+  // เลื่อนตารางหรือเลื่อนหน้าตอนกางอยู่ ให้รายการขยับตามช่อง
+  function refloatTeamDropdown() {
+    if (FLOATING_SELECT) floatTeamDropdown(FLOATING_SELECT);
+  }
+  window.addEventListener('scroll', refloatTeamDropdown, true);
+  window.addEventListener('resize', refloatTeamDropdown);
 
   // เลือกทีมในแถวไหนก็ตาม อาจทำให้คำในแถว "ทุกทีม" เปลี่ยนเป็น "ทีมที่เหลือ" หรือกลับกัน
   // จึงต้องวาดใหม่ทุกแถว ไม่ใช่แค่แก้ข้อความใน <option>

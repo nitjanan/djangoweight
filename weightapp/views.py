@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync
 from django.db.models import Sum, Q, Max, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
@@ -38,6 +38,10 @@ from django.db.models import Value as V
 from django.db.models.functions import Cast, Concat, Right
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+import logging
+from django.utils import timezone as dj_timezone
+
+logger = logging.getLogger(__name__)
 from django.urls import reverse
 from urllib.parse import quote
 
@@ -10662,8 +10666,8 @@ IFR_EXPORT_SUBHEAD_ROW = 9       # แถวหัวย่อย เดิม/�
 IFR_EXPORT_FIRST_DATA_ROW = 10
 IFR_EXPORT_FIXED_COLS = 6        # ที่ / ต้นทาง / ปลายทาง / ระยะทาง / น้ำมันฐาน (เดิม+ใหม่)
 IFR_EXPORT_BASE_FUEL_COL = 5     # คอลัมน์แรกของกลุ่มราคาน้ำมันฐาน (เดิม, ใหม่)
-# เดิม / ใหม่ / น้ำมัน ± 1 / ค่าขนส่ง บาท/ตัน/กม. / ลดบาท/ตัน / หมายเหตุ
-IFR_EXPORT_BAND_WIDTH = 6
+# เดิม / ใหม่ / ตามสัญญา / น้ำมัน ± 1 / ค่าขนส่ง บาท/ตัน/กม. / ลดบาท/ตัน / หมายเหตุ
+IFR_EXPORT_BAND_WIDTH = 7
 
 IFR_EXPORT_SUBJECT = '( ****ใส่เรื่อง**** )'
 IFR_EXPORT_TO = '( ****ใส่ชื่อผู้รับบันทึก**** )       ( ****ใส่ตำแหน่ง**** )'
@@ -10780,9 +10784,10 @@ def exportExcelInternationalFreightRate(request):
     # บาท/ตัน/กม. กับ ลดบาท/ตัน ไม่มีคอลัมน์เดี่ยว เป็นช่องย่อยของแต่ละช่วงน้ำหนัก
     # เพราะสองค่านี้แยกตามช่วงน้ำหนัก (บาท/ตัน/กม. คิดจากค่าขนส่งของช่วงนั้นหารระยะทาง)
     #
-    # ส่วนขั้นการปรับน้ำมันกับเงื่อนไขการชำระเงินเป็นข้อตกลงระดับทีม ทุกช่วงของทีมเดียวกัน
-    # ต้องเป็นค่าเดียวกัน (serializer บังคับไว้) จึงให้คอลัมน์เดียวต่อแถวทีม ไม่ต้องซ้ำทุกช่วง
-    step_col = col
+    # ส่วนเงื่อนไขการชำระเงินเป็นข้อตกลงระดับทีม ทุกช่วงของทีมเดียวกันต้องเป็นค่าเดียวกัน
+    # (serializer บังคับไว้) จึงให้คอลัมน์เดียวต่อแถวทีม ไม่ต้องซ้ำทุกช่วง
+    # ราคาน้ำมันวันทำสัญญาก็เป็นของทีม (ค่าเดียวทุกช่วงน้ำหนัก) จึงอยู่กลุ่มเดียวกับเงื่อนไขการชำระเงิน
+    contract_fuel_col = col
     payment_col = col + 1
     note_col = col + 2
     last_col = note_col
@@ -10835,7 +10840,7 @@ def exportExcelInternationalFreightRate(request):
         cell.font = Font(bold=True)
         cell.alignment = center
         cell.fill = head_fill
-        for i, sub in enumerate(('เดิม', 'ใหม่', 'น้ำมัน\n± 1',
+        for i, sub in enumerate(('เดิม', 'ใหม่', 'ตาม\nสัญญา', 'น้ำมัน\n± 1',
                                  'ค่าขนส่ง\nบาท/ตัน/กม.', 'ลด\nบาท/ตัน', 'หมายเหตุ')):
             sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW, column=start + i)
             sub_cell.value = sub
@@ -10861,7 +10866,7 @@ def exportExcelInternationalFreightRate(request):
         sub_cell.fill = head_fill
 
     fixed_heads = [(1, 'ที่'), (2, 'ต้นทาง'), (3, 'ปลายทาง'), (4, 'ระยะทาง (กม.)')]
-    for column, text in fixed_heads + [(step_col, 'ขั้นการปรับน้ำมัน\n(บาท/ลิตร)'),
+    for column, text in fixed_heads + [(contract_fuel_col, 'ราคาน้ำมันฐาน\nวันทำสัญญา (บาท/ลิตร)'),
                                        (payment_col, 'เงื่อนไขการชำระเงิน'),
                                        (note_col, 'หมายเหตุของเส้นทาง')]:
         worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=column,
@@ -10898,7 +10903,8 @@ def exportExcelInternationalFreightRate(request):
         current_cell.value = rate.baseFuelPriceLabel()
         current_cell.alignment = Alignment(horizontal='right')
         # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
-        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, step_col, payment_col, note_col, rate,
+        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, contract_fuel_col,
+                               payment_col, note_col, rate,
                                previous_rates.get(rate.id), previous_labels.get(rate.id),
                                is_route_row=True)
         for cell in worksheet[row][:last_col]:
@@ -10914,8 +10920,8 @@ def exportExcelInternationalFreightRate(request):
         for team_index, team_rates in enumerate(by_team.values(), start=1):
             worksheet.cell(row=row, column=2).value = '%d. %s' % (
                 team_index, team_rates[0].team.car_team_name)
-            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col,
-                                   step_col, payment_col, note_col, rate,
+            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, contract_fuel_col,
+                                   payment_col, note_col, rate,
                                    previous_rates.get(rate.id))
             row += 1
 
@@ -10940,12 +10946,12 @@ def exportExcelInternationalFreightRate(request):
     # ราคาน้ำมันฐานเป็นช่วง "30.00 - 30.99" ยาว 13 ตัวอักษร กว้าง 10 จะโดนตัด
     worksheet.column_dimensions['E'].width = 15
     worksheet.column_dimensions['F'].width = 15
-    for c in range(IFR_EXPORT_FIXED_COLS + 1, step_col):
+    for c in range(IFR_EXPORT_FIXED_COLS + 1, contract_fuel_col):
         worksheet.column_dimensions[get_column_letter(c)].width = 11
     # ช่องหมายเหตุของแต่ละช่วงน้ำหนักเป็นข้อความ ต้องกว้างกว่าช่องตัวเลข
     for start in band_col.values():
-        worksheet.column_dimensions[get_column_letter(start + 5)].width = 22
-    worksheet.column_dimensions[get_column_letter(step_col)].width = 16
+        worksheet.column_dimensions[get_column_letter(start + 6)].width = 22
+    worksheet.column_dimensions[get_column_letter(contract_fuel_col)].width = 18
     worksheet.column_dimensions[get_column_letter(payment_col)].width = 18
     worksheet.column_dimensions[get_column_letter(note_col)].width = 34
     worksheet.row_dimensions[IFR_EXPORT_HEAD_ROW].height = 32
@@ -10965,8 +10971,9 @@ def exportExcelInternationalFreightRate(request):
     return _exportDocumentMarkDownloadDone(request, response)
 
 
-def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, step_col, payment_col, note_col,
-                           rate, previous_rates=None, previous_label=None, is_route_row=False):
+def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, contract_fuel_col, payment_col,
+                           note_col, rate, previous_rates=None, previous_label=None,
+                           is_route_row=False):
     """ลงอัตราของทีมหนึ่ง (หรือของแถว "ทุกทีม") ลงในแถวเดียว กระจายไปตามคอลัมน์ช่วงน้ำหนัก
 
     team_rates คือทุก record ของทีมนั้นในเส้นทางนี้ ทีมเดียวอาจมีหลายช่วงน้ำหนัก
@@ -10990,25 +10997,32 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, step_col, payme
                 worksheet.cell(row=row, column=start).value = float(previous_rate)
             if team_rate.freight_rate is not None:
                 worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
+            # ค่าขนส่งตามสัญญาแยกตามช่วงน้ำหนักเหมือนค่าขนส่งที่ใช้จริง จึงอยู่ในกลุ่มของช่วงนั้น
+            if team_rate.contract_freight_rate is not None:
+                worksheet.cell(row=row, column=start + 2).value = float(
+                    team_rate.contract_freight_rate)
             # ค่าปรับตามน้ำมันเป็นของแถวทีม (ทีม + ช่วงแบก นน.) ไม่ใช่ของทั้งใบแล้ว
             # ช่อง "น้ำมัน ± 1" เป็นคอลัมน์ย่อยใต้ช่วงน้ำหนักอยู่แล้ว จึงลงตรงนี้ได้เลยไม่ต้องแก้โครง
             if team_rate.fuel_freight_adjustment is not None:
-                worksheet.cell(row=row, column=start + 2).value = (
+                worksheet.cell(row=row, column=start + 3).value = (
                     '± %.2f' % team_rate.fuel_freight_adjustment)
             # บาท/ตัน/กม. ของช่วงนี้ คิดจากค่าขนส่งของช่วงนี้หารระยะทาง จึงต้องลงทีละช่วง
             if team_rate.freight_rate_per_ton_km is not None:
-                worksheet.cell(row=row, column=start + 3).value = float(
+                worksheet.cell(row=row, column=start + 4).value = float(
                     team_rate.freight_rate_per_ton_km)
             if team_rate.discount_per_ton is not None:
-                worksheet.cell(row=row, column=start + 4).value = float(team_rate.discount_per_ton)
+                worksheet.cell(row=row, column=start + 5).value = float(team_rate.discount_per_ton)
             # หมายเหตุผูกกับ (ทีม + ช่วงน้ำหนัก) จึงต้องอยู่ในกลุ่มของช่วงนั้น
             # ถ้ารวมไว้ช่องเดียวแล้วต่อกันด้วย | จะอ่านไม่ออกว่าข้อความไหนเป็นของช่วงไหน
             if team_rate.note:
-                note_cell = worksheet.cell(row=row, column=start + 5)
+                note_cell = worksheet.cell(row=row, column=start + 6)
                 note_cell.value = team_rate.note
                 note_cell.alignment = Alignment(wrap_text=True, vertical='top')
-        # ขั้นการปรับน้ำมันกับเงื่อนไขการชำระเงินเป็นของทีม ทุกช่วงค่าเท่ากัน เขียนทับซ้ำได้ไม่มีปัญหา
-        worksheet.cell(row=row, column=step_col).value = team_rate.fuelAdjustStepLabel()
+        # เงื่อนไขการชำระเงินกับราคาน้ำมันวันทำสัญญาเป็นของทีม ทุกช่วงค่าเท่ากัน
+        # เขียนทับซ้ำได้ไม่มีปัญหา
+        if team_rate.contract_base_fuel_price is not None:
+            worksheet.cell(row=row, column=contract_fuel_col).value = float(
+                team_rate.contract_base_fuel_price)
         payment = team_rate.paymentTermLabel()
         if payment:
             worksheet.cell(row=row, column=payment_col).value = payment
@@ -11065,7 +11079,7 @@ def editInternationalFreightRate(request, id):
     teams = list(obj.teams.values(
         'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note', 'credit_days',
-        'fuel_adjust_step',
+        'contract_freight_rate', 'contract_base_fuel_price',
     ))
     
 
@@ -11436,7 +11450,10 @@ def _exportDocumentFuelRefills(selected_month):
     result = _exportDocumentFuelRefillsUncached(selected_month)
     # 5 นาทีพอ : บิลเติมน้ำมันของเดือนที่ปิดไปแล้วแทบไม่ขยับ
     # ส่วนเดือนปัจจุบันช้าไป 5 นาทีก็ไม่มีใครเดือดร้อน เพราะเอกสารออกทีเดียวตอนสิ้นเดือน
-    cache.set(cache_key, result, 300)
+    # แต่ถ้าอ่าน Express ไม่ได้ (ใช้สำเนาหรือไม่มีอะไรเลย) จำไว้แค่ 1 นาที
+    # Express กลับมาเมื่อไหร่ จะได้กลับไปใช้ข้อมูลล่าสุดเร็ว ๆ และไม่ต้องรอต่อไม่ติดซ้ำทุกคลิก
+    timeout = 300 if result[1].get('source') == 'express' else 60
+    cache.set(cache_key, result, timeout)
     return result
 
 
@@ -11456,11 +11473,16 @@ def _exportDocumentFuelRefillsUncached(selected_month):
     จำนวนลิตร เท่ากันหมด เดือนเดียวมี 325 ใบ ถ้านับตรง ๆ ทุ่งใหญ่จะถูกนับสองเท่า
 
     ฐานข้อมูล Express อยู่นอกเน็ตเวิร์กเรา ต่อไม่ได้เมื่อไหร่ก็ได้ จึงห้ามปล่อยให้ error
-    หลุดขึ้นไป ไม่งั้นหน้า export พังทั้งหน้าเพราะเรื่องราคาน้ำมัน ผู้เรียกจะถอยไปใช้
-    วิธีเฉลี่ยรายวันจากวันที่วิ่งแทน
+    หลุดขึ้นไป ไม่งั้นหน้า export พังทั้งหน้าเพราะเรื่องราคาน้ำมัน
+
+    อ่านได้  -> เขียนทับสำเนาของเดือนนั้นในฐานข้อมูลเรา แล้วใช้ข้อมูลที่เพิ่งอ่าน (source = 'express')
+    อ่านไม่ได้ -> ใช้สำเนาล่าสุดของเดือนนั้นแทน (source = 'snapshot') พร้อมบอกเวลาของสำเนา
+                ไม่มีสำเนาเลย คืนรายการว่าง ผู้เรียกจะถอยไปเฉลี่ยราคารายวันจากวันที่วิ่งแทน
+    ทั้งสองกรณีที่อ่านไม่ได้ stats['error'] จะมีข้อความเสมอ
     """
     stats = {'bills': 0, 'refills': 0, 'teams': 0, 'no_team': 0,
-             'no_branch': 0, 'duplicate': 0, 'no_price': 0, 'error': None}
+             'no_branch': 0, 'duplicate': 0, 'no_price': 0, 'error': None,
+             'source': None, 'snapshot_at': None, 'snapshot_at_th': None}
 
     first = _exportDocumentMonthDate(selected_month)
     if first is None:
@@ -11478,6 +11500,41 @@ def _exportDocumentFuelRefillsUncached(selected_month):
                     .exclude(oil_customer_id__isnull=True).exclude(oil_customer_id='')
                     .values('oil_customer_id', 'car_team_name'))}
 
+    try:
+        raw_lines, fetched = _exportDocumentFetchExpressFuel(first, last, branches, team_name)
+    except _ExpressFuelFetchError as exc:
+        # อ่านไม่ได้ขั้นไหนก็ตาม ถือว่าอ่านไม่สำเร็จทั้งก้อน ห้ามเอาผลครึ่ง ๆ กลาง ๆ ไปเขียนทับสำเนา
+        stats['error'] = str(exc)
+        snapshot = _exportDocumentLoadFuelSnapshot(first)
+        if snapshot is None:
+            return [], stats
+        raw_lines, saved = snapshot
+        stats.update(saved)
+        stats['source'] = 'snapshot'
+    else:
+        stats.update(fetched)
+        stats['source'] = 'express'
+        _exportDocumentSaveFuelSnapshot(first, raw_lines, fetched)
+
+    return _exportDocumentResolveFuelLines(raw_lines, branches, team_name), stats
+
+
+class _ExpressFuelFetchError(Exception):
+    """อ่านบิลจาก Express ไม่สำเร็จ ข้อความในตัวบอกแล้วว่าพังตอนอ่านหัวบิลหรือรายการ"""
+
+
+def _exportDocumentFetchExpressFuel(first, last, branches, team_name):
+    """อ่านบิลเติมน้ำมันของทีมรถร่วมจาก Express คืนเป็นรายการดิบ (ยังไม่แปลงเป็นชื่อทีม/สาขา)
+
+    คัดเฉพาะบิลที่รหัสลูกค้าเป็นทีมรถร่วม และระบุสาขาได้ เพื่อไม่ต้องอ่านรายการของบิลอื่น
+    ตัดบิลซ้ำด้วยเลขที่บิล และตัดรายการซ้ำด้วย (docnum, seqnum) ตามเหตุผลใน docstring ผู้เรียก
+
+    คืน ([{docnum, seqnum, docdate, cuscod, comcod, stkdes, ordqty, unitpr, trnval}, ...],
+         {bills, no_team, no_branch, duplicate})
+    อ่านไม่ได้ขั้นไหนก็ตาม raise _ExpressFuelFetchError
+    """
+    fetched = {'bills': 0, 'no_team': 0, 'no_branch': 0, 'duplicate': 0}
+
     prefix_filter = Q()
     for prefix in branches:
         prefix_filter |= Q(docnum__startswith=prefix)
@@ -11487,35 +11544,34 @@ def _exportDocumentFuelRefillsUncached(selected_month):
                        .filter(prefix_filter, docdate__gte=first, docdate__lte=last)
                        .values_list('docnum', 'docdate', 'cuscod', 'comcod'))
     except Exception as exc:
-        stats['error'] = 'ต่อฐานข้อมูล Express ไม่ได้ : %s' % exc
-        return {}, stats
+        raise _ExpressFuelFetchError('ต่อฐานข้อมูล Express ไม่ได้ : %s' % exc)
 
     # เลขที่เอกสารดิบ (มี space ต่อท้าย) เอาไว้ยิง query ต่อ ห้าม strip ก่อนถึงตอนนั้น
     # ส่วนคีย์ใน dict ใช้ตัวที่ strip แล้ว จะได้เทียบกับที่อ่านจาก OEINVD ได้ตรง
     bill_of = {}
     raw_docnums = []
     for docnum, docdate, cuscod, comcod in headers:
-        stats['bills'] += 1
+        fetched['bills'] += 1
         key = _pgText(docnum)
-        team = team_name.get(_pgText(cuscod))
-        if not team:
+        customer = _pgText(cuscod)
+        company = _pgText(comcod)
+        if not team_name.get(customer):
             # Express ขายน้ำมันให้ลูกค้าทั่วไปด้วย ไม่ใช่แค่ทีมรถร่วม
-            stats['no_team'] += 1
+            fetched['no_team'] += 1
             continue
-        branch = _exportDocumentFuelBranchOf(branches, key, _pgText(comcod))
-        if branch is None:
-            stats['no_branch'] += 1
+        if _exportDocumentFuelBranchOf(branches, key, company) is None:
+            fetched['no_branch'] += 1
             continue
         if key in bill_of:
-            stats['duplicate'] += 1
+            fetched['duplicate'] += 1
             continue
-        bill_of[key] = (team, branch[0], branch[1], docdate, _pgText(comcod))
+        bill_of[key] = (docdate, customer, company)
         raw_docnums.append(docnum)
 
+    raw_lines = []
     if not bill_of:
-        return [], stats
+        return raw_lines, fetched
 
-    lines = []
     seen = set()
     try:
         # ยิงทีละก้อน เผื่อบิลเยอะจน IN (...) ยาวเกินจนฐานข้อมูลไม่รับ
@@ -11527,32 +11583,97 @@ def _exportDocumentFuelRefillsUncached(selected_month):
                                 'ordqty', 'unitpr', 'trnval')):
                 key = _pgText(row['docnum'])
                 if (key, row['seqnum']) in seen:
-                    stats['duplicate'] += 1
+                    fetched['duplicate'] += 1
                     continue
                 seen.add((key, row['seqnum']))
                 bill = bill_of.get(key)
                 if bill is None:
                     continue
-                team, company_id, branch_name, docdate, comcod = bill
-                lines.append({
-                    'date': docdate,
+                docdate, customer, company = bill
+                raw_lines.append({
                     'docnum': key,
-                    'comcod': comcod,
-                    'branch': branch_name,
-                    'company_id': company_id,
-                    'team': team,
+                    'seqnum': row['seqnum'],
+                    'docdate': docdate,
+                    'cuscod': customer,
+                    'comcod': company,
                     'stkdes': _pgText(row['stkdes']),
-                    'litre': row['ordqty'] or Decimal(0),
-                    'unit_price': row['unitpr'] or Decimal(0),
-                    'amount': row['trnval'] or Decimal(0),
+                    'ordqty': row['ordqty'] or Decimal(0),
+                    'unitpr': row['unitpr'] or Decimal(0),
+                    'trnval': row['trnval'] or Decimal(0),
                 })
     except Exception as exc:
-        stats['error'] = 'อ่านรายการเติมน้ำมันจาก Express ไม่ได้ : %s' % exc
-        return [], stats
+        raise _ExpressFuelFetchError('อ่านรายการเติมน้ำมันจาก Express ไม่ได้ : %s' % exc)
+
+    return raw_lines, fetched
+
+
+def _exportDocumentResolveFuelLines(raw_lines, branches, team_name):
+    """แปลงรายการดิบเป็นรายการที่ผู้ใช้ปลายทางต้องการ (ชื่อทีม / สาขา / id บริษัท)
+
+    ใช้ร่วมกันทั้งข้อมูลที่เพิ่งอ่านจาก Express และข้อมูลจากสำเนา ผลจึงออกมาหน้าตาเดียวกัน
+    แปลงด้วยการผูกรหัสล่าสุดเสมอ ถ้าหลังทำสำเนาไปแก้รหัสทีมหรือสาขาจนแปลงไม่ได้ ให้ข้ามบรรทัดนั้น
+    """
+    lines = []
+    for raw in raw_lines:
+        team = team_name.get(raw['cuscod'])
+        branch = _exportDocumentFuelBranchOf(branches, raw['docnum'], raw['comcod'])
+        if not team or branch is None:
+            continue
+        company_id, branch_name = branch
+        lines.append({
+            'date': raw['docdate'],
+            'docnum': raw['docnum'],
+            'comcod': raw['comcod'],
+            'branch': branch_name,
+            'company_id': company_id,
+            'team': team,
+            'stkdes': raw['stkdes'],
+            'litre': raw['ordqty'],
+            'unit_price': raw['unitpr'],
+            'amount': raw['trnval'],
+        })
 
     # เรียงให้คงที่ ไม่งั้น sheet express สลับแถวไปมาทุกครั้งที่ export
     lines.sort(key=lambda x: (x['team'], x['date'], x['docnum']))
-    return lines, stats
+    return lines
+
+
+def _exportDocumentSaveFuelSnapshot(month, raw_lines, fetched):
+    """เขียนทับสำเนาบิลของเดือนนั้นทั้งก้อน เรียกเฉพาะตอนอ่าน Express สำเร็จครบทุกขั้นเท่านั้น
+
+    ลบของเดือนนั้นแล้วใส่ใหม่ใน transaction เดียว ไม่มีช่วงไหนที่สำเนาหายไปครึ่งก้อน
+    บันทึกไม่สำเร็จไม่ถือว่าไฟล์พัง (ข้อมูลที่ใช้ออกไฟล์รอบนี้อ่านมาครบแล้ว) แค่เขียน log ไว้
+    """
+    try:
+        with transaction.atomic():
+            ExpressFuelBillLine.objects.filter(month=month).delete()
+            ExpressFuelBillLine.objects.bulk_create(
+                [ExpressFuelBillLine(month=month, **raw) for raw in raw_lines],
+                batch_size=1000)
+            ExpressFuelBillSync.objects.update_or_create(
+                month=month,
+                defaults=dict(fetched, synced_at=dj_timezone.now(), lines=len(raw_lines)))
+    except Exception:
+        logger.exception('บันทึกสำเนาบิลเติมน้ำมันของเดือน %s ไม่สำเร็จ', month)
+
+
+def _exportDocumentLoadFuelSnapshot(month):
+    """สำเนาบิลล่าสุดของเดือนนั้น คืน (รายการดิบ, ตัวนับ + เวลาทำสำเนา) หรือ None ถ้ายังไม่เคยทำสำเนา"""
+    sync = ExpressFuelBillSync.objects.filter(month=month).first()
+    if sync is None:
+        return None
+    raw_lines = list(ExpressFuelBillLine.objects.filter(month=month).order_by('id').values(
+        'docnum', 'seqnum', 'docdate', 'cuscod', 'comcod', 'stkdes',
+        'ordqty', 'unitpr', 'trnval'))
+    saved = {
+        'bills': sync.bills,
+        'no_team': sync.no_team,
+        'no_branch': sync.no_branch,
+        'duplicate': sync.duplicate,
+        'snapshot_at': sync.synced_at,
+        'snapshot_at_th': '%s เวลา %s น.' % (_thaiDate(sync.synced_at), sync.synced_at.strftime('%H:%M')),
+    }
+    return raw_lines, saved
 
 
 def _exportDocumentFuelPriceByTeam(selected_month):
@@ -11756,15 +11877,13 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         # H : ช่วงราคาฐานแบบข้อความ เช่น "31.00 - 31.99" ให้บัญชีเห็นในตารางหลัก
                         # แสดงผลเท่านั้น สูตรไม่ได้อ่านช่องนี้
                         'base_fuel_range': rate.baseFuelPriceLabel(),
-                        # W : ขอบล่างแบบตัวเลข สูตร V ใช้ค่านี้ (คู่กับขอบบนที่ U)
+                        # V : ขอบล่างแบบตัวเลข สูตรส่วนต่างที่ U ใช้ค่านี้ (คู่กับขอบบนที่ T)
                         'base_fuel_price': rate.base_fuel_price,
                         # I กับ N เติมในรอบที่ 2
                         'average_fuel_price': None,                 # I
-                        # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = (I-H)*J ในไฟล์ไม่ต้องแก้
+                        # J : เป็นของแถวทีม ไม่ใช่ของทั้งใบ สูตร K = ส่วนต่าง × J ในไฟล์ไม่ต้องแก้
                         'fuel_freight_adjustment': team_rate.fuel_freight_adjustment,
-                        # T : ขั้นการปรับน้ำมันของทีม (0 = ทุกบาททุกสตางค์)
-                        'fuel_adjust_step': team_rate.fuel_adjust_step,
-                        # U : ขอบบนของช่วงราคาน้ำมันฐาน ราคาเฉลี่ยที่ยังอยู่ในช่วง H ถึง U จะไม่ถูกปรับ
+                        # T : ขอบบนของช่วงราคาน้ำมันฐาน ราคาเฉลี่ยที่ยังอยู่ในช่วง V ถึง T จะไม่ถูกปรับ
                         # ใบที่ตกลงเป็นราคาเดียว (ไม่มีขอบบน) ใช้ขอบล่างซ้ำ ผลจึงเท่ากับวัดจากจุดเดียว
                         'base_fuel_price_max': rate.base_fuel_price_max or rate.base_fuel_price,
                         # หมายเหตุเขียนลงคอลัมน์ N (ช่องว่างที่ไม่มีสูตรไหนอ้างถึง)
@@ -11919,6 +12038,13 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
     fuel_by_team, stats['fuel_bill'] = _exportDocumentFuelPriceByTeam(selected_month)
     fuel_by_group = _exportDocumentFuelPriceByGroup(trip_rows, billable)
 
+    bill_stats = stats['fuel_bill']
+    from_snapshot = bill_stats.get('source') == 'snapshot'
+    # ต่อ Express ไม่ได้และไม่มีสำเนา = ไม่มีบิลให้ใช้เลยทั้งเดือน ไม่ใช่ "ทีมนี้ไม่มีบิล"
+    # ต้องบอกเหตุผลให้ถูก ไม่งั้นคนจะไปไล่ตรวจรหัสลูกค้าน้ำมันของทุกทีมโดยเปล่าประโยชน์
+    express_down = bool(bill_stats.get('error')) and not from_snapshot
+    snapshot_note = (' (จากสำเนาบิล ณ %s)' % bill_stats.get('snapshot_at_th')) if from_snapshot else ''
+
     for row in rate_rows:
         route = row.pop('route')
         rate, route_label = rate_by_route[route]
@@ -11933,7 +12059,8 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
             fuel = fuel_by_group.get(group_key) if company_id else None
             # นับเฉพาะแถวที่มีเที่ยวจริง แถวเผื่อไว้ไม่ได้จ่ายเงินอยู่แล้ว
             # เอามารวมจะทำให้รายชื่อทีมในคำเตือนยาวเกินจริง
-            if row.get('has_trip') and row['team'] not in stats['fuel_no_bill']:
+            if (row.get('has_trip') and not express_down
+                    and row['team'] not in stats['fuel_no_bill']):
                 stats['fuel_no_bill'].append(row['team'])
 
         if fuel is None:
@@ -11945,8 +12072,12 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
             bucket = 'fuel_no_company' if not company_id else 'fuel_no_price'
             if route_label not in stats[bucket]:
                 stats[bucket].append(route_label)
-            row['fuel_note'] = ('ไม่มีราคาน้ำมัน (ต้นทางยังไม่ได้ผูกบริษัท)' if not company_id
-                                else 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)')
+            if not company_id:
+                row['fuel_note'] = 'ไม่มีราคาน้ำมัน (ต้นทางยังไม่ได้ผูกบริษัท)'
+            elif express_down:
+                row['fuel_note'] = 'ไม่มีราคาน้ำมัน (ต่อ Express ไม่ได้ และวันที่วิ่งยังไม่ได้กรอกราคา)'
+            else:
+                row['fuel_note'] = 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)'
             continue
 
         price, counted, missing = fuel
@@ -11955,7 +12086,7 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
         row['average_fuel_price'] = price.quantize(Decimal('0.0001'))
 
         if from_bill:
-            row['fuel_note'] = 'ถ่วงจากบิลเติมน้ำมัน %s ครั้ง' % counted
+            row['fuel_note'] = 'ถ่วงจากบิลเติมน้ำมัน %s ครั้ง%s' % (counted, snapshot_note)
             if missing:
                 row['fuel_note'] += ' (อีก %s ครั้งไม่มีราคาของวันนั้น)' % missing
                 note = '%s : ถ่วงจาก %s ครั้ง ขาดราคาอีก %s ครั้ง' % (
@@ -11964,7 +12095,8 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                     stats['fuel_partial'].append(note)
         else:
             stats['fuel_days'][route_label] = counted
-            row['fuel_note'] = 'ไม่มีบิลเติมน้ำมัน จึงเฉลี่ยจาก %s วันที่วิ่ง' % counted
+            reason = 'ต่อ Express ไม่ได้' if express_down else 'ไม่มีบิลเติมน้ำมัน'
+            row['fuel_note'] = '%s จึงเฉลี่ยราคารายวันจาก %s วันที่วิ่ง' % (reason, counted)
             if missing:
                 note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
                     route_label, counted, missing)
@@ -12044,14 +12176,13 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
 # คอลัมน์ N ของ sheet อัตรา : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (M เป็นคีย์ O/P เป็นตารางกลุ่มจ่าย)
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง I ว่าง
 EXPORT_DOC_RATE_NOTE_COL = 14
-# คอลัมน์ที่เพิ่มใน template v13 ต่อท้ายของเดิม (A-S ถูกใช้หมดแล้ว และ sheet สรุปจ่ายรถร่วม
+# คอลัมน์ที่เพิ่มใน template v14 ต่อท้ายของเดิม (A-S ถูกใช้หมดแล้ว และ sheet สรุปจ่ายรถร่วม
 # อ้างคอลัมน์ของ sheet นี้แบบตายตัวอยู่ 2,700 สูตร แทรกกลางตารางไม่ได้)
-EXPORT_DOC_RATE_STEP_COL = 20      # T ขั้นการปรับน้ำมัน
-EXPORT_DOC_RATE_BASE_MAX_COL = 21  # U ราคาน้ำมันฐาน ขอบบน
-EXPORT_DOC_RATE_BASE_MIN_COL = 23  # W ราคาน้ำมันฐาน ขอบล่าง
+EXPORT_DOC_RATE_BASE_MAX_COL = 20  # T ราคาน้ำมันฐาน ขอบบน
+EXPORT_DOC_RATE_BASE_MIN_COL = 22  # V ราคาน้ำมันฐาน ขอบล่าง
 # H แสดงช่วงราคาฐานเป็นข้อความ ย้ายได้เพราะไม่มี sheet อื่นอ้างถึง H
 EXPORT_DOC_RATE_BASE_RANGE_COL = 8
-# V เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
+# U เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
 
 
 def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
@@ -12087,7 +12218,6 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
         worksheet.cell(row=row, column=5).value = r['stone']
         for col, key in ((6, 'distance'), (7, 'freight_rate'),
                          (9, 'average_fuel_price'), (10, 'fuel_freight_adjustment'),
-                         (EXPORT_DOC_RATE_STEP_COL, 'fuel_adjust_step'),
                          (EXPORT_DOC_RATE_BASE_MAX_COL, 'base_fuel_price_max'),
                          (EXPORT_DOC_RATE_BASE_MIN_COL, 'base_fuel_price')):
             value = r[key]
@@ -12124,14 +12254,23 @@ def _exportDocumentWriteExpressSheet(workbook, lines, stats):
     worksheet['A2'] = ('sheet นี้เป็นข้อมูลดิบไว้ตรวจสอบอย่างเดียว ไม่มีสูตรไหนอ้างถึง '
                        '| คัดบิลด้วยคำนำหน้าเลขที่เอกสาร ซึ่งบอกว่าเติมที่สาขาไหน '
                        '| "ราคาอ้างอิง" คือราคาน้ำมันรายวันที่กรอกในระบบ ไม่ใช่ราคาบนบิล')
-    if stats.get('error'):
-        worksheet['A3'] = 'อ่านข้อมูลไม่ได้ : %s' % stats['error']
+    counts = ('บิลทั้งหมด %s ใบ | เป็นของทีมรถร่วม %s รายการ | ไม่ใช่ทีมรถร่วม %s ใบ '
+              '| บิลซ้ำที่ตัดออก %s' % (
+                  stats.get('bills', 0), len(lines),
+                  stats.get('no_team', 0), stats.get('duplicate', 0)))
+    if stats.get('error') and stats.get('source') != 'snapshot':
+        worksheet['A3'] = ('อ่านข้อมูลไม่ได้ และยังไม่เคยมีสำเนาบิลของเดือนนี้ : %s'
+                           % stats['error'])
         worksheet['A3'].font = Font(bold=True, color='9C0006')
         return
-    worksheet['A3'] = ('บิลทั้งหมด %s ใบ | เป็นของทีมรถร่วม %s รายการ | ไม่ใช่ทีมรถร่วม %s ใบ '
-                       '| บิลซ้ำที่ตัดออก %s' % (
-                           stats.get('bills', 0), len(lines),
-                           stats.get('no_team', 0), stats.get('duplicate', 0)))
+    if stats.get('source') == 'snapshot':
+        # ใช้สำเนาได้ แต่ต้องบอกให้ชัดว่าเป็นข้อมูล ณ เวลาไหน บิลที่เพิ่มทีหลังไม่อยู่ในนี้
+        worksheet['A3'] = ('ต่อ Express ไม่ได้ ใช้สำเนาบิลที่ดึงไว้เมื่อ %s แทน '
+                           '(บิลที่เพิ่มหลังจากนั้นไม่อยู่ในไฟล์นี้) | %s | %s'
+                           % (stats.get('snapshot_at_th'), counts, stats['error']))
+        worksheet['A3'].font = Font(bold=True, color='9C5700')
+    else:
+        worksheet['A3'] = counts
 
     headers = ['วันที่', 'เลขที่บิล', 'สาขาที่เติม', 'comcod', 'ทีมรถร่วม',
                'ชนิดน้ำมัน', 'ลิตร', 'ราคา/ลิตร', 'จำนวนเงิน', 'ราคาอ้างอิงของวันนั้น']

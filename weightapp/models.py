@@ -1703,12 +1703,15 @@ class InternationalFreightRateTeam(models.Model):
     # ไม่แยกช่อง "ประเภท" อีกช่อง เพราะจะเก็บเรื่องเดียวกันซ้ำสองที่แล้วขัดกันได้ (เช่น เครดิต + 0 วัน)
     # แถวเก่าปล่อยเป็น NULL ไม่ตั้ง default เป็นเงินสด เพราะจะเท่ากับระบบยืนยันแทนว่าทีมรับเงินสด
     credit_days = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="เครดิต (วัน) 0 = เงินสด")
-    # ขั้นการปรับตามราคาน้ำมัน (บาท/ลิตร)
-    # 0 = คิดทุกบาททุกสตางค์ (พฤติกรรมเดิมของระบบ) / มากกว่า 0 = ขยับครบขั้นละเท่านี้ถึงปรับ 1 ครั้ง
-    # แถวเดิมทั้งหมดเป็น 0 เพราะตรงกับที่ระบบคิดอยู่จริง ไม่ใช่การเดาแทนผู้ใช้
-    # สูตรที่ใช้จริงอยู่ในไฟล์ excel ดู _exportDocumentWriteRateSheet และ template v13
-    fuel_adjust_step = models.DecimalField(max_digits=5, decimal_places=2, default=0,
-                                           verbose_name="ขั้นการปรับน้ำมัน (บาท/ลิตร) 0 = ทุกบาททุกสตางค์")
+    # ค่าที่ตกลงกันไว้ตอนทำสัญญา เก็บไว้เทียบว่าราคาที่ใช้อยู่ตอนนี้ขยับไปจากสัญญาเท่าไหร่
+    # ยังไม่มีสูตรไหนเอาไปคิดเงิน (ตั้งใจ) ถ้าวันหลังจะใช้คิด ต้องมาแก้ที่ไฟล์ export ด้วย
+    # ค่าขนส่งตามสัญญาแยกตามช่วงแบก นน. เหมือน freight_rate เพราะสัญญาก็ระบุแยกช่วงอยู่แล้ว
+    contract_freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                verbose_name="ค่าขนส่งตามสัญญา (บาท/ตัน)")
+    # ราคาน้ำมันวันที่เซ็นสัญญา เป็นค่าเดียวของทีม ไม่แยกตามช่วงน้ำหนัก (serializer บังคับให้ทุกแถวเท่ากัน)
+    # เก็บเป็นค่าเดียว ไม่ใช่ช่วง ต่างจากราคาน้ำมันฐานของใบที่เป็นช่วง
+    contract_base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                   verbose_name="ราคาน้ำมันฐานวันทำสัญญา (บาท/ลิตร)")
 
     class Meta:
         db_table = 'international_freight_rate_team'
@@ -1719,12 +1722,6 @@ class InternationalFreightRateTeam(models.Model):
     def __str__(self):
         team_name = self.team.car_team_name if self.team else "ทุกทีม"
         return f"{team_name} - {self.weight_carried}"
-
-    def fuelAdjustStepLabel(self):
-        """ข้อความขั้นการปรับน้ำมันสำหรับแสดงผล"""
-        if not self.fuel_adjust_step:
-            return "ทุกบาททุกสตางค์"
-        return "ขั้นละ %s บาท" % self.fuel_adjust_step.normalize()
 
     def paymentTermLabel(self):
         """ข้อความเงื่อนไขการชำระเงินสำหรับแสดงผล คืน None ถ้ายังไม่ระบุ"""
@@ -1846,3 +1843,61 @@ class ExOEINVD(models.Model):
 
     def __str__(self):
         return '%s - %s' % (self.docnum, self.stkcod)
+
+
+class ExpressFuelBillLine(models.Model):
+    """สำเนาบิลเติมน้ำมันของทีมรถร่วม ที่อ่านมาจาก Express ได้สำเร็จครั้งล่าสุด (ตารางของเรา)
+
+    Express อยู่นอกเน็ตเวิร์กเรา ต่อไม่ติดเมื่อไหร่ก็ได้ ถ้าไม่มีสำเนา sheet oil จะว่าง
+    แล้วยอดหักค่าน้ำมันของทีมรถร่วมจะเป็น 0 โดยไม่มีใครสังเกต
+
+    อ่าน Express ได้เมื่อไหร่ ระบบเขียนทับสำเนาของเดือนนั้นทั้งก้อน (ดู _exportDocumentSaveFuelSnapshot)
+    อ่านไม่ได้ ค่อยหยิบสำเนาล่าสุดมาใช้แทน
+
+    เก็บรหัสดิบ (cuscod / docnum / comcod) ไม่เก็บชื่อทีมหรือชื่อสาขาที่แปลงแล้ว
+    ตอนใช้จะแปลงด้วยการผูกรหัสล่าสุด ถ้าวันหลังแก้รหัสทีม สำเนาเก่าก็ยังแปลงตามกติกาใหม่
+    เก็บเฉพาะบรรทัดของบิลทีมรถร่วมที่ระบุสาขาได้ตอนอ่าน ซ้ำกันตัดออกแล้วด้วย (docnum, seqnum)
+    """
+    month = models.DateField(db_index=True, verbose_name="เดือน (วันที่ 1)")
+    docnum = models.CharField(max_length=20, verbose_name="เลขที่บิล")
+    seqnum = models.IntegerField(null=True, blank=True, verbose_name="ลำดับรายการ")
+    docdate = models.DateField(null=True, blank=True, verbose_name="วันที่เติม")
+    cuscod = models.CharField(max_length=20, blank=True, default='', verbose_name="รหัสลูกค้า (ทีม)")
+    comcod = models.CharField(max_length=10, blank=True, default='', verbose_name="comcod")
+    stkdes = models.CharField(max_length=100, blank=True, default='', verbose_name="สินค้า")
+    ordqty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="ลิตร")
+    unitpr = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="ราคา/ลิตร หน้าปั๊ม")
+    trnval = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="จำนวนเงิน")
+
+    class Meta:
+        db_table = 'express_fuel_bill_line'
+        unique_together = ('month', 'docnum', 'seqnum')
+        verbose_name = 'สำเนาบิลเติมน้ำมันจาก Express'
+        verbose_name_plural = 'สำเนาบิลเติมน้ำมันจาก Express'
+
+    def __str__(self):
+        return '%s-%s (%s)' % (self.docnum, self.seqnum, self.month)
+
+
+class ExpressFuelBillSync(models.Model):
+    """ประวัติการทำสำเนาบิลของแต่ละเดือน 1 เดือน 1 แถว
+
+    ต้องมีแยกจากตารางบรรทัด เพราะเดือนที่อ่านสำเร็จแต่ไม่มีบิลเลย (0 บรรทัด)
+    ต่างจากเดือนที่ยังไม่เคยทำสำเนา ถ้าดูจากตารางบรรทัดอย่างเดียวจะแยกไม่ออก
+    ตัวนับเก็บไว้ให้หัว sheet express ตอนใช้สำเนา ยังบอกได้ว่าตอนนั้นเจอบิลกี่ใบ
+    """
+    month = models.DateField(unique=True, verbose_name="เดือน (วันที่ 1)")
+    synced_at = models.DateTimeField(verbose_name="ดึงจาก Express เมื่อ")
+    bills = models.PositiveIntegerField(default=0, verbose_name="บิลทั้งหมดที่เจอ")
+    no_team = models.PositiveIntegerField(default=0, verbose_name="ไม่ใช่ทีมรถร่วม")
+    no_branch = models.PositiveIntegerField(default=0, verbose_name="ระบุสาขาไม่ได้")
+    duplicate = models.PositiveIntegerField(default=0, verbose_name="ซ้ำที่ตัดออก")
+    lines = models.PositiveIntegerField(default=0, verbose_name="บรรทัดที่เก็บ")
+
+    class Meta:
+        db_table = 'express_fuel_bill_sync'
+        verbose_name = 'ประวัติสำเนาบิลเติมน้ำมัน'
+        verbose_name_plural = 'ประวัติสำเนาบิลเติมน้ำมัน'
+
+    def __str__(self):
+        return '%s @ %s' % (self.month, self.synced_at)

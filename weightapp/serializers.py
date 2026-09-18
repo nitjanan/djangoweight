@@ -300,8 +300,9 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
             'credit_days': {'required': False, 'allow_null': True, 'min_value': 0, 'max_value': 365},
             # คำนวณเองจาก ค่าขนส่ง / ระยะทาง ของใบ (ดู _perTonKm) client ส่งมาก็ไม่รับ
             'freight_rate_per_ton_km': {'read_only': True},
-            # ขั้นการปรับน้ำมัน 0 = ทุกบาททุกสตางค์ เพดาน 10 บาทกันพิมพ์ผิด (ที่ใช้จริงคือ 1-2 บาท)
-            'fuel_adjust_step': {'required': False, 'min_value': 0, 'max_value': 10},
+            # ค่าตอนทำสัญญา ไม่บังคับกรอก (null = ยังไม่ได้กรอก) ยังไม่มีสูตรไหนเอาไปคิดเงิน
+            'contract_freight_rate': {'required': False, 'allow_null': True, 'min_value': 0},
+            'contract_base_fuel_price': {'required': False, 'allow_null': True, 'min_value': 0},
         }
 
 
@@ -464,15 +465,17 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         # เงื่อนไขการชำระเงินเป็นของทีม ไม่ใช่ของช่วงน้ำหนัก ทีมเดียวกันในใบเดียวกันต้องได้ค่าเดียว
         # ไม่งั้นบัญชีไม่รู้ว่าจะจ่ายทีมนั้นกี่วัน ("ทุกทีม" ก็นับเป็นกลุ่มหนึ่งเหมือนกัน)
-        # ขั้นการปรับน้ำมันก็เป็นของทีมเหมือนกัน ตกลงกันทีละทีม ไม่ได้ตกลงแยกตามช่วงน้ำหนัก
         by_team = {}
         for team_data in teams_data:
             team = team_data.get('team')
             key = team.pk if team else None
-            bucket = by_team.setdefault(key, {'credit_days': set(), 'fuel_adjust_step': set()})
+            bucket = by_team.setdefault(key, {'credit_days': set(),
+                                               'contract_base_fuel_price': set()})
             bucket['credit_days'].add(team_data.get('credit_days'))
-            bucket['fuel_adjust_step'].add(team_data.get('fuel_adjust_step'))
-        labels = {'credit_days': 'เงื่อนไขการชำระเงิน', 'fuel_adjust_step': 'ขั้นการปรับน้ำมัน'}
+            # ราคาน้ำมันวันทำสัญญาก็เป็นของทีม สัญญาฉบับเดียวไม่ได้เซ็นคนละวันตามช่วงน้ำหนัก
+            bucket['contract_base_fuel_price'].add(team_data.get('contract_base_fuel_price'))
+        labels = {'credit_days': 'เงื่อนไขการชำระเงิน',
+                  'contract_base_fuel_price': 'ราคาน้ำมันฐานวันทำสัญญา'}
         for team_pk, buckets in by_team.items():
             for field, values in buckets.items():
                 if len(values) > 1:
@@ -590,7 +593,8 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             # ถ้าเทียบด้วย แถวเก่าที่ช่องนี้ยังว่างจะถูกนับว่าเปลี่ยน แล้วออกเวอร์ชันใหม่ทั้งที่ไม่ได้แก้อะไร
             s(get('note')),
             s(get('credit_days')),
-            s(get('fuel_adjust_step')),
+            s(get('contract_freight_rate')),
+            s(get('contract_base_fuel_price')),
         )
 
     def _rateChanged(self, instance, validated_data, teams_data):
@@ -642,7 +646,9 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
              'discount_per_ton': t.discount_per_ton,
              # ระยะทางของใบใหม่อาจเปลี่ยน ต้องคิดใหม่ ไม่ยกค่าเดิมมาตรง ๆ
              'freight_rate_per_ton_km': _perTonKm(t.freight_rate, rate.distance), 'note': t.note,
-             'credit_days': t.credit_days, 'fuel_adjust_step': t.fuel_adjust_step}
+             'credit_days': t.credit_days,
+             'contract_freight_rate': t.contract_freight_rate,
+             'contract_base_fuel_price': t.contract_base_fuel_price}
             for t in instance.teams.all()
         ]
         for team_data in source_teams:

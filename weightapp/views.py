@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseBadRequest, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseBadRequest, StreamingHttpResponse, Http404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -40,6 +40,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.urls import reverse
 from urllib.parse import quote
+from django.utils import timezone as django_timezone
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework import generics, viewsets, permissions, status
@@ -13467,3 +13468,131 @@ def exportExcelExportDocument(request):
     filename = 'trip_report_%s_%s%s%s.xlsx' % (active, selected_month or 'all', date_part, origin_part)
     response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
     return _exportDocumentMarkDownloadDone(request, response)
+
+
+#ดึงรายละเอียดของ base ในแท็ป Setting เป็นไฟล์ excel (ทุกแถว ไม่กรองตามบริษัท)
+#slug -> (model, ชื่อที่ใช้ตั้งชื่อ sheet/ไฟล์)
+BASE_SETTING_EXPORTS = OrderedDict([
+    ('jobType',         (BaseJobType,        'ข้อมูลประเภทงานของลูกค้า')),
+    ('customer',        (BaseCustomer,       'ข้อมูลลูกค้า')),
+    ('site',            (BaseSite,           'ข้อมูลปลายทาง')),
+    ('customerSite',    (BaseCustomerSite,   'ข้อมูลลูกค้าและปลายทาง')),
+    ('mill',            (BaseMill,           'ข้อมูลต้นทาง')),
+    ('stoneType',       (BaseStoneType,      'ข้อมูลชนิดหิน')),
+    ('carTeam',         (BaseCarTeam,        'ข้อมูลทีม')),
+    ('car',             (BaseCar,            'ข้อมูลรถร่วมและทีม')),
+    ('scoop',           (BaseScoop,          'ข้อมูลผู้ตัก')),
+    ('driver',          (BaseDriver,         'ข้อมูลผู้ขับ')),
+    ('carRegistration', (BaseCarRegistration,'ข้อมูลทะเบียนรถ')),
+])
+
+#ชื่อ sheet ของ excel ห้ามเกิน 31 ตัวอักษร และห้ามมีอักขระเหล่านี้
+BASE_SETTING_EXPORT_INVALID_SHEET_CHARS = '[]:*?/\\'
+
+
+def _baseSettingExportSheetTitle(label):
+    title = label
+    for ch in BASE_SETTING_EXPORT_INVALID_SHEET_CHARS:
+        title = title.replace(ch, ' ')
+    return title[:31]
+
+
+def _baseSettingExportFields(model):
+    #เอาเฉพาะ field ที่เก็บค่าจริงในตาราง (ข้าม reverse relation / m2m)
+    #FK จะใช้ field ตรง ๆ แล้วแปลงเป็น str() ตอนอ่านค่า เพื่อให้ได้ชื่อที่คนอ่านรู้เรื่อง
+    return [f for f in model._meta.get_fields()
+            if getattr(f, 'concrete', False) and not f.many_to_many]
+
+
+def _baseSettingExportValue(obj, field):
+    value = getattr(obj, field.name, None)
+    if value is None:
+        return None
+
+    if field.is_relation:
+        #คอลัมน์บริษัทให้แสดงเป็น 'code - name' (__str__ ของ BaseCompany คืนแค่ code)
+        if isinstance(value, BaseCompany):
+            return ' - '.join([p for p in (value.code, value.name) if p])
+        return str(value)
+
+    if isinstance(field, models.BooleanField):
+        return 'ใช่' if value else 'ไม่ใช่'
+
+    if isinstance(value, Decimal):
+        return float(value)
+
+    if isinstance(value, datetime):
+        #openpyxl เขียน datetime ที่มี timezone ไม่ได้ ต้องแปลงเป็นเวลาท้องถิ่นแบบ naive ก่อน
+        if django_timezone.is_aware(value):
+            value = django_timezone.localtime(value)
+        return value.replace(tzinfo=None)
+
+    return value
+
+
+@login_required(login_url='login')
+def exportExcelBaseSetting(request, base):
+    try:
+        request.session['company_code']
+    except:
+        return redirect('logout')
+
+    if base not in BASE_SETTING_EXPORTS:
+        raise Http404('ไม่พบ base ที่ต้องการดึงข้อมูล')
+
+    model, label = BASE_SETTING_EXPORTS[base]
+    fields = _baseSettingExportFields(model)
+    relation_names = [f.name for f in fields if f.is_relation]
+
+    #ดึงทุกแถว ไม่กรองตามบริษัท
+    data = model.objects.all()
+    if relation_names:
+        data = data.select_related(*relation_names)
+
+    workbook = openpyxl.Workbook(write_only=True)
+    worksheet = workbook.create_sheet(_baseSettingExportSheetTitle(label))
+
+    head_font = Font(bold=True, color='FFFFFF')
+    head_fill = PatternFill(start_color='4F4F4F', end_color='4F4F4F', fill_type='solid')
+    head_align = Alignment(horizontal='center', vertical='center')
+
+    #write_only ต้องตั้ง freeze_panes ก่อน append แถวแรก ไม่งั้นค่าจะไม่ถูกเขียนลงไฟล์
+    worksheet.freeze_panes = 'A2'
+
+    header_row = []
+    widths = []
+    for field in fields:
+        title = str(field.verbose_name) if getattr(field, 'verbose_name', None) else field.name
+        cell = WriteOnlyCell(worksheet, value=title)
+        cell.font = head_font
+        cell.fill = head_fill
+        cell.alignment = head_align
+        header_row.append(cell)
+        widths.append(len(title))
+    worksheet.append(header_row)
+
+    for obj in data.iterator(chunk_size=2000):
+        out_row = []
+        for col, field in enumerate(fields):
+            value = _baseSettingExportValue(obj, field)
+            if isinstance(value, datetime):
+                cell = WriteOnlyCell(worksheet, value=value)
+                cell.number_format = 'dd/mm/yyyy hh:mm'
+                out_row.append(cell)
+            else:
+                out_row.append(value)
+
+            length = len(str(value)) if value is not None else 0
+            if length > widths[col]:
+                widths[col] = length
+
+        worksheet.append(out_row)
+
+    for col, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = min(max(width + 2, 10), 40)
+
+    file_name = '%s_%s.xlsx' % (label, datetime.now().strftime('%Y%m%d_%H%M%S'))
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(file_name)
+    workbook.save(response)
+    return response

@@ -48,6 +48,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       <div class="card">
         <div class="card-header">
           <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseCar' %}">เพิ่ม รถร่วม <i class="fa-solid fa-circle-plus"></i></a>
+          <a type="button" class="btn btn-success rounded-pill float-end me-2" href="{% url 'exportExcelBaseSetting' 'car' %}">ดึงรายละเอียด Excel <i class="fa-solid fa-file-excel"></i></a>
         </div>
         <div class="card-body">
           <form method="get" class="row gx-3 gy-2 align-items-center" id="form_filter">

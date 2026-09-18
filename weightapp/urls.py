@@ -122,6 +122,8 @@ urlpatterns = [
     path('baseCarRegistration/create',views.createBaseCarRegistration,name="createBaseCarRegistration"),
     path('baseCarRegistration/edit/<str:id>',views.editBaseCarRegistration,name="editBaseCarRegistration"),
 
+    path('baseSetting/export/<str:base>',views.exportExcelBaseSetting,name="exportExcelBaseSetting"),
+
     path('exportExcelStoneEstimateAndProduction/', views.exportExcelStoneEstimateAndProduction,name="exportExcelStoneEstimateAndProduction"),
     path('exportExcelStoneEstimateAndProduction/dashboard', views.exportExcelStoneEstimateAndProductionDashboard,name="exportExcelStoneEstimateAndProductionDashboard"),
     path('exportWeightToExpress/', views.exportWeightToExpress,name="exportWeightToExpress"),

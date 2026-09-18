@@ -3,6 +3,10 @@ from django.urls import reverse
 from weightapp.models import BaseCompany, BaseWeightStation, WeightDelivery, DeliveryOrder, BaseCarryType, BaseTransport
 import json
 from unittest.mock import patch, MagicMock
+import io, openpyxl
+from django.contrib.auth.models import User
+from weightapp.models import BaseJobType, BaseDriver
+from weightapp.views import BASE_SETTING_EXPORTS, _baseSettingExportFields
 
 class UCWeightDeliveryTests(TestCase):
     def setUp(self):
@@ -850,3 +854,60 @@ class ExportExcelWeightTableTests(TestCase):
         # ยังแบ่งหน้าละ 10 เหมือนเดิม
         self.assertEqual(len(response.context['weight'].object_list), 10)
         self.assertEqual(response.context['weight'].paginator.count, 26)
+
+
+class BaseSettingExcelExportTests(TestCase):
+    """ปุ่ม 'ดึงรายละเอียด Excel' บนหน้า setting ของทุก base"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username='export_tester', password='pw12345')
+        self.client.force_login(self.user)
+        #view อ่าน session['company_code'] เหมือน view อื่นในแท็ป Setting
+        session = self.client.session
+        session['company_code'] = 'ALL'
+        session.save()
+
+    def test_export_returns_xlsx_for_every_base(self):
+        for slug in BASE_SETTING_EXPORTS:
+            with self.subTest(base=slug):
+                response = self.client.get(reverse('exportExcelBaseSetting', args=[slug]))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response['Content-Type'],
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                )
+                self.assertIn('attachment', response['Content-Disposition'])
+
+    def test_header_uses_model_verbose_names(self):
+        BaseJobType.objects.create(base_job_type_id='JT01', base_job_type_name='งานทดสอบ')
+
+        response = self.client.get(reverse('exportExcelBaseSetting', args=['jobType']))
+        workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+        worksheet = workbook.active
+
+        header = [cell.value for cell in worksheet[1]]
+        expected = [str(f.verbose_name) for f in _baseSettingExportFields(BaseJobType)]
+        self.assertEqual(header, expected)
+
+        #แถวข้อมูลต้องมีอยู่จริง และหัวตารางถูกตรึงไว้
+        self.assertEqual(worksheet.max_row, 2)
+        self.assertEqual(worksheet.freeze_panes, 'A2')
+        row = [cell.value for cell in worksheet[2]]
+        self.assertIn('งานทดสอบ', row)
+
+    def test_company_column_shows_code_and_name(self):
+        company = BaseCompany.objects.create(code='SLC', name='ศิลาชัย')
+        BaseDriver.objects.create(driver_id='DV01', driver_name='คนขับทดสอบ', company=company)
+
+        response = self.client.get(reverse('exportExcelBaseSetting', args=['driver']))
+        workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+        worksheet = workbook.active
+
+        header = [cell.value for cell in worksheet[1]]
+        row = [cell.value for cell in worksheet[2]]
+        self.assertEqual(row[header.index('บริษัท')], 'SLC - ศิลาชัย')
+
+    def test_unknown_base_returns_404(self):
+        response = self.client.get(reverse('exportExcelBaseSetting', args=['notABase']))
+        self.assertEqual(response.status_code, 404)

@@ -49,6 +49,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         <div class="card-header">
           {% if is_add_stone %}
             <a type="button" class="btn btn-secondary rounded-pill float-end" href="{% url 'createBaseStoneType' %}">เพิ่ม ชนิดหิน <i class="fa-solid fa-circle-plus"></i></a>
+            <a type="button" class="btn btn-success rounded-pill float-end me-2" href="{% url 'exportExcelBaseSetting' 'stoneType' %}">ดึงรายละเอียด Excel <i class="fa-solid fa-file-excel"></i></a>
           {% else %}
             <a type="button" class="btn btn-outline-secondary rounded-pill float-end" href="#">ไม่อนุญาติให้เพิ่มชนิดหิน กรุณาติดต่อผู้มีสิทธิ์</a>
           {% endif %}

@@ -3790,15 +3790,33 @@ def _prefetch_site_production_excel_data(site, line_type_ids, created_dates_list
     min_date = min(created_dates_list)
     max_date = max(created_dates_list)
     earliest_month = datetime.strptime(startDateInMonth(min_date), '%Y-%m-%d').date()
-    cache['weight_by_date'] = {}
-    for se in StoneEstimate.objects.filter(
+    # ยอดผลิต (ตัน) sum จากตาชั่งตรง ๆ ไม่ผูกกับ StoneEstimate
+    # ถ้าอ่านจาก StoneEstimate.scale วันไหนยังไม่ได้ลงประมาณการหิน ช่องจะว่าง
+    # ทั้งที่มีน้ำหนักชั่งจริงอยู่แล้ว (เช่น CTM 15-19/09/2026)
+    cache['weight_by_date'] = {
+        row['date']: row['s']
+        for row in Weight.objects.filter(
+            site=site,
+            bws__weight_type=2,
+            bws__company__code__in=company_in,
+            date__gte=earliest_month,
+            date__lte=max_date,
+        ).values('date').annotate(s=Sum('weight_total'))
+    }
+    # แต่ถ้าวันไหนยอดรวมใน StoneEstimate (total = topup + other + scale) มากกว่า
+    # ยอดจากตาชั่ง ให้ยึดตาม StoneEstimate เพราะมียอดที่ไม่ผ่านตาชั่ง/มาจากโรงโม่อื่นรวมอยู่
+    for row in StoneEstimate.objects.filter(
         site=site,
         company__code__in=company_in,
         created__gte=earliest_month,
         created__lte=max_date,
-    ):
-        if se.created not in cache['weight_by_date']:
-            cache['weight_by_date'][se.created] = se.scale or Decimal('0.00')
+    ).values('created').annotate(s=Sum('total')):
+        se_total = row['s']
+        if se_total is None:
+            continue
+        current = cache['weight_by_date'].get(row['created'])
+        if current is None or se_total > current:
+            cache['weight_by_date'][row['created']] = se_total
     for cd in created_dates_list:
         month_start = datetime.strptime(startDateInMonth(cd), '%Y-%m-%d').date()
         total = sum(

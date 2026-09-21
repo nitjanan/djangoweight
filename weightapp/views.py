@@ -1492,6 +1492,12 @@ WEIGHT_TABLE_EXPORT_ICON_FONT_TRUE = Font(bold=True, color='1E7E34')   # เข�
 WEIGHT_TABLE_EXPORT_ICON_FONT_FALSE = Font(bold=True, color='C0392B')  # แดง
 WEIGHT_TABLE_EXPORT_ICON_ALIGN = Alignment(horizontal='center', vertical='center')
 
+#ฟอนต์สีแดงสำหรับเซลล์ที่ต้องแจ้งเตือน (ทีมว่างเมื่อขนส่งเป็น "ส่งให้", น้ำหนักสุทธิต้นทางน้อยกว่าเกณฑ์)
+WEIGHT_TABLE_EXPORT_WARN_FONT = Font(bold=True, color='C0392B')
+WEIGHT_TABLE_EXPORT_CARRY_SEND = 'ส่งให้'
+WEIGHT_TABLE_EXPORT_NO_TEAM = 'ไม่ระบุทีม'
+WEIGHT_TABLE_EXPORT_ORIGIN_WEIGHT_MIN = Decimal('10.000')
+
 def weightTableFilter(request, company_in):
     data = Weight.objects.filter(bws__company__code__in = company_in
                 ).values(*WEIGHT_TABLE_VALUES
@@ -1542,6 +1548,16 @@ def exportExcelWeightTable(request):
             site_display = '-'
 
         is_apw_val = i.get('is_apw')
+
+        #ขนส่งเป็น "ส่งให้" แต่ไม่ได้ระบุทีม -> ใส่ข้อความ "ไม่ระบุทีม" ฟอนต์สีแดง
+        is_no_team = (i.get('carry_type_name') == WEIGHT_TABLE_EXPORT_CARRY_SEND
+                      and not (i.get('car_team_name') or '').strip())
+
+        #น้ำหนักสุทธิต้นทางน้อยกว่า 10.000 -> ฟอนต์สีแดง
+        origin_weight_val = i.get('origin_weight')
+        is_low_origin_weight = (origin_weight_val is not None
+                                and origin_weight_val < WEIGHT_TABLE_EXPORT_ORIGIN_WEIGHT_MIN)
+
         out_row = []
         for col, (key, label, number_format) in enumerate(WEIGHT_TABLE_EXPORT_COLUMNS):
             if key == 'site_display':
@@ -1550,6 +1566,8 @@ def exportExcelWeightTable(request):
                 value = i.get('mill__mill_name') or '-'
             elif key == 'is_apw':
                 value = WEIGHT_TABLE_EXPORT_ICON_TRUE if is_apw_val else WEIGHT_TABLE_EXPORT_ICON_FALSE
+            elif key == 'car_team_name' and is_no_team:
+                value = WEIGHT_TABLE_EXPORT_NO_TEAM
             elif key in WEIGHT_TABLE_EXPORT_BOOL_LABELS:
                 true_label, false_label = WEIGHT_TABLE_EXPORT_BOOL_LABELS[key]
                 value = true_label if i.get(key) else false_label
@@ -1561,6 +1579,12 @@ def exportExcelWeightTable(request):
                 cell = WriteOnlyCell(worksheet, value=value)
                 cell.font = WEIGHT_TABLE_EXPORT_ICON_FONT_TRUE if is_apw_val else WEIGHT_TABLE_EXPORT_ICON_FONT_FALSE
                 cell.alignment = WEIGHT_TABLE_EXPORT_ICON_ALIGN
+                out_row.append(cell)
+            elif (key == 'car_team_name' and is_no_team) or (key == 'origin_weight' and is_low_origin_weight):
+                cell = WriteOnlyCell(worksheet, value=value)
+                cell.font = WEIGHT_TABLE_EXPORT_WARN_FONT
+                if value is not None and number_format:
+                    cell.number_format = number_format
                 out_row.append(cell)
             elif value is not None and number_format:
                 cell = WriteOnlyCell(worksheet, value=value)
@@ -1620,7 +1644,10 @@ def weightTable(request):
     page = request.GET.get('page')
     weight = p.get_page(page)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), active :"active",}
+    #ธุรกิจท่าเรือ (biz = 2) แสดงคอลัมน์ทีมและน้ำหนักสุทธิต้นทางเพิ่ม
+    is_port_biz = BaseCompany.objects.filter(code = active, biz__id = 2).exists()
+
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), 'is_port_biz' : is_port_biz, active :"active",}
     return render(request, "weight/weightTable.html",context)
 
 @login_required(login_url='login')

@@ -168,6 +168,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>เวลาเข้า</th>
                   <th>เวลาออก</th>
                   <th>ทะเบียนรถ</th>
+                  {% if is_port_biz %}
+                  <th>ทีม</th>
+                  {% endif %}
                   <th>ลูกค้า</th>
                   <th>หิน</th>
                   <th>ต้นทาง</th>
@@ -175,6 +178,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <th>นน.เข้า</th>
                   <th>นน.ออก</th>
                   <th>นน.สุทธิ</th>
+                  {% if is_port_biz %}
+                  <th>นน.สุทธิต้นทาง</th>
+                  {% endif %}
                   <th>lc.</th>
                   <th>ผู้ชั่ง</th>
 
@@ -196,6 +202,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.time_in}}</td>
                   <td>{{i.time_out}}</td>
                   <td>{{i.car_registration_name}}</td>
+                  {% if is_port_biz %}
+                  {# ขนส่งเป็น "ส่งให้" แต่ไม่ได้ระบุทีม -> แสดง "ไม่ระบุทีม" ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
+                  <td>
+                    {% if i.carry_type_name == 'ส่งให้' and not i.car_team_name %}
+                      <span class="fw-bold" style="color:#C0392B;">ไม่ระบุทีม</span>
+                    {% else %}
+                      {{i.car_team_name|default_if_none:""}}
+                    {% endif %}
+                  </td>
+                  {% endif %}
                   <td>{{i.customer__customer_name}}</td>
                   <td>{{i.stone_type__base_stone_type_name}}</td>
                   <td>{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}</td>
@@ -203,6 +219,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td>{{i.weight_in |intcomma}}</td>
                   <td>{{i.weight_out |intcomma}}</td>
                   <td>{{i.weight_total |intcomma}}</td>
+                  {% if is_port_biz %}
+                  {# น้ำหนักสุทธิต้นทางน้อยกว่า 10.000 -> ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
+                  <td>
+                    {% if i.origin_weight != None and i.origin_weight < 10 %}
+                      <span class="fw-bold" style="color:#C0392B;">{{i.origin_weight|intcomma}}</span>
+                    {% else %}
+                      {{i.origin_weight|default_if_none:""|intcomma}}
+                    {% endif %}
+                  </td>
+                  {% endif %}
                   <td>{{i.base_weight_station_name}}</td>
                   <td>{{i.scale_name}}</td>
 

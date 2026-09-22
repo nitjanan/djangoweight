@@ -183,12 +183,13 @@
                 <tr>
                   <th style="min-width: 180px;">ทีม <span class="text-danger">*</span></th>
                   <th style="min-width: 200px;">ประเภทการแบกน้ำหนัก <span class="text-danger">*</span></th>
-                  <th style="min-width: 120px;">ค่าขนส่ง</th>
                   <th style="min-width: 140px;">ค่าขนส่งตามสัญญา<br /><small class="fw-normal">บาท/ตัน</small></th>
+                  <th style="min-width: 160px;">น้ำมันฐานวันทำสัญญา<br /><small class="fw-normal">บาท/ลิตร</small></th>
+                  <th style="min-width: 160px;">วันทำสัญญา</th>
+                  <th style="min-width: 120px;">ค่าขนส่ง</th>
                   <th style="min-width: 150px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small> <span class="text-danger">*</span></th>
                   <th style="min-width: 120px;">ลดบาท/ตัน</th>
                   <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.<br /><small class="fw-normal">คำนวณอัตโนมัติ</small></th>
-                  <th style="min-width: 160px;">น้ำมันฐานวันทำสัญญา<br /><small class="fw-normal">บาท/ลิตร</small></th>
                   <th style="min-width: 200px;">เงื่อนไขการชำระเงิน</th>
                   <th style="min-width: 160px;">หมายเหตุ</th>
                   <th style="width: 96px;">จัดการ</th>
@@ -490,16 +491,30 @@
     return v;
   }
 
+  // [น้ำหนักต่ำสุด, น้ำหนักสูงสุด] ของช่วงที่เลือก ยังไม่เลือกให้อยู่ท้ายสุดของทีม
+  const BAND_RANGE = {};
+  WEIGHT_CARRIED_CHOICES.forEach(function (c) {
+    BAND_RANGE[String(c[0])] = [parseFloat(c[3]), parseFloat(c[4])];
+  });
+
+  function bandSortKey(select) {
+    return BAND_RANGE[select.value] || [Infinity, Infinity];
+  }
+
   function groupTeamRows() {
     const tbody = document.getElementById('ifr_team_rows');
     const rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
     if (!rows.length) return;
 
-    // sort ของ JS เป็น stable อยู่แล้ว ลำดับเดิมภายในทีมเดียวกันจึงไม่สลับ
+    // เรียงตามทีมก่อน แล้วในทีมเดียวกันเรียงตามช่วงน้ำหนักจากน้อยไปมาก
+    // sort ของ JS เป็น stable แถวที่ช่วงน้ำหนักเท่ากันจึงคงลำดับเดิม
     rows.sort(function (a, b) {
       const ka = teamSortKey(a.querySelector('.ifr-team-select'));
       const kb = teamSortKey(b.querySelector('.ifr-team-select'));
-      return ka < kb ? -1 : (ka > kb ? 1 : 0);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      const ba = bandSortKey(a.querySelector('.ifr-weight-carried'));
+      const bb = bandSortKey(b.querySelector('.ifr-weight-carried'));
+      return ba[0] - bb[0] || ba[1] - bb[1];
     });
 
     let previousKey = null;
@@ -578,15 +593,17 @@
       '<td class="ifr-team-cell"><select class="form-select ifr-team-select" data-selected="'
         + escapeHtml(teamValueForSelect) + '">' + teamOptionsHtml() + '</select></td>' +
       '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-contract-rate" ' +
              'title="ค่าขนส่งที่ตกลงกันตอนทำสัญญา เก็บไว้เทียบเฉย ๆ" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-contract-fuel" ' +
+             'title="ราคาน้ำมันวันที่เซ็นสัญญาของช่วงน้ำหนักนี้" /></td>' +
+      '<td><input type="date" class="form-control ifr-contract-date" ' +
+             'title="วันที่เซ็นสัญญาของช่วงน้ำหนักนี้ ทีมเดียวกันคนละช่วงทำสัญญาคนละวันได้" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-fuel-adjustment" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
       '<td><input type="text" class="form-control ifr-rate-per-ton-km bg-light" readonly tabindex="-1" ' +
              'title="ค่าขนส่ง ÷ ระยะทาง" placeholder="กรอกค่าขนส่งและระยะทาง" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-contract-fuel" ' +
-             'title="ราคาน้ำมันวันที่เซ็นสัญญา ทีมเดียวกันต้องเท่ากันทุกแถว" /></td>' +
       '<td><div class="d-flex gap-1">' +
         '<select class="form-select ifr-pay-type">' +
           '<option value="">ยังไม่ระบุ</option>' +
@@ -613,12 +630,11 @@
     tr.querySelector('.ifr-fuel-adjustment').value = row.fuel_freight_adjustment == null ? '' : row.fuel_freight_adjustment;
     tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
+    // ค่าตอนทำสัญญา 3 ช่องเป็นของแต่ละช่วงน้ำหนัก ทีมเดียวกันคนละช่วงทำสัญญาคนละวันได้
+    // จึงไม่ sync ข้ามแถวเหมือนเงื่อนไขการชำระเงิน
     tr.querySelector('.ifr-contract-rate').value = row.contract_freight_rate == null ? '' : row.contract_freight_rate;
-    // ราคาน้ำมันวันทำสัญญาเป็นของทีม แก้แถวเดียวให้ตามไปทุกแถวของทีมนั้น (backend บังคับอยู่แล้ว)
     tr.querySelector('.ifr-contract-fuel').value = row.contract_base_fuel_price == null ? '' : row.contract_base_fuel_price;
-    tr.querySelector('.ifr-contract-fuel').addEventListener('input', function () {
-      syncTeamContractFuel(tr);
-    });
+    tr.querySelector('.ifr-contract-date').value = row.contract_date || '';
     setPayment(tr, row.credit_days);
 
     // บาท/ตัน/กม. ไม่ได้อ่านจากค่าที่เก็บไว้ คิดสดจากช่องบนจอเสมอ ให้ตรงกับที่ server จะคิดตอนบันทึก
@@ -645,6 +661,10 @@
     tr.querySelector('.ifr-team-select').addEventListener('change', function () {
       refreshAllTeamsLabel();
     });
+    // เลือกช่วงน้ำหนักแล้วจัดแถวในทีมให้เรียงจากน้ำหนักน้อยไปมาก
+    tr.querySelector('.ifr-weight-carried').addEventListener('change', function () {
+      groupTeamRows();
+    });
 
     // เพิ่มช่วงน้ำหนักให้ทีมเดิม : ทีมเดียวมักมีหลายช่วงคนละราคา ถ้าให้ไปกด "เพิ่มทีม"
     // แล้วค้นหาชื่อทีมซ้ำทุกครั้ง จะเสียเวลาและพิมพ์ผิดง่าย ปุ่มนี้ยกทีมมาให้เลย
@@ -658,10 +678,10 @@
       }
       // ALL_TEAMS เก็บลง db เป็น team = null ต้องแปลงกลับให้ addTeamRow อ่านออก
       // เงื่อนไขการชำระเงินยกตามมาด้วย ต่างจากราคาที่เว้นว่าง เพราะเป็นของทีม ไม่ขึ้นกับช่วงน้ำหนัก
+      // ค่าตอนทำสัญญาไม่ยกตาม เพราะคนละช่วงน้ำหนักทำสัญญาคนละวันได้
       addTeamRow({
         team_id: select.value === ALL_TEAMS ? null : select.value,
         credit_days: creditDaysOf(tr),
-        contract_base_fuel_price: orNull(tr.querySelector('.ifr-contract-fuel').value),
       });
     });
 
@@ -787,19 +807,6 @@
     return rows;
   }
 
-  // ---------- ค่าที่ตกลงกันตอนทำสัญญา ----------
-  // ราคาน้ำมันวันทำสัญญาเป็นข้อตกลงระดับทีม ไม่ได้แยกตามช่วงน้ำหนัก แถวของทีมเดียวกันจึงต้องเท่ากัน
-  // (backend บังคับอยู่แล้ว ตรงนี้ทำให้ผู้ใช้ไม่ต้องไล่แก้ทีละแถว)
-  function syncTeamContractFuel(source) {
-    const teamValue = source.querySelector('.ifr-team-select').value;
-    if (teamValue === '') return;
-    const value = source.querySelector('.ifr-contract-fuel').value;
-    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
-      if (tr === source || tr.querySelector('.ifr-team-select').value !== teamValue) return;
-      tr.querySelector('.ifr-contract-fuel').value = value;
-    });
-  }
-
   // ---------- ค่าขนส่ง บาท/ตัน/กม. ----------
   // = ค่าขนส่ง / ระยะทาง  แสดงให้ดูเฉย ๆ ไม่ส่งไป server เพราะ server คิดเองตอนบันทึก (ปัด 2 ตำแหน่ง)
   function parseNumber(value) {
@@ -836,6 +843,7 @@
         credit_days: creditDaysOf(tr),
         contract_freight_rate: orNull(tr.querySelector('.ifr-contract-rate').value),
         contract_base_fuel_price: orNull(tr.querySelector('.ifr-contract-fuel').value),
+        contract_date: orNull(tr.querySelector('.ifr-contract-date').value),
         note: orNull(tr.querySelector('.ifr-team-note').value),
       });
     });
@@ -860,6 +868,7 @@
     credit_days: 'เครดิต (วัน)',
     contract_freight_rate: 'ค่าขนส่งตามสัญญา',
     contract_base_fuel_price: 'ราคาน้ำมันฐานวันทำสัญญา',
+    contract_date: 'วันทำสัญญา',
     team_id: 'ทีมขนส่ง',
     teams: 'ทีมขนส่ง',
     non_field_errors: 'ข้อมูลไม่ถูกต้อง',

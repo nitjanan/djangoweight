@@ -219,25 +219,27 @@
                 <!-- แถวรายละเอียดทีมของรายการนี้ ซ่อนไว้ กดปุ่มจำนวนทีมเพื่อเปิด -->
                 <tr id="ifr-teams-{{ i.id }}" class="d-none">
                   <td colspan="8" class="bg-light">
-                    {% if i.teams.all %}
+                    {% if i.sorted_teams %}
                     <table class="table table-sm table-bordered mb-0">
                       <thead>
                         <tr>
                           <th>ทีม</th>
                           <th>ประเภทการแบกน้ำหนัก</th>
+                          <th>ค่าขนส่ง<br /><small class="fw-normal">ตามสัญญา</small></th>
+                          <th>น้ำมันฐาน<br /><small class="fw-normal">วันทำสัญญา</small></th>
+                          <th>วันทำสัญญา</th>
                           <th>ค่าขนส่ง</th>
-                          <th>ตามสัญญา</th>
                           <th>ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small></th>
                           <th>ลดบาท/ตัน</th>
                           <th>บาท/ตัน/กม.</th>
-                          <th>น้ำมันฐาน<br /><small class="fw-normal">วันทำสัญญา</small></th>
                           <th>การชำระเงิน</th>
                           <th>หมายเหตุ</th>
                         </tr>
                       </thead>
                       <tbody>
                         {# ทีมเดียวกันมักมีหลายช่วงน้ำหนัก จับกลุ่มแล้วรวมช่องชื่อทีมด้วย rowspan #}
-                        {% regroup i.teams.all by team_id as team_groups %}
+                        {# sorted_teams เรียงทีมให้อยู่ติดกันแล้ว regroup จึงจับกลุ่มได้ครบ #}
+                        {% regroup i.sorted_teams by team_id as team_groups %}
                         {% for group in team_groups %}
                           {% for t in group.list %}
                           <tr>
@@ -258,12 +260,13 @@
                             </td>
                             {% endif %}
                             <td>{{ t.weight_carried.description|default_if_none:"-" }}</td>
-                            <td>{{ t.freight_rate|default_if_none:"-" }}</td>
                             <td>{{ t.contract_freight_rate|default_if_none:"-" }}</td>
+                            <td>{{ t.contract_base_fuel_price|default_if_none:"-" }}</td>
+                            <td>{{ t.contract_date_th|default_if_none:"-" }}</td>
+                            <td>{{ t.freight_rate|default_if_none:"-" }}</td>
                             <td>{{ t.fuel_freight_adjustment|default_if_none:"-" }}</td>
                             <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
                             <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
-                            <td>{{ t.contract_base_fuel_price|default_if_none:"-" }}</td>
                             <td>{{ t.paymentTermLabel|default_if_none:"ยังไม่ระบุ" }}</td>
                             <td>{{ t.note|default_if_none:"-" }}</td>
                           </tr>

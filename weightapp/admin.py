@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
 from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
@@ -625,11 +625,27 @@ class ClientUpdateLogAdmin(admin.ModelAdmin):
     ordering = ('-checked_at',)
 
 
+class BaseCompanyMapCustomerAliasInline(admin.TabularInline):
+    # ใส่รหัสลูกค้าสำรองในหน้าแถว map เลย เช่น สุราษฎร์พอร์ท 06-V-024 มีรหัสสำรอง 77-V-007
+    model = BaseCompanyMapCustomerAlias
+    extra = 0
+    autocomplete_fields = ['base_customer']
+
+
 class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'name', 'base_company', 'base_customer', 'oi_soc_code')
-    search_fields = ('base_company__name', 'base_customer__customer_name', 'oi_soc_code')
+    list_display = ('id', 'name', 'base_company', 'base_customer', 'alias_codes', 'oi_soc_code')
+    search_fields = ('base_company__name', 'base_customer__customer_name', 'oi_soc_code',
+                     'customer_aliases__base_customer__customer_id')
     autocomplete_fields = ['base_company', 'base_customer']
+    inlines = [BaseCompanyMapCustomerAliasInline]
     list_per_page = 20
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('customer_aliases')
+
+    @admin.display(description='รหัสลูกค้าสำรอง')
+    def alias_codes(self, obj):
+        return ', '.join(a.base_customer_id for a in obj.customer_aliases.all()) or '-'
 
 class InternationalFreightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'origin', 'destination', 'version', 'status', 'effective_date', 'created_at')

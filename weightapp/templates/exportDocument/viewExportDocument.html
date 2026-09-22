@@ -301,7 +301,7 @@
         <h5 class="card-title mb-0">แก้ไขข้อมูลผ่าน Excel</h5>
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
           โหลดไฟล์ไปแก้ → อัปกลับ → ระบบให้ดูก่อนว่าจะเปลี่ยนอะไร → กดยืนยันถึงจะบันทึกลงฐานข้อมูล |
-          แก้ได้ 3 ช่อง <strong>นน.ต้นทาง / นน.ปลายทาง / ทีมรถร่วม</strong> | คนละไฟล์กับปุ่ม Export รายงานด้านบน
+          แก้ได้ช่องเดียว <strong>นน.ปลายทาง</strong> | คนละไฟล์กับปุ่ม Export รายงานด้านบน
         </p>
       </div>
       <div class="card-body">
@@ -415,6 +415,42 @@
     <div class="card ifr-health mb-3">
       <div class="card-body py-3">
 
+        {% comment %}
+        สถานะการอ่านบิลเติมน้ำมันจาก Express (Postgres คนละเครื่อง ต่อไม่ติดเมื่อไหร่ก็ได้)
+        ต้องขึ้นเสมอ ไม่ว่าเที่ยวอื่นจะคิดเงินได้ครบหรือไม่
+        เดิมอยู่ในส่วน "คิดเงินได้ไม่ครบ" เดือนที่ทุกเที่ยวคิดเงินได้ หน้าจอจึงขึ้นว่าข้อมูลครบ
+        ทั้งที่ยอดหักค่าน้ำมันหายไปทั้งก้อน
+        {% endcomment %}
+        {% if rate_stats.fuel_bill.error %}
+          {% if rate_stats.fuel_bill.source == 'snapshot' %}
+          <div class="ifr-issue ifr-issue-warn mb-3">
+            <div class="ifr-issue-num">Express</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ ใช้สำเนาบิลที่ดึงไว้เมื่อ {{ rate_stats.fuel_bill.snapshot_at_th }}</div>
+              <div class="ifr-issue-text">
+                ราคาน้ำมันเฉลี่ยและยอดหักค่าน้ำมันของทีมรถร่วม (sheet oil) คิดจากสำเนานี้
+                บิลที่เพิ่มในระบบ Express หลังเวลานั้นจะไม่อยู่ในไฟล์<br />
+                <strong>ถ้าต้องการข้อมูลล่าสุด:</strong> รอให้ต่อ Express ได้ แล้วโหลดไฟล์ใหม่<br />
+                <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
+              </div>
+            </div>
+          </div>
+          {% else %}
+          <div class="ifr-issue ifr-issue-bad mb-3">
+            <div class="ifr-issue-num">Express</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ และยังไม่เคยมีสำเนาบิลของเดือนนี้</div>
+              <div class="ifr-issue-text">
+                ราคาน้ำมันเฉลี่ยใช้ราคารายวันที่กรอกในระบบ เฉลี่ยจากวันที่รถวิ่งแทน<br />
+                <strong>sheet oil จะว่าง ยอดหักค่าน้ำมันของทีมรถร่วมจะเป็น 0</strong>
+                — อย่าใช้ไฟล์นี้จ่ายเงินจนกว่าจะต่อ Express ได้<br />
+                <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endif %}
+
         {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count %}
         <div class="d-flex align-items-center gap-2">
           <span class="ifr-health-icon text-success"><i class="bi bi-check-circle-fill"></i></span>
@@ -506,24 +542,6 @@
           </div>
           {% endif %}
 
-          {% comment %}
-          ราคาน้ำมันหลักมาจากบิลเติมน้ำมันจริงในระบบ Express (Postgres คนละเครื่อง)
-          ต่อไม่ติดเมื่อไหร่ก็ได้ ระบบจะถอยไปเฉลี่ยจากวันที่วิ่งแทนแล้วไฟล์ยังออกได้
-          แต่ต้องบอกให้เห็นชัด ไม่งั้นตัวเลขเปลี่ยนวิธีคิดโดยไม่มีใครรู้
-          {% endcomment %}
-          {% if rate_stats.fuel_bill.error %}
-          <div class="ifr-issue ifr-issue-warn">
-            <div class="ifr-issue-num">Express</div>
-            <div class="ifr-issue-body">
-              <div class="ifr-issue-title">อ่านบิลเติมน้ำมันจากระบบ Express ไม่ได้</div>
-              <div class="ifr-issue-text">
-                ราคาน้ำมันในไฟล์นี้จึงไม่ได้ถ่วงตามจำนวนครั้งที่เติมจริง
-                แต่ใช้วิธีสำรองคือเฉลี่ยราคารายวันของวันที่รถวิ่ง<br />
-                <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
-              </div>
-            </div>
-          </div>
-          {% endif %}
 
           {% comment %}
           ไม่มีราคาน้ำมัน = ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันเลยเป็น 0

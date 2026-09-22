@@ -1775,10 +1775,12 @@ class InternationalFreightRateTeam(models.Model):
     # ค่าขนส่งตามสัญญาแยกตามช่วงแบก นน. เหมือน freight_rate เพราะสัญญาก็ระบุแยกช่วงอยู่แล้ว
     contract_freight_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
                                                 verbose_name="ค่าขนส่งตามสัญญา (บาท/ตัน)")
-    # ราคาน้ำมันวันที่เซ็นสัญญา เป็นค่าเดียวของทีม ไม่แยกตามช่วงน้ำหนัก (serializer บังคับให้ทุกแถวเท่ากัน)
+    # ราคาน้ำมันวันที่เซ็นสัญญา เก็บรายแถว เพราะทีมเดียวกันคนละช่วงแบก นน. ทำสัญญาคนละวันได้
     # เก็บเป็นค่าเดียว ไม่ใช่ช่วง ต่างจากราคาน้ำมันฐานของใบที่เป็นช่วง
     contract_base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
                                                    verbose_name="ราคาน้ำมันฐานวันทำสัญญา (บาท/ลิตร)")
+    # วันที่เซ็นสัญญาของแถวนี้ (ทีม + ช่วงแบก นน.) ว่างได้ แถวเก่าปล่อยว่าง ยังไม่ใช้คิดเงิน
+    contract_date = models.DateField(null=True, blank=True, verbose_name="วันทำสัญญา")
 
     class Meta:
         db_table = 'international_freight_rate_team'

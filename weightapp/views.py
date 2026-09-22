@@ -10607,7 +10607,8 @@ def viewInternationalFreightRate(request):
                           .values_list('root_id', 'n'))
 
     for row in rows:
-        teams = list(row.teams.all())
+        teams = _ifrSortTeams(row.teams.all())
+        row.sorted_teams = teams
         # แถว team = NULL ครอบคลุม "ทุกทีม" ก็ต่อเมื่อไม่มีแถวไหนระบุทีมเจาะจง
         # ถ้ามี แถวนั้นเหลือแค่ "ทีมที่เหลือ" ใช้ flag นี้ไปเลือกคำที่แสดงในตาราง
         row.has_specific_team = any(t.team_id for t in teams)
@@ -10712,8 +10713,9 @@ IFR_EXPORT_SUBHEAD_ROW = 9       # แถวหัวย่อย เดิม/�
 IFR_EXPORT_FIRST_DATA_ROW = 10
 IFR_EXPORT_FIXED_COLS = 6        # ที่ / ต้นทาง / ปลายทาง / ระยะทาง / น้ำมันฐาน (เดิม+ใหม่)
 IFR_EXPORT_BASE_FUEL_COL = 5     # คอลัมน์แรกของกลุ่มราคาน้ำมันฐาน (เดิม, ใหม่)
-# เดิม / ใหม่ / ตามสัญญา / น้ำมัน ± 1 / ค่าขนส่ง บาท/ตัน/กม. / ลดบาท/ตัน / หมายเหตุ
-IFR_EXPORT_BAND_WIDTH = 7
+# ตามสัญญา / น้ำมันฐานวันทำสัญญา / วันทำสัญญา / เดิม / ใหม่ / น้ำมัน ± 1 / ค่าขนส่ง บาท/ตัน/กม. / ลดบาท/ตัน / หมายเหตุ
+# ลำดับเดียวกับตารางทีมในหน้า create/edit
+IFR_EXPORT_BAND_WIDTH = 9
 
 IFR_EXPORT_SUBJECT = '( ****ใส่เรื่อง**** )'
 IFR_EXPORT_TO = '( ****ใส่ชื่อผู้รับบันทึก**** )       ( ****ใส่ตำแหน่ง**** )'
@@ -10832,10 +10834,8 @@ def exportExcelInternationalFreightRate(request):
     #
     # ส่วนเงื่อนไขการชำระเงินเป็นข้อตกลงระดับทีม ทุกช่วงของทีมเดียวกันต้องเป็นค่าเดียวกัน
     # (serializer บังคับไว้) จึงให้คอลัมน์เดียวต่อแถวทีม ไม่ต้องซ้ำทุกช่วง
-    # ราคาน้ำมันวันทำสัญญาก็เป็นของทีม (ค่าเดียวทุกช่วงน้ำหนัก) จึงอยู่กลุ่มเดียวกับเงื่อนไขการชำระเงิน
-    contract_fuel_col = col
-    payment_col = col + 1
-    note_col = col + 2
+    payment_col = col
+    note_col = col + 1
     last_col = note_col
 
     workbook = openpyxl.Workbook()
@@ -10886,7 +10886,8 @@ def exportExcelInternationalFreightRate(request):
         cell.font = Font(bold=True)
         cell.alignment = center
         cell.fill = head_fill
-        for i, sub in enumerate(('เดิม', 'ใหม่', 'ตาม\nสัญญา', 'น้ำมัน\n± 1',
+        for i, sub in enumerate(('ตาม\nสัญญา', 'น้ำมันฐาน\nวันทำสัญญา', 'วันทำ\nสัญญา',
+                                 'เดิม', 'ใหม่', 'น้ำมัน\n± 1',
                                  'ค่าขนส่ง\nบาท/ตัน/กม.', 'ลด\nบาท/ตัน', 'หมายเหตุ')):
             sub_cell = worksheet.cell(row=IFR_EXPORT_SUBHEAD_ROW, column=start + i)
             sub_cell.value = sub
@@ -10912,8 +10913,7 @@ def exportExcelInternationalFreightRate(request):
         sub_cell.fill = head_fill
 
     fixed_heads = [(1, 'ที่'), (2, 'ต้นทาง'), (3, 'ปลายทาง'), (4, 'ระยะทาง (กม.)')]
-    for column, text in fixed_heads + [(contract_fuel_col, 'ราคาน้ำมันฐาน\nวันทำสัญญา (บาท/ลิตร)'),
-                                       (payment_col, 'เงื่อนไขการชำระเงิน'),
+    for column, text in fixed_heads + [(payment_col, 'เงื่อนไขการชำระเงิน'),
                                        (note_col, 'หมายเหตุของเส้นทาง')]:
         worksheet.merge_cells(start_row=IFR_EXPORT_HEAD_ROW, start_column=column,
                               end_row=IFR_EXPORT_SUBHEAD_ROW, end_column=column)
@@ -10949,7 +10949,7 @@ def exportExcelInternationalFreightRate(request):
         current_cell.value = rate.baseFuelPriceLabel()
         current_cell.alignment = Alignment(horizontal='right')
         # ป้ายบอกที่มาของช่อง "เดิม" ใส่แค่แถวหลักของเส้นทาง ไม่ใส่ซ้ำทุกแถวทีม
-        _ifrExportWriteTeamRow(worksheet, row, shared, band_col, contract_fuel_col,
+        _ifrExportWriteTeamRow(worksheet, row, shared, band_col,
                                payment_col, note_col, rate,
                                previous_rates.get(rate.id), previous_labels.get(rate.id),
                                is_route_row=True)
@@ -10966,7 +10966,7 @@ def exportExcelInternationalFreightRate(request):
         for team_index, team_rates in enumerate(by_team.values(), start=1):
             worksheet.cell(row=row, column=2).value = '%d. %s' % (
                 team_index, team_rates[0].team.car_team_name)
-            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, contract_fuel_col,
+            _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col,
                                    payment_col, note_col, rate,
                                    previous_rates.get(rate.id))
             row += 1
@@ -10992,12 +10992,13 @@ def exportExcelInternationalFreightRate(request):
     # ราคาน้ำมันฐานเป็นช่วง "30.00 - 30.99" ยาว 13 ตัวอักษร กว้าง 10 จะโดนตัด
     worksheet.column_dimensions['E'].width = 15
     worksheet.column_dimensions['F'].width = 15
-    for c in range(IFR_EXPORT_FIXED_COLS + 1, contract_fuel_col):
+    for c in range(IFR_EXPORT_FIXED_COLS + 1, payment_col):
         worksheet.column_dimensions[get_column_letter(c)].width = 11
     # ช่องหมายเหตุของแต่ละช่วงน้ำหนักเป็นข้อความ ต้องกว้างกว่าช่องตัวเลข
     for start in band_col.values():
-        worksheet.column_dimensions[get_column_letter(start + 6)].width = 22
-    worksheet.column_dimensions[get_column_letter(contract_fuel_col)].width = 18
+        # วันทำสัญญาเป็นวันที่ไทย "15/06/2569" กว้าง 11 จะโดนตัด
+        worksheet.column_dimensions[get_column_letter(start + 2)].width = 13
+        worksheet.column_dimensions[get_column_letter(start + 8)].width = 22
     worksheet.column_dimensions[get_column_letter(payment_col)].width = 18
     worksheet.column_dimensions[get_column_letter(note_col)].width = 34
     worksheet.row_dimensions[IFR_EXPORT_HEAD_ROW].height = 32
@@ -11017,7 +11018,7 @@ def exportExcelInternationalFreightRate(request):
     return _exportDocumentMarkDownloadDone(request, response)
 
 
-def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, contract_fuel_col, payment_col,
+def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, payment_col,
                            note_col, rate, previous_rates=None, previous_label=None,
                            is_route_row=False):
     """ลงอัตราของทีมหนึ่ง (หรือของแถว "ทุกทีม") ลงในแถวเดียว กระจายไปตามคอลัมน์ช่วงน้ำหนัก
@@ -11039,36 +11040,38 @@ def _ifrExportWriteTeamRow(worksheet, row, team_rates, band_col, contract_fuel_c
                    and column_band.max_weight <= band.max_weight]
         previous_rate = (previous_rates or {}).get((team_rate.team_id, band.id))
         for start in targets:
-            if previous_rate is not None:
-                worksheet.cell(row=row, column=start).value = float(previous_rate)
-            if team_rate.freight_rate is not None:
-                worksheet.cell(row=row, column=start + 1).value = float(team_rate.freight_rate)
-            # ค่าขนส่งตามสัญญาแยกตามช่วงน้ำหนักเหมือนค่าขนส่งที่ใช้จริง จึงอยู่ในกลุ่มของช่วงนั้น
+            # ค่าตอนทำสัญญา 3 ช่องเป็นของแถวทีม (ทีม + ช่วงแบก นน.) ทีมเดียวกันคนละช่วงทำสัญญาคนละวันได้
             if team_rate.contract_freight_rate is not None:
-                worksheet.cell(row=row, column=start + 2).value = float(
-                    team_rate.contract_freight_rate)
+                worksheet.cell(row=row, column=start).value = float(team_rate.contract_freight_rate)
+            if team_rate.contract_base_fuel_price is not None:
+                worksheet.cell(row=row, column=start + 1).value = float(
+                    team_rate.contract_base_fuel_price)
+            if team_rate.contract_date is not None:
+                date_cell = worksheet.cell(row=row, column=start + 2)
+                date_cell.value = _thaiShortDate(team_rate.contract_date)
+                date_cell.alignment = Alignment(horizontal='center')
+            if previous_rate is not None:
+                worksheet.cell(row=row, column=start + 3).value = float(previous_rate)
+            if team_rate.freight_rate is not None:
+                worksheet.cell(row=row, column=start + 4).value = float(team_rate.freight_rate)
             # ค่าปรับตามน้ำมันเป็นของแถวทีม (ทีม + ช่วงแบก นน.) ไม่ใช่ของทั้งใบแล้ว
             # ช่อง "น้ำมัน ± 1" เป็นคอลัมน์ย่อยใต้ช่วงน้ำหนักอยู่แล้ว จึงลงตรงนี้ได้เลยไม่ต้องแก้โครง
             if team_rate.fuel_freight_adjustment is not None:
-                worksheet.cell(row=row, column=start + 3).value = (
+                worksheet.cell(row=row, column=start + 5).value = (
                     '± %.2f' % team_rate.fuel_freight_adjustment)
             # บาท/ตัน/กม. ของช่วงนี้ คิดจากค่าขนส่งของช่วงนี้หารระยะทาง จึงต้องลงทีละช่วง
             if team_rate.freight_rate_per_ton_km is not None:
-                worksheet.cell(row=row, column=start + 4).value = float(
+                worksheet.cell(row=row, column=start + 6).value = float(
                     team_rate.freight_rate_per_ton_km)
             if team_rate.discount_per_ton is not None:
-                worksheet.cell(row=row, column=start + 5).value = float(team_rate.discount_per_ton)
+                worksheet.cell(row=row, column=start + 7).value = float(team_rate.discount_per_ton)
             # หมายเหตุผูกกับ (ทีม + ช่วงน้ำหนัก) จึงต้องอยู่ในกลุ่มของช่วงนั้น
             # ถ้ารวมไว้ช่องเดียวแล้วต่อกันด้วย | จะอ่านไม่ออกว่าข้อความไหนเป็นของช่วงไหน
             if team_rate.note:
-                note_cell = worksheet.cell(row=row, column=start + 6)
+                note_cell = worksheet.cell(row=row, column=start + 8)
                 note_cell.value = team_rate.note
                 note_cell.alignment = Alignment(wrap_text=True, vertical='top')
-        # เงื่อนไขการชำระเงินกับราคาน้ำมันวันทำสัญญาเป็นของทีม ทุกช่วงค่าเท่ากัน
-        # เขียนทับซ้ำได้ไม่มีปัญหา
-        if team_rate.contract_base_fuel_price is not None:
-            worksheet.cell(row=row, column=contract_fuel_col).value = float(
-                team_rate.contract_base_fuel_price)
+        # เงื่อนไขการชำระเงินเป็นของทีม ทุกช่วงค่าเท่ากัน เขียนทับซ้ำได้ไม่มีปัญหา
         payment = team_rate.paymentTermLabel()
         if payment:
             worksheet.cell(row=row, column=payment_col).value = payment
@@ -11095,7 +11098,7 @@ def internationalFreightRate(request):
     context = {
         'ifr_page': 'active',
         # ส่ง choices ไปให้ template render dropdown ประเภทการแบกน้ำหนัก
-        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
+        'weight_carried_choices': _ifrWeightCarriedChoices(),
         'ifr_obj': None,
         'ifr_teams_json': [],
         'ifr_versions': [],
@@ -11109,6 +11112,18 @@ def internationalFreightRate(request):
         active: "active",
     }
     return render(request, "internationalFreightRate/viewInternationalFreightRateCreate.html", context)
+
+
+def _ifrWeightCarriedChoices():
+    """[[id, คำอธิบาย, ชื่อ, นน.ต่ำสุด, นน.สูงสุด], ...] ให้หน้า create/edit ทำ dropdown ช่วงแบก นน.
+
+    น้ำหนักต่ำสุด/สูงสุดใช้เรียงแถวของทีมเดียวกันจากช่วงน้อยไปมาก ส่งเป็นข้อความ
+    (Decimal ลง JSON ตรง ๆ ไม่ได้) ฝั่ง JS แปลงเป็นตัวเลขเอง
+    """
+    return [[band_id, description, name, str(min_weight), str(max_weight)]
+            for band_id, description, name, min_weight, max_weight
+            in CarryingweightRate.objects.values_list('id', 'description', 'name',
+                                                       'min_weight', 'max_weight')]
 
 
 @login_required(login_url='login')
@@ -11125,7 +11140,7 @@ def editInternationalFreightRate(request, id):
     teams = list(obj.teams.values(
         'team_id', 'weight_carried', 'freight_rate', 'fuel_freight_adjustment',
         'discount_per_ton', 'freight_rate_per_ton_km', 'note', 'credit_days',
-        'contract_freight_rate', 'contract_base_fuel_price',
+        'contract_freight_rate', 'contract_base_fuel_price', 'contract_date',
     ))
     
 
@@ -11137,7 +11152,7 @@ def editInternationalFreightRate(request, id):
 
     context = {
         'ifr_page': 'active',
-        'weight_carried_choices': list(CarryingweightRate.objects.values_list('id', 'description' ,'name')),
+        'weight_carried_choices': _ifrWeightCarriedChoices(),
         'ifr_obj': obj,
         'ifr_teams_json': teams,
         'ifr_version_count': len(version_rows),
@@ -11184,6 +11199,7 @@ def _ifrVersionRows(obj):
             'is_in_use': in_use is not None and v.id == in_use.id,
             'is_open': v.id == obj.id,
             'approvals': list(v.approvals.all()),
+            'teams': _ifrSortTeams(v.teams.all()),
             'effective_th': _ifrEffectiveLabel(v.effective_date),
             'version_th': _ifrVersionLabel(v.version),
         })
@@ -12571,6 +12587,32 @@ def _thaiDate(value):
     if value is None:
         return '-'
     return '%s %s %s' % (value.day, EXPORT_DOC_THAI_MONTHS[value.month - 1], value.year + 543)
+
+
+def _thaiShortDate(value):
+    """วันที่แบบไทยสั้น เช่น '15/06/2569' ใช้ในช่องตารางที่แคบ ค่าว่างคืน None"""
+    if value is None:
+        return None
+    return '%02d/%02d/%d' % (value.day, value.month, value.year + 543)
+
+
+def _ifrSortTeams(teams):
+    """เรียงแถวทีมสำหรับแสดงผล : ทีมเดียวกันอยู่ติดกัน แล้วเรียงตามช่วงแบก นน. น้อยไปมาก
+
+    ลำดับเดียวกับตารางทีมในหน้า create/edit (แถวทุกทีม/ทีมที่เหลือขึ้นก่อน)
+    ติด contract_date_th (วันทำสัญญาแบบไทย) ไว้กับแต่ละแถวให้ template ใช้ได้เลย
+    """
+    def key(t):
+        band = t.weight_carried
+        return (t.team_id is not None, t.team_id or '',
+                band.min_weight if band else Decimal('Infinity'),
+                band.max_weight if band else Decimal('Infinity'),
+                t.id)
+
+    rows = sorted(teams, key=key)
+    for t in rows:
+        t.contract_date_th = _thaiShortDate(t.contract_date)
+    return rows
 
 
 def _ifrVersionLabel(version):

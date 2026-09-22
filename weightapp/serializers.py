@@ -303,6 +303,7 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
             # ค่าตอนทำสัญญา ไม่บังคับกรอก (null = ยังไม่ได้กรอก) ยังไม่มีสูตรไหนเอาไปคิดเงิน
             'contract_freight_rate': {'required': False, 'allow_null': True, 'min_value': 0},
             'contract_base_fuel_price': {'required': False, 'allow_null': True, 'min_value': 0},
+            'contract_date': {'required': False, 'allow_null': True},
         }
 
 
@@ -469,13 +470,11 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         for team_data in teams_data:
             team = team_data.get('team')
             key = team.pk if team else None
-            bucket = by_team.setdefault(key, {'credit_days': set(),
-                                               'contract_base_fuel_price': set()})
+            bucket = by_team.setdefault(key, {'credit_days': set()})
             bucket['credit_days'].add(team_data.get('credit_days'))
-            # ราคาน้ำมันวันทำสัญญาก็เป็นของทีม สัญญาฉบับเดียวไม่ได้เซ็นคนละวันตามช่วงน้ำหนัก
-            bucket['contract_base_fuel_price'].add(team_data.get('contract_base_fuel_price'))
-        labels = {'credit_days': 'เงื่อนไขการชำระเงิน',
-                  'contract_base_fuel_price': 'ราคาน้ำมันฐานวันทำสัญญา'}
+        # ค่าตอนทำสัญญา (ราคา / น้ำมันฐาน / วันที่) ไม่ต้องเท่ากันในทีม
+        # เพราะทีมเดียวกันคนละช่วงแบก นน. ทำสัญญาคนละวันได้
+        labels = {'credit_days': 'เงื่อนไขการชำระเงิน'}
         for team_pk, buckets in by_team.items():
             for field, values in buckets.items():
                 if len(values) > 1:
@@ -595,6 +594,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             s(get('credit_days')),
             s(get('contract_freight_rate')),
             s(get('contract_base_fuel_price')),
+            s(get('contract_date')),
         )
 
     def _rateChanged(self, instance, validated_data, teams_data):
@@ -648,7 +648,8 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
              'freight_rate_per_ton_km': _perTonKm(t.freight_rate, rate.distance), 'note': t.note,
              'credit_days': t.credit_days,
              'contract_freight_rate': t.contract_freight_rate,
-             'contract_base_fuel_price': t.contract_base_fuel_price}
+             'contract_base_fuel_price': t.contract_base_fuel_price,
+             'contract_date': t.contract_date}
             for t in instance.teams.all()
         ]
         for team_data in source_teams:

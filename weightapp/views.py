@@ -4,8 +4,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync
-from django.db.models import Sum, Q, Max, Value
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY
+from django.db.models import Sum, Q, Max, Min, Value
 from decimal import Decimal, InvalidOperation
 from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
@@ -12127,14 +12127,15 @@ def _exportDocumentPickWeightCarried(options, pay_weight):
     return min(matched, key=lambda o: o.max_weight - o.min_weight).name
 
 
-def _exportDocumentTonAttr(role, case):
-    """บทบาทน้ำหนัก (ต้นทาง/ปลายทาง) -> ชื่อฟิลด์จริงใน Weight ตามเคส
+def _exportDocumentTonAttr(role, weighed_at):
+    """บทบาทน้ำหนัก (ต้นทาง/ปลายทาง) -> ชื่อฟิลด์จริงใน Weight ตาม "ชั่งที่ไหน"
 
     ต้องตรงกับที่ _exportDocumentRows ใช้เป๊ะ ๆ ไม่งั้นไฟล์โชว์ค่าหนึ่งแต่ไปเทียบกับอีกค่าหนึ่ง
-      เคส 1 ชั่งที่ท่าเรือ : ต้นทาง = origin_weight | ปลายทาง = weight_total
-      เคส 2 ชั่งที่เหมือง  : ต้นทาง = weight_total  | ปลายทาง = origin_weight
+      ชั่งที่ท่าเรือ : ต้นทาง = origin_weight | ปลายทาง = weight_total
+      ชั่งที่เหมือง  : ต้นทาง = weight_total  | ปลายทาง = origin_weight
+    ห้ามใช้เคสแทน : ใบเหมืองก่อนท่าเรือเปิดใช้ตาชั่งเป็นเคส "ลงท่าเรือเรา" แต่ชั่งที่เหมือง
     """
-    own_port = case == EXPORT_DOC_CASE_OWN_PORT
+    own_port = weighed_at == EXPORT_DOC_WEIGHED_AT_PORT
     if role == 'origin_ton':
         return 'origin_weight' if own_port else 'weight_total'
     return 'weight_total' if own_port else 'origin_weight'
@@ -12554,34 +12555,106 @@ def _ifrEffectiveLabel(effective_date):
 # เคส 2 เอาเฉพาะตาชั่งประเภทที่ 1 (ตาชั่งขาย) ตาชั่งประเภทอื่นของเหมืองไม่เกี่ยวกับการส่งออก
 EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
 
-EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท : ชั่งที่ท่าเรือเรา -> bws คือปลายทาง
-EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น : ชั่งที่เหมืองเรา -> bws คือต้นทาง
+# เคส = เที่ยวนี้ "ไปลงท่าเรือไหน" ดูจากปลายทาง (ใช้เป็นป้ายและตัวกรอง)
+EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท
+EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น
 EXPORT_DOC_CASE_LABELS = {
     EXPORT_DOC_CASE_OWN_PORT: 'ลงท่าเรือของบริษัท',
     EXPORT_DOC_CASE_OTHER_PORT: 'ลงท่าเรือบริษัทอื่น',
 }
 
+# ชั่งที่ไหน = ใบนี้ออกจากตาชั่งฝั่งไหนของเที่ยว (ใช้สลับต้นทาง/ปลายทาง และเลือกช่องน้ำหนัก)
+# แยกจากเคส เพราะเที่ยวลงท่าเรือเราที่เกิดก่อนท่าเรือเปิดใช้ตาชั่ง มีแต่ใบที่ชั่งที่เหมือง
+EXPORT_DOC_WEIGHED_AT_PORT = 'port'   # ชั่งที่ท่าเรือเรา : bws = ปลายทาง, customer = ต้นทาง
+EXPORT_DOC_WEIGHED_AT_MINE = 'mine'   # ชั่งที่เหมืองเรา  : bws = ต้นทาง, customer = ปลายทาง
 
-def _exportDocumentCaseOf(bws_id, own_port_bws):
-    """เที่ยวนี้เป็นเคสไหน
 
-    ตัวแบ่งคือ "ตาชั่งที่ออกใบเป็นของท่าเรือเราหรือเปล่า"
-    - อยู่ในท่าเรือเรา  = ชั่งตอนรถมาลง  -> bws คือปลายทาง, customer คือต้นทาง (เคส 1)
-    - ไม่อยู่           = ชั่งตอนรถออกจากเหมืองเรา -> bws คือต้นทาง, customer คือปลายทาง (เคส 2)
+def _exportDocumentWeighedAt(bws_id, own_port_bws):
+    """ใบนี้ชั่งที่ท่าเรือเรา หรือชั่งที่เหมือง ดูจากบริษัทเจ้าของตาชั่ง (biz = ขายหินส่งออก)"""
+    return EXPORT_DOC_WEIGHED_AT_PORT if bws_id in own_port_bws else EXPORT_DOC_WEIGHED_AT_MINE
 
-    ถ้าวันหลังต้องจำกัดเคส 2 ให้แคบลง (เช่นเอาเฉพาะลูกค้าที่เป็นท่าเรือจริง ๆ)
-    ให้แก้ที่ฟังก์ชันนี้กับ _exportDocumentApplyCaseFilter ที่เดียว
+
+def _exportDocumentCaseOf(bws_id, customer_id, own_port_bws, own_port_customers):
+    """เที่ยวนี้ลงท่าเรือไหน ดูจากปลายทาง ไม่ใช่ดูจากตาชั่งที่ออกใบ
+
+    - ใบที่ชั่งที่ท่าเรือเรา : ปลายทางคือตาชั่งเอง = ลงท่าเรือเราแน่นอน
+    - ใบที่ชั่งที่เหมือง     : ปลายทางคือ customer ถ้า customer เป็นท่าเรือเรา = ลงท่าเรือเรา
+    ใบเหมืองที่ไปท่าเรือเราและเหลือรอดมาถึงตรงนี้ คือเที่ยวก่อนท่าเรือเปิดใช้ตาชั่ง
+    (หลังจากนั้นถูกตัดทิ้งไปแล้วใน _exportDocumentDuplicateTicketsQ)
     """
-    return EXPORT_DOC_CASE_OWN_PORT if bws_id in own_port_bws else EXPORT_DOC_CASE_OTHER_PORT
+    if bws_id in own_port_bws or customer_id in own_port_customers:
+        return EXPORT_DOC_CASE_OWN_PORT
+    return EXPORT_DOC_CASE_OTHER_PORT
 
 
-def _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws):
-    # base_qs กรองขอบเขตของทั้งสองเคสไว้แล้ว ตรงนี้แค่เลือกดูเคสเดียว
+def _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, own_port_customers):
+    # กติกาเดียวกับ _exportDocumentCaseOf แต่เขียนเป็นเงื่อนไข query
+    own_port = Q(bws_id__in=own_port_bws) | Q(customer_id__in=list(own_port_customers))
     if selected_case == EXPORT_DOC_CASE_OWN_PORT:
-        return qs.filter(bws_id__in=own_port_bws)
+        return qs.filter(own_port)
     if selected_case == EXPORT_DOC_CASE_OTHER_PORT:
-        return qs.filter(bws_id__in=other_bws)
+        return qs.exclude(own_port)
     return qs
+
+
+def _exportDocumentOwnPortCustomers():
+    """{รหัสลูกค้าที่เป็นท่าเรือเรา : วันเปิดใช้ตาชั่งของท่าเรือนั้น}
+
+    ท่าเรือเรา = บริษัทที่ biz เป็นขายหินส่งออก รหัสลูกค้าของท่าเรือหาจากตาราง map
+    (แถวที่ base_company เป็นท่าเรือเรา) ตอนนี้คือ 06-V-013 สุราษฎร์ กับ 06-V-018 กระบี่
+
+    วันเปิดใช้ = วันที่ของใบชั่งใบแรกสุดที่ตาชั่งของท่าเรือนั้นเคยออก หาเองจากข้อมูล ไม่ hardcode
+    ท่าเรือที่ยังไม่เคยออกใบเลยได้ None = ยังไม่เปิดใช้ ใบเหมืองที่ไปท่าเรือนั้นจะถูกเก็บไว้ทั้งหมด
+
+    วันเปิดใช้เปลี่ยนแค่ตอนมีท่าเรือใหม่ แต่ MIN(date) ต้องกวาดใบของตาชั่งนั้นทั้งหมด จึง cache ไว้
+    """
+    cached = cache.get(EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY)
+    if cached is not None:
+        return cached
+
+    port_rows = list(BaseCompanyMapBaseCustomer.objects
+                     .filter(base_company__biz_id=EXPORT_DOC_OWN_PORT_BIZ_ID)
+                     .values_list('id', 'base_customer_id', 'base_company_id'))
+    company_by_customer = {customer_id: company_id
+                           for _, customer_id, company_id in port_rows if customer_id}
+    # ท่าเรือเราที่มีรหัสลูกค้าสำรอง ก็ต้องนับรหัสสำรองเป็นท่าเรือเราด้วย
+    company_by_row = {row_id: company_id for row_id, _, company_id in port_rows}
+    for customer_id, row_id in _baseCompanyMapCustomerAliases().items():
+        if row_id in company_by_row:
+            company_by_customer.setdefault(customer_id, company_by_row[row_id])
+
+    go_live_by_company = {}
+    for company_id in set(company_by_customer.values()):
+        station_ids = list(BaseWeightStation.objects.filter(company_id=company_id)
+                           .values_list('id', flat=True))
+        go_live_by_company[company_id] = (
+            Weight.objects.filter(bws_id__in=station_ids)
+            .aggregate(first=Min('date'))['first'] if station_ids else None)
+
+    result = {customer_id: go_live_by_company.get(company_id)
+              for customer_id, company_id in company_by_customer.items()}
+    cache.set(EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY, result, 60 * 60)
+    return result
+
+
+def _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers):
+    """เงื่อนไขของใบที่ต้องตัดออกจากหน้านี้ คืน None ถ้าไม่มีอะไรต้องตัด
+
+    1) ใบท่าเรือที่ customer เป็นท่าเรือเราด้วย = ท่าเรือ -> ท่าเรือ
+       เป็นการขนภายในท่าเรือ (กองสต็อก -> เรือ) ไม่ใช่เที่ยวจากเหมือง
+    2) ใบเหมืองที่ส่งไปท่าเรือเรา ตั้งแต่วันที่ท่าเรือนั้นเปิดใช้ตาชั่ง
+       เที่ยวไปท่าเรือเรามี 2 ใบเสมอ (ใบเหมือง + ใบท่าเรือ) นับจากใบท่าเรือใบเดียว
+       เพราะใบท่าเรือมีน้ำหนักครบทั้งสองฝั่ง ถ้าเก็บทั้งคู่ เที่ยวเดียวจะถูกจ่ายเงินสองครั้ง
+       ก่อนวันเปิดใช้ ท่าเรือยังไม่มีใบของตัวเอง ใบเหมืองคือหลักฐานเดียว จึงเก็บไว้
+    """
+    customers = list(own_port_customers)
+    if not customers:
+        return None
+    duplicate = Q(bws_id__in=own_port_bws, customer_id__in=customers)
+    for customer_id, go_live in own_port_customers.items():
+        if go_live is not None:
+            duplicate |= Q(customer_id=customer_id, date__gte=go_live)
+    return duplicate
 
 
 def _exportDocumentOwnPortBwsIds():
@@ -12591,26 +12664,10 @@ def _exportDocumentOwnPortBwsIds():
                 .values_list('id', flat=True))
 
 
-# รหัสลูกค้าที่ขึ้นต้นด้วยนี้เป็น "ฝากขาย" ไม่ใช่ทั้งส่งออกและขายในประเทศ
-# ไม่ต้องคิดค่าขนส่งส่งออก จึงตัดออกตั้งแต่ชั้นดึงข้อมูล
-# ลูกค้ากลุ่มนี้มีรหัสคู่แฝดในชุดอื่นอยู่แล้ว (เช่น 77-V-007 คู่กับ 06-V-024)
-EXPORT_DOC_CONSIGN_PREFIX = '77-'
-
-
-def _exportDocumentConsignCustomerIds():
-    """รหัสลูกค้าฝากขายทั้งหมด (ขึ้นต้นด้วย 77-)
-
-    ดึงรายชื่อมาเป็น list แล้วค่อยกรองด้วย IN แทนการ join base_customer
-    เพราะ weight มีเป็นล้านแถว การ join เพื่อเช็ค prefix ทำให้ query ช้าโดยไม่จำเป็น
-    ส่วนตัว weight เองก็เก็บ customer_id ไว้ตรง ๆ อยู่แล้ว กรองที่คอลัมน์นี้ได้เลย
-    """
-    ids = cache.get('exportdoc_consign_customer_ids')
-    if ids is None:
-        ids = list(BaseCustomer.objects
-                   .filter(customer_id__startswith=EXPORT_DOC_CONSIGN_PREFIX)
-                   .values_list('customer_id', flat=True))
-        cache.set('exportdoc_consign_customer_ids', ids, 60 * 60)
-    return ids
+# เคยตัดลูกค้ารหัส 77- ทิ้งทั้งหมด โดยเข้าใจว่าเป็น "ฝากขาย" ที่มีรหัสคู่แฝด 06- อยู่แล้ว
+# ยกเลิกแล้ว (2026-09-22) : 77-V-007 สุราษฎร์พอร์ท แอนด์ เทอร์มินอล เป็นท่าเรือปลายทางจริง
+# เหมืองกงตาก ทุ่งใหญ่ กงตาก 3 และ 39 ศิลาทอง (ตั้งแต่ ธ.ค. 2025) ส่งหินไปโดยใช้รหัสนี้
+# ลูกค้า 77- ที่เป็นการขายในประเทศยังไม่เข้ามา เพราะเคส 2 ต้องเป็นปลายทางที่มีในตารางราคาอยู่แล้ว
 
 
 def _exportDocumentExportCustomerIds():
@@ -12623,13 +12680,29 @@ def _exportDocumentExportCustomerIds():
     เพิ่มเส้นทางในหน้าค่าขนส่ง ส่งออก = เที่ยวปลายทางนั้นเข้ารายงานทันที
 
     ผลข้างเคียงที่ต้องรู้ : เที่ยวส่งออกที่ยังไม่ได้บันทึกเรท จะไม่ขึ้นในหน้านี้เลย
+
+    รหัสลูกค้าสำรองของแถวปลายทางนับด้วย (เช่นใบราคาไปสุราษฎร์พอร์ทผูกกับ 06-V-024
+    แต่เหมืองกงตากออกใบชั่งด้วยรหัส 77-V-007)
     """
-    return set(BaseCompanyMapBaseCustomer.objects
-               .filter(id__in=InternationalFreightRate.objects
-                       .exclude(destination__isnull=True)
-                       .values_list('destination_id', flat=True))
-               .exclude(base_customer__isnull=True)
-               .values_list('base_customer_id', flat=True))
+    destination_ids = set(InternationalFreightRate.objects
+                          .exclude(destination__isnull=True)
+                          .values_list('destination_id', flat=True))
+    customers = set(BaseCompanyMapBaseCustomer.objects
+                    .filter(id__in=destination_ids)
+                    .exclude(base_customer__isnull=True)
+                    .values_list('base_customer_id', flat=True))
+    customers.update(customer_id for customer_id, row_id in _baseCompanyMapCustomerAliases().items()
+                     if row_id in destination_ids)
+    return customers
+
+
+def _baseCompanyMapCustomerAliases():
+    """{รหัสลูกค้าสำรอง : id แถว map} ดู BaseCompanyMapCustomerAlias
+
+    ทุกที่ที่แปลงรหัสลูกค้าเป็นแถว map ต้องดูตัวนี้ด้วย ไม่งั้นเที่ยวที่ใช้รหัสสำรอง
+    จะหาชื่อ / ใบราคา / ตัวกรองต้นทางไม่เจอ
+    """
+    return dict(BaseCompanyMapCustomerAlias.objects.values_list('base_customer_id', 'map_row_id'))
 
 
 def _baseCompanyMapRowName(row, customer_names, company_names):
@@ -12709,6 +12782,9 @@ def _exportDocumentOriginFilter(origin_name, own_port_bws, other_bws):
     # ไม่งั้นเปลี่ยนที่มาของชื่อเมื่อไหร่ ตัวกรองจะเพี้ยนทันที
     rows = [r for r in _baseCompanyMapRows() if r['display'] == origin_name]
     customer_ids = [r['base_customer_id'] for r in rows if r['base_customer_id']]
+    row_ids = {r['id'] for r in rows}
+    customer_ids += [customer_id for customer_id, row_id in _baseCompanyMapCustomerAliases().items()
+                     if row_id in row_ids]
     company_ids = [r['base_company_id'] for r in rows if r['base_company_id']]
 
     condition = Q(pk__in=[])   # ไม่ตรงอะไรเลย ใช้เป็นตัวตั้งต้น
@@ -12765,6 +12841,13 @@ def _exportDocumentNameMaps():
             if preferred(chosen_by_company.get(key), r):
                 chosen_by_company[key] = r
 
+    # รหัสลูกค้าสำรองได้ชื่อและ id ของแถว map ที่มันสังกัด ใบราคาของแถวนั้นจึงใช้กับรหัสสำรองได้
+    # ถ้ารหัสนั้นเป็นรหัสหลักของแถวไหนอยู่แล้ว ให้รหัสหลักชนะ (หน้า admin กันไว้แล้ว แต่กันซ้ำอีกชั้น)
+    rows_by_id = {r['id']: r for r in rows}
+    for customer_id, row_id in _baseCompanyMapCustomerAliases().items():
+        if customer_id not in chosen_by_customer and row_id in rows_by_id:
+            chosen_by_customer[customer_id] = rows_by_id[row_id]
+
     # ชื่อของแถว map ที่ resolve แล้ว (base_customer -> base_comp -> map.name)
     origin_by_customer = {k: v['display'] for k, v in chosen_by_customer.items()}
     port_by_company = {k: v['display'] for k, v in chosen_by_company.items()}
@@ -12782,6 +12865,7 @@ def _exportDocumentQuerySet(request):
     own_port_bws = _exportDocumentOwnPortBwsIds()
     other_bws = _exportDocumentOtherBwsIds()
     export_customers = _exportDocumentExportCustomerIds()
+    own_port_customers = _exportDocumentOwnPortCustomers()
 
     # หน้านี้รวมทั้ง 2 เคสไว้ด้วยกัน เงื่อนไขร่วมคือประเภทการบรรทุก "ส่งให้"
     # เคส 1 : ชั่งที่ท่าเรือเรา
@@ -12791,7 +12875,12 @@ def _exportDocumentQuerySet(request):
         Q(bws_id__in=own_port_bws)
         | Q(bws_id__in=other_bws, customer_id__in=export_customers),
         carry_type_name=EXPORT_DOC_CARRY_TYPE,
-    ).exclude(customer_id__in=_exportDocumentConsignCustomerIds())
+    )
+    # ตัดท่าเรือ -> ท่าเรือ และใบเหมืองที่ซ้ำกับใบท่าเรือ ตั้งแต่ชั้น query
+    # หน้าเว็บ (ยอดรวม/แบ่งหน้า) ไฟล์ export และไฟล์แก้ไขรายเที่ยว จะได้ใช้ชุดเดียวกันเสมอ
+    duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)
+    if duplicate_q is not None:
+        base_qs = base_qs.exclude(duplicate_q)
 
     # เดือนที่มีข้อมูล ใช้ทำ dropdown และหาเดือนตั้งต้น
     #
@@ -12800,7 +12889,9 @@ def _exportDocumentQuerySet(request):
     # ผลข้างเคียงที่ยอมรับได้ : เดือนใหม่จะโผล่ใน dropdown ช้าที่สุด 10 นาที
     cache_key = 'exportdoc_month_list_%s' % hash((tuple(sorted(own_port_bws)),
                                                   tuple(sorted(other_bws)),
-                                                  tuple(sorted(export_customers))))
+                                                  tuple(sorted(export_customers)),
+                                                  tuple(sorted(own_port_customers.items(),
+                                                               key=lambda kv: kv[0]))))
     _exportProgressSet(request, 10, 'กำลังหาเดือนที่มีข้อมูล')
     month_list = cache.get(cache_key)
     if month_list is None:
@@ -12852,15 +12943,8 @@ def _exportDocumentQuerySet(request):
         selected_bws = raw_bws
     if selected_case not in (EXPORT_DOC_CASE_OWN_PORT, EXPORT_DOC_CASE_OTHER_PORT):
         selected_case = ''
-
-    if selected_bws:
-        bws_case = (EXPORT_DOC_CASE_OWN_PORT if selected_bws in own_port_bws
-                    else EXPORT_DOC_CASE_OTHER_PORT if selected_bws in other_bws else '')
-        if selected_case and bws_case and selected_case != bws_case:
-            # ลิงก์เก่าที่ส่ง case กับ bws มาขัดกัน : ยึดตาชั่งเป็นหลัก เพราะเจาะจงกว่า
-            selected_case = bws_case
-        elif not selected_case and bws_case:
-            selected_case = bws_case
+    # ไม่เดาเคสจากตาชั่งแล้ว : ตาชั่งเหมือง 1 ตัวมีได้ทั้งเที่ยวลงท่าเรือเรา (ก่อนท่าเรือเปิดใช้ตาชั่ง)
+    # และเที่ยวลงท่าเรือบริษัทอื่น เลือกตาชั่งอย่างเดียวจึงเห็นทุกเที่ยวของตาชั่งนั้น
 
     # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
     include_cancel = request.GET.get('include_cancel') == '1'
@@ -12913,7 +12997,7 @@ def _exportDocumentQuerySet(request):
         qs = qs.filter(_exportDocumentOriginFilter(selected_origin, own_port_bws, other_bws))
     elif origin_unmapped:
         qs = qs.none()
-    qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, other_bws)
+    qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, own_port_customers)
     if not include_cancel:
         qs = qs.filter(is_cancel=False)
 
@@ -12943,34 +13027,39 @@ def _exportDocumentQuerySet(request):
         'base_qs': base_qs,
         'option_qs': option_qs,
         'own_port_bws': own_port_bws,
+        'own_port_customers': own_port_customers,
     }
     return qs, filters, month_list
 
 
-def _exportDocumentRows(weights, own_port_bws=None):
+def _exportDocumentRows(weights, own_port_bws=None, own_port_customers=None):
     """ปั้นแถวให้ตรงคอลัมน์ A-M ของ sheet บันทึกรายเที่ยว
 
-    ต้นทาง/ปลายทางสลับกันตามเคส เพราะตาชั่งอยู่คนละฝั่งของเที่ยว
-    - เคส 1 ชั่งที่ท่าเรือเรา  : customer = ต้นทาง (เหมือง)   | bws = ปลายทาง (ท่าเรือ)
-    - เคส 2 ชั่งที่เหมืองเรา   : bws = ต้นทาง (เหมือง)        | customer = ปลายทาง (ท่าเรือบริษัทอื่น)
+    ต้นทาง/ปลายทางสลับกันตาม "ชั่งที่ไหน" เพราะตาชั่งอยู่คนละฝั่งของเที่ยว
+    - ชั่งที่ท่าเรือเรา : customer = ต้นทาง (เหมือง) | bws = ปลายทาง (ท่าเรือ)
+    - ชั่งที่เหมืองเรา  : bws = ต้นทาง (เหมือง)      | customer = ปลายทาง (ท่าเรือ)
+    ส่วนเคส (ลงท่าเรือไหน) ดูจากปลายทาง ดู _exportDocumentCaseOf
     """
     if own_port_bws is None:
         own_port_bws = _exportDocumentOwnPortBwsIds()
+    if own_port_customers is None:
+        own_port_customers = _exportDocumentOwnPortCustomers()
     (origin_by_customer, port_by_company,
      map_id_by_customer, map_id_by_company) = _exportDocumentNameMaps()
 
     rows = []
     for w in weights:
         bws_company_id = w.bws.company_id if w.bws else None
-        case = _exportDocumentCaseOf(w.bws_id, own_port_bws)
+        weighed_at = _exportDocumentWeighedAt(w.bws_id, own_port_bws)
+        case = _exportDocumentCaseOf(w.bws_id, w.customer_id, own_port_bws, own_port_customers)
 
         # weight_total คือน้ำหนักที่ "ตาชั่งใบนั้นชั่งได้เอง" (= weight_in - weight_out)
-        # ตาชั่งอยู่คนละฝั่งของเที่ยวตามเคส การจับคู่จึงต้องสลับตาม
-        #   เคส 1 ชั่งที่ท่าเรือ (ปลายทาง) : origin_weight = ต้นทาง | weight_total = ปลายทาง
-        #   เคส 2 ชั่งที่เหมือง (ต้นทาง)   : weight_total = ต้นทาง
+        # ตาชั่งอยู่คนละฝั่งของเที่ยว การจับคู่จึงต้องสลับตาม "ชั่งที่ไหน" (ไม่ใช่ตามเคส)
+        #   ชั่งที่ท่าเรือ (ปลายทาง) : origin_weight = ต้นทาง | weight_total = ปลายทาง
+        #   ชั่งที่เหมือง (ต้นทาง)   : weight_total = ต้นทาง
         # ฝั่งที่ไม่ได้ชั่งจะเก็บเป็น 0 ไม่ใช่ NULL ต้องมองว่าเป็น "ไม่มีค่า"
         # ให้ตรงกับไฟล์ excel ที่เว้นช่องว่าง ไม่งั้น M จะกลายเป็น MIN(0, อีกฝั่ง) = 0 แล้วยอดหายทั้งแถว
-        if case == EXPORT_DOC_CASE_OWN_PORT:
+        if weighed_at == EXPORT_DOC_WEIGHED_AT_PORT:
             origin_weight = w.origin_weight or None
             dest_weight = w.weight_total or None
         else:
@@ -12991,10 +13080,10 @@ def _exportDocumentRows(weights, own_port_bws=None):
         # ชื่อฝั่ง customer กับฝั่ง bws หามาก่อน แล้วค่อยจัดว่าใครเป็นต้นทาง/ปลายทางตามเคส
         customer_side = origin_by_customer.get(w.customer_id) or w.customer_name
         bws_side = port_by_company.get(bws_company_id) or w.bws_id
-        # id ของแถว map ที่ใช้จับคู่กับตารางอัตรา สลับข้างตามเคสเหมือนกับชื่อ
+        # id ของแถว map ที่ใช้จับคู่กับตารางอัตรา สลับข้างตาม "ชั่งที่ไหน" เหมือนกับชื่อ
         customer_map_id = map_id_by_customer.get(w.customer_id)
         bws_map_id = map_id_by_company.get(bws_company_id)
-        if case == EXPORT_DOC_CASE_OWN_PORT:
+        if weighed_at == EXPORT_DOC_WEIGHED_AT_PORT:
             origin_name, destination_name = customer_side, bws_side
             origin_company_id, destination_company_id = None, bws_company_id
             origin_map_id, destination_map_id = customer_map_id, bws_map_id
@@ -13006,6 +13095,7 @@ def _exportDocumentRows(weights, own_port_bws=None):
         rows.append({
             'weight_id': w.weight_id,
             'case': case,
+            'weighed_at': weighed_at,
             'case_label': EXPORT_DOC_CASE_LABELS.get(case, ''),
             'date': w.date,                                                   # A วันที่
             'origin': origin_name,                                            # B ต้นทาง
@@ -13080,11 +13170,12 @@ def viewExportDocument(request):
     page = request.GET.get('page')
     trips = p.get_page(page)
 
-    rows = _exportDocumentRows(trips, own_port_bws)
+    own_port_customers = filters['own_port_customers']
+    rows = _exportDocumentRows(trips, own_port_bws, own_port_customers)
 
     # เช็คความครอบคลุมของตารางอัตราค่าขนส่ง จากทั้งเดือน ไม่ใช่แค่หน้าที่เปิดอยู่
     # จะได้รู้ก่อนกดปุ่มว่าไฟล์ที่ได้จะมีตัวเงินหรือจะขึ้น 0
-    all_rows = _exportDocumentRows(qs, own_port_bws)
+    all_rows = _exportDocumentRows(qs, own_port_bws, own_port_customers)
     rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
         all_rows, selected_month)
     # แบก นน. คิดจาก นน.จ่ายค่าบรรทุก เทียบเฉพาะช่วงที่ทีมนั้นมีสัญญาไว้ในเส้นทางนั้น
@@ -13192,7 +13283,7 @@ def exportExcelTripEdit(request):
     # ไฟล์นี้ไม่ได้เปิด template ใหญ่เหมือนรายงาน เวลาจึงไปกองที่ดึงข้อมูลกับบันทึกไฟล์
     _exportProgressSet(request, 2, 'กำลังดึงข้อมูลรายเที่ยว')
     qs, filters, _ = _exportDocumentQuerySet(request)
-    rows = _exportDocumentRows(qs, filters['own_port_bws'])
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
     if not rows:
         return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้แก้ไข")
     if len(rows) > EXPORT_DOC_EDIT_MAX_ROWS:
@@ -13346,15 +13437,15 @@ def uploadTripEdit(request):
                           % (row, weight_id))
             continue
 
-        # เคสเป็นตัวกำหนดว่าน้ำหนักฝั่งไหนเก็บอยู่ฟิลด์ไหน ต้องหาก่อนถึงจะเทียบค่าเก่าได้ถูก
-        case = _exportDocumentCaseOf(weight.bws_id, own_port_bws)
+        # "ชั่งที่ไหน" เป็นตัวกำหนดว่าน้ำหนักฝั่งไหนเก็บอยู่ฟิลด์ไหน ต้องหาก่อนถึงจะเทียบค่าเก่าได้ถูก
+        weighed_at = _exportDocumentWeighedAt(weight.bws_id, own_port_bws)
 
         fields = []
         apply_values = {}
         for attr, (col, label, kind, value) in raw_values.items():
             # ไฟล์นี้แก้ได้แค่น้ำหนักปลายทาง ทีมรถร่วมในคอลัมน์ J เป็นข้อมูลประกอบ ไม่ถูกอ่านกลับ
             if kind == 'ton':
-                attr = _exportDocumentTonAttr(attr, case)
+                attr = _exportDocumentTonAttr(attr, weighed_at)
                 try:
                     new_ton = Decimal(str(value)).quantize(Decimal('0.001'))
                 except (InvalidOperation, TypeError, ValueError):
@@ -13494,7 +13585,7 @@ def exportExcelExportDocument(request):
         )
 
     _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
-    rows = _exportDocumentRows(qs, filters['own_port_bws'])
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
 
     # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
     _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')

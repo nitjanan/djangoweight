@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
 from django.db.models import Q, F, CheckConstraint
 from django.forms import forms
 from django.utils.translation import gettext_lazy as _
@@ -1438,6 +1439,72 @@ class BaseCompanyMapBaseCustomer(models.Model):
         company = self.base_company.name if self.base_company else "-"
         customer = self.base_customer.customer_name if self.base_customer else "-"
         return f"{company} - {customer}"
+
+    def clean(self):
+        # รหัสลูกค้าที่เป็นรหัสสำรองของแถวอื่นอยู่แล้ว ห้ามมาเป็นรหัสหลักของแถวนี้อีก
+        # ไม่งั้นเที่ยวของลูกค้ารายนั้นจะชี้ได้สองแถว แล้วไม่รู้ว่าต้องใช้ใบราคาของแถวไหน
+        if self.base_customer_id:
+            alias = (BaseCompanyMapCustomerAlias.objects
+                     .filter(base_customer_id=self.base_customer_id)
+                     .exclude(map_row_id=self.pk)
+                     .select_related('map_row').first())
+            if alias is not None:
+                raise ValidationError({'base_customer': 'รหัสนี้เป็นรหัสลูกค้าสำรองของ "%s" อยู่แล้ว'
+                                                         % alias.map_row.name})
+
+
+# key ของ cache รายชื่อลูกค้าที่เป็นท่าเรือเรา (ดู views._exportDocumentOwnPortCustomers)
+EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY = 'exportdoc_own_port_customers'
+
+
+class BaseCompanyMapCustomerAlias(models.Model):
+    """รหัสลูกค้าสำรองของแถว map 1 แถว
+
+    ที่เดียวกันบางแห่งมีรหัสลูกค้าหลายตัว เช่น ท่าเรือสุราษฎร์พอร์ท แอนด์ เทอร์มินอล
+    มีทั้ง 06-V-024 (รหัสหลักในแถว map) และ 77-V-007 ที่เหมืองกงตาก ทุ่งใหญ่ ใช้ออกใบชั่ง
+    รหัสสำรองทำให้ทั้งสองรหัสชี้แถว map เดียวกัน ใบราคาที่ผูกกับแถวนั้นจึงใช้ได้กับทุกรหัส
+    ไม่ต้องทำใบราคาซ้ำ
+
+    รหัสลูกค้า 1 ตัวอยู่ได้แถวเดียว ไม่ว่าจะเป็นรหัสหลักหรือรหัสสำรอง
+    รหัสสำรองมีแต่ฝั่งลูกค้า ฝั่งบริษัทยังใช้ base_company ของแถว map อย่างเดียว
+    """
+    map_row = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.CASCADE,
+                                related_name='customer_aliases', verbose_name="แถว map")
+    # base_customer เป็นตารางเก่า collation ไม่ตรงกันในแต่ละ DB (MySQL จะไม่ยอมสร้าง FK)
+    # จึงไม่สร้าง constraint ที่ระดับ DB แบบเดียวกับ FK อื่นที่ชี้ไปตารางเก่า
+    # OneToOne = รหัสสำรอง 1 ตัวอยู่ได้แถว map เดียว (unique ที่ระดับ DB)
+    base_customer = models.OneToOneField(BaseCustomer, on_delete=models.CASCADE, db_constraint=False,
+                                         related_name='map_alias', verbose_name="รหัสลูกค้าสำรอง")
+
+    class Meta:
+        db_table = 'base_company_map_customer_alias'
+        ordering = ['id']
+        verbose_name = 'รหัสลูกค้าสำรอง'
+        verbose_name_plural = 'รหัสลูกค้าสำรอง'
+
+    def __str__(self):
+        return '%s -> %s' % (self.base_customer_id, self.map_row_id)
+
+    # หน้า /exportDocument/ cache รายชื่อลูกค้าที่เป็นท่าเรือเราไว้ 1 ชั่วโมง
+    # เพิ่ม/ลบรหัสสำรองแล้วต้องล้าง ไม่งั้นต้องรอชั่วโมงกว่าจะเห็นผล
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY)
+
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        cache.delete(EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY)
+        return result
+
+    def clean(self):
+        # รหัสที่เป็นรหัสหลักของแถว map ไหนอยู่แล้ว (รวมแถวตัวเอง) มาเป็นรหัสสำรองไม่ได้
+        if self.base_customer_id:
+            owner = (BaseCompanyMapBaseCustomer.objects
+                     .filter(base_customer_id=self.base_customer_id).first())
+            if owner is not None:
+                raise ValidationError({'base_customer': 'รหัสนี้เป็นรหัสลูกค้าหลักของ "%s" อยู่แล้ว'
+                                                         % owner.name})
+
 
 class InternationalFreightRateStatus(models.TextChoices):
     """สถานะการอนุมัติของ 1 ใบ (1 เวอร์ชัน)

@@ -172,9 +172,15 @@
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">ทีมขนส่ง</h5>
-          <button type="button" id="ifr_add_team" class="btn btn-primary btn-sm rounded-pill">
-            เพิ่มทีม <i class="fa-solid fa-circle-plus"></i>
-          </button>
+          <div class="d-flex gap-2">
+            <button type="button" id="ifr_recalc_freight" class="btn btn-outline-secondary btn-sm rounded-pill"
+                    title="คิดค่าขนส่งของทุกแถวที่กรอกค่าสัญญาครบ จากช่วงราคาน้ำมันฐานปัจจุบัน">
+              คิดค่าขนส่งใหม่จากสัญญา <i class="fa-solid fa-calculator"></i>
+            </button>
+            <button type="button" id="ifr_add_team" class="btn btn-primary btn-sm rounded-pill">
+              เพิ่มทีม <i class="fa-solid fa-circle-plus"></i>
+            </button>
+          </div>
         </div>
         <div class="card-body">
           <div class="table-responsive ifr-team-table-wrap">
@@ -637,6 +643,15 @@
     tr.querySelector('.ifr-contract-date').value = row.contract_date || '';
     setPayment(tr, row.credit_days);
 
+    // ค่าขนส่งคิดจากค่าสัญญาให้ เฉพาะตอนผู้ใช้แก้ 2 ช่องนี้
+    // ไม่คิดตอนเปิดหน้า เพราะค่าที่บันทึกไว้อาจเป็นค่าที่พิมพ์มือ ทับแล้วจะออกเวอร์ชันใหม่โดยไม่ตั้งใจ
+    tr.querySelector('.ifr-contract-rate').addEventListener('input', function () {
+      applyContractFreight(tr);
+    });
+    tr.querySelector('.ifr-contract-fuel').addEventListener('input', function () {
+      applyContractFreight(tr);
+    });
+
     // บาท/ตัน/กม. ไม่ได้อ่านจากค่าที่เก็บไว้ คิดสดจากช่องบนจอเสมอ ให้ตรงกับที่ server จะคิดตอนบันทึก
     updatePerTonKm(tr);
     tr.querySelector('.ifr-freight-rate').addEventListener('input', function () {
@@ -805,6 +820,41 @@
       }
     });
     return rows;
+  }
+
+  // ---------- คิดค่าขนส่งจากค่าสัญญา ----------
+  // เทียบบัญญัติไตรยางศ์กับราคาน้ำมัน : ค่าขนส่ง = ค่าขนส่งตามสัญญา x ฐานที่ใช้ / น้ำมันฐานวันทำสัญญา
+  // ฐานที่ใช้เลือกจากช่วงราคาน้ำมันฐานของใบ [x, y] ด้วยกติกาเดียวกับส่วนปรับน้ำมัน (dead band)
+  //   น้ำมันฐานสัญญาสูงกว่าขอบบน  -> ใช้ขอบบน (น้ำมันถูกลงกว่าตอนเซ็น ค่าขนส่งจึงลด)
+  //   ต่ำกว่าขอบล่าง              -> ใช้ขอบล่าง (น้ำมันแพงขึ้น ค่าขนส่งจึงเพิ่ม)
+  //   อยู่ในช่วง                   -> ไม่คิด ใช้ค่าขนส่งตามสัญญาตรง ๆ
+  // ขอบบนว่างให้ถือว่าเท่าขอบล่าง (ใบที่ตกลงเป็นราคาเดียว) เหมือนที่ไฟล์ export ทำ
+  function contractFreightOf(tr) {
+    const contractRate = parseNumber(tr.querySelector('.ifr-contract-rate').value);
+    const contractFuel = parseNumber(tr.querySelector('.ifr-contract-fuel').value);
+    const low = parseNumber(document.getElementById('ifr_base_fuel_price').value);
+    const rawHigh = parseNumber(document.getElementById('ifr_base_fuel_price_max').value);
+    const high = isNaN(rawHigh) ? low : rawHigh;
+    // กรอกไม่ครบ (หรือน้ำมันฐานสัญญาเป็น 0) คิดไม่ได้ ปล่อยให้พิมพ์เอง
+    if (isNaN(contractRate) || isNaN(contractFuel) || contractFuel <= 0 || isNaN(low)) return null;
+
+    let base = null;
+    if (contractFuel > high) base = high;
+    else if (contractFuel < low) base = low;
+    if (base === null) return roundHalfUp2(contractRate);          // อยู่ในช่วง = ไม่ปรับ
+    return roundHalfUp2(contractRate * base / contractFuel);
+  }
+
+  function applyContractFreight(tr) {
+    const value = contractFreightOf(tr);
+    if (value === null) return false;
+    const field = tr.querySelector('.ifr-freight-rate');
+    field.value = value;
+    field.title = 'คิดจากค่าสัญญา ' + tr.querySelector('.ifr-contract-rate').value
+                + ' กับน้ำมันฐานวันทำสัญญา ' + tr.querySelector('.ifr-contract-fuel').value
+                + ' เทียบช่วงราคาน้ำมันฐานของใบนี้ (พิมพ์ทับเองได้)';
+    updatePerTonKm(tr);
+    return true;
   }
 
   // ---------- ค่าขนส่ง บาท/ตัน/กม. ----------
@@ -990,6 +1040,18 @@
   });
 
   // ห่อไว้ ไม่ส่ง addTeamRow ตรงๆ ไม่งั้น Event object จะถูกส่งเข้าไปเป็น data
+  // แก้ช่วงราคาน้ำมันฐานที่หัวหน้าแล้วค่าขนส่งของแถวเดิมจะยังเป็นของช่วงเก่า
+  // ไม่คิดทับให้เองเพราะบางแถวพิมพ์มือไว้ ให้กดปุ่มนี้เมื่อต้องการคิดใหม่ทั้งตาราง
+  document.getElementById('ifr_recalc_freight').addEventListener('click', function () {
+    let changed = 0;
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
+      if (applyContractFreight(tr)) changed += 1;
+    });
+    showAlert(changed === 0
+      ? 'ไม่มีแถวไหนกรอกค่าสัญญาครบ (ต้องมีค่าขนส่งตามสัญญาและน้ำมันฐานวันทำสัญญา)'
+      : 'คิดค่าขนส่งใหม่แล้ว ' + changed + ' แถว', changed === 0);
+  });
+
   document.getElementById('ifr_add_team').addEventListener('click', function () {
     addTeamRow();
   });

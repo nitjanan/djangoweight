@@ -647,6 +647,26 @@ class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     def alias_codes(self, obj):
         return ', '.join(a.base_customer_id for a in obj.customer_aliases.all()) or '-'
 
+class BaseCompanyMapCustomerAliasAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    # เมนูแยกไว้ดูรวดเดียวว่าทั้งระบบมีรหัสสำรองกี่ตัว ชี้ไปแถว map ไหนบ้าง
+    # ส่วนการเพิ่มระหว่างแก้แถว map ใช้ inline ในหน้า "ข้อมูลบริษัทลูกค้า" ได้เหมือนเดิม
+    list_display = ('id', 'base_customer', 'alias_code', 'map_row', 'map_main_code')
+    search_fields = ('base_customer__customer_id', 'base_customer__customer_name', 'map_row__name')
+    autocomplete_fields = ['map_row', 'base_customer']
+    list_per_page = 20
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('map_row', 'base_customer')
+
+    @admin.display(description='รหัสลูกค้าสำรอง', ordering='base_customer_id')
+    def alias_code(self, obj):
+        return obj.base_customer_id
+
+    @admin.display(description='รหัสหลักของแถว map')
+    def map_main_code(self, obj):
+        return obj.map_row.base_customer_id or '-'
+
+
 class InternationalFreightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'origin', 'destination', 'version', 'status', 'effective_date', 'created_at')
     list_filter = ('status',)
@@ -654,6 +674,7 @@ class InternationalFreightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_per_page = 20
 
 admin.site.register(BaseCompanyMapBaseCustomer, BaseCompanyMapBaseCustomerAdmin)
+admin.site.register(BaseCompanyMapCustomerAlias, BaseCompanyMapCustomerAliasAdmin)
 admin.site.register(InternationalFreightRate, InternationalFreightRateAdmin)
 
 class InternationalFreightRateFuelPriceAdmin(ImportExportModelAdmin, admin.ModelAdmin):

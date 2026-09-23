@@ -12761,26 +12761,20 @@ def _exportDocumentOwnPortBwsIds():
 def _exportDocumentExportCustomerIds():
     """รหัสลูกค้าที่ถือว่าเป็น "ปลายทางส่งออก"
 
-    เอามาจากปลายทางที่บันทึกไว้ในตารางอัตราค่าขนส่งไปนอกประเทศ :
-        weight.customer_id  ==  international_freight_rate.destination -> base_customer_id
+    เกณฑ์คือ "ลูกค้ารายนี้ถูกผูกไว้ในตาราง base_company_map_base_customer หรือยัง"
+    (นับรหัสลูกค้าสำรองใน base_company_map_customer_alias ด้วย)
 
-    ใช้ตารางเรทเป็นตัวกำหนดเอง แทนการเดาจากชื่อลูกค้าหรือเพิ่มธงใหม่
-    เพิ่มเส้นทางในหน้าค่าขนส่ง ส่งออก = เที่ยวปลายทางนั้นเข้ารายงานทันที
+    เดิมใช้ปลายทางที่มีในตารางอัตราค่าขนส่งเป็นตัวกำหนด ทำให้เที่ยวที่ยังไม่ได้ทำใบราคา
+    หายไปจากหน้านี้ทั้งก้อนโดยไม่มีใครรู้ เปลี่ยนมาใช้ตาราง map แทน เที่ยวจะขึ้นทันทีที่ผูกปลายทาง
+    แล้วเส้นทางที่ยังไม่มีใบราคาจะไปโผล่ในแถบเตือน "ยังไม่มีสัญญา" ของหน้านี้แทน
 
-    ผลข้างเคียงที่ต้องรู้ : เที่ยวส่งออกที่ยังไม่ได้บันทึกเรท จะไม่ขึ้นในหน้านี้เลย
-
-    รหัสลูกค้าสำรองของแถวปลายทางนับด้วย (เช่นใบราคาไปสุราษฎร์พอร์ทผูกกับ 06-V-024
-    แต่เหมืองกงตากออกใบชั่งด้วยรหัส 77-V-007)
+    ยังต้องมีตัวกรองนี้อยู่ เพราะตาชั่งขายของเหมืองออกใบให้ลูกค้าในประเทศด้วย
+    ถ้าไม่กรองเลย การขายในประเทศ ~90,000 เที่ยวจะทะลักเข้ามาปนกับเที่ยวส่งออก
     """
-    destination_ids = set(InternationalFreightRate.objects
-                          .exclude(destination__isnull=True)
-                          .values_list('destination_id', flat=True))
     customers = set(BaseCompanyMapBaseCustomer.objects
-                    .filter(id__in=destination_ids)
                     .exclude(base_customer__isnull=True)
                     .values_list('base_customer_id', flat=True))
-    customers.update(customer_id for customer_id, row_id in _baseCompanyMapCustomerAliases().items()
-                     if row_id in destination_ids)
+    customers.update(_baseCompanyMapCustomerAliases())
     return customers
 
 

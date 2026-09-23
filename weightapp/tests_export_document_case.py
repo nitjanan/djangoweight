@@ -138,6 +138,24 @@ class ExportDocumentCaseTests(TestCase):
         self.assertEqual(qs.count(), len(rows))
         self.assertEqual({r['weight_id'] for r in rows}, {10, 30})
 
+    def test_destination_without_any_rate_still_shows_up(self):
+        """ปลายทางที่ผูก map แล้วแต่ยังไม่มีใบราคา ต้องขึ้นในหน้านี้ (แล้วไปเตือนว่าไม่มีราคาแทน)"""
+        BaseCustomer.objects.create(customer_id='06-V-901', customer_name='ท่าเรือยังไม่มีราคา')
+        BaseCompanyMapBaseCustomer.objects.create(name='ท่าเรือยังไม่มีราคา',
+                                                  base_customer_id='06-V-901')
+        self.trip(31, date(2026, 8, 12), 'W1A', '06-V-901', '41.000', None)
+
+        _, filters, _ = self.querySet()
+        self.assertIn(31, self.ids(filters['base_qs']))
+
+    def test_customer_without_map_row_stays_out(self):
+        """ลูกค้าในประเทศ (ยังไม่ผูก map) ต้องไม่หลุดเข้ามา"""
+        BaseCustomer.objects.create(customer_id='04-V-027', customer_name='ผู้รับเหมาในประเทศ')
+        self.trip(32, date(2026, 8, 12), 'W1A', '04-V-027', '40.000', None)
+
+        _, filters, _ = self.querySet()
+        self.assertNotIn(32, self.ids(filters['base_qs']))
+
     # ---------- เคส + การสลับต้นทาง/ปลายทาง ----------
 
     def rowOf(self, weight_id):

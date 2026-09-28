@@ -16,7 +16,8 @@ from django.test import RequestFactory, TestCase
 
 from weightapp import views
 from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer, BaseCustomer,
-                              BaseWeightStation, BaseWeightType, InternationalFreightRate, Weight)
+                              BaseSite, BaseWeightStation, BaseWeightType, InternationalFreightRate,
+                              Weight)
 
 OWN = views.EXPORT_DOC_CASE_OWN_PORT
 OTHER = views.EXPORT_DOC_CASE_OTHER_PORT
@@ -79,9 +80,10 @@ class ExportDocumentCaseTests(TestCase):
         cls.trip(30, date(2026, 8, 10), 'W1A', '06-V-900', '42.000', None)
 
     @staticmethod
-    def trip(weight_id, day, bws_id, customer_id, weight_total, origin_weight):
+    def trip(weight_id, day, bws_id, customer_id, weight_total, origin_weight, site_id=None):
         Weight.objects.create(
             weight_id=weight_id, date=day, bws_id=bws_id, customer_id=customer_id,
+            site_id=site_id,
             customer_name=BaseCustomer.objects.get(pk=customer_id).customer_name,
             carry_type_name=views.EXPORT_DOC_CARRY_TYPE, is_cancel=False,
             car_registration_name='83-2751', doc_id=str(weight_id),
@@ -205,6 +207,22 @@ class ExportDocumentCaseTests(TestCase):
         by_code = {p['customer_id']: p for p in pending}
         self.assertIn('06-V-903', by_code)
         self.assertEqual(by_code['06-V-903']['trips'], 1)
+
+    def test_internal_and_charity_sites_are_dropped(self):
+        """หน้างาน ใช้ภายใน (200PL) / อนุเคราะห์ (300PL) ไม่ใช่เที่ยวส่งออก"""
+        BaseSite.objects.create(base_site_id='200PL', base_site_name='ใช้ภายใน')
+        BaseSite.objects.create(base_site_id='300PL', base_site_name='อนุเคราะห์')
+        BaseSite.objects.create(base_site_id='001PL', base_site_name='หน้างานปกติ')
+        self.trip(40, date(2026, 8, 12), 'W1A', '06-V-900', '40.000', None, site_id='200PL')
+        self.trip(41, date(2026, 8, 12), 'W1A', '06-V-900', '40.000', None, site_id='300PL')
+        self.trip(42, date(2026, 8, 12), 'W1A', '06-V-900', '40.000', None, site_id='001PL')
+        self.trip(43, date(2026, 8, 12), 'W1A', '06-V-900', '40.000', None)   # ไม่ระบุหน้างาน
+
+        kept = self.ids(self.querySet()[1]['base_qs'])
+        self.assertNotIn(40, kept)
+        self.assertNotIn(41, kept)
+        self.assertIn(42, kept)
+        self.assertIn(43, kept)   # site_id เป็น NULL ต้องไม่ถูกตัด
 
     # ---------- เคส + การสลับต้นทาง/ปลายทาง ----------
 

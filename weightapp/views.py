@@ -12643,6 +12643,11 @@ def _ifrEffectiveLabel(effective_date):
 # เคส 2 เอาเฉพาะตาชั่งประเภทที่ 1 (ตาชั่งขาย) ตาชั่งประเภทอื่นของเหมืองไม่เกี่ยวกับการส่งออก
 EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
 
+# หน้างาน (base_site) ที่ไม่ใช่การขนไปขาย จึงไม่ต้องคิดค่าขนส่งส่งออกในหน้านี้
+#   200PL = ใช้ภายใน   300PL = อนุเคราะห์
+# ตัดด้วยรหัส ไม่ใช่ชื่อ เพราะชื่อแก้ในหน้า admin ได้ตลอด
+EXPORT_DOC_EXCLUDED_SITE_IDS = ('200PL', '300PL')
+
 # เคส = เที่ยวนี้ "ไปลงท่าเรือไหน" ดูจากปลายทาง (ใช้เป็นป้ายและตัวกรอง)
 EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท
 EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น
@@ -13003,7 +13008,9 @@ def _exportDocumentQuerySet(request):
         Q(bws_id__in=own_port_bws)
         | Q(bws_id__in=other_bws, customer_id__in=export_customers),
         carry_type_name=EXPORT_DOC_CARRY_TYPE,
-    )
+    # ใบที่หน้างานเป็น "ใช้ภายใน" หรือ "อนุเคราะห์" ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก
+    # แถวที่ไม่ได้ระบุหน้างาน (site_id เป็น NULL) ยังอยู่ครบ เพราะ exclude ของ Django ไม่ตัด NULL
+    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS)
     # ตัดท่าเรือ -> ท่าเรือ และใบเหมืองที่ซ้ำกับใบท่าเรือ ตั้งแต่ชั้น query
     # หน้าเว็บ (ยอดรวม/แบ่งหน้า) ไฟล์ export และไฟล์แก้ไขรายเที่ยว จะได้ใช้ชุดเดียวกันเสมอ
     duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)

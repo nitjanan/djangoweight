@@ -1170,7 +1170,7 @@ def index(request):
         for row in qs_port_stock:
             customer = row['cus__customer_name']
             stone = row['pss__stone__base_stone_type_name']
-            total = row['total']
+            total = row['total'] or Decimal('0.00')
             data[customer][stone] += total
             port_stone_types.add(stone)
 
@@ -2077,6 +2077,9 @@ def updatePortStockStoneItem(company, date, cus, stone):
 def updateTotalPortStockInMonth(ps_id):
     psi = PortStockStoneItem.objects.select_related('pss__ps__company', 'pss__stone', 'cus').get(id = ps_id)
 
+    if psi.cus_id is None: #ไม่มีลูกค้า ไม่ต้องคำนวนยอดยกมา
+        return
+
     created = psi.pss.ps.created
     last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
     stone = psi.pss.stone.base_stone_type_id
@@ -2119,6 +2122,9 @@ def updateTotalPortStockInMonthByDate(previous_day, company):
     ss_items = PortStockStoneItem.objects.filter(pss__ps = stock)
 
     for ss in ss_items:
+        if ss.cus_id is None: #ไม่มีลูกค้า ไม่ต้องคำนวนยอดยกมา
+            continue
+
         created = ss.pss.ps.created
         last_date = created.replace(day=1) + relativedelta(months=1, days=-1)
         stone = ss.pss.stone.base_stone_type_id
@@ -7393,7 +7399,8 @@ def exportExcelStockStone(request):
         if end_created is not None:
             my_q &=Q(pss__ps__created__lte = end_created)
         my_q &= Q(pss__ps__company__code__in = company_in)
-   
+        my_q &= ~Q(total = 0) & ~Q(total__isnull = True) #แสดงเฉพาะลูกค้าที่มี stock คงเหลือ (total != 0)
+
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
@@ -7428,33 +7435,35 @@ def excelStockStone(request, my_q, list_date):
         date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
         
         # Create a set of all unique mill and stone values
+        # สร้าง source (ลูกค้า/ที่มา) แยกตามชนิดหิน เพื่อไม่ให้ขึ้นคอลัมน์ลูกค้าที่ไม่มีข้อมูลของหินชนิดนั้น
         stones = set()
-        sources = set()
+        stone_sources = {}
         for item in data:
             stones.add(item[1])
-            sources.add(item[2]) 
+            stone_sources.setdefault(item[1], set()).add(item[2])
 
         stone_col_list = []
-        
+
         # Create a list of colors for each line_type
         stone_colors = [generate_pastel_color() for i  in range(len(stones) + 1)]
 
         column_index = 2
         for st in stones:
+            sources_for_st = stone_sources.get(st, set())
             worksheet.cell(row=1, column=column_index, value=f'Stock {st}')
-            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources) + 2) - 1 )
-            
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources_for_st) + 2) - 1 )
+
             cell = worksheet.cell(row=1, column=column_index)
             cell.alignment = Alignment(horizontal='center')
 
             info = {}
             info['st'] = st
             info['strat_col'] = column_index
-            info['end_col'] = column_index + len(sources) + 2
+            info['end_col'] = column_index + len(sources_for_st) + 2
             stone_col_list.append(info)
 
             #อัพเดทจำนวน col ตามที่มา
-            column_index += len(sources) + 2
+            column_index += len(sources_for_st) + 2
 
         #set color in header in row 1-2
         for row in worksheet.iter_rows(min_row=1, max_row=2):
@@ -7462,7 +7471,7 @@ def excelStockStone(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 2) // (len(sources) + 2 )
+                line_index = next((i for i, info in enumerate(stone_col_list) if info['strat_col'] <= cell.column < info['end_col']), 0)
                 fill_color = stone_colors[line_index % len(stone_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -7470,10 +7479,10 @@ def excelStockStone(request, my_q, list_date):
         # Write headers row 2 to the worksheet
         column_index = 2
         for st in stones:
-            for sou in sources:
+            for sou in stone_sources.get(st, set()):
                 worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
                 column_index += 1
-                
+
             worksheet.cell(row=2, column=column_index, value= 'Total').alignment = Alignment(horizontal='center')
             worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="FF0000")
             column_index += 1
@@ -7521,7 +7530,7 @@ def excelStockStone(request, my_q, list_date):
                         note_value = stone_data.get(st, {}).get('note', '')
 
                         # Write quantities by source
-                        for sou in sources:
+                        for sou in stone_sources.get(st, set()):
                             value = source_data.get(sou, '')
                             worksheet.cell(row=idl + 3, column=column_index, value=value).number_format = '#,##0.00'
                             column_index += 1
@@ -8211,16 +8220,23 @@ def createPortStock(request):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
 
-    cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+    #ลูกค้าทั้งหมดที่เปิดใช้ port stock ใช้เป็น choices ของ select (รวมลูกค้าที่ยังไม่เคยมี stock ด้วย เผื่อกดเพิ่มแถวใหม่)
+    all_cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+
+    #แสดงเฉพาะลูกค้าที่เคยมี stock คงเหลือ (total != 0) ใน PortStockStone เก่าของบริษัทนี้ เป็นแถวเริ่มต้น
+    cus_ids_with_stock = PortStockStoneItem.objects.filter(
+        pss__ps__company = company, cus__is_port_stock = True
+    ).exclude(total = 0).exclude(total__isnull = True).values_list('cus_id', flat = True).distinct()
+    cus_objs = list(BaseCustomer.objects.filter(customer_id__in = cus_ids_with_stock))
     cus_qs = cus_objs
 
-    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs) + 1, can_delete=True,)
 
     if request.method == 'POST':
         form = PortStockForm(request.POST)
         ss_form = PortStockStoneForm(request.POST)
         formset = PortStockStoneItemFormSet(request.POST)
-        set_port_stock_cus_choices(formset, cus_objs)
+        set_port_stock_cus_choices(formset, all_cus_objs)
         if form.is_valid() and ss_form.is_valid() and formset.is_valid():
             form = form.save()
 
@@ -8229,7 +8245,15 @@ def createPortStock(request):
             pss.save()
 
             formset_instances = formset.save(commit=False)
+            for obj in formset.deleted_objects:
+                obj.delete()
+
+            seen_cus_ids = set()
             for instance in formset_instances:
+                if instance.cus_id:
+                    if instance.cus_id in seen_cus_ids:
+                        continue #กันบันทึกลูกค้าซ้ำในการ submit เดียวกัน
+                    seen_cus_ids.add(instance.cus_id)
                 instance.pss = pss
                 instance.save()
 
@@ -8242,7 +8266,7 @@ def createPortStock(request):
         form = PortStockForm(initial={'company': company})
         ss_form = PortStockStoneForm()
         formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
-        set_port_stock_cus_choices(formset, cus_objs)
+        set_port_stock_cus_choices(formset, all_cus_objs)
 
     context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
     return render(request, "portStock/createPortStock.html", context)
@@ -8250,15 +8274,23 @@ def createPortStock(request):
 @login_required(login_url='login')
 def editStep2PortStock(request, stock_id):
     active = request.session['company_code']
-    cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
-    cus_qs = cus_objs
-
-    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs),)
 
     try:
         stock_data = PortStock.objects.get(id=stock_id)
     except PortStock.DoesNotExist:
         return redirect('viewPortStock')
+
+    #ลูกค้าทั้งหมดที่เปิดใช้ port stock ใช้เป็น choices ของ select (รวมลูกค้าที่ยังไม่เคยมี stock ด้วย เผื่อกดเพิ่มแถวใหม่)
+    all_cus_objs = list(BaseCustomer.objects.filter(is_port_stock = True))
+
+    #แสดงเฉพาะลูกค้าที่เคยมี stock คงเหลือ (total != 0) ใน PortStockStone เก่าของบริษัทนี้ เป็นแถวเริ่มต้น
+    cus_ids_with_stock = PortStockStoneItem.objects.filter(
+        pss__ps__company = stock_data.company, cus__is_port_stock = True
+    ).exclude(total = 0).exclude(total__isnull = True).values_list('cus_id', flat = True).distinct()
+    cus_objs = list(BaseCustomer.objects.filter(customer_id__in = cus_ids_with_stock))
+    cus_qs = cus_objs
+
+    PortStockStoneItemFormSet = modelformset_factory(PortStockStoneItem, fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'), extra=len(cus_qs) + 1, can_delete=True,)
 
     ssn_data = PortStockStone.objects.filter(ps=stock_data).select_related('stone').prefetch_related(
         Prefetch('portstockstoneitem_set', queryset=PortStockStoneItem.objects.select_related('cus'))
@@ -8268,7 +8300,7 @@ def editStep2PortStock(request, stock_id):
         form = PortStockForm(request.POST, instance=stock_data)
         ss_form = PortStockStoneForm(request.POST)
         formset = PortStockStoneItemFormSet(request.POST)
-        set_port_stock_cus_choices(formset, cus_objs)
+        set_port_stock_cus_choices(formset, all_cus_objs)
 
         if form.is_valid() and ss_form.is_valid() and formset.is_valid():
             form = form.save()
@@ -8279,7 +8311,15 @@ def editStep2PortStock(request, stock_id):
                 pss.save()
 
                 formset_instances = formset.save(commit=False)
+                for obj in formset.deleted_objects:
+                    obj.delete()
+
+                seen_cus_ids = set()
                 for instance in formset_instances:
+                    if instance.cus_id:
+                        if instance.cus_id in seen_cus_ids:
+                            continue #กันบันทึกลูกค้าซ้ำในการ submit เดียวกัน
+                        seen_cus_ids.add(instance.cus_id)
                     instance.pss = pss
                     instance.save()
 
@@ -8292,7 +8332,7 @@ def editStep2PortStock(request, stock_id):
         form = PortStockForm(instance=stock_data)
         ss_form = PortStockStoneForm()
         formset = PortStockStoneItemFormSet(queryset=PortStockStoneItem.objects.none())
-        set_port_stock_cus_choices(formset, cus_objs)
+        set_port_stock_cus_choices(formset, all_cus_objs)
 
     context = {'port_stock_page':'active', 'form': form, 'ss_form': ss_form, 'formset' : formset, 'cus_qs': cus_qs, 'ssn_data': ssn_data,'stock_data':stock_data, active :"active", 'disabledTab' : 'disabled', 'is_edit_stock': is_edit_stock(request.user)}
     return render(request, "portStock/editStep2PortStock.html",context)
@@ -8332,9 +8372,35 @@ def editPortStockStoneItem(request, stock_id, pss_id):
                 ssn.save()
 
                 formset_instances = formset.save(commit=False)
-                for instance in formset_instances: #อันนี้ไม่มี deleted_objects นะ
+                for obj in formset.deleted_objects:
+                    obj.delete()
+
+                #กันบันทึกลูกค้าซ้ำใน pss เดียวกัน (ลูกค้าที่มี stock item อยู่แล้ว ห้ามสร้างซ้ำ)
+                #หากมีอยู่แล้ว ให้เอาค่าที่กรอกในแถวใหม่ไปอัพเดตรายการเดิมแทนการสร้างซ้ำ (กันข้อมูลหาย)
+                existing_items_by_cus = {
+                    item.cus_id: item for item in PortStockStoneItem.objects.filter(pss = ssn).exclude(
+                        id__in = [instance.pk for instance in formset_instances if instance.pk]
+                    )
+                }
+
+                merge_fields = ['quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total']
+                seen_cus_ids = set()
+                for instance in formset_instances:
                     if instance.quoted is None:
                         instance.quoted = 0
+
+                    if not instance.pk and instance.cus_id and instance.cus_id in existing_items_by_cus:
+                        existing_item = existing_items_by_cus[instance.cus_id]
+                        for field_name in merge_fields:
+                            setattr(existing_item, field_name, getattr(instance, field_name))
+                        existing_item.save()
+                        continue
+
+                    if not instance.pk and instance.cus_id and instance.cus_id in seen_cus_ids:
+                        continue #ลูกค้านี้ถูกบันทึกไปแล้วในแถวอื่นของการ submit นี้ กันสร้างซ้ำ
+
+                    if instance.cus_id:
+                        seen_cus_ids.add(instance.cus_id)
                     instance.save()
 
             psi = PortStockStoneItem.objects.filter(pss__ps = stock_id)

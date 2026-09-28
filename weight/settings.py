@@ -102,7 +102,7 @@ WSGI_APPLICATION = 'weight.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'djangoweightdb',
+        'NAME': 'real_weight_20/09/2026',
         'USER': 'root',
         'PASSWORD': '',
         'HOST': 'localhost',

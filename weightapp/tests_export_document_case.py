@@ -50,7 +50,8 @@ class ExportDocumentCaseTests(TestCase):
         for code, (name, company) in customers.items():
             BaseCustomer.objects.create(customer_id=code, customer_name=name)
             cls.map_rows[code] = BaseCompanyMapBaseCustomer.objects.create(
-                name=name, base_customer_id=code, base_company=company)
+                name=name, base_customer_id=code, base_company=company,
+                is_export_destination=True)
 
         # ปลายทางในตารางราคา = ลูกค้าที่ใบเหมืองจะเข้ารายงานได้
         for dest in ('06-V-013', '06-V-018', '06-V-900'):
@@ -142,7 +143,8 @@ class ExportDocumentCaseTests(TestCase):
         """ปลายทางที่ผูก map แล้วแต่ยังไม่มีใบราคา ต้องขึ้นในหน้านี้ (แล้วไปเตือนว่าไม่มีราคาแทน)"""
         BaseCustomer.objects.create(customer_id='06-V-901', customer_name='ท่าเรือยังไม่มีราคา')
         BaseCompanyMapBaseCustomer.objects.create(name='ท่าเรือยังไม่มีราคา',
-                                                  base_customer_id='06-V-901')
+                                                  base_customer_id='06-V-901',
+                                                  is_export_destination=True)
         self.trip(31, date(2026, 8, 12), 'W1A', '06-V-901', '41.000', None)
 
         _, filters, _ = self.querySet()
@@ -155,6 +157,54 @@ class ExportDocumentCaseTests(TestCase):
 
         _, filters, _ = self.querySet()
         self.assertNotIn(32, self.ids(filters['base_qs']))
+
+    def test_destination_must_be_flagged_as_export(self):
+        """ผูก map แล้วแต่ไม่ติ๊ก = เที่ยวไม่เข้ารายงาน (เช่นเหมืองในเครือที่เป็นต้นทางอย่างเดียว)"""
+        BaseCustomer.objects.create(customer_id='06-V-902', customer_name='เหมืองในเครือ')
+        row = BaseCompanyMapBaseCustomer.objects.create(name='เหมืองในเครือ',
+                                                        base_customer_id='06-V-902')
+        self.trip(33, date(2026, 8, 12), 'W1A', '06-V-902', '40.000', None)
+
+        _, filters, _ = self.querySet()
+        self.assertNotIn(33, self.ids(filters['base_qs']))
+
+        # ติ๊กแล้วต้องเข้ามาทันที
+        row.is_export_destination = True
+        row.save()
+        _, filters, _ = self.querySet()
+        self.assertIn(33, self.ids(filters['base_qs']))
+
+    def test_alias_follows_the_flag_of_its_map_row(self):
+        """รหัสสำรองไม่มีธงของตัวเอง ใช้ธงของแถวแม่"""
+        from weightapp.models import BaseCompanyMapCustomerAlias
+        BaseCustomer.objects.create(customer_id='77-V-900', customer_name='ท่าเรืออื่น รหัสสำรอง')
+        alias_row = self.map_rows['06-V-900']
+        BaseCompanyMapCustomerAlias.objects.create(map_row=alias_row,
+                                                   base_customer_id='77-V-900')
+        self.trip(34, date(2026, 8, 12), 'W1A', '77-V-900', '40.000', None)
+
+        _, filters, _ = self.querySet()
+        self.assertIn(34, self.ids(filters['base_qs']))
+
+        # เอาติ๊กออกที่แถวแม่ รหัสสำรองต้องหลุดออกไปด้วย
+        alias_row.is_export_destination = False
+        alias_row.save()
+        _, filters, _ = self.querySet()
+        self.assertNotIn(34, self.ids(filters['base_qs']))
+
+    def test_unflagged_destination_with_trips_is_reported(self):
+        """ผูก map แล้วแต่ลืมติ๊ก ต้องมีรายการให้เห็นบนหน้าเว็บ ไม่ใช่เงียบหาย"""
+        BaseCustomer.objects.create(customer_id='06-V-903', customer_name='ท่าเรือลืมติ๊ก')
+        BaseCompanyMapBaseCustomer.objects.create(name='ท่าเรือลืมติ๊ก',
+                                                  base_customer_id='06-V-903')
+        self.trip(35, date(2026, 8, 12), 'W1A', '06-V-903', '40.000', None)
+
+        _, filters, _ = self.querySet()
+        pending = views._exportDocumentUnflaggedDestinations(
+            views._exportDocumentOtherBwsIds(), filters['export_customers'])
+        by_code = {p['customer_id']: p for p in pending}
+        self.assertIn('06-V-903', by_code)
+        self.assertEqual(by_code['06-V-903']['trips'], 1)
 
     # ---------- เคส + การสลับต้นทาง/ปลายทาง ----------
 
@@ -236,7 +286,7 @@ class ExportDocumentCustomerAliasTests(TestCase):
         cls.origin = BaseCompanyMapBaseCustomer.objects.create(
             name='กงตาก', base_customer_id='06-V-028', base_company=kongtak)
         cls.spt = BaseCompanyMapBaseCustomer.objects.create(
-            name='สุราษฎร์พอร์ท', base_customer_id='06-V-024')
+            name='สุราษฎร์พอร์ท', base_customer_id='06-V-024', is_export_destination=True)
         # ใบราคาผูกกับรหัสหลัก 06-V-024 อย่างเดียว
         InternationalFreightRate.objects.create(origin=cls.origin, destination=cls.spt)
 

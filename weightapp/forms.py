@@ -1030,9 +1030,10 @@ PortStockStoneItemInlineFormset = inlineformset_factory(
     PortStockStoneItem,
     form=PortStockStoneItemForm,
     fields=('cus', 'quoted', 'receive', 'pay', 'loss', 'other', 'sell_cus', 'total'),
-    widgets = { 
+    widgets = {
     },
-    extra=0,
+    extra=1,
+    can_delete=True,
 )
 
 #LoadingRate   

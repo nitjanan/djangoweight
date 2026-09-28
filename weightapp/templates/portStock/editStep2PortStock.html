@@ -26,6 +26,21 @@
     max-width: 10.4167% !important;
   }
 
+  .col-md-2-2 {
+    flex: 0 0 18% !important;
+    max-width: 18% !important;
+  }
+
+  .col-md-1-1 {
+    flex: 0 0 11% !important;
+    max-width: 11% !important;
+  }
+
+  .col-md-0-5 {
+    flex: 0 0 5% !important;
+    max-width: 5% !important;
+  }
+
 </style>
   
 {% endblock %}
@@ -108,6 +123,7 @@
               </thead>
               <tbody>
                 {% for item in pss.portstockstoneitem_set.all %}
+                  {% if item.total %}
                   <tr>
                     <th scope="row">
                       {{item.cus}}
@@ -120,6 +136,7 @@
                     <td class="text-end">{{item.sell_cus | intcomma}}</td>
                     <td class="text-end">{{item.total| intcomma}}</td>
                   </tr>
+                  {% endif %}
                 {% endfor %}
                 <tr>
                   <th scope="row" colspan="7">
@@ -157,96 +174,106 @@
                 </div>
                 <hr class="my-3">
                 <div class="row">
-                  <div class="col-md-2 col-12">
+                  <div class="col-md-2-2 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">stock ของลูกค้า</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">ยกมา</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">รับเข้า</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">จำนวนที่ลงเรือ <b id="b_pay" class="text-success"></b></p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">สูญเสียจากการขนถ่าย (1% - 1.2%)</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">หินอันเดอร์ไซต์ 10% (เฉพาะหิน 40/80)</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">ขายในนาม SLC</p>
                     </div>
                   </div>
-                  <div class="col-md-1-4 col-12">
+                  <div class="col-md-1-1 col-12">
                     <div class="form-group">
                       <p class="fw-bolder">stock คงเหลือ</p>
                     </div>
                   </div>
+                  <div class="col-md-0-5 col-12">
+                    <div class="form-group">
+                      <p class="fw-bolder">&nbsp;</p>
+                    </div>
+                  </div>
                   {{ formset.management_form }}
+                  <div id="formset-rows-container">
                   {% for form in formset %}
-                    <div class="row form-row spacer">
-                     <div class="col-md-2 col-12">
+                    <div class="row form-row spacer formset-row">
+                     <div class="col-md-2-2 col-12">
                         <div class="form-group">
                           {{form.cus | add_class:"form-control cus"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.quoted | add_class:"form-control quoted"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.receive | add_class:"form-control receive"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.pay | add_class:"form-control pay border-success"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.loss | add_class:"form-control loss"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.other | add_class:"form-control other"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.sell_cus | add_class:"form-control sell_cus"}}
                         </div>
                       </div>
-                      <div class="col-md-1-4 col-12">
+                      <div class="col-md-1-1 col-12">
                         <div class="form-group">
                           {{form.total | add_class:"form-control total border-primary" |attr:"readonly:readonly"}}
                         </div>
                       </div>
-                     <!--div class="col-md-1 col-12">
-                        <div class="input-group-append text-right">
-                          <button class="btn btn-success add-form-row hidden-print">+</button>
-                        </div>
-                      </div-->
+                      <div class="col-md-0-5 col-12 d-flex align-items-center">
+                        {{form.id}}
+                        {{form.DELETE | add_class:"d-none delete-checkbox"}}
+                        <button type="button" class="btn btn-danger btn-sm remove-row"><i class="fas fa-trash-alt"></i></button>
+                      </div>
                     </div>
                     {% endfor %}
+                  </div>
+                    <div class="col-12 mb-2">
+                      <button type="button" id="add-row" class="btn btn-success btn-sm"><i class="fas fa-plus"></i> เพิ่ม stock ของลูกค้า</button>
+                    </div>
                     <div class="col-6">
                       <!--ul class="text-success" style="line-height:95%">
                         <li>ผลิต : ดึงข้อมูลหินเบอร์จากการประมาณการณ์หิน</li>
@@ -303,9 +330,6 @@
   //ห้ามเปลี่ยนวันที่ส่งผลต่อการคำนวณ stock
   $('#id_created').prop('readonly', true);
 
-  //ห้ามเปลี่ยน select option
-  $('.cus').css('pointer-events','none');
-
   //after load
   $(window).on('load', function() {
     //select2
@@ -314,7 +338,15 @@
     "{% for it in cus_qs %}"
         $("#id_form-{{forloop.counter0}}-cus").val("{{it.customer_id}}");
     "{% endfor %}"
- 
+
+    //ห้ามเปลี่ยน select option เฉพาะ row ที่ถูก prefill ลูกค้าไว้แล้ว ส่วน row ว่างให้เลือกลูกค้าได้
+    $('.formset-row').each(function() {
+      var $cus = $(this).find('.cus');
+      if ($cus.val()) {
+        $cus.css('pointer-events', 'none');
+      }
+    });
+    updateCusOptionsAvailability();
   });
 
   var have_stock = false;
@@ -552,6 +584,91 @@
     }
 
   }
+
+  ////// start เพิ่ม/ลบ stock ของลูกค้า //////
+  var formsetPrefix = 'form';
+
+  //กันเลือกลูกค้าซ้ำ (ลูกค้าที่ถูกเลือกไปแล้ว ห้ามเลือกซ้ำใน row อื่น)
+  function updateCusOptionsAvailability() {
+    var usedValues = {};
+    $('.formset-row').not('.d-none').find('.cus').each(function() {
+      var val = $(this).val();
+      if (val) {
+        usedValues[val] = true;
+      }
+    });
+
+    $('.formset-row').not('.d-none').find('.cus').each(function() {
+      var $select = $(this);
+      var myVal = $select.val();
+      $select.find('option').each(function() {
+        var optVal = $(this).val();
+        if (!optVal) {
+          return;
+        }
+        $(this).prop('disabled', !!usedValues[optVal] && optVal !== myVal);
+      });
+    });
+  }
+
+  $(document).on('change', '.cus', function() {
+    updateCusOptionsAvailability();
+  });
+
+  $('#add-row').click(function() {
+    var totalForms = $('#id_' + formsetPrefix + '-TOTAL_FORMS');
+    var newIndex = parseInt(totalForms.val());
+
+    var $newRow = $('#formset-rows-container .formset-row:last').clone();
+    $newRow.removeClass('d-none');
+
+    var namePattern = new RegExp(formsetPrefix + '-\\d+-');
+
+    //อัพเดต name/id ของ input ทั้งหมดใน row ใหม่ ให้เป็น index ล่าสุด
+    $newRow.find('input, select, textarea').each(function() {
+      var name = $(this).attr('name');
+      if (name) {
+        var newName = name.replace(namePattern, formsetPrefix + '-' + newIndex + '-');
+        $(this).attr('name', newName);
+      }
+      var id = $(this).attr('id');
+      if (id) {
+        var newId = id.replace(namePattern, formsetPrefix + '-' + newIndex + '-');
+        $(this).attr('id', newId);
+      }
+
+      if ($(this).hasClass('delete-checkbox')) {
+        $(this).prop('checked', false);
+      } else if ($(this).is('select')) {
+        $(this).val('');
+      } else {
+        $(this).val('');
+      }
+    });
+
+    //row ใหม่เลือกลูกค้าได้ ไม่ต้องล็อค
+    $newRow.find('.cus').css('pointer-events', 'auto');
+
+    $('#formset-rows-container').append($newRow);
+    totalForms.val(newIndex + 1);
+    updateCusOptionsAvailability();
+  });
+
+  $(document).on('click', '.remove-row', function() {
+    var $row = $(this).closest('.formset-row');
+    var $idInput = $row.find('input[name$="-id"]');
+
+    if ($idInput.length && $idInput.val()) {
+      //row ที่มีอยู่แล้ว : ติ๊ก DELETE แล้วซ่อน row
+      $row.find('.delete-checkbox').prop('checked', true);
+      $row.addClass('d-none');
+    } else {
+      //row ที่เพิ่งเพิ่มใหม่ ยังไม่ได้บันทึก : ลบ row ออกจากหน้าไปเลย
+      $row.remove();
+    }
+    updateCusOptionsAvailability();
+  });
+  ////// end เพิ่ม/ลบ stock ของลูกค้า //////
 
 </script>
 

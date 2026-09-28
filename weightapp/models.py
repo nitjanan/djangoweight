@@ -1427,6 +1427,17 @@ class BaseCompanyMapBaseCustomer(models.Model):
     # ว่าง = สาขานี้ไม่มีการขายเชื่อน้ำมันให้บุคคลภายนอก
     oi_soc_code = models.CharField(max_length=255, null=True, blank=True,
                                    verbose_name="โค้ดขายเชื่อบุคคลภายนอก - น้ำมัน")
+    # ตารางนี้ใช้แปลงชื่อทุกฝั่ง (ต้นทาง/ปลายทาง/บริษัท) ไม่ได้มีไว้เก็บแค่ปลายทางส่งออก
+    # สองธงนี้บอกว่าแถวนี้ถูกใช้เป็นปลายทางของงานแบบไหน ติ๊กได้ทั้งคู่หรือไม่ติ๊กเลย
+    #   ติ๊กส่งออก      -> เที่ยวที่เหมืองส่งไปที่นี่ขึ้นในหน้า /exportDocument/
+    #   ไม่ติ๊กทั้งคู่   -> แถวที่ใช้เป็นต้นทางอย่างเดียว (เหมืองในเครือ) หรือใช้แปลงชื่อเฉย ๆ
+    # รหัสลูกค้าสำรอง (BaseCompanyMapCustomerAlias) ไม่มีธงของตัวเอง ใช้ธงของแถวนี้
+    # เพราะรหัสสำรองแปลว่า "ที่เดียวกัน คนละรหัส" ถ้าต้องติ๊กต่างกันแปลว่าไม่ใช่ที่เดียวกัน
+    is_export_destination = models.BooleanField(default=False,
+                                                verbose_name="ใช้เป็นปลายทางส่งออก")
+    # ยังไม่มีหน้าไหนใช้ เตรียมไว้ให้รายงานฝั่งขายในประเทศ
+    is_domestic_destination = models.BooleanField(default=False,
+                                                  verbose_name="ใช้เป็นปลายทางในประเทศ")
 
     class Meta:
         db_table = 'base_company_map_base_customer'

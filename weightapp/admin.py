@@ -633,7 +633,11 @@ class BaseCompanyMapCustomerAliasInline(admin.TabularInline):
 
 
 class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'name', 'base_company', 'base_customer', 'alias_codes', 'oi_soc_code')
+    # ติ๊กปลายทางส่งออกได้จากหน้ารายการเลย ไม่ต้องเปิดทีละแถว เวลาไล่เก็บกวาดทั้งตาราง
+    list_display = ('id', 'name', 'base_company', 'base_customer', 'alias_codes',
+                    'is_export_destination', 'is_domestic_destination', 'oi_soc_code')
+    list_editable = ('is_export_destination', 'is_domestic_destination')
+    list_filter = ('is_export_destination', 'is_domestic_destination')
     search_fields = ('base_company__name', 'base_customer__customer_name', 'oi_soc_code',
                      'customer_aliases__base_customer__customer_id')
     autocomplete_fields = ['base_company', 'base_customer']
@@ -650,7 +654,7 @@ class BaseCompanyMapBaseCustomerAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class BaseCompanyMapCustomerAliasAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     # เมนูแยกไว้ดูรวดเดียวว่าทั้งระบบมีรหัสสำรองกี่ตัว ชี้ไปแถว map ไหนบ้าง
     # ส่วนการเพิ่มระหว่างแก้แถว map ใช้ inline ในหน้า "ข้อมูลบริษัทลูกค้า" ได้เหมือนเดิม
-    list_display = ('id', 'base_customer', 'alias_code', 'map_row', 'map_main_code')
+    list_display = ('id', 'base_customer', 'alias_code', 'map_row', 'map_main_code', 'map_is_export')
     search_fields = ('base_customer__customer_id', 'base_customer__customer_name', 'map_row__name')
     autocomplete_fields = ['map_row', 'base_customer']
     list_per_page = 20
@@ -665,6 +669,11 @@ class BaseCompanyMapCustomerAliasAdmin(ImportExportModelAdmin, admin.ModelAdmin)
     @admin.display(description='รหัสหลักของแถว map')
     def map_main_code(self, obj):
         return obj.map_row.base_customer_id or '-'
+
+    # รหัสสำรองไม่มีธงของตัวเอง ใช้ธงของแถวแม่ โชว์ไว้กันเข้าใจผิดว่าต้องไปติ๊กที่นี่
+    @admin.display(description='แถว map ติ๊กปลายทางส่งออก', boolean=True)
+    def map_is_export(self, obj):
+        return obj.map_row.is_export_destination
 
 
 class InternationalFreightRateAdmin(ImportExportModelAdmin, admin.ModelAdmin):

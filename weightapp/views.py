@@ -1170,7 +1170,7 @@ def index(request):
         for row in qs_port_stock:
             customer = row['cus__customer_name']
             stone = row['pss__stone__base_stone_type_name']
-            total = row['total']
+            total = row['total'] or Decimal('0.00')
             data[customer][stone] += total
             port_stone_types.add(stone)
 
@@ -7399,7 +7399,8 @@ def exportExcelStockStone(request):
         if end_created is not None:
             my_q &=Q(pss__ps__created__lte = end_created)
         my_q &= Q(pss__ps__company__code__in = company_in)
-   
+        my_q &= ~Q(total = 0) & ~Q(total__isnull = True) #แสดงเฉพาะลูกค้าที่มี stock คงเหลือ (total != 0)
+
     current_date_time = datetime.today()
     previous_date_time = current_date_time - timedelta(days=1)
 
@@ -7434,33 +7435,35 @@ def excelStockStone(request, my_q, list_date):
         date_style = NamedStyle(name='custom_datetime', number_format='DD/MM/YYYY')
         
         # Create a set of all unique mill and stone values
+        # สร้าง source (ลูกค้า/ที่มา) แยกตามชนิดหิน เพื่อไม่ให้ขึ้นคอลัมน์ลูกค้าที่ไม่มีข้อมูลของหินชนิดนั้น
         stones = set()
-        sources = set()
+        stone_sources = {}
         for item in data:
             stones.add(item[1])
-            sources.add(item[2]) 
+            stone_sources.setdefault(item[1], set()).add(item[2])
 
         stone_col_list = []
-        
+
         # Create a list of colors for each line_type
         stone_colors = [generate_pastel_color() for i  in range(len(stones) + 1)]
 
         column_index = 2
         for st in stones:
+            sources_for_st = stone_sources.get(st, set())
             worksheet.cell(row=1, column=column_index, value=f'Stock {st}')
-            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources) + 2) - 1 )
-            
+            worksheet.merge_cells(start_row=1, start_column = column_index, end_row=1, end_column=(column_index + len(sources_for_st) + 2) - 1 )
+
             cell = worksheet.cell(row=1, column=column_index)
             cell.alignment = Alignment(horizontal='center')
 
             info = {}
             info['st'] = st
             info['strat_col'] = column_index
-            info['end_col'] = column_index + len(sources) + 2
+            info['end_col'] = column_index + len(sources_for_st) + 2
             stone_col_list.append(info)
 
             #อัพเดทจำนวน col ตามที่มา
-            column_index += len(sources) + 2
+            column_index += len(sources_for_st) + 2
 
         #set color in header in row 1-2
         for row in worksheet.iter_rows(min_row=1, max_row=2):
@@ -7468,7 +7471,7 @@ def excelStockStone(request, my_q, list_date):
             for cell in row:
                 #cell.border = Border(top=side, bottom=side, left=side, right=side)
                 cell.alignment = Alignment(horizontal='center')
-                line_index = (cell.column - 2) // (len(sources) + 2 )
+                line_index = next((i for i, info in enumerate(stone_col_list) if info['strat_col'] <= cell.column < info['end_col']), 0)
                 fill_color = stone_colors[line_index % len(stone_colors)]
                 fill = PatternFill(start_color=fill_color, fill_type="solid")
                 cell.fill = fill
@@ -7476,10 +7479,10 @@ def excelStockStone(request, my_q, list_date):
         # Write headers row 2 to the worksheet
         column_index = 2
         for st in stones:
-            for sou in sources:
+            for sou in stone_sources.get(st, set()):
                 worksheet.cell(row=2, column=column_index, value=sou).alignment = Alignment(horizontal='center')
                 column_index += 1
-                
+
             worksheet.cell(row=2, column=column_index, value= 'Total').alignment = Alignment(horizontal='center')
             worksheet.cell(row=2, column=column_index).font = Font(bold=True, color="FF0000")
             column_index += 1
@@ -7527,7 +7530,7 @@ def excelStockStone(request, my_q, list_date):
                         note_value = stone_data.get(st, {}).get('note', '')
 
                         # Write quantities by source
-                        for sou in sources:
+                        for sou in stone_sources.get(st, set()):
                             value = source_data.get(sou, '')
                             worksheet.cell(row=idl + 3, column=column_index, value=value).number_format = '#,##0.00'
                             column_index += 1

@@ -12,6 +12,70 @@
   fill: #737CA1;
   font-weight : 600 ;
 }
+
+/* ยอด stock ตามลูกค้า */
+.stock-table-wrap {
+  max-height: 480px;
+  overflow: auto;
+  border-radius: 0.5rem;
+  border: 1px solid #e9ecef;
+}
+.stock-table {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: nowrap;
+}
+.stock-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #f1f4fb;
+  color: #495057;
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+  padding: 0.6rem 0.9rem;
+}
+.stock-table tbody td, .stock-table tfoot td {
+  padding: 0.55rem 0.9rem;
+  vertical-align: middle;
+}
+.stock-table tbody tr:hover {
+  background-color: #f8f9fc;
+}
+.stock-table .cus-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: #fff;
+  font-weight: 500;
+  text-align: left;
+}
+.stock-table thead th.cus-col {
+  z-index: 3;
+  background-color: #f1f4fb;
+}
+.stock-table tbody tr:hover .cus-col {
+  background-color: #f8f9fc;
+}
+.stock-table .total-col {
+  font-weight: 700;
+  color: #2f6fed;
+  background-color: #f4f8ff;
+}
+.stock-table .value-negative {
+  color: #dc3545;
+  font-weight: 600;
+}
+.stock-table tfoot tr {
+  position: sticky;
+  bottom: 0;
+  background-color: #eaf2ff;
+}
+.stock-table tfoot .cus-col {
+  background-color: #eaf2ff;
+}
 </style>
 {% endblock %}
 
@@ -235,43 +299,45 @@
               </button>
             </div>
             <div class="card-body">
-              <table class="table table-striped" id="table1">
+              <div class="stock-table-wrap">
+              <table class="table stock-table" id="table1">
                 <thead>
                     <tr>
-                        <th>ลูกค้า</th>
+                        <th class="cus-col">ลูกค้า</th>
                         {% for stone in port_stone_types %}
                             <th class="text-center">{{ stone }}</th>
                         {% endfor %}
-                        <th class="text-center">Total</th>
+                        <th class="text-center total-col">Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for customer, row in port_stock_list.items %}
                         <tr>
-                            <td>{{ customer }}</td>
+                            <td class="cus-col">{{ customer }}</td>
                             {% for stone in port_stone_types %}
-                                <td class="text-end">{{ row|get_item:stone|floatformat:2|intcomma}}</td>
+                                <td class="text-end{% if row|get_item:stone|is_negative %} value-negative{% endif %}">{{ row|get_item:stone|floatformat:2|intcomma}}</td>
                             {% endfor %}
-                            <td class="text-end">{{ row|get_item:"__total__"|floatformat:2|intcomma}}</td>
+                            <td class="text-end total-col{% if row|get_item:"__total__"|is_negative %} value-negative{% endif %}">{{ row|get_item:"__total__"|floatformat:2|intcomma}}</td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="{{ port_stone_types|length|add:2 }}">No data found</td>
+                            <td colspan="{{ port_stone_types|length|add:2 }}" class="text-center text-muted py-3">No data found</td>
                         </tr>
                     {% endfor %}
                 </tbody>
                 {% if port_stock_list %}
                     <tfoot>
-                        <tr class="text-primary bg-info bg-opacity-10">
-                            <td><strong>ทั้งหมด</strong></td>
+                        <tr>
+                            <td class="cus-col"><strong>ทั้งหมด</strong></td>
                             {% for stone in port_stone_types %}
-                                <td class="text-end"><strong>{{ port_stock_totals|get_item:stone|floatformat:2|intcomma }}</strong></td>
+                                <td class="text-end{% if port_stock_totals|get_item:stone|is_negative %} value-negative{% endif %}"><strong>{{ port_stock_totals|get_item:stone|floatformat:2|intcomma }}</strong></td>
                             {% endfor %}
-                            <td class="text-end"><strong>{{ port_stock_totals|get_item:"__total__"|floatformat:2|intcomma }}</strong></td>
+                            <td class="text-end total-col{% if port_stock_totals|get_item:"__total__"|is_negative %} value-negative{% endif %}"><strong>{{ port_stock_totals|get_item:"__total__"|floatformat:2|intcomma }}</strong></td>
                         </tr>
                     </tfoot>
                 {% endif %}
               </table>
+              </div>
             </div>
           </div>
         </div>

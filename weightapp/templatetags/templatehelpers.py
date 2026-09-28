@@ -35,3 +35,10 @@ def dict_keys(input_dict):
 @register.filter
 def get_item(dictionary, key):
     return dictionary.get(key, "0.00")
+
+@register.filter
+def is_negative(value):
+    try:
+        return float(value) < 0
+    except (TypeError, ValueError):
+        return False

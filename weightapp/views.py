@@ -7270,6 +7270,101 @@ def calculateTotalStock(ssn_id):
                 total -= i.quantity
     return total
 
+#จำลองยอด stock รายวันของชนิดหินหนึ่งๆ ในเดือนของ created โดยแทนที่ค่าของวันที่กำลังแก้ไข/เพิ่มด้วย submitted_items
+#แล้วไล่คำนวณยอดยกมาต่อไปยังวันถัดไปในเดือนแบบเดียวกับ updateTotalStockInMonth แต่ไม่บันทึกลงฐานข้อมูล
+def calcPreviewStockInMonth(company_id, created, stone_id, submitted_items):
+    if isinstance(created, str):
+        created = datetime.strptime(created, "%Y-%m-%d").date()
+    first_date = created.replace(day=1)
+    last_date = first_date + relativedelta(months=1, days=-1)
+
+    source_symbol = {s.id: s.symbol for s in BaseStockSource.objects.all()}
+
+    ssn_qs = StockStone.objects.filter(
+        stone_id = stone_id, stk__company_id = company_id, stk__created__range = (first_date, last_date)
+    ).exclude(stk__created = created).select_related('stk').prefetch_related('stockstoneitem_set').order_by('stk__created')
+
+    days = {}
+    for ssn in ssn_qs:
+        items = {}
+        for it in ssn.stockstoneitem_set.all():
+            items[it.source_id] = it.quantity or Decimal('0')
+        days[ssn.stk.created] = items
+
+    #แทนที่วันที่กำลังแก้ไข/เพิ่มด้วยค่าที่กรอกในฟอร์ม (ยังไม่บันทึก)
+    target_items = {}
+    for it in submitted_items:
+        try:
+            sid = int(it.get('source'))
+            qty = Decimal(str(it.get('quantity') or 0))
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+        target_items[sid] = qty
+    days[created] = target_items
+
+    result = []
+    old_total = None
+    for day in sorted(days.keys()):
+        items = dict(days[day])
+        if old_total is not None:
+            items[1] = old_total #ยกมาจากยอดของวันก่อนหน้า (แทนที่ค่าที่กรอกไว้ เหมือนกับตอนบันทึกจริง)
+
+        day_total = Decimal('0')
+        for sid, qty in items.items():
+            symbol = source_symbol.get(sid)
+            if symbol == "+":
+                day_total += qty
+            elif symbol == "-":
+                day_total -= qty
+
+        result.append({
+            'date': day.strftime('%Y-%m-%d'),
+            'total': float(day_total),
+            'is_target': day == created,
+            'warning': day_total < 0,
+        })
+        old_total = day_total
+
+    return result
+
+@login_required(login_url='login')
+def previewStockInMonth(request):
+    company = request.GET.get('company')
+    created = request.GET.get('created')
+    stone = request.GET.get('stone')
+    sources = request.GET.getlist('source[]')
+    quantities = request.GET.getlist('quantity[]')
+
+    if not (company and created and stone):
+        return JsonResponse({'days': [], 'stone_name': '', 'has_warning': False})
+
+    #จำกัดให้ดู preview ได้เฉพาะบริษัทที่ user คนนี้มีสิทธิเห็นเท่านั้น (กัน IDOR)
+    user_profile = UserProfile.objects.get(user = request.user.id)
+    allowed_company_ids = BaseCompany.objects.filter(userprofile = user_profile).values_list('id', flat=True)
+    try:
+        company_id = int(company)
+    except (TypeError, ValueError):
+        return JsonResponse({'days': [], 'stone_name': '', 'has_warning': False})
+    if company_id not in allowed_company_ids:
+        return JsonResponse({'days': [], 'stone_name': '', 'has_warning': False}, status=403)
+
+    submitted_items = [{'source': s, 'quantity': q} for s, q in zip(sources, quantities)]
+
+    try:
+        days = calcPreviewStockInMonth(company_id, created, stone, submitted_items)
+    except ValueError:
+        return JsonResponse({'days': [], 'stone_name': '', 'has_warning': False})
+
+    stone_obj = BaseStoneType.objects.filter(base_stone_type_id = stone).first()
+    stone_name = str(stone_obj) if stone_obj else ''
+
+    data = {
+        'days': days,
+        'stone_name': stone_name,
+        'has_warning': any(d['warning'] for d in days),
+    }
+    return JsonResponse(data)
+
 def searchStockInDay(request):
     if 'created' in request.GET and 'company' in request.GET and 'stock_id' in request.GET:
         created =  request.GET.get('created')

@@ -11,6 +11,7 @@ rel="stylesheet"
 href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
+<link rel="stylesheet" href="{% static 'css/stockPreview.css' %}"/>
 <style>
   .div-shadow{
     box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
@@ -77,12 +78,21 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
         </div>
 
         {% for ssn in ssn_data %}
-        <div class="card">
-          <div class="card-header">
-            <h3 class="float-start">{{forloop.counter}}. {{ssn.stone}}</h3>
-            <a href="{% url 'editStockStoneItem' ssn.stk.id ssn.id %}" class="btn btn-warning float-end"><i class="fas fa-pen"></i> แก้ไข</a>
-            <a onclick="return confirm('คุณต้องการลบ {{ssn.stone}} นี้หรือไม่ ?')" href="{% url 'removeStockStone' ssn.id %}" class="btn btn-danger float-end"><i class="fas fa-trash-alt"></i> ลบ</a>
+        <div class="card stock-ssn-card">
+          <div class="card-header stock-ssn-header">
+            <div class="stock-ssn-header-main">
+              <button type="button" class="stock-ssn-toggle-btn" data-collapse-target="#ssn-collapse-{{ssn.id}}" aria-expanded="false" aria-controls="ssn-collapse-{{ssn.id}}" aria-label="ย่อ/ขยาย">
+                <i class="bi bi-chevron-down stock-ssn-chevron"></i>
+              </button>
+              <h3 class="mb-0">{{forloop.counter}}. {{ssn.stone}}</h3>
+              <span class="badge bg-primary stock-ssn-total-badge">{{ssn.total | intcomma}} ตัน</span>
+            </div>
+            <div class="stock-ssn-header-actions">
+              <a href="{% url 'editStockStoneItem' ssn.stk.id ssn.id %}" class="btn btn-warning btn-sm" onclick="event.stopPropagation();"><i class="fas fa-pen"></i> แก้ไข</a>
+              <a onclick="event.stopPropagation(); return confirm('คุณต้องการลบ {{ssn.stone}} นี้หรือไม่ ?')" href="{% url 'removeStockStone' ssn.id %}" class="btn btn-danger btn-sm"><i class="fas fa-trash-alt"></i> ลบ</a>
+            </div>
           </div>
+          <div id="ssn-collapse-{{ssn.id}}" class="collapse">
           <div class="card-body">
             <table class="table">
               <thead>
@@ -121,90 +131,88 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </tbody>
             </table>
           </div>
+          </div>
         </div>
         {%endfor%}
 
-        <h4><span class="my-3 badge rounded-pill bg-primary">เพิ่มชนิดหินใน stock</span></h4>
-        <div class="card div-shadow border border-primary border-4">
+        <div class="row">
+          <div id="stock-preview-col" class="col-md-4 col-12 d-none">
+            <div id="stock-preview-container" class="d-none"></div>
+          </div>
+          <div id="stock-form-col" class="col-12">
+        <div id="stock-form-card" class="card stock-card">
+          <div class="card-header stock-card-header stock-card-header-primary">
+            <h5><i class="bi bi-plus-circle-fill"></i> เพิ่มชนิดหินใน stock</h5>
+          </div>
           <div class="card-content">
             <div class="card-body">
               <div id="alert" class="alert alert-warning d-none" role="alert"></div><!-- แจ้งเตือนหากมีการดึงข้อมูลมาไม่ครบ -->
               <form class="form" method="post">
-                <div class="row">
+                <div class="row g-2 align-items-center">
                   <div class="col-md-2">
-                    <p class="fw-bolder">{{ss_form.stone.label}}</p>
+                    <label class="stock-field-label">{{ss_form.stone.label}}</label>
                   </div>
-                  <div class="col-md-9">
+                  <div class="col-md-10">
                     <div class="form-group">
                       {{ss_form.stone| add_class:"form-control"}}
                     </div>
                   </div>
-                  <div class="col-md-1">
-                    <!-- -->
-                  </div>
                 </div>
-                <div class="row my-2">
+                <div class="row g-2 align-items-center mt-1">
                   <div class="col-md-2">
-                    <p class="fw-bolder">{{ss_form.note.label}}</p>
+                    <label class="stock-field-label">{{ss_form.note.label}}</label>
                   </div>
-                  <div class="col-md-9">
+                  <div class="col-md-10">
                     <div class="form-group">
                       {{ss_form.note| add_class:"form-control"}}
                     </div>
                   </div>
-                  <div class="col-md-1">
-                    <!-- -->
-                  </div>
                 </div>
-                <hr class="my-3">
-                <div class="row">
-                  <div class="col-md-6 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder">ที่มาของ stock</p>
-                    </div>
-                  </div>
-                  <div class="col-md-6 col-12">
-                    <div class="form-group">
-                      <p class="fw-bolder">จำนวนตัน</p>
-                    </div>
+                <hr class="my-4">
+                <p class="stock-field-label mb-2"><i class="bi bi-list-ul"></i> ที่มาของ stock</p>
+                <div class="stock-source-list">
+                  <div class="stock-source-row stock-source-row-head d-none d-md-flex">
+                    <div class="stock-source-col-label">ที่มาของ stock</div>
+                    <div class="stock-source-col-qty">จำนวนตัน</div>
                   </div>
                   {{ formset.management_form }}
                   {% for form in formset %}
-                    <div class="row form-row spacer">
-                      <div class="col-md-6 col-12">
+                    <div class="stock-source-row form-row spacer">
+                      <div class="stock-source-col-label">
                         <div class="form-group">
                           {{form.source | add_class:"form-control source"}}
                         </div>
                       </div>
-                      <div class="col-md-6 col-12">
+                      <div class="stock-source-col-qty">
                         <div class="form-group">
                           {{form.quantity | add_class:"form-control quantity"}}
                         </div>
                       </div>
-                      <div class="col-md-1 col-12">
-                        <!--div class="input-group-append text-right">
-                          <button class="btn btn-success add-form-row hidden-print">+</button>
-                        </div-->
-                      </div>
                     </div>
                     {% endfor %}
-                    <div class="col-6">
-                      <ul class="text-success" style="line-height:100%">
+                </div>
+                <div class="row mt-3 g-3 align-items-end">
+                  <div class="col-md-8 col-12">
+                    <div class="stock-legend">
+                      <ul>
                         <li>ผลิต : ดึงข้อมูลหินเบอร์จากการประมาณการณ์หิน</li>
                         <li>ขาย : ดึงข้อมูลหินจากตาชั่งขาย ไม่รวมปลายทาง อนุเคราะห์และใช้ภายใน (200PL, 300PL)</li>
                         <li>อนุเคราะห์ : ดึงข้อมูลจากปลายทาง อนุเคราะห์ (300PL)</li>
                       </ul>
                     </div>
-                    <div class="col-6 d-flex justify-content-end">
-                      <button type="submit" class="btn btn-primary me-1 mb-1">
-                        บันทึก
-                      </button>
-                    </div>
+                  </div>
+                  <div class="col-md-4 col-12 d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary stock-submit-btn">
+                      <i class="bi bi-check-circle-fill"></i> บันทึก
+                    </button>
+                  </div>
                 </div>
+              </form>
             </div>
           </div>
         </div>
-      </form>
+          </div>
+        </div>
     </section>
     <!-- Basic Tables end -->
   </div>
@@ -386,6 +394,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   }
   ////// end ดึงข้อมูลหินและจำนวนตัน //////
 
+  window.previewStockInMonthUrl = "{% url 'previewStockInMonth' %}";
+  $(window).on('load', function() {
+    initStockPreview();
+  });
 </script>
+<script src="{% static 'js/pages/stockPreview.js' %}"></script>
 
 {% endblock %}

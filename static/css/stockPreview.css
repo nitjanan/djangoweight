@@ -1,0 +1,256 @@
+/* ===== การ์ดชนิดหินใน stock : ย่อ/ขยายได้ (คลิกปุ่มลูกศร) ===== */
+.stock-ssn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.stock-ssn-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.stock-ssn-header-main h3 {
+  font-size: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stock-ssn-total-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.stock-ssn-header-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.stock-ssn-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border: 1px solid #dee2e6;
+  border-radius: 50%;
+  background-color: #f8f9fc;
+  color: #495057;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.stock-ssn-toggle-btn:hover {
+  background-color: #eef1f6;
+  border-color: #ced4da;
+}
+.stock-ssn-chevron {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.stock-ssn-toggle-btn[aria-expanded="true"] .stock-ssn-chevron {
+  transform: rotate(180deg);
+}
+
+/* ===== ฟอร์มเพิ่ม/แก้ไข ชนิดหินใน stock ===== */
+.stock-card {
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  scroll-margin-top: 90px; /* กันไม่ให้หัวการ์ดถูกบังตอน scroll ไปหา */
+}
+
+/* เอฟเฟกต์เน้นให้เห็นชัดตอนเลื่อนมาที่ฟอร์มอัตโนมัติ */
+.stock-card-highlight {
+  animation: stock-card-pulse 1.4s ease-out;
+}
+@keyframes stock-card-pulse {
+  0% { box-shadow: 0 0 0 0.35rem rgba(255, 181, 71, 0.55), 0 4px 14px 0 rgba(0, 0, 0, 0.08); }
+  100% { box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.08); }
+}
+.stock-card-header {
+  padding: 0.9rem 1.25rem;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stock-card-header h5 {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.stock-card-header-primary {
+  background: linear-gradient(135deg, #4a7dfc 0%, #2f5fd9 100%);
+}
+.stock-card-header-warning {
+  background: linear-gradient(135deg, #ffb547 0%, #f2994a 100%);
+}
+.stock-clear-btn {
+  font-weight: 600;
+}
+
+.stock-field-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0;
+}
+
+/* theme เดิมมี .form-group{margin-bottom:.7rem} ทำให้แถวชนิดหิน/หมายเหตุห่างกันเกินไป ตัดออกในฟอร์มนี้ */
+.stock-card .form-group {
+  margin-bottom: 0;
+}
+
+.stock-card .form-control {
+  border-radius: 0.5rem;
+  border: 1px solid #dee2e6;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.stock-card .form-control:focus {
+  border-color: #4a7dfc;
+  box-shadow: 0 0 0 0.15rem rgba(74, 125, 252, 0.15);
+}
+
+.stock-source-list {
+  border: 1px solid #eef1f6;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.stock-source-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid #f1f3f6;
+}
+.stock-source-row:last-child {
+  border-bottom: none;
+}
+.stock-source-row:nth-of-type(even) {
+  background-color: #fafbfd;
+}
+.stock-source-row-head {
+  background-color: #f8f9fc !important;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.85rem;
+  padding: 0.6rem 0.9rem;
+}
+.stock-source-col-label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.stock-source-col-qty {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.stock-source-row .form-group {
+  margin-bottom: 0;
+}
+
+.stock-legend {
+  background-color: #f6faf6;
+  border: 1px solid #dff2e0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  height: 100%;
+}
+.stock-legend ul {
+  color: #2f7d3c;
+  margin: 0;
+  padding-left: 1.1rem;
+  line-height: 1.5;
+  font-size: 0.85rem;
+}
+
+.stock-submit-btn {
+  border-radius: 2rem;
+  padding: 0.6rem 1.75rem;
+  font-weight: 700;
+  box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 575.98px) {
+  .stock-source-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+}
+
+/* ===== ตัวอย่างยอด stock เดือนนี้ (preview) ===== */
+/* ยึดความสูงตาม form ที่อยู่ข้างๆ : ความสูงจริงถูกกำหนดด้วย JS (syncPreviewHeight)
+   เพราะ flex/grid stretch ทำได้แค่ดึงฝั่งที่เตี้ยกว่าให้สูงขึ้น แต่ทำให้ฝั่งที่สูงกว่าถูกบีบ (scroll) ไม่ได้ */
+.stock-preview-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.stock-preview-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.stock-preview-card .stock-preview-header {
+  background: linear-gradient(135deg, #37c48a 0%, #1f9d6c 100%);
+  padding: 0.9rem 1.25rem;
+}
+.stock-preview-card .stock-preview-header h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+.stock-preview-card .stock-preview-alert {
+  margin: 0.75rem 1rem 0;
+}
+.stock-preview-table {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.stock-preview-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #f8f9fc;
+  color: #495057;
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+  padding: 0.55rem 0.9rem;
+}
+.stock-preview-table tbody td {
+  padding: 0.5rem 0.9rem;
+  vertical-align: middle;
+}
+.stock-preview-table tbody tr:hover {
+  background-color: #f8f9fc;
+}
+.stock-preview-table .stock-preview-target {
+  background-color: #fff8e6;
+  font-weight: 600;
+}
+.stock-preview-table .stock-preview-negative {
+  background-color: #fdecea;
+}
+.stock-preview-table .stock-preview-negative .stock-preview-total {
+  color: #dc3545;
+  font-weight: 700;
+}
+.stock-preview-table .stock-preview-total {
+  font-weight: 600;
+  color: #2f6fed;
+}
+.stock-preview-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: #6c757d;
+}

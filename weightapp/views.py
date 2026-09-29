@@ -12826,6 +12826,11 @@ def _ifrEffectiveLabel(effective_date):
 # เคส 2 เอาเฉพาะตาชั่งประเภทที่ 1 (ตาชั่งขาย) ตาชั่งประเภทอื่นของเหมืองไม่เกี่ยวกับการส่งออก
 EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
 
+# หน้างาน (base_site) ที่ไม่ใช่การขนไปขาย จึงไม่ต้องคิดค่าขนส่งส่งออกในหน้านี้
+#   200PL = ใช้ภายใน   300PL = อนุเคราะห์
+# ตัดด้วยรหัส ไม่ใช่ชื่อ เพราะชื่อแก้ในหน้า admin ได้ตลอด
+EXPORT_DOC_EXCLUDED_SITE_IDS = ('200PL', '300PL')
+
 # เคส = เที่ยวนี้ "ไปลงท่าเรือไหน" ดูจากปลายทาง (ใช้เป็นป้ายและตัวกรอง)
 EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท
 EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น
@@ -12944,21 +12949,67 @@ def _exportDocumentOwnPortBwsIds():
 def _exportDocumentExportCustomerIds():
     """รหัสลูกค้าที่ถือว่าเป็น "ปลายทางส่งออก"
 
-    เกณฑ์คือ "ลูกค้ารายนี้ถูกผูกไว้ในตาราง base_company_map_base_customer หรือยัง"
-    (นับรหัสลูกค้าสำรองใน base_company_map_customer_alias ด้วย)
+    เกณฑ์คือแถว map ของลูกค้ารายนั้นติ๊ก "ใช้เป็นปลายทางส่งออก" ไว้หรือเปล่า
+    รหัสลูกค้าสำรองใช้ธงของแถวแม่ ไม่มีธงของตัวเอง
 
     เดิมใช้ปลายทางที่มีในตารางอัตราค่าขนส่งเป็นตัวกำหนด ทำให้เที่ยวที่ยังไม่ได้ทำใบราคา
-    หายไปจากหน้านี้ทั้งก้อนโดยไม่มีใครรู้ เปลี่ยนมาใช้ตาราง map แทน เที่ยวจะขึ้นทันทีที่ผูกปลายทาง
+    หายไปจากหน้านี้ทั้งก้อนโดยไม่มีใครรู้ เปลี่ยนมาใช้ธงแทน เที่ยวจะขึ้นทันทีที่ติ๊ก
     แล้วเส้นทางที่ยังไม่มีใบราคาจะไปโผล่ในแถบเตือน "ยังไม่มีสัญญา" ของหน้านี้แทน
 
     ยังต้องมีตัวกรองนี้อยู่ เพราะตาชั่งขายของเหมืองออกใบให้ลูกค้าในประเทศด้วย
     ถ้าไม่กรองเลย การขายในประเทศ ~90,000 เที่ยวจะทะลักเข้ามาปนกับเที่ยวส่งออก
     """
+    row_ids = set(BaseCompanyMapBaseCustomer.objects
+                  .filter(is_export_destination=True)
+                  .values_list('id', flat=True))
     customers = set(BaseCompanyMapBaseCustomer.objects
+                    .filter(id__in=row_ids)
                     .exclude(base_customer__isnull=True)
                     .values_list('base_customer_id', flat=True))
-    customers.update(_baseCompanyMapCustomerAliases())
+    customers.update(customer_id for customer_id, map_row_id
+                     in _baseCompanyMapCustomerAliases().items() if map_row_id in row_ids)
     return customers
+
+
+def _exportDocumentUnflaggedDestinations(other_bws, export_customers, selected_month=None):
+    """ลูกค้าที่มีเที่ยววิ่งออกจากเหมือง แต่แถว map ยังไม่ได้ติ๊กว่าเป็นปลายทางส่งออก
+
+    เพิ่มท่าเรือใหม่แล้วลืมติ๊ก = เที่ยวหายทั้งก้อนโดยไม่มีอะไรบอก เคยเกิดมาแล้วตอนที่
+    ขอบเขตยังผูกกับใบราคา จึงต้องมีตัวนับให้เห็นบนหน้าเว็บ
+
+    ดูเฉพาะลูกค้าที่มีแถว map แล้ว (ตั้งใจผูกไว้แล้วแต่ไม่ได้ติ๊ก) ไม่กวาดลูกค้าในประเทศ
+    ที่ไม่เคยผูก map มาด้วย ไม่งั้นจะขึ้นเป็นร้อยรายจนไม่มีใครอ่าน
+
+    คืน [{'name':..., 'customer_id':..., 'trips': n}, ...] เรียงจากเที่ยวมากไปน้อย
+    """
+    mapped = {}
+    for row in BaseCompanyMapBaseCustomer.objects.exclude(base_customer__isnull=True):
+        mapped[row.base_customer_id] = row
+    alias_rows = {r.base_customer_id: r.map_row
+                  for r in BaseCompanyMapCustomerAlias.objects.select_related('map_row')}
+    mapped.update(alias_rows)
+
+    candidates = [customer_id for customer_id in mapped if customer_id not in export_customers]
+    if not candidates:
+        return []
+
+    # นับจากตาราง weight ตรง ๆ ไม่ใช่จาก base_qs เพราะ base_qs กรองปลายทางที่ติ๊กแล้วออกไปก่อน
+    # เที่ยวของลูกค้าที่ยังไม่ติ๊กจึงไม่มีทางอยู่ใน base_qs เลย
+    names = _baseCompanyMapDisplayNameById()
+    trips = Weight.objects.filter(bws_id__in=other_bws, customer_id__in=candidates,
+                                  carry_type_name=EXPORT_DOC_CARRY_TYPE, is_cancel=False)
+    if selected_month:
+        try:
+            year, month = selected_month.split('-')
+            trips = trips.filter(date__year=int(year), date__month=int(month))
+        except (ValueError, TypeError):
+            pass
+    rows = (trips.values('customer_id')
+            .annotate(trips=Count('weight_id')).order_by('-trips'))
+    return [{'customer_id': r['customer_id'],
+             'name': names.get(mapped[r['customer_id']].id) or r['customer_id'],
+             'trips': r['trips']}
+            for r in rows]
 
 
 def _baseCompanyMapCustomerAliases():
@@ -13140,7 +13191,9 @@ def _exportDocumentQuerySet(request):
         Q(bws_id__in=own_port_bws)
         | Q(bws_id__in=other_bws, customer_id__in=export_customers),
         carry_type_name=EXPORT_DOC_CARRY_TYPE,
-    )
+    # ใบที่หน้างานเป็น "ใช้ภายใน" หรือ "อนุเคราะห์" ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก
+    # แถวที่ไม่ได้ระบุหน้างาน (site_id เป็น NULL) ยังอยู่ครบ เพราะ exclude ของ Django ไม่ตัด NULL
+    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS)
     # ตัดท่าเรือ -> ท่าเรือ และใบเหมืองที่ซ้ำกับใบท่าเรือ ตั้งแต่ชั้น query
     # หน้าเว็บ (ยอดรวม/แบ่งหน้า) ไฟล์ export และไฟล์แก้ไขรายเที่ยว จะได้ใช้ชุดเดียวกันเสมอ
     duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)
@@ -13293,6 +13346,7 @@ def _exportDocumentQuerySet(request):
         'option_qs': option_qs,
         'own_port_bws': own_port_bws,
         'own_port_customers': own_port_customers,
+        'export_customers': export_customers,
     }
     return qs, filters, month_list
 
@@ -13459,6 +13513,9 @@ def viewExportDocument(request):
         'wc_no_contract_pct': round(100.0 * wc_no_contract / wc_total) if wc_total else 0,
         'wc_out_of_range_pct': round(100.0 * wc_out_of_range / wc_total) if wc_total else 0,
         'wc_missing_routes': _exportDocumentMissingRoutes(all_rows, weight_carried_by_key),
+        # ลูกค้าที่ผูก map ไว้แล้วแต่ยังไม่ได้ติ๊กว่าเป็นปลายทางส่งออก (เที่ยวจึงยังไม่เข้ารายงาน)
+        'unflagged_destinations': _exportDocumentUnflaggedDestinations(
+            _exportDocumentOtherBwsIds(), filters['export_customers'], selected_month),
     })
     # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)

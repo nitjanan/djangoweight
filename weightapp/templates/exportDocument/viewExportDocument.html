@@ -473,6 +473,31 @@
         </div>
 
         <div class="ifr-issues">
+          {% comment %}
+            ติ๊กปลายทางส่งออกไว้ที่แถว map เป็นตัวกำหนดว่าเที่ยวไหนเข้ารายงาน
+            เพิ่มท่าเรือใหม่แล้วลืมติ๊ก เที่ยวจะหายทั้งก้อนโดยไม่มีอะไรบอก จึงต้องเตือนไว้
+          {% endcomment %}
+          {% if rate_stats.unflagged_destinations %}
+          <div class="ifr-issue ifr-issue-warn">
+            <div class="ifr-issue-num">{{ rate_stats.unflagged_destinations|length }} ปลายทาง</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">ยังไม่ได้ติ๊กว่าเป็นปลายทางส่งออก เที่ยวจึงไม่เข้ารายงาน</div>
+              <div class="ifr-issue-text">
+                <strong>ต้องทำ:</strong> ไปหน้า admin &rarr; ข้อมูลบริษัทลูกค้า
+                แล้วติ๊ก "ใช้เป็นปลายทางส่งออก" ให้แถวเหล่านี้
+                <ul class="ifr-missing-list">
+                  {% for d in rate_stats.unflagged_destinations %}
+                  <li>
+                    <span class="fw-semibold">{{ d.name }}</span>
+                    <span class="text-muted small">({{ d.customer_id }}) — {{ d.trips|intcomma }} เที่ยว</span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
           {% if rate_stats.wc_no_contract %}
           <div class="ifr-issue ifr-issue-bad">
             <div class="ifr-issue-num">{{ rate_stats.wc_no_contract|intcomma }} เที่ยว</div>

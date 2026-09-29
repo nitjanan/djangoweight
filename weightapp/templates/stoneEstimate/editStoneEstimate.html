@@ -347,10 +347,8 @@ label {
   //ห้ามเปลี่ยน site ส่งผลต่อการคำนวณ stock
   $('#id_site').css('pointer-events','none');
 
-  //ห้ามเปลี่ยน select option
-  $('.stone_type').css('pointer-events','none');
-
   visibleIsPass();
+  updateStoneTypeOptions();
 
 
   total = parseFloat($('#id_total').val());
@@ -384,7 +382,35 @@ label {
     $("#id_stoneestimateitem_set-"+inputId+"-percent").removeClass("percent");
     // ซ่อนรายการหิน
     $("#div-"+id).hide();
+
+    updateStoneTypeOptions();
   }
+
+  //ห้ามเลือกชนิดหินซ้ำกันในแต่ละแถว (ซ่อน option ที่ถูกเลือกไปแล้วในแถวอื่น โดยไม่แตะ option ของแถวตัวเอง)
+  function updateStoneTypeOptions(){
+    var selects = $('.stone_type');
+    var selectedValues = [];
+    selects.each(function(){
+      if($(this).closest('.form-row').is(':visible')){
+        var val = $(this).val();
+        if(val) selectedValues.push(val);
+      }
+    });
+    selects.each(function(){
+      var current = $(this).val();
+      $(this).find('option').each(function(){
+        var optVal = $(this).val();
+        if(!optVal) return;
+        var usedElsewhere = optVal !== current && selectedValues.indexOf(optVal) !== -1;
+        $(this).prop('disabled', usedElsewhere);
+        $(this).prop('hidden', usedElsewhere);
+      });
+    });
+  }
+
+  $(document).on('change', '.stone_type', function(){
+    updateStoneTypeOptions();
+  });
 
   //before save
   $(document).ready(function() {
@@ -482,7 +508,7 @@ label {
       if (el.name) el.name = el.name.replace(id_regex, replacement);
   }
   function cloneMore(selector, prefix) {
-      var newElement = $(selector).clone(true);
+      var newElement = $(selector).clone(true, true);
       var total = $('#id_' + prefix + '-TOTAL_FORMS').val();
       newElement.find(':input:not([type=button]):not([type=submit]):not([type=reset])').each(function() {
           var name = $(this).attr('name')
@@ -490,6 +516,9 @@ label {
               name = name.replace('-' + (total-1) + '-', '-' + total + '-');
               var id = 'id_' + name;
               $(this).attr({'name': name, 'id': id}).val('').removeAttr('checked');
+              if($(this).hasClass('qty_site') || $(this).hasClass('nd_qty_site')){
+                $(this).val('0.000');
+              }
           }
       });
       newElement.find('label').each(function() {
@@ -507,6 +536,7 @@ label {
       .removeClass('btn-success').addClass('btn-danger')
       .removeClass('add-form-row').addClass('remove-form-row')
       .html('-');
+      updateStoneTypeOptions();
       return false;
   }
   function deleteForm(prefix, btn) {
@@ -521,6 +551,7 @@ label {
               });
           }
       }
+      updateStoneTypeOptions();
       return false;
   }
   $(document).on('click', '.add-form-row', function(e){

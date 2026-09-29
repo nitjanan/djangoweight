@@ -12,7 +12,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
 from weightapp import xlsx_template
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
-from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
+from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
 from django.db.models import Count, Avg
 import stripe, logging, datetime
@@ -4251,8 +4251,16 @@ def createStoneEstimate(request):
     SITE_CHOICES = [('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
     ND_SITE_CHOICES = [('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
 
-    base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True)
-    StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'nd_site_id', 'nd_qty_site', 'total'), extra=len(base_stone_type), 
+    #โชว์เฉพาะชนิดหินที่เคยคีย์ percent > 0 ของบริษัทนี้ ถ้ายังไม่เคยคีย์เลย ให้ show ชนิดหินที่ is_stone_estimate ทั้งหมดแทน
+    keyed_stone_type_ids = StoneEstimateItem.objects.filter(
+        se__company__code = active, percent__isnull = False, percent__gt = 0
+    ).values_list('stone_type_id', flat=True).distinct()
+    if keyed_stone_type_ids:
+        base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True, base_stone_type_id__in = keyed_stone_type_ids)
+    else:
+        base_stone_type = BaseStoneType.objects.filter(is_stone_estimate = True)
+    num_rows = len(base_stone_type) or 1
+    StoneEstimateItemFormSet = modelformset_factory(StoneEstimateItem, form=StoneEstimateItemForm, fields=('stone_type', 'percent', 'qty', 'site_id', 'qty_site', 'nd_site_id', 'nd_qty_site', 'total'), extra=num_rows,
         widgets={
         'site_id': Select(choices=SITE_CHOICES),
         'nd_site_id': Select(choices=ND_SITE_CHOICES)
@@ -4260,7 +4268,7 @@ def createStoneEstimate(request):
 
     if request.method == 'POST':
         se_form = StoneEstimateForm(request, request.POST)
-        formset = StoneEstimateItemFormSet(request.POST)
+        formset = StoneEstimateItemFormSet(request.POST, form_kwargs={'company_code': active})
         if se_form.is_valid() and formset.is_valid():
             se = se_form.save()
 
@@ -4273,13 +4281,10 @@ def createStoneEstimate(request):
             updateProdStockStoneItem(se.company.id, se.created)#คำนวณ stock
             return redirect('viewStoneEstimate')
     else:
-        initial_data = (
-            [{'qty_site': 0.0} for _ in range(len(base_stone_type))] +
-            [{'nd_qty_site': 0.0} for _ in range(len(base_stone_type))]
-        )
+        initial_data = [{'qty_site': 0.0, 'nd_qty_site': 0.0} for _ in range(num_rows)]
 
         se_form = StoneEstimateForm(request, initial={'company': company})
-        formset = StoneEstimateItemFormSet(queryset=StoneEstimateItem.objects.none(), initial=initial_data)
+        formset = StoneEstimateItemFormSet(queryset=StoneEstimateItem.objects.none(), initial=initial_data, form_kwargs={'company_code': active})
 
     context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset, 'base_stone_type': base_stone_type, active :"active", 'disabledTab' : 'disabled'}
     return render(request, "stoneEstimate/createStoneEstimate.html",context)
@@ -4294,10 +4299,27 @@ def editStoneEstimate(request, se_id):
     estimate = get_object_or_404(StoneEstimate, pk=se_id)
     FormsetClass = StoneEstimateItemInlineFormset
 
+    #โชว์เฉพาะรายการชนิดหินที่เคยคีย์ percent > 0 ของบริษัทนี้ ถ้ายังไม่เคยคีย์เลย ให้ show ทุกรายการของ estimate นี้แทน
+    keyed_stone_type_ids = list(StoneEstimateItem.objects.filter(
+        se__company__code = active, percent__isnull = False, percent__gt = 0
+    ).values_list('stone_type_id', flat=True).distinct())
+    if keyed_stone_type_ids:
+        item_qs = StoneEstimateItem.objects.filter(se=estimate, stone_type_id__in=keyed_stone_type_ids)
+    else:
+        item_qs = StoneEstimateItem.objects.filter(se=estimate)
+
+    #กันกรณีมีรายการชนิดหินซ้ำกันในรายการเดียวกัน (ข้อมูลเก่า) ให้เหลือแค่แถวเดียวต่อชนิดหิน (เลือกแถวที่ percent มากที่สุด)
+    best_item_by_type = {}
+    for item in item_qs.order_by('id'):
+        current_best = best_item_by_type.get(item.stone_type_id)
+        if current_best is None or (item.percent or 0) > (current_best.percent or 0):
+            best_item_by_type[item.stone_type_id] = item
+    item_qs = StoneEstimateItem.objects.filter(pk__in=[i.pk for i in best_item_by_type.values()])
+
     if request.method == "POST":
-        formset = FormsetClass(request.POST, instance=estimate, form_kwargs={'company_code': request.session['company_code']})
+        formset = FormsetClass(request.POST, instance=estimate, queryset=item_qs, form_kwargs={'company_code': request.session['company_code']})
         se_form = StoneEstimateForm(request, request.POST, request.FILES, instance=estimate)
-        
+
         if se_form.is_valid() and formset.is_valid():
             se = se_form.save(commit=False)
             se.save()
@@ -4317,7 +4339,7 @@ def editStoneEstimate(request, se_id):
 
             return redirect('viewStoneEstimate')
     else:
-        formset = FormsetClass(instance=estimate, form_kwargs={'company_code': request.session['company_code']})
+        formset = FormsetClass(instance=estimate, queryset=item_qs, form_kwargs={'company_code': request.session['company_code']})
         se_form = StoneEstimateForm(request, instance=se_data)
 
     context = {'stone_estimate_page':'active', 'se_form': se_form, 'formset' : formset,'se': se_data, active :"active", 'disabledTab' : 'disabled'}

@@ -253,6 +253,9 @@ class StoneEstimateItemForm(forms.ModelForm):
                 choices=[('', '---------')] + [(str(site.base_site_id), site.base_site_name) for site in site_qs]
             )
 
+            #dropdown เลือกชนิดหินให้โชว์ชนิดหินที่ is_stone_estimate = True ทั้งหมด
+            self.fields['stone_type'].queryset = BaseStoneType.objects.filter(is_stone_estimate=True)
+
 #เปอร์เซ็นคาดการณ์คำนวณหินเบอร์
 StoneEstimateItemInlineFormset = inlineformset_factory(
     StoneEstimate,

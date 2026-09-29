@@ -27,6 +27,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     max-width: 10.4167% !important;
   }
 
+  .col-md-0-25 {
+    flex: 0 0 2.0833% !important;
+    max-width: 2.0833% !important;
+  }
+
   .big-checkbox {
     width: 16px;
     height: 16px;
@@ -184,7 +189,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <p class="fw-bolder">ชนิดหิน</p>
                   </div>
                 </div>
-                <div class="col-md-1-5 col-12 npp">
+                <div class="col-md-1-25 col-12 npp">
                   <div class="form-group">
                     <p class="fw-bolder">เปอร์เซ็นต์</p>
                   </div>
@@ -219,15 +224,20 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     <p class="fw-bolder">รวมหินที่โม่ได้  (ตัน)</p>
                   </div>
                 </div>
+                <div class="col-md-0-25 col-12">
+                  <div class="form-group">
+                    <p class="fw-bolder">.</p>
+                  </div>
+                </div>
                 {{ formset.management_form }}
                 {% for form in formset %}
                   <div class="row form-row spacer">
                     <div class="col-md-2 col-12 nps">
                       <div class="form-group">
-                        {{form.stone_type | add_class:"form-control stone_type"}}
+                        {{form.id}}{{form.stone_type | add_class:"form-control stone_type"}}
                       </div>
                     </div>
-                    <div class="col-md-1-5 col-12 npp">
+                    <div class="col-md-1-25 col-12 npp">
                       <div class="form-group">
                         <div class="input-group">
                           {{ form.percent|add_class:"form-control percent" }}
@@ -267,10 +277,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                         {{form.total | add_class:"form-control total border border-primary" |attr:"readonly:readonly"}}
                       </div>
                     </div>
-                    <div class="col-md-1 col-12">
-                      <!--div class="input-group-append text-right">
-                        <button class="btn btn-success add-form-row hidden-print">+</button>
-                      </div-->
+                    <div class="col-md-0-25 col-12">
+                      {% if forloop.last %}
+                        <div class="input-group-append text-right">
+                          <button type="button" class="btn btn-success add-form-row hidden-print">+</button>
+                        </div>
+                      {% else %}
+                        <div class="input-group-append text-right">
+                          <button type="button" class="btn btn-danger remove-form-row hidden-print">-</button>
+                        </div>
+                      {% endif %}
                     </div>
                 </div>
                   {% endfor %}
@@ -326,9 +342,6 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   var formattedDate = today.toISOString().split('T')[0];
   $('#id_created').val(formattedDate);
 
-  //ห้ามเปลี่ยน select option
-  $('.stone_type').css('pointer-events','none');
-
   //after load
   $(window).on('load', function() {
   "{% for it in base_stone_type %}"
@@ -336,6 +349,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   "{% endfor %}"
 
   visibleIsPass();
+  updateStoneTypeOptions();
 
   });
 
@@ -425,6 +439,31 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     });
   });
 
+  //ห้ามเลือกชนิดหินซ้ำกันในแต่ละแถว
+  //ห้ามเลือกชนิดหินซ้ำกันในแต่ละแถว (ซ่อน option ที่ถูกเลือกไปแล้วในแถวอื่น โดยไม่แตะ option ของแถวตัวเอง)
+  function updateStoneTypeOptions(){
+    var selects = $('.stone_type');
+    var selectedValues = [];
+    selects.each(function(){
+      var val = $(this).val();
+      if(val) selectedValues.push(val);
+    });
+    selects.each(function(){
+      var current = $(this).val();
+      $(this).find('option').each(function(){
+        var optVal = $(this).val();
+        if(!optVal) return;
+        var usedElsewhere = optVal !== current && selectedValues.indexOf(optVal) !== -1;
+        $(this).prop('disabled', usedElsewhere);
+        $(this).prop('hidden', usedElsewhere);
+      });
+    });
+  }
+
+  $(document).on('change', '.stone_type', function(){
+    updateStoneTypeOptions();
+  });
+
   function checkOverPercent(){
     var inputs = $(".percent");
     var sum = 0;
@@ -444,7 +483,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       if (el.name) el.name = el.name.replace(id_regex, replacement);
   }
   function cloneMore(selector, prefix) {
-      var newElement = $(selector).clone(true);
+      var newElement = $(selector).clone(true, true);
       var total = $('#id_' + prefix + '-TOTAL_FORMS').val();
       newElement.find(':input:not([type=button]):not([type=submit]):not([type=reset])').each(function() {
           var name = $(this).attr('name')
@@ -452,6 +491,9 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               name = name.replace('-' + (total-1) + '-', '-' + total + '-');
               var id = 'id_' + name;
               $(this).attr({'name': name, 'id': id}).val('').removeAttr('checked');
+              if($(this).hasClass('qty_site') || $(this).hasClass('nd_qty_site')){
+                $(this).val('0.000');
+              }
           }
       });
       newElement.find('label').each(function() {
@@ -469,6 +511,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
       .removeClass('btn-success').addClass('btn-danger')
       .removeClass('add-form-row').addClass('remove-form-row')
       .html('-');
+      updateStoneTypeOptions();
       return false;
   }
   function deleteForm(prefix, btn) {
@@ -483,6 +526,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               });
           }
       }
+      updateStoneTypeOptions();
       return false;
   }
   $(document).on('click', '.add-form-row', function(e){

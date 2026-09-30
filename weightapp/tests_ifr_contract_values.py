@@ -3,11 +3,15 @@
 
 ตอนนี้เก็บไว้อ้างอิงอย่างเดียว ยังไม่มีสูตรไหนเอาไปคิดเงิน เทสต์จึงคุมแค่
 การเก็บค่า (รายแถว ทีมเดียวกันต่างกันได้) และการออกเวอร์ชันใหม่
+ไฟล์รายงานรายเที่ยวโชว์ค่าสัญญาในชีตอัตรา (G/H) ให้บัญชีเห็นเฉย ๆ สูตรในไฟล์คิดจากค่าขนส่ง (J)
 """
 from datetime import date
 from decimal import Decimal
 
-from django.test import TestCase
+import openpyxl
+from django.test import SimpleTestCase, TestCase
+
+from weightapp import views, xlsx_template
 
 from weightapp.serializers import InternationalFreightRateSerializer
 from weightapp.tests_ifr_fuel_adjustment import IfrRateFixtureMixin
@@ -173,3 +177,95 @@ class IfrContractValueTests(IfrRateFixtureMixin, TestCase):
         self.assertIsNone(cell(3))                 # เดิม : ใบแรก ไม่มีฉบับก่อนหน้า
         self.assertEqual(cell(4), 1200.0)          # ใหม่
         self.assertEqual(cell(5), '± 1.00')        # น้ำมัน ± 1
+
+
+class TripReportRateSheetColumnTests(SimpleTestCase):
+    """ชีต อัตราค่าขนส่ง ของไฟล์รายงานรายเที่ยว (template v15)
+
+    G ค่าขนส่งตามสัญญา / H น้ำมันฐานวันทำสัญญา = โชว์เฉย ๆ
+    J ค่าขนส่งในใบราคา = ตัวตั้งของสูตรอัตราสุทธิ N = ROUND(J + ส่วนปรับ M, 2)
+    """
+
+    def rateRow(self, **extra):
+        row = {
+            'team': 'ทีมทดสอบ', 'origin': 'เหมืองทดสอบ', 'destination': 'ท่าเรือทดสอบ',
+            'weight_carried': 'แบก นน.', 'stone': 'หินทดสอบ', 'distance': Decimal('450'),
+            'contract_freight_rate': Decimal('1150.00'), 'contract_base_fuel_price': Decimal('29.75'),
+            'base_fuel_range': '30.00 - 35.00', 'freight_rate': Decimal('1153.75'),
+            'average_fuel_price': Decimal('36.50'), 'fuel_freight_adjustment': Decimal('15.00'),
+            'base_fuel_price': Decimal('30.00'), 'base_fuel_price_max': Decimal('35.00'),
+            'fuel_note': 'หมายเหตุทดสอบ',
+        }
+        row.update(extra)
+        return row
+
+    def writeSheet(self, rows):
+        workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+        views._exportDocumentWriteRateSheet(workbook, rows)
+        return workbook
+
+    def test_values_land_in_their_columns(self):
+        ws = self.writeSheet([self.rateRow()])[views.EXPORT_DOC_RATE_SHEET]
+        self.assertEqual(ws['F5'].value, 450.0)
+        self.assertEqual(ws['G5'].value, 1150.0)        # ตามสัญญา
+        self.assertEqual(ws['H5'].value, 29.75)         # น้ำมันฐานวันทำสัญญา
+        self.assertEqual(ws['I5'].value, '30.00 - 35.00')
+        self.assertEqual(ws['J5'].value, 1153.75)       # ค่าขนส่ง ตัวตั้งที่ใช้คิด
+        self.assertEqual(ws['K5'].value, 36.5)          # ราคาน้ำมันเฉลี่ย
+        self.assertEqual(ws['L5'].value, 15.0)          # ปรับค่าขนส่ง
+        self.assertEqual(ws['P5'].value, 'หมายเหตุทดสอบ')
+        self.assertEqual(ws['V5'].value, 35.0)          # ขอบบน
+        self.assertEqual(ws['X5'].value, 30.0)          # ขอบล่าง
+
+    def test_formulas_are_not_overwritten(self):
+        ws = self.writeSheet([self.rateRow()])[views.EXPORT_DOC_RATE_SHEET]
+        self.assertEqual(ws['N5'].value, '=IF($J5="","",ROUND(N($J5)+N($M5),2))')
+        self.assertEqual(ws['M5'].value, '=IF(OR($X5="",$K5="",$L5="",$W5=""),0,ROUND($W5*$L5,2))')
+        self.assertTrue(ws['O5'].value.startswith('=IF(OR($A5="",$B5="",$C5="",$D5="",$E5="")'))
+        self.assertTrue(ws['W5'].value.startswith('=IF(OR($X5="",$K5=""),"",IF($K5<$X5,$K5-$X5,'))
+
+    def test_missing_contract_values_stay_blank(self):
+        """ใบที่ยังไม่ได้กรอกค่าสัญญา ต้องเว้นว่าง ไม่ใช่ 0 และค่าขนส่งยังลงตามปกติ"""
+        ws = self.writeSheet([self.rateRow(contract_freight_rate=None,
+                                           contract_base_fuel_price=None)])[views.EXPORT_DOC_RATE_SHEET]
+        self.assertIsNone(ws['G5'].value)
+        self.assertIsNone(ws['H5'].value)
+        self.assertEqual(ws['J5'].value, 1153.75)
+
+    def test_sample_rows_are_cleared(self):
+        """แถวตัวอย่างสีเหลืองของ template (แถว 5) ต้องหายหมด รวม 2 คอลัมน์ใหม่"""
+        ws = self.writeSheet([])[views.EXPORT_DOC_RATE_SHEET]
+        for col in 'ABCDEFGHIJKLP':
+            self.assertIsNone(ws['%s5' % col].value, col)
+
+    def test_template_headers_match_column_numbers(self):
+        """ตัวเลขคอลัมน์ใน views กับหัวตารางในไฟล์ template ต้องเดินตรงกัน"""
+        ws = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)[views.EXPORT_DOC_RATE_SHEET]
+
+        def header(col):
+            return (ws.cell(row=4, column=col).value or '').replace('\n', ' ')
+
+        expected = (
+            (views.EXPORT_DOC_RATE_CONTRACT_RATE_COL, 'อัตราค่าขนส่ง ตามสัญญา'),
+            (views.EXPORT_DOC_RATE_CONTRACT_FUEL_COL, 'น้ำมันฐานวันทำสัญญา'),
+            (views.EXPORT_DOC_RATE_BASE_RANGE_COL, 'ราคาน้ำมันฐาน (บาท/ลิตร)'),
+            (views.EXPORT_DOC_RATE_FREIGHT_COL, 'ค่าขนส่ง ณ ราคาน้ำมันฐาน (บาท/ตัน)'),
+            (views.EXPORT_DOC_RATE_AVG_FUEL_COL, 'ราคาน้ำมันเฉลี่ย'),
+            (views.EXPORT_DOC_RATE_ADJUST_COL, 'ปรับค่าขนส่ง'),
+            (views.EXPORT_DOC_RATE_BASE_MAX_COL, 'ราคาน้ำมันฐาน ขอบบน'),
+            (views.EXPORT_DOC_RATE_BASE_MIN_COL, 'ราคาน้ำมันฐาน ขอบล่าง'),
+        )
+        for col, text in expected:
+            self.assertTrue(header(col).startswith(text), '%s : %r' % (col, header(col)))
+        # P ว่างไว้ให้ระบบเขียนหัว "หมายเหตุราคาน้ำมัน" ตอน export
+        self.assertEqual(header(views.EXPORT_DOC_RATE_NOTE_COL), '')
+
+    def test_payment_summary_uses_freight_rate_column(self):
+        """หน้าสรุปจ่ายโชว์ อัตรา ณ น้ำมันฐาน + ส่วนปรับ = อัตราสุทธิ ต้องดึงช่อง J ไม่ใช่ค่าตามสัญญา G
+        และช่องตรวจ BF4 นับแถวที่ช่องนี้เป็น 0 ถ้าดึง G ผิดตัว จะฟ้องว่าอัตรายังไม่ได้กรอกทั้งที่มีราคา"""
+        pay = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)['สรุปจ่ายรถร่วม']
+        self.assertIn('อัตราค่าขนส่ง!$J$5:$J$204', pay['AT5'].value)
+        self.assertIn('อัตราค่าขนส่ง!$J$5:$J$204', pay['AT404'].value)
+        self.assertIn('อัตราค่าขนส่ง!$N$5:$N$204', pay['BD5'].value)
+        self.assertEqual(pay['G2'].value, 'อัตรา ณ')
+        self.assertEqual(pay['G3'].value, 'น้ำมันฐาน')

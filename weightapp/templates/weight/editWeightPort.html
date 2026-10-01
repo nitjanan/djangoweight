@@ -431,7 +431,15 @@
   $('#id_stone_type_name option:contains("{{weight.stone_type_name}}")').prop('selected', true);
   $('#id_site_name option:contains("{{weight.site_name}}")').prop('selected', true);
   $('#id_scoop_name option:contains("{{weight.scoop_name}}")').prop('selected', true);
+  {% if weight.transport %}
+  {% if weight.transport %}
   $('#id_transport option:contains("{{weight.transport}}")').prop('selected', true);
+  {% else %}
+  $('#id_transport').val('');
+  {% endif %}
+  {% else %}
+  $('#id_transport').val('');
+  {% endif %}
   if ("{{weight.stone_color}}" != "")
     $('#id_stone_color option:contains("{{weight.stone_color}}")').prop('selected', true);
 

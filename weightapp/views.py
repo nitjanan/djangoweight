@@ -6216,8 +6216,10 @@ def weightCreate(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
-            return Response(serializer.data, status=status.HTTP_409_CONFLICT)
+            logger.error("weightCreate IntegrityError: %s | data=%s", e, request.data)
+            return Response({**serializer.data, 'error': str(e)}, status=status.HTTP_409_CONFLICT)
     else:
+        logger.error("weightCreate validation errors: %s | data=%s", serializer.errors, request.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT'])

@@ -1,0 +1,159 @@
+# ตรวจความปลอดภัย แยกจาก django-checks.yml (ที่ตรวจ DB/migration)
+#
+# หลัก : บล็อก PR เฉพาะ "ปัญหาใหม่" ที่ PR นั้นพามา ปัญหาเก่าที่มีอยู่แล้วรายงานไว้ในหน้า Summary
+# ไม่งั้น CI จะแดงตั้งแต่วันแรกแล้วทุกคนจะชินจนไม่ดูอีก
+#
+#   job          เครื่องมือ                 บล็อก PR ไหม
+#   secrets      gitleaks               บล็อก  : PR สแกนเฉพาะ commit ใหม่ เจอ token/รหัสผ่านใหม่ = แดง
+#                                               schedule/กดเอง สแกนทั้งประวัติ (จะเจอของเก่าจนกว่าจะเปลี่ยน token)
+#   code         bandit                 บล็อก  : เฉพาะปัญหาใหม่ระดับ medium ขึ้นไป เทียบกับ .github/bandit-baseline.json
+#   codeql       GitHub CodeQL          ไม่บล็อก : ผลขึ้นแท็บ Security > Code scanning (repo public ใช้ฟรี)
+#   dependencies pip-audit              ไม่บล็อก : ช่องโหว่ในแพ็กเกจของ requirements.txt ขึ้นเป็น warning + ตารางใน Summary
+#                                               (ตอนนี้แก้หมดไม่ได้ Django 4.2 หมดอายุแล้ว ตัวแก้อยู่ที่ 5.2 ซึ่งต้อง Python 3.10+)
+#   django-deploy manage.py check --deploy ไม่บล็อก : ค่า settings ที่ไม่ควรขึ้น production (DEBUG / SECRET_KEY / HTTPS)
+#ด
+# รันทุกสัปดาห์ด้วย เพราะช่องโหว่ใหม่ของแพ็กเกจประกาศออกมาได้ทุกวันโดยที่เราไม่ได้แก้โค้ดเลย
+name: security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 1 * * 1'   # จันทร์ 08:00 เวลาไทย (schedule รันจาก main เท่านั้น)
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write   # gitleaks คอมเมนต์ใน PR ตรงบรรทัดที่เจอ
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # ต้องมีประวัติทั้งหมด ไม่งั้นสแกน commit ใน PR ไม่ได้
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  code:
+    name: code (bandit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'   # แค่รันเครื่องมือ ไม่ได้ติดตั้งโปรเจกต์
+      - run: pip install bandit
+      # -s B105,B106,B107 : ข้ามเรื่องรหัสผ่านที่เขียนตรงในโค้ด ให้ gitleaks ดูแทน
+      #   ถ้าให้ bandit ดูด้วย ไฟล์ baseline จะต้องเก็บค่า secret จริงไว้ (bandit เทียบด้วยข้อความที่มีค่านั้นอยู่)
+      # -b : ปัญหาที่มีอยู่แล้วใน baseline ไม่นับ สร้าง baseline ใหม่ได้ด้วยคำสั่งเดียวกันแต่เปลี่ยน -b เป็น
+      #      -f json -o .github/bandit-baseline.json (แล้วล้างช่อง code ทิ้ง)
+      - name: Scan for new issues
+        run: >-
+          bandit -r weight weightapp
+          -x '*/migrations/*,*/tests.py,*/tests_*.py'
+          -s B105,B106,B107
+          -b .github/bandit-baseline.json
+          --severity-level medium
+
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write   # ส่งผลขึ้นแท็บ Security
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+
+  dependencies:
+    name: dependencies (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pip-audit
+      # --no-deps --disable-pip : เวอร์ชันล็อกไว้ครบทุกตัวแล้ว เช็คกับฐานข้อมูลช่องโหว่ตรง ๆ ไม่ต้องติดตั้งแพ็กเกจจริง
+      - name: Audit requirements.txt
+        run: |
+          status=0
+          pip-audit -r requirements.txt --no-deps --disable-pip --progress-spinner off \
+            -f markdown -o audit.md || status=$?
+          {
+            echo '## pip-audit : ช่องโหว่ในแพ็กเกจ'
+            cat audit.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" != 0 ]; then
+            echo "::warning title=pip-audit::พบช่องโหว่ในแพ็กเกจของ requirements.txt ดูตารางในหน้า Summary ของ run นี้"
+          fi
+
+  django-deploy:
+    name: django check --deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: djangoweightdb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DJANGO_SETTINGS_MODULE: weight.settings_ci
+      DB_NAME: djangoweightdb
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+      - name: Install MySQL client headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmysqlclient-dev pkg-config
+      - run: pip install -r requirements.txt
+      # forms.py query ตาราง base_loss_type ตอน import ต้องมีตารางก่อน check จะโหลด urls ได้
+      - name: Apply migrations
+        run: python manage.py migrate --skip-checks --noinput
+      # คำเตือนระดับ WARNING ไม่ทำให้ job แดง (fail-level ค่าเริ่มต้น = ERROR) อ่านผลจาก Summary
+      - name: Deploy settings check
+        run: |
+          python manage.py check --deploy 2>&1 | tee deploy-check.txt
+          {
+            echo '## manage.py check --deploy'
+            echo '```'
+            cat deploy-check.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

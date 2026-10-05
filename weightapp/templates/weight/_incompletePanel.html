@@ -1,0 +1,149 @@
+{% load humanize %}
+{% comment %}
+  fragment ที่ weightTable.html โหลดมาแทรกผ่าน fetch (ดู weightTableIncomplete)
+  นับแค่ช่องที่ต้องกรอกแต่ยังว่าง : ทีม / นน.ต้นทาง / นน.ปลายทาง
+  ปุ่ม/การ์ด/ตัวเลือกเดือนไม่มีลิงก์จริง ใช้ data-* ให้ JS ในหน้าหลักอ่านแล้วโหลดใหม่
+  ห้ามให้ formatter ตัดบรรทัดกลาง tag {{ }} / {% %} ไม่งั้น Django พิมพ์ออกมาเป็นข้อความดิบ
+{% endcomment %}
+{% if not counts.total %}
+{% comment %}รายชื่อเดือนมาจากเดือนที่มีเที่ยวจริง จึงมาถึงตรงนี้ได้แค่กรณีไม่มีเที่ยวเลยสักเดือน{% endcomment %}
+<div class="ubp-line text-muted">
+  <i class="bi bi-info-circle"></i>
+  <span>ยังไม่มีเที่ยวส่งออกของบริษัทนี้</span>
+</div>
+{% elif not counts.incomplete %}
+<div class="ubp-line">
+  <i class="bi bi-check-circle-fill text-success fs-5"></i>
+  <div class="flex-grow-1">
+    <span class="fw-bold">เที่ยวส่งออกเดือนนี้กรอกข้อมูลครบทุกเที่ยวแล้ว</span>
+    <span class="text-muted small">— ครบทั้ง {{ counts.total|intcomma }} เที่ยว</span>
+  </div>
+  <select class="form-select form-select-sm ubp-month" aria-label="เดือน">
+    {% for value, label in month_options %}
+    <option value="{{ value }}" {% if value == month %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% else %}
+<div class="ubp-head">
+  <i class="bi bi-exclamation-triangle-fill ubp-tone-warning fs-4"></i>
+  <div class="flex-grow-1">
+    <div class="fw-bold">เที่ยวส่งออกเดือนนี้ยังกรอกข้อมูลไม่ครบ</div>
+    <div class="small text-muted">
+      กรอกไม่ครบ
+      <strong class="ubp-tone-warning">{{ counts.incomplete|intcomma }}</strong>
+      จาก {{ counts.total|intcomma }} เที่ยว · ครบแล้ว {{ complete_pct }}%
+    </div>
+  </div>
+  <select class="form-select form-select-sm ubp-month" aria-label="เดือน">
+    {% for value, label in month_options %}
+    <option value="{{ value }}" {% if value == month %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+{% comment %}
+  สรุป (แถบ + การ์ด) โชว์ตลอด ส่วนตารางรายเที่ยวซ่อนไว้ก่อน เพราะบางแท็บมีเป็นร้อยเป็นพันเที่ยว
+  เปิดด้วยปุ่ม "ดูรายการเที่ยว" หรือกดการ์ด (กดการ์ด = อยากดูเที่ยวที่ขาดช่องนั้น จึงเปิดให้เลย)
+{% endcomment %}
+<div class="ubp-body">
+  <div class="ubp-bar" title="เขียว = กรอกครบ · เหลือง = กรอกไม่ครบ">
+    <div class="ubp-bar-ok" style="width: {{ complete_pct }}%"></div>
+    <div class="ubp-bar-warn" style="width: calc(100% - {{ complete_pct }}%)"></div>
+  </div>
+
+  <div class="ubp-cards">
+    {% for c in cards %}
+    {% if c.count %}
+    <button type="button" class="ubp-card {% if c.code == reason %}is-active{% endif %}" data-reason="{{ c.code }}" aria-pressed="{% if c.code == reason %}true{% else %}false{% endif %}">
+      <span class="ubp-card-label {% if c.code != 'all' %}ubp-tone-warning{% endif %}">{{ c.label }}</span>
+      <span class="ubp-card-num">{{ c.count|intcomma }}</span>
+    </button>
+    {% else %}
+    <div class="ubp-card is-zero">
+      <span class="ubp-card-label">{{ c.label }}</span>
+      <span class="ubp-card-num"><i class="bi bi-check2 text-success"></i> 0</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <button type="button" class="btn btn-sm btn-outline-secondary ubp-toggle" aria-expanded="false" aria-controls="ubp-list">
+    <i class="bi bi-chevron-down"></i>
+    <span class="ubp-toggle-show">ดูรายการเที่ยว ({{ page.paginator.count|intcomma }})</span>
+    <span class="ubp-toggle-hide">ซ่อนรายการเที่ยว</span>
+  </button>
+
+  <div class="ubp-list" id="ubp-list">
+  <div class="table-responsive mt-3">
+    <table class="table table-sm table-hover align-middle ubp-table mb-2">
+      <thead>
+        <tr>
+          <th>เลขที่ชั่ง</th>
+          <th>วันที่</th>
+          <th>ทะเบียน</th>
+          <th>ต้นทาง → ปลายทาง</th>
+          <th>ทีม</th>
+          <th class="text-end">นน.ต้นทาง</th>
+          <th class="text-end">นน.ปลายทาง</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-nowrap">
+            {% if r.edit_mode %}
+            <a href="{% url 'editWeight' r.edit_mode r.weight_id %}" title="แก้ไขใบชั่ง">{{ r.doc_id }}</a>
+            {% else %}
+            {{ r.doc_id }}
+            {% endif %}
+          </td>
+          <td class="text-nowrap">{{ r.date|date:"d/m/Y" }}</td>
+          <td class="text-nowrap">{{ r.car_registration|default_if_none:"" }}</td>
+          <td>{{ r.origin }} <span class="text-muted">→</span> {{ r.destination }}</td>
+          <td>
+            {% if r.team_missing %}
+            <span class="ubp-missing">ยังไม่ใส่</span>
+            {% else %}
+            {{ r.team }}
+            {% endif %}
+          </td>
+          <td class="text-end text-nowrap">
+            {% if r.origin_weight is None %}
+            <span class="ubp-missing">ยังไม่ใส่</span>
+            {% else %}
+            {{ r.origin_weight|floatformat:2|intcomma }}
+            {% endif %}
+          </td>
+          <td class="text-end text-nowrap">
+            {% if r.dest_weight is None %}
+            <span class="ubp-missing">ยังไม่ใส่</span>
+            {% else %}
+            {{ r.dest_weight|floatformat:2|intcomma }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ubp-foot">
+    <span class="small text-muted">
+      {{ page.start_index|intcomma }}–{{ page.end_index|intcomma }} จาก {{ page.paginator.count|intcomma }} เที่ยว · เรียงวันที่ล่าสุดก่อน
+    </span>
+    {% if page.paginator.num_pages > 1 %}
+    <div class="d-flex align-items-center gap-2">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-page="{% if page.has_previous %}{{ page.previous_page_number }}{% endif %}" {% if not page.has_previous %}disabled{% endif %} aria-label="หน้าก่อน">
+        <i class="bi bi-chevron-left"></i>
+      </button>
+      <span class="small">{{ page.number }} / {{ page.paginator.num_pages }}</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-page="{% if page.has_next %}{{ page.next_page_number }}{% endif %}" {% if not page.has_next %}disabled{% endif %} aria-label="หน้าถัดไป">
+        <i class="bi bi-chevron-right"></i>
+      </button>
+    </div>
+    {% endif %}
+  </div>
+  </div>
+</div>
+{% endif %}

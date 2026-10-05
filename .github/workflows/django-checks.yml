@@ -1,0 +1,80 @@
+# ตรวจโปรเจกต์ Django ทุกครั้งที่เปิด/อัปเดต PR เข้า main และทุกครั้งที่มี commit ลง main
+#   1) ลง requirements.txt ได้ครบ
+#   2) migration ทุกไฟล์รันบน MySQL ว่าง ๆ ได้จนจบ
+#   3) manage.py check ผ่าน (settings / urls / models / admin ไม่พัง)
+#   4) ไม่มี model ที่แก้แล้วลืมสร้างไฟล์ migration
+# ไม่ได้รันเทสต์
+# กดรันเองได้จากแท็บ Actions (workflow_dispatch) หลังไฟล์นี้อยู่บน main แล้ว
+name: django checks DB
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# push ซ้อนกันใน branch/PR เดียวกัน ยกเลิกรอบเก่า ไม่ต้องรอให้จบ
+concurrency:
+  group: django-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # MySQL 8 เหมือนเครื่อง dev ใช้แค่ในรอบนี้ ทิ้งไปพร้อมเครื่อง CI
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: djangoweightdb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # settings_ci = settings.py ที่ชี้ DB มาที่ service ข้างบน และตัด pg_db (Express) ออก
+      DJANGO_SETTINGS_MODULE: weight.settings_ci
+      DB_NAME: djangoweightdb
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ต้องเป็น 3.9 : mysqlclient 2.0.3 / pandas 1.5.2 ที่ล็อกไว้ไม่มีให้ Python ใหม่กว่านี้
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+
+      # mysqlclient ใน requirements.txt ไม่มี wheel บน Linux ต้อง build เอง ต้องมี mysql_config
+      - name: Install MySQL client headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmysqlclient-dev pkg-config
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # --skip-checks : system check จะโหลด urls -> forms.py ซึ่ง query ตาราง base_loss_type ตอน import
+      # ฐานยังว่างอยู่ตรงนี้ ถ้าไม่ข้ามจะพังก่อนได้สร้างตาราง
+      - name: Apply migrations to an empty MySQL
+        run: python manage.py migrate --skip-checks --noinput
+
+      - name: Django system check
+        run: python manage.py check
+
+      # แก้ model แล้วลืมสร้างไฟล์ migration = พังตอน deploy ดักไว้ตรงนี้
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run

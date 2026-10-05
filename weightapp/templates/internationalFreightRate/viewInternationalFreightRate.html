@@ -121,6 +121,15 @@
         <a href="{% url 'exportExcelInternationalFreightRate' %}" class="btn btn-success rounded-pill">
           Export Excel <i class="fa-solid fa-file-excel"></i>
         </a>
+        {% comment %}
+          ต้นทาง/ปลายทางในใบราคามาจากตาราง map ตารางนี้ยังกำหนดด้วยว่าเที่ยวไหนเข้าหน้า /exportDocument/
+          โชว์ปุ่มเฉพาะคนที่มีสิทธิ์แก้ตาราง map (ตั้งในหน้า admin) ตรงกับที่ view เช็ค
+        {% endcomment %}
+        {% if perms.weightapp.change_basecompanymapbasecustomer %}
+        <a href="{% url 'settingCompanyMap' %}" class="btn btn-outline-primary rounded-pill">
+          จัดการต้นทาง / ปลายทาง <i class="fa-solid fa-map-location-dot"></i>
+        </a>
+        {% endif %}
       </div>
 
       <div class="card-body">

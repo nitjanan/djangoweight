@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>{{ text_mode }} ต้นทาง / ปลายทาง</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'settingCompanyMap' %}">จัดการต้นทาง / ปลายทาง</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ text_mode }}</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">ข้อมูลหลัก</h5></div>
+        <div class="card-body">
+          {% if rate_count %}
+          <div class="alert alert-light-info color-info">
+            <i class="bi bi-info-circle"></i>
+            แถวนี้ถูกใช้ในใบราคาค่าขนส่ง {{ rate_count }} ใบ (รวมทุกเวอร์ชัน)
+            แก้ชื่อแล้วชื่อในใบราคาจะเปลี่ยนตาม
+          </div>
+          {% endif %}
+          {{ form|crispy }}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">รหัสลูกค้าสำรอง</h5>
+          <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" id="cm_add_alias">
+            เพิ่มรหัสสำรอง <i class="fa-solid fa-circle-plus"></i>
+          </button>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            ที่เดียวกันแต่มีรหัสลูกค้าหลายตัว เช่น สุราษฎร์พอร์ท 06-V-024 กับ 77-V-007
+            ใส่รหัสอื่นเป็นรหัสสำรอง เที่ยวของทุกรหัสจะใช้แถวนี้ร่วมกัน (ใช้ธงปลายทางของแถวนี้)
+          </p>
+
+          {{ formset.management_form }}
+          {% for error in formset.non_form_errors %}
+          <div class="alert alert-danger">{{ error }}</div>
+          {% endfor %}
+
+          <table class="table align-middle mb-0">
+            <tbody id="cm_alias_rows">
+              {% for f in formset %}
+              <tr class="cm-alias-row{% if f.DELETE.value %} d-none{% endif %}">
+                <td>
+                  {{ f.id }}
+                  {{ f.base_customer }}
+                  {% for error in f.base_customer.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                  {% for error in f.non_field_errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </td>
+                <td class="text-end" style="width: 1%;">
+                  <span class="d-none">{{ f.DELETE }}</span>
+                  <button type="button" class="btn btn-outline-danger btn-sm cm-remove-alias">
+                    <i class="fa-solid fa-trash"></i> ลบ
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <p class="text-muted small mb-0 {% if formset.forms %}d-none{% endif %}" id="cm_alias_empty">ยังไม่มีรหัสสำรอง</p>
+
+          <template id="cm_alias_template">
+            <tr class="cm-alias-row">
+              <td>
+                {{ formset.empty_form.id }}
+                {{ formset.empty_form.base_customer }}
+              </td>
+              <td class="text-end" style="width: 1%;">
+                <span class="d-none">{{ formset.empty_form.DELETE }}</span>
+                <button type="button" class="btn btn-outline-danger btn-sm cm-remove-alias">
+                  <i class="fa-solid fa-trash"></i> ลบ
+                </button>
+              </td>
+            </tr>
+          </template>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mb-4">
+        <a href="{% url 'settingCompanyMap' %}" class="btn btn-light-secondary">ยกเลิก</a>
+        <button type="submit" class="btn btn-primary">บันทึก</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+<script src="{% static 'extensions/jquery/jquery.min.js' %}"></script>
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+
+<script>
+  // ลูกค้ามีหลายพันราย ไม่ render เป็น option ทั้งหมด ให้ select2 ค้นจาก API ทีละ 30 ราย
+  // เลื่อนถึงท้ายรายการ select2 ขอหน้าถัดไปเอง (API ตอบ pagination.more มาบอกว่ายังมีอีกไหม)
+  const CM_CUSTOMER_SEARCH_URL = "{% url 'companyMapCustomerSearch' %}";
+
+  function cmInitCustomerSelect(el) {
+    $(el).select2({
+      width: '100%',
+      theme: 'bootstrap-5',
+      allowClear: true,
+      placeholder: 'พิมพ์รหัสหรือชื่อลูกค้า',
+      ajax: {
+        url: CM_CUSTOMER_SEARCH_URL,
+        dataType: 'json',
+        delay: 250,
+        data: function (params) { return { term: params.term || '', page: params.page || 1 }; },
+        processResults: function (data) { return data; },
+      },
+    });
+  }
+
+  function cmRefreshEmptyText() {
+    const visible = document.querySelectorAll('#cm_alias_rows .cm-alias-row:not(.d-none)').length;
+    document.getElementById('cm_alias_empty').classList.toggle('d-none', visible > 0);
+  }
+
+  $(document).ready(function () {
+    document.querySelectorAll('.js-customer-search').forEach(function (el) {
+      // ตัวใน <template> ยังไม่อยู่บนหน้า ข้ามไป ค่อย init ตอนกดเพิ่มแถว
+      if (!el.closest('template')) cmInitCustomerSelect(el);
+    });
+
+    // เพิ่มแถว : ก๊อป empty_form แทน __prefix__ ด้วยเลขแถวถัดไป แล้วบวก TOTAL_FORMS
+    document.getElementById('cm_add_alias').addEventListener('click', function () {
+      const total = document.getElementById('id_alias-TOTAL_FORMS');
+      const index = parseInt(total.value, 10);
+      const html = document.getElementById('cm_alias_template').innerHTML.replace(/__prefix__/g, index);
+      const tbody = document.getElementById('cm_alias_rows');
+      tbody.insertAdjacentHTML('beforeend', html);
+      total.value = index + 1;
+      const row = tbody.lastElementChild;
+      cmInitCustomerSelect(row.querySelector('.js-customer-search'));
+      cmRefreshEmptyText();
+    });
+
+    // ลบแถว : ติ๊ก DELETE แล้วซ่อนแถว ไม่เอาแถวออกจากหน้า เลขแถวของ formset จะได้ไม่เพี้ยน
+    // แถวใหม่ที่ติ๊ก DELETE Django ข้ามไปเอง แถวเดิมจะถูกลบตอนกดบันทึก
+    document.getElementById('cm_alias_rows').addEventListener('click', function (event) {
+      const btn = event.target.closest('.cm-remove-alias');
+      if (!btn) return;
+      const row = btn.closest('.cm-alias-row');
+      row.querySelector('input[type=checkbox][name$="-DELETE"]').checked = true;
+      row.classList.add('d-none');
+      cmRefreshEmptyText();
+    });
+  });
+</script>
+{% endblock %}

@@ -1091,3 +1091,132 @@ LoadingRateItemInlineFormset = inlineformset_factory(
     },
     extra=0,
 )
+
+
+############ จัดการต้นทาง / ปลายทาง (ตาราง base_company_map_base_customer) ############
+from django.core.exceptions import ValidationError
+from weightapp.models import BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias
+
+
+def customerChoiceLabel(customer):
+    return '%s - %s' % (customer.customer_id, (customer.customer_name or '').strip())
+
+
+def limitCustomerChoices(form, field_name='base_customer'):
+    """ช่องลูกค้า render แค่ตัวที่เลือกอยู่ ตัวอื่นค้นผ่าน API (select2 แบบ ajax)
+
+    ลูกค้ามีหลายพันราย ถ้า render ทุกตัว ทุกแถวของรหัสสำรองจะพ่วง option ไปหลายพันตัว
+    หน้าจะหนักมาก การตรวจค่าที่ส่งมายังใช้ queryset เต็มของ field เหมือนเดิม
+    """
+    field = form.fields[field_name]
+    if form.is_bound:
+        value = form.data.get(form.add_prefix(field_name)) or None
+    else:
+        value = form.initial.get(field_name)
+    choices = [('', '---------')]
+    if value:
+        customer = BaseCustomer.objects.filter(pk=value).first()
+        if customer is not None:
+            choices.append((customer.pk, customerChoiceLabel(customer)))
+    field.widget.choices = choices
+
+
+class CompanyMapForm(forms.ModelForm):
+    base_company = CompanyCodeNameChoiceField(
+        queryset=BaseCompany.objects.order_by('code'), required=False, label='บริษัท',
+        help_text='ต้นทางที่เป็นเหมือง/ท่าเรือของบริษัทในเครือ ให้เลือกบริษัท')
+    base_customer = forms.ModelChoiceField(
+        queryset=BaseCustomer.objects.all(), required=False, label='รหัสลูกค้า (รหัสหลัก)',
+        widget=forms.Select(attrs={'class': 'form-select js-customer-search'}),
+        help_text='ปลายทางที่เป็นลูกค้า ให้เลือกรหัสลูกค้า หน้า /exportDocument/ จับเที่ยวด้วยรหัสนี้')
+
+    class Meta:
+        model = BaseCompanyMapBaseCustomer
+        fields = ('name', 'base_company', 'base_customer', 'oi_soc_code',
+                  'is_export_destination', 'is_domestic_destination')
+        labels = {'name': 'ชื่อ'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        limitCustomerChoices(self)
+
+    def clean(self):
+        cleaned = super().clean()
+        company = cleaned.get('base_company')
+        customer = cleaned.get('base_customer')
+        if company is None and customer is None:
+            raise ValidationError('ต้องเลือกบริษัทหรือรหัสลูกค้าอย่างน้อย 1 อย่าง')
+
+        # หน้า /exportDocument/ จับเที่ยวด้วยรหัสลูกค้า แถวที่ติ๊กปลายทางแต่ไม่มีรหัสจะไม่มีเที่ยวเข้าเลย
+        if customer is None and (cleaned.get('is_export_destination')
+                                 or cleaned.get('is_domestic_destination')):
+            self.add_error('base_customer', 'ติ๊กใช้เป็นปลายทางแล้ว ต้องเลือกรหัสลูกค้าด้วย')
+
+        # รหัสลูกค้า 1 ตัวอยู่ได้แถวเดียว unique_together (บริษัท, ลูกค้า) ของตารางกันไม่ได้
+        # ตอนบริษัทว่าง เพราะ MySQL ถือว่าค่าว่างไม่ซ้ำกัน จึงต้องเช็คเอง
+        # (กรณีเป็นรหัสสำรองของแถวอื่น model.clean() เช็คให้แล้ว)
+        if customer is not None:
+            owner = (BaseCompanyMapBaseCustomer.objects
+                     .filter(base_customer=customer).exclude(pk=self.instance.pk).first())
+            if owner is not None:
+                self.add_error('base_customer', 'รหัสนี้เป็นรหัสหลักของ "%s" อยู่แล้ว' % owner.name)
+        return cleaned
+
+
+class CompanyMapAliasForm(forms.ModelForm):
+    base_customer = forms.ModelChoiceField(
+        queryset=BaseCustomer.objects.all(), label='รหัสลูกค้าสำรอง',
+        widget=forms.Select(attrs={'class': 'form-select js-customer-search'}))
+
+    class Meta:
+        model = BaseCompanyMapCustomerAlias
+        fields = ('base_customer',)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        limitCustomerChoices(self)
+
+    def clean_base_customer(self):
+        # เช็คเองก่อน validate_unique ของ Django ซึ่งขึ้นแค่ว่า "มีอยู่แล้ว" ไม่บอกว่าอยู่แถวไหน
+        # field ที่ error ตรงนี้ Django จะข้ามการเช็ค unique ไปเอง ข้อความจึงไม่ขึ้นซ้ำสองอัน
+        customer = self.cleaned_data['base_customer']
+        other = (BaseCompanyMapCustomerAlias.objects.filter(base_customer=customer)
+                 .exclude(pk=self.instance.pk).select_related('map_row').first())
+        if other is not None:
+            raise ValidationError('รหัสนี้เป็นรหัสลูกค้าสำรองของ "%s" อยู่แล้ว' % other.map_row.name)
+        return customer
+
+
+class BaseCompanyMapAliasFormSet(BaseInlineFormSet):
+    def clean(self):
+        # เช็คซ้ำในฟอร์มเดียวกันก่อน super().clean() (validate_unique ของ Django)
+        # ซึ่งขึ้นข้อความกลาง ๆ ว่า "ข้อมูลซ้ำซ้อนใน base_customer" ไม่บอกว่ารหัสไหน
+        seen = set()
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data') or form.cleaned_data.get('DELETE'):
+                continue
+            customer = form.cleaned_data.get('base_customer')
+            if customer is None:
+                continue
+            if customer.pk in seen:
+                raise ValidationError('รหัสสำรอง %s ใส่ซ้ำกัน' % customer.pk)
+            seen.add(customer.pk)
+        super().clean()
+
+    def keptCustomerIds(self):
+        """รหัสสำรองที่จะเหลืออยู่หลังบันทึก (ไม่รวมแถวที่ติ๊กลบ / แถวว่าง)"""
+        return {form.cleaned_data['base_customer'].pk for form in self.forms
+                if getattr(form, 'cleaned_data', None)
+                and form.cleaned_data.get('base_customer') is not None
+                and not form.cleaned_data.get('DELETE')}
+
+
+CompanyMapAliasFormSet = inlineformset_factory(
+    BaseCompanyMapBaseCustomer,
+    BaseCompanyMapCustomerAlias,
+    form=CompanyMapAliasForm,
+    formset=BaseCompanyMapAliasFormSet,
+    fields=('base_customer',),
+    extra=0,
+    can_delete=True,
+)

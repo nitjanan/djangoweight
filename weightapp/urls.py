@@ -1,5 +1,6 @@
 from django.urls import path
 from weightapp import views
+from weightapp import views_company_map
 from django.contrib.auth import views as auth_views
 from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList, LoginApiView, SignUpApiView
 from rest_framework_simplejwt.views import(
@@ -320,6 +321,12 @@ urlpatterns = [
       path('internationalFreightRate/fuelPrice/', views.viewInternationalFreightRateFuelPrice, name="viewInternationalFreightRateFuelPrice"),
       path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
       path('internationalFreightRate/excel/', views.exportExcelInternationalFreightRate, name="exportExcelInternationalFreightRate"),
+      # จัดการต้นทาง / ปลายทาง (ตาราง map + รหัสลูกค้าสำรอง) ดู views_company_map.py
+      path('internationalFreightRate/destinations/', views_company_map.settingCompanyMap, name="settingCompanyMap"),
+      path('internationalFreightRate/destinations/create/', views_company_map.createCompanyMap, name="createCompanyMap"),
+      path('internationalFreightRate/destinations/edit/<int:id>/', views_company_map.editCompanyMap, name="editCompanyMap"),
+      path('internationalFreightRate/destinations/delete/<int:id>/', views_company_map.deleteCompanyMap, name="deleteCompanyMap"),
+      path('internationalFreightRate/destinations/api/customers/', views_company_map.companyMapCustomerSearch, name="companyMapCustomerSearch"),
       path('exportDocument/', views.viewExportDocument, name="viewExportDocument"),
       path('exportDocument/excel/', views.exportExcelExportDocument, name="exportExcelExportDocument"),
       path('exportDocument/progress/', views.exportDocumentProgress, name="exportDocumentProgress"),

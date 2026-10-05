@@ -175,10 +175,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     0%
                 </span>
               </button>
-              {% comment %} {% if request.user.is_superuser %}
+              {% if request.user.is_superuser %}
                 <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight Fix Bug</a>
                 <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight History Fix Bug</a>
-              {% endif %} {% endcomment %}
+              {% endif %} 
             </div>
             {% if is_approve_weight %}
               <div class="col-2">

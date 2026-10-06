@@ -15,6 +15,34 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     flex: 0 0 12.5%;
     max-width: 12.5%;
   }
+
+  /* แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ (เนื้อหามาจาก weight/_incompletePanel.html) */
+  .ubp { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .75rem; padding: .9rem 1.1rem; margin: 1rem 0; transition: opacity .15s; }
+  .ubp.is-loading { opacity: .55; pointer-events: none; }
+  /* ตารางรายเที่ยวซ่อนไว้ก่อน เปิดด้วยปุ่มหรือกดการ์ด */
+  .ubp:not(.is-open) .ubp-list,
+  .ubp:not(.is-open) .ubp-toggle-hide,
+  .ubp.is-open .ubp-toggle-show { display: none; }
+  .ubp.is-open .ubp-toggle .bi { transform: rotate(180deg); }
+  .ubp-tone-warning { color: #997404; }
+  .ubp-line, .ubp-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .ubp-month { width: auto; min-width: 9.5rem; }
+  .ubp-body { margin-top: .9rem; }
+  .ubp-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(128,128,128,.15); margin-bottom: .9rem; }
+  .ubp-bar-ok { background: #198754; }
+  .ubp-bar-warn { background: #ffc107; }
+  .ubp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+  .ubp-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: transparent; color: inherit; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: .5rem .75rem; cursor: pointer; }
+  .ubp-card:hover { border-color: #6c757d; }
+  .ubp-card.is-active { border: 2px solid #0d6efd; padding: calc(.5rem - 1px) calc(.75rem - 1px); }
+  .ubp-card-label { font-size: .85rem; }
+  .ubp-card-num { font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
+  .ubp-table { font-size: .875rem; }
+  .ubp-table thead th { font-weight: 600; white-space: nowrap; }
+  .ubp-missing { display: inline-block; font-size: .75rem; padding: .1rem .45rem; border-radius: .375rem; background: #fff3cd; color: #664d03; white-space: nowrap; }
+  .ubp-card.is-zero { cursor: default; opacity: .7; }
+  .ubp-card.is-zero:hover { border-color: var(--bs-border-color, #dee2e6); }
+  .ubp-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
 </style>
 {% endblock %}
 
@@ -150,7 +178,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               {% if request.user.is_superuser %}
                 <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight Fix Bug</a>
                 <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight History Fix Bug</a>
-              {% endif %}
+              {% endif %} 
             </div>
             {% if is_approve_weight %}
               <div class="col-2">
@@ -158,6 +186,14 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </div>
             {% endif %}
           </div>
+          {% if show_incomplete_panel %}
+          <div id="incomplete-panel" class="ubp" data-url="{% url 'weightTableIncomplete' %}" aria-live="polite">
+            <div class="ubp-line text-muted">
+              <span class="spinner-border spinner-border-sm" role="status"></span>
+              <span>กำลังตรวจเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ…</span>
+            </div>
+          </div>
+          {% endif %}
           <div class="table-responsive my-3">
             <table class="table table-hover">
               <thead class="table-dark">
@@ -440,6 +476,68 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
     progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name)
   });
+
+  // แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ : โหลดแยกหลังหน้าเปิดแล้ว เพราะต้องอ่านทั้งเดือน
+  (function () {
+    const panel = document.getElementById('incomplete-panel');
+    if (!panel) return;
+    const url = panel.dataset.url;
+    // open : ตารางรายเที่ยวเปิดอยู่ไหม ไม่จำข้ามการโหลดหน้า เปิดหน้ามาใหม่ให้เห็นแค่สรุปเสมอ
+    const state = { month: '', reason: 'all', page: '', open: false };
+
+    function applyOpen() {
+      panel.classList.toggle('is-open', state.open);
+      const toggle = panel.querySelector('.ubp-toggle');
+      if (toggle) toggle.setAttribute('aria-expanded', state.open ? 'true' : 'false');
+    }
+
+    function load() {
+      const params = new URLSearchParams();
+      if (state.month) params.set('month', state.month);
+      if (state.reason !== 'all') params.set('reason', state.reason);
+      if (state.page) params.set('page', state.page);
+      panel.classList.add('is-loading');
+      fetch(url + (params.toString() ? '?' + params.toString() : ''),
+            { credentials: 'same-origin' })
+        .then(function (res) {
+          if (res.status === 204) { panel.remove(); return null; }
+          if (!res.ok) throw new Error(res.status);
+          return res.text();
+        })
+        .then(function (html) {
+          if (html === null) return;
+          panel.innerHTML = html;
+          panel.classList.remove('is-loading');
+          const monthSelect = panel.querySelector('.ubp-month');
+          if (monthSelect) state.month = monthSelect.value;
+          applyOpen();
+        })
+        .catch(function () {
+          panel.classList.remove('is-loading');
+          panel.innerHTML =
+            '<div class="ubp-line text-danger"><i class="bi bi-x-circle"></i>' +
+            '<span class="flex-grow-1">โหลดข้อมูลเที่ยวที่กรอกไม่ครบไม่สำเร็จ</span>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary ubp-retry">ลองใหม่</button></div>';
+        });
+    }
+
+    panel.addEventListener('click', function (e) {
+      const card = e.target.closest('[data-reason]');
+      // กดการ์ด = อยากดูเที่ยวของสาเหตุนั้น จึงเปิดตารางให้ด้วย
+      if (card) { state.reason = card.dataset.reason; state.page = ''; state.open = true; load(); return; }
+      const pager = e.target.closest('[data-page]');
+      if (pager && pager.dataset.page) { state.page = pager.dataset.page; load(); return; }
+      if (e.target.closest('.ubp-toggle')) { state.open = !state.open; applyOpen(); return; }
+      if (e.target.closest('.ubp-retry')) { load(); }
+    });
+    panel.addEventListener('change', function (e) {
+      if (e.target.classList.contains('ubp-month')) {
+        state.month = e.target.value; state.reason = 'all'; state.page = ''; state.open = false; load();
+      }
+    });
+
+    load();
+  })();
 
 </script>
 

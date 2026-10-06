@@ -1651,7 +1651,10 @@ def weightTable(request):
     #ธุรกิจท่าเรือ (biz = 2) แสดงคอลัมน์ทีมและน้ำหนักสุทธิต้นทางเพิ่ม
     is_port_biz = BaseCompany.objects.filter(code = active, biz__id = 2).exists()
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), 'is_port_biz' : is_port_biz, active :"active",}
+    #แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ : โหลดแยกทีหลังผ่าน weightTableIncomplete
+    show_incomplete_panel = _weightTableHasExportScope(active)
+
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), 'is_port_biz' : is_port_biz, 'show_incomplete_panel' : show_incomplete_panel, active :"active",}
     return render(request, "weight/weightTable.html",context)
 
 @login_required(login_url='login')
@@ -12421,6 +12424,7 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
     return filled, no_contract, out_of_range
 
 
+
 # คอลัมน์ N ของ sheet อัตรา : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (M เป็นคีย์ O/P เป็นตารางกลุ่มจ่าย)
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง I ว่าง
 EXPORT_DOC_RATE_NOTE_COL = 14
@@ -13176,15 +13180,12 @@ def _exportDocumentNameMaps():
     return origin_by_customer, port_by_company, map_id_by_customer, map_id_by_company
 
 
-def _exportDocumentQuerySet(request):
-    """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
-    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
-    _exportProgressSet(request, 3, 'กำลังตรวจรายชื่อตาชั่งและลูกค้าส่งออก')
-    own_port_bws = _exportDocumentOwnPortBwsIds()
-    other_bws = _exportDocumentOtherBwsIds()
-    export_customers = _exportDocumentExportCustomerIds()
-    own_port_customers = _exportDocumentOwnPortCustomers()
+def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_port_customers):
+    """เที่ยวทั้งหมดที่เข้าข่ายรายงานส่งออก (ทุกเดือน ทุกต้นทาง ยังไม่ตัดใบยกเลิก)
 
+    ใช้ร่วมกันทั้งหน้า export และแผงเที่ยวคิดเงินไม่ได้ในหน้า weight table
+    สองหน้าต้องนับจากชุดเดียวกัน ไม่งั้นตัวเลขไม่ตรงกันแล้วไม่รู้จะเชื่อหน้าไหน
+    """
     # หน้านี้รวมทั้ง 2 เคสไว้ด้วยกัน เงื่อนไขร่วมคือประเภทการบรรทุก "ส่งให้"
     # เคส 1 : ชั่งที่ท่าเรือเรา
     # เคส 2 : ชั่งที่เหมืองเรา และปลายทาง (customer) ต้องอยู่ในตารางอัตราค่าขนส่งไปนอกประเทศ
@@ -13201,6 +13202,20 @@ def _exportDocumentQuerySet(request):
     duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)
     if duplicate_q is not None:
         base_qs = base_qs.exclude(duplicate_q)
+    return base_qs
+
+
+def _exportDocumentQuerySet(request):
+    """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
+    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
+    _exportProgressSet(request, 3, 'กำลังตรวจรายชื่อตาชั่งและลูกค้าส่งออก')
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    other_bws = _exportDocumentOtherBwsIds()
+    export_customers = _exportDocumentExportCustomerIds()
+    own_port_customers = _exportDocumentOwnPortCustomers()
+
+    base_qs = _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers,
+                                          own_port_customers)
 
     # เดือนที่มีข้อมูล ใช้ทำ dropdown และหาเดือนตั้งต้น
     #
@@ -13588,6 +13603,204 @@ def viewExportDocument(request):
         'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
     }
     return render(request, "exportDocument/viewExportDocument.html", context)
+
+
+# แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบในหน้า weight table
+# นับแค่ "ช่องที่ต้องกรอกแต่ยังว่าง" ไม่ได้เช็คกับตารางราคา (เรื่องราคาดูที่หน้า /exportDocument/)
+INCOMPLETE_NO_TEAM = 'no_team'
+INCOMPLETE_NO_ORIGIN_WEIGHT = 'no_origin_weight'
+INCOMPLETE_NO_DEST_WEIGHT = 'no_dest_weight'
+# ลำดับนี้ = ลำดับการ์ดและป้ายบนหน้าเว็บ
+INCOMPLETE_REASONS = (INCOMPLETE_NO_TEAM, INCOMPLETE_NO_ORIGIN_WEIGHT, INCOMPLETE_NO_DEST_WEIGHT)
+INCOMPLETE_REASON_LABELS = {
+    INCOMPLETE_NO_TEAM: 'ไม่ได้ใส่ทีม',
+    INCOMPLETE_NO_ORIGIN_WEIGHT: 'ไม่ได้ใส่ นน.ต้นทาง',
+    INCOMPLETE_NO_DEST_WEIGHT: 'ไม่ได้ใส่ นน.ปลายทาง',
+}
+INCOMPLETE_PAGE_SIZE = 50
+# คลิกการ์ด/เปลี่ยนหน้าบ่อย แต่ละครั้งต้องอ่านทั้งเดือนใหม่ จึงพักผลไว้สั้น ๆ
+# ผลข้างเคียงที่ยอมรับได้ : แก้ใบชั่งแล้วแผงยังโชว์ของเดิมได้นานสุด 2 นาที
+INCOMPLETE_CACHE_SECONDS = 120
+
+
+def _exportDocumentIncomplete(trip_rows):
+    """แยกเที่ยวที่กรอกข้อมูลไม่ครบ พร้อมบอกว่าขาดช่องไหน (ไม่แตะ db)
+
+    ใช้แถวจาก _exportDocumentRows ซึ่งสลับ นน.ต้นทาง/ปลายทาง ตาม "ชั่งที่ไหน" มาแล้ว
+    และแปลง 0 (= ไม่ได้ชั่ง) เป็น None ไว้แล้ว ตรงนี้จึงเช็คแค่ว่าเป็น None ไหม
+
+    เที่ยวหนึ่งขาดได้หลายช่อง การ์ดแต่ละใบนับเที่ยวที่ขาดช่องนั้น ส่วน incomplete นับเที่ยวละครั้ง
+    คืน (items, counts)
+      items  = แถวเดิม + 'reasons' เฉพาะเที่ยวที่ขาดอย่างน้อย 1 ช่อง คงลำดับเดิม
+      counts = {'total', 'complete', 'incomplete', 'no_team', 'no_origin_weight', 'no_dest_weight'}
+    """
+    counts = {reason: 0 for reason in INCOMPLETE_REASONS}
+    items = []
+    for r in trip_rows:
+        reasons = []
+        if r['team_missing']:
+            reasons.append(INCOMPLETE_NO_TEAM)
+        if r['origin_weight'] is None:
+            reasons.append(INCOMPLETE_NO_ORIGIN_WEIGHT)
+        if r['dest_weight'] is None:
+            reasons.append(INCOMPLETE_NO_DEST_WEIGHT)
+        if not reasons:
+            continue
+        for reason in reasons:
+            counts[reason] += 1
+        item = dict(r)
+        item['reasons'] = reasons
+        items.append(item)
+
+    counts['total'] = len(trip_rows)
+    counts['incomplete'] = len(items)
+    counts['complete'] = counts['total'] - counts['incomplete']
+    return items, counts
+
+
+def _weightTableHasExportScope(company_code):
+    """เช็คแบบเบา ๆ ว่าแท็บนี้ควรมีแผงเที่ยวกรอกไม่ครบไหม (เรียกทุกครั้งที่เปิด weight table)
+
+    ตัวจริงอยู่ที่ _exportDocumentTabScope ซึ่งต้องโหลดตาราง map ทั้งก้อน
+    ตรงนี้แค่กันแท็บที่ไม่เกี่ยวกับงานส่งออกเลยไม่ให้ยิง request เปล่า
+    ถ้าผ่านตรงนี้แต่ตัวจริงบอกว่าไม่มีต้นทาง endpoint จะคืน 204 แล้วหน้าเว็บเอากล่องออกเอง
+    """
+    if not company_code:
+        return False
+    if company_code in COMPANY_TAB_SEES_ALL:
+        return True
+    return BaseCompanyMapBaseCustomer.objects.filter(base_company__code=company_code).exists()
+
+
+def _exportDocumentTabScope(company_code):
+    """เที่ยวส่งออกของ "ทั้งแท็บบริษัท" (ทุกต้นทางของแท็บ ไม่รวมใบยกเลิก) ทุกเดือน
+
+    ต่างจากหน้า export ที่ดูทีละต้นทาง : แผงในหน้า weight table ต้องเห็นทุกใบที่ต้องแก้ของแท็บ
+    กติกาว่าแท็บไหนเห็นต้นทางไหนใช้ตัวเดียวกับหน้า export (COMPANY_TAB_SEES_ALL)
+
+    คืน (qs, own_port_bws, own_port_customers) หรือ None ถ้าแท็บนี้ไม่มีต้นทางส่งออกเลย
+    """
+    sees_all = company_code in COMPANY_TAB_SEES_ALL
+    origins = _exportDocumentOriginNames(None if sees_all else company_code)
+    if not origins and not sees_all:
+        return None
+
+    own_port_bws = _exportDocumentOwnPortBwsIds()
+    other_bws = _exportDocumentOtherBwsIds()
+    own_port_customers = _exportDocumentOwnPortCustomers()
+    qs = _exportDocumentBaseQuerySet(own_port_bws, other_bws,
+                                     _exportDocumentExportCustomerIds(), own_port_customers)
+    if not sees_all:
+        condition = Q(pk__in=[])
+        for name in origins:
+            condition |= _exportDocumentOriginFilter(name, own_port_bws, other_bws)
+        qs = qs.filter(condition)
+    # ค่าตั้งต้นของหน้า export คือไม่เอาใบยกเลิก ตัวเลขจะได้ตรงกัน
+    return qs.filter(is_cancel=False), own_port_bws, own_port_customers
+
+
+def _weightTableIncompleteData(company_code, month):
+    """หาเที่ยวกรอกไม่ครบของทั้งเดือน คืน dict ที่ cache ได้ หรือ None ถ้าแท็บไม่มีงานส่งออก"""
+    cache_key = 'weighttable_incomplete_%s_%s' % (company_code, month or 'latest')
+    data = cache.get(cache_key)
+    if data is not None:
+        return data
+
+    scope = _exportDocumentTabScope(company_code)
+    if scope is None:
+        return None
+    tab_qs, own_port_bws, own_port_customers = scope
+
+    month_rows = (tab_qs.exclude(date__isnull=True)
+                  .annotate(m=TruncMonth('date'))
+                  .values_list('m', flat=True)
+                  .distinct()
+                  .order_by('-m'))
+    month_list = [m.strftime('%Y-%m') for m in month_rows]
+    if month not in month_list:
+        month = month_list[0] if month_list else ''
+
+    items, counts = _exportDocumentIncomplete([])
+    if month:
+        y, m = month.split('-')
+        month_qs = (tab_qs.filter(date__year=int(y), date__month=int(m))
+                    .select_related('bws', 'bws__company')
+                    .order_by('-date', '-weight_id'))
+        rows = _exportDocumentRows(month_qs, own_port_bws, own_port_customers)
+        items, counts = _exportDocumentIncomplete(rows)
+
+    total = counts['total']
+    data = {
+        'month': month,
+        'month_options': [(mm, _exportDocumentThaiMonth(mm)) for mm in month_list],
+        'items': items,
+        'counts': counts,
+        'complete_pct': round(100.0 * counts['complete'] / total) if total else 0,
+    }
+    cache.set(cache_key, data, INCOMPLETE_CACHE_SECONDS)
+    return data
+
+
+@login_required(login_url='login')
+def weightTableIncomplete(request):
+    """fragment HTML ของแผงเที่ยวกรอกไม่ครบ หน้า weight table โหลดมาแทรกทีหลัง
+    แยกออกมาเพราะต้องอ่านทั้งเดือน ถ้าทำตอน render หน้าหลักจะทำให้ weight table ช้าทุกครั้ง"""
+    company_code = request.session.get('company_code')
+    if not company_code:
+        return HttpResponse(status=403)
+
+    # เดือนเป็นส่วนหนึ่งของ cache key ห้ามรับข้อความอะไรก็ได้
+    month = request.GET.get('month') or ''
+    if not re.match(r'^\d{4}-\d{2}$', month):
+        month = ''
+    data = _weightTableIncompleteData(company_code, month)
+    if data is None:
+        return HttpResponse(status=204)
+
+    reason = request.GET.get('reason') or 'all'
+    if reason not in INCOMPLETE_REASONS:
+        reason = 'all'
+    items = data['items']
+    if reason != 'all':
+        items = [i for i in items if reason in i['reasons']]
+    page = Paginator(items, INCOMPLETE_PAGE_SIZE).get_page(request.GET.get('page'))
+
+    # ลิงก์ไปหน้าแก้ไขใบชั่ง : ให้เฉพาะใบของบริษัทในแท็บนี้ และคนที่ปุ่ม "แก้ไข" ในตารางหลักให้สิทธิ์
+    # editWeight เลือกฟอร์มจากธุรกิจของแท็บที่เปิดอยู่ ถ้าเปิดใบของบริษัทอื่น (เช่นจากแท็บร้อยเกาะ)
+    # จะได้ฟอร์มผิดประเภท จึงไม่ให้ลิงก์ ใบพวกนั้นต้องสลับแท็บไปแก้เอง
+    can_edit = request.user.is_superuser or is_account(request.user) or is_scale(request.user)
+    edit_mode_by_bws = {}
+    if can_edit:
+        try:
+            company_in = findCompanyIn(request)
+        except Exception:
+            company_in = []
+        edit_mode_by_bws = dict(
+            BaseWeightStation.objects
+            .filter(id__in={i['bws_id'] for i in page.object_list},
+                    company__code__in=company_in)
+            .values_list('id', 'weight_type_id'))
+    rows = []
+    for item in page.object_list:
+        row = dict(item)
+        row['edit_mode'] = edit_mode_by_bws.get(item['bws_id'])
+        rows.append(row)
+
+    counts = data['counts']
+    # การ์ดโชว์ครบทุกใบแม้เป็น 0 จะได้เห็นว่าช่องนั้นกรอกครบแล้ว
+    cards = [{'code': 'all', 'label': 'ทั้งหมด', 'count': counts['incomplete']}]
+    for code in INCOMPLETE_REASONS:
+        cards.append({'code': code, 'label': INCOMPLETE_REASON_LABELS[code],
+                      'count': counts[code]})
+
+    context = dict(data)
+    context.update({
+        'page': page,
+        'rows': rows,
+        'reason': reason,
+        'cards': cards,
+    })
+    return render(request, "weight/_incompletePanel.html", context)
 
 
 @login_required(login_url='login')

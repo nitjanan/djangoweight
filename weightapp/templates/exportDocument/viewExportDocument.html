@@ -104,6 +104,11 @@
     background-color: rgba(255, 193, 7, .22);
   }
 
+  /* กล่อง checkbox ในตัวกรอง สูงเท่าช่อง select ข้าง ๆ จะได้อยู่บรรทัดเดียวกัน */
+  .export-doc-options {
+    min-height: calc(1.5em + .75rem + 2px);
+  }
+
   /* ปุ่มที่กำลังทำงานอยู่ กันกดซ้ำและบอกผู้ใช้ว่ายังไม่เสร็จ */
   .btn.is-busy {
     pointer-events: none;
@@ -260,17 +265,27 @@
             </select>
           </div>
 
-          <div class="form-group col-md-3">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
-                     value="1" {% if include_cancel %}checked{% endif %}>
-              <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
+          {% comment %}
+            checkbox แยกคอลัมน์ของตัวเองพร้อมหัวข้อ ให้แถวเดียวกับ "ชนิดแร่/หิน" ชิดล่างตรงกัน
+            (form ใช้ align-items-end) กล่อง checkbox สูงเท่าช่อง select จะได้อยู่บรรทัดเดียวกับ dropdown
+          {% endcomment %}
+          <div class="form-group col-md-6">
+            <label class="d-block">ตัวเลือกเพิ่มเติม</label>
+            <div class="d-flex flex-wrap align-items-center gap-3 export-doc-options">
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
+                       value="1" {% if include_cancel %}checked{% endif %}>
+                <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
+              </div>
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="carry_empty" name="carry_empty"
+                       value="1" {% if carry_empty_only %}checked{% endif %}>
+                <label class="form-check-label" for="carry_empty">เฉพาะเที่ยวที่ประเภทการบรรทุกว่าง</label>
+              </div>
             </div>
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="carry_empty" name="carry_empty"
-                     value="1" {% if carry_empty_only %}checked{% endif %}>
-              <label class="form-check-label" for="carry_empty">เฉพาะเที่ยวที่ประเภทการบรรทุกว่าง</label>
-            </div>
+          </div>
+
+          <div class="form-group col-md-3 d-flex gap-2 justify-content-md-end">
             <button type="submit" class="btn btn-primary" data-busy="กำลังโหลด...">
               <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
             </button>

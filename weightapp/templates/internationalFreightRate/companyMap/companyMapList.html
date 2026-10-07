@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<style>
+  .cm-codes { white-space: nowrap; }
+  .cm-alias-badge { font-weight: normal; margin-right: .25rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>จัดการต้นทาง / ปลายทาง</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a></li>
+            <li class="breadcrumb-item active" aria-current="page">จัดการต้นทาง / ปลายทาง</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card">
+      <div class="card-header">
+        <a href="{% url 'viewInternationalFreightRate' %}" class="btn btn-light-secondary rounded-pill">
+          <i class="fa-solid fa-arrow-left"></i> กลับหน้าค่าขนส่ง
+        </a>
+        <a href="{% url 'createCompanyMap' %}" class="btn btn-primary rounded-pill float-end">
+          เพิ่มต้นทาง / ปลายทาง <i class="fa-solid fa-circle-plus"></i>
+        </a>
+      </div>
+
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          แถวในตารางนี้คือตัวเลือกต้นทาง/ปลายทางในใบราคาค่าขนส่ง ·
+          ติ๊ก <b>ใช้เป็นปลายทางส่งออก</b> แล้วเที่ยวที่ส่งให้รหัสลูกค้านี้ (รวมรหัสสำรอง) จะเข้าหน้ารายเที่ยวส่งออก ·
+          ลบแถวที่มีใบราคาใช้อยู่ไม่ได้
+        </p>
+
+        <form method="get" class="row gx-3 gy-2 align-items-end mb-3">
+          <div class="col-md-4">
+            <label for="cm_q" class="form-label">ค้นหา</label>
+            <input type="text" id="cm_q" name="q" value="{{ query }}" class="form-control"
+                   placeholder="ชื่อ / บริษัท / รหัสลูกค้า / รหัสสำรอง">
+          </div>
+          <div class="col-md-3">
+            <label for="cm_kind" class="form-label">ปลายทาง</label>
+            <select id="cm_kind" name="kind" class="form-select">
+              {% for value, label in kind_options %}
+              <option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-outline-info"><i class="fas fa-filter"></i> ค้นหา</button>
+            <a href="{% url 'settingCompanyMap' %}" class="btn btn-light-secondary">ล้างตัวกรอง</a>
+          </div>
+        </form>
+
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>ชื่อ</th>
+                <th>บริษัท</th>
+                <th>รหัสลูกค้า</th>
+                <th>รหัสสำรอง</th>
+                <th class="text-center">ปลายทาง<br>ส่งออก</th>
+                <th class="text-center">ปลายทาง<br>ในประเทศ</th>
+                <th class="text-end">ใบราคา<br>ที่ใช้อยู่</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              <tr{% if row.is_incomplete %} class="table-warning"{% endif %}>
+                <td class="text-muted">{{ row.id }}</td>
+                <td>{{ row.name }}</td>
+                <td>{% if row.base_company %}{{ row.base_company.name }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                <td class="cm-codes">
+                  {% if row.base_customer_id %}
+                    {{ row.base_customer_id }}
+                    {% if row.base_customer %}<div class="small text-muted">{{ row.base_customer.customer_name }}</div>{% endif %}
+                  {% elif row.is_incomplete %}
+                    <span class="badge bg-warning text-dark">ไม่มีรหัสลูกค้า เที่ยวจะไม่เข้า</span>
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+                <td class="cm-codes">
+                  {% for code in row.alias_codes %}<span class="badge bg-light-secondary cm-alias-badge">{{ code }}</span>{% empty %}<span class="text-muted">-</span>{% endfor %}
+                </td>
+                <td class="text-center">{% if row.is_export_destination %}<i class="fa-solid fa-check text-success"></i>{% endif %}</td>
+                <td class="text-center">{% if row.is_domestic_destination %}<i class="fa-solid fa-check text-success"></i>{% endif %}</td>
+                <td class="text-end">{% if row.rate_count %}{{ row.rate_count }} ใบ{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                <td class="text-nowrap">
+                  <a href="{% url 'editCompanyMap' row.id %}" class="btn btn-secondary btn-sm">
+                    <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                  </a>
+                  {% if can_delete %}
+                  <a href="{% url 'deleteCompanyMap' row.id %}" class="btn btn-outline-danger btn-sm">
+                    <i class="fa-solid fa-trash"></i> ลบ
+                  </a>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="9" class="text-center">
+                  <div class="alert alert-light-warning color-warning mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> ไม่พบข้อมูล
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+{% endblock %}

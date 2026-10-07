@@ -1,0 +1,25 @@
+{% load i18n %}
+{% comment %}
+  ตัวกรองช่วงวันที่ (DateRangeListFilter ใน weightapp/admin.py)
+  ส่งตัวกรอง / คำค้น / การเรียง ที่ใช้อยู่ไปด้วยเป็น hidden ไม่งั้นกดกรองวันที่แล้วตัวกรองอื่นหาย
+{% endcomment %}
+<details data-filter-title="{{ title }}" open>
+  <summary>
+    {% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}
+  </summary>
+  {% with c=choices.0 %}
+  <form method="get" style="padding: 4px 15px 12px;">
+    {% for key, value in c.hidden %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <label for="id_{{ c.lookup_gte }}" style="display:block; margin-top:4px;">ตั้งแต่</label>
+    <input type="date" id="id_{{ c.lookup_gte }}" name="{{ c.lookup_gte }}" value="{{ c.gte }}" style="width:100%;">
+    <label for="id_{{ c.lookup_lte }}" style="display:block; margin-top:6px;">ถึง</label>
+    <input type="date" id="id_{{ c.lookup_lte }}" name="{{ c.lookup_lte }}" value="{{ c.lte }}" style="width:100%;">
+    <div style="margin-top:8px;">
+      <input type="submit" class="button" value="กรอง">
+      {% if c.selected %}<a href="{{ c.clear_url|iriencode }}" style="margin-left:8px;">ล้าง</a>{% endif %}
+    </div>
+  </form>
+  {% endwith %}
+</details>

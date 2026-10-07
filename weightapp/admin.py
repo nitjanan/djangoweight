@@ -146,6 +146,39 @@ class BaseTimeEstimateAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['site','time_name', 'time_from', 'time_to'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
+class DateRangeListFilter(admin.FieldListFilter):
+    """กรองช่วงวันที่ (ตั้งแต่ - ถึง) ในแถบตัวกรองด้านขวาของหน้า admin
+
+    ไม่ใช้ date_hierarchy ของ Django เพราะต้องกวาดหาปี/เดือน/วันที่มีข้อมูลทั้งตารางทุกครั้งที่เปิดหน้า
+    ตาราง weight มีราวล้านแถว หน้าจะช้าลงทุกครั้ง ตัวนี้ไม่ query อะไรเพิ่ม
+    แค่ใส่ date__gte / date__lte ลงใน url ปุ่ม Export ของหน้า admin ก็กรองตามนี้ด้วย
+    (export ทั้งตารางทีเดียว time out ให้กรองทีละช่วงก่อนกด Export)
+    """
+    template = 'admin/weightapp/date_range_filter.html'
+
+    def __init__(self, field, request, params, model, model_admin, field_path):
+        self.lookup_gte = '%s__gte' % field_path
+        self.lookup_lte = '%s__lte' % field_path
+        super().__init__(field, request, params, model, model_admin, field_path)
+        self.title = 'วันที่'
+
+    def expected_parameters(self):
+        return [self.lookup_gte, self.lookup_lte]
+
+    def choices(self, changelist):
+        ours = (self.lookup_gte, self.lookup_lte)
+        yield {
+            'lookup_gte': self.lookup_gte,
+            'lookup_lte': self.lookup_lte,
+            'gte': self.used_parameters.get(self.lookup_gte, ''),
+            'lte': self.used_parameters.get(self.lookup_lte, ''),
+            # ตัวกรองอื่น / คำค้น / การเรียง ที่ใช้อยู่ ส่งต่อไปพร้อมฟอร์ม ไม่ให้หายตอนกดกรอง
+            'hidden': [(key, value) for key, value in changelist.params.items() if key not in ours],
+            'clear_url': changelist.get_query_string(remove=list(ours)),
+            'selected': bool(self.used_parameters),
+        }
+
+
 class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     formfield_overrides = {
         models.ManyToManyField: {'widget': CheckboxSelectMultiple},
@@ -155,6 +188,8 @@ class WeightAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ['weight_id', 'doc_id', 'date', 'customer_name', 'mill_name' , 'stone_type_name', 'site_name', 'car_team_name', 'bws'] #แสดงรายการสินค้าในรูปแบบตาราง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
     search_fields = ('weight_id', 'doc_id', 'date', 'customer__customer_id' ,'customer_name', 'stone_type__base_stone_type_id', 'stone_type_name', 'base_weight_station_name', 'mill__mill_id' ,'mill_name', 'site__base_site_id', 'site_name', 'car_team__car_team_id', 'car_team_name')
+    # กรองช่วงวันที่ ดู DateRangeListFilter
+    list_filter = (('date', DateRangeListFilter),)
 
 class WeightHistoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     formfield_overrides = {

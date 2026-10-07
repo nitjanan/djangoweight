@@ -11,13 +11,14 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 from weightapp import views
 from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer, BaseCustomer,
                               BaseSite, BaseWeightStation, BaseWeightType, InternationalFreightRate,
-                              Weight)
+                              UserProfile, Weight)
 
 OWN = views.EXPORT_DOC_CASE_OWN_PORT
 OTHER = views.EXPORT_DOC_CASE_OTHER_PORT
@@ -80,12 +81,13 @@ class ExportDocumentCaseTests(TestCase):
         cls.trip(30, date(2026, 8, 10), 'W1A', '06-V-900', '42.000', None)
 
     @staticmethod
-    def trip(weight_id, day, bws_id, customer_id, weight_total, origin_weight, site_id=None):
+    def trip(weight_id, day, bws_id, customer_id, weight_total, origin_weight, site_id=None,
+             carry=views.EXPORT_DOC_CARRY_TYPE):
         Weight.objects.create(
             weight_id=weight_id, date=day, bws_id=bws_id, customer_id=customer_id,
             site_id=site_id,
             customer_name=BaseCustomer.objects.get(pk=customer_id).customer_name,
-            carry_type_name=views.EXPORT_DOC_CARRY_TYPE, is_cancel=False,
+            carry_type_name=carry, is_cancel=False,
             car_registration_name='83-2751', doc_id=str(weight_id),
             weight_total=Decimal(weight_total),
             origin_weight=None if origin_weight is None else Decimal(origin_weight))
@@ -264,6 +266,68 @@ class ExportDocumentCaseTests(TestCase):
             base, OTHER, filters['own_port_bws'], filters['own_port_customers'])
         self.assertEqual(self.ids(own), {1, 2, 10, 21, 22})
         self.assertEqual(self.ids(other), {30})
+
+    # ---------- ประเภทการบรรทุกว่าง ----------
+
+    def addCarryTrips(self):
+        """ใบเหมืองไปท่าเรือบริษัทอื่น เดือน 8/2026 : ส่งให้ (30 จาก setUpTestData) + ว่าง 2 แบบ + รับเอง"""
+        self.trip(40, date(2026, 8, 11), 'W1A', '06-V-900', '42.000', None, carry=None)
+        self.trip(41, date(2026, 8, 12), 'W1A', '06-V-900', '42.000', None, carry='')
+        self.trip(42, date(2026, 8, 13), 'W1A', '06-V-900', '42.000', None, carry='รับเอง')
+
+    def test_empty_carry_type_is_counted_but_pickup_is_not(self):
+        """ตาชั่งไม่ได้บันทึกประเภทการบรรทุก (เช่นโมบาย E1V) ต้องไม่หายจากรายงาน ส่วนรับเองยังตัดเหมือนเดิม"""
+        self.addCarryTrips()
+        qs, _, _ = self.querySet(month='2026-08')
+        kept = self.ids(qs)
+        self.assertTrue({40, 41} <= kept)    # NULL และข้อความว่าง
+        self.assertIn(30, kept)              # ส่งให้
+        self.assertNotIn(42, kept)           # รับเอง
+
+    def test_rows_mark_empty_carry_type(self):
+        self.addCarryTrips()
+        qs, filters, _ = self.querySet(month='2026-08')
+        rows = {r['weight_id']: r for r in views._exportDocumentRows(
+            qs, filters['own_port_bws'], filters['own_port_customers'])}
+        self.assertTrue(rows[40]['carry_empty'])
+        self.assertEqual(rows[40]['carry_type'], views.EXPORT_DOC_CARRY_EMPTY_LABEL)
+        self.assertTrue(rows[41]['carry_empty'])
+        self.assertFalse(rows[30]['carry_empty'])
+        self.assertEqual(rows[30]['carry_type'], views.EXPORT_DOC_CARRY_TYPE)
+
+    def test_filter_only_empty_carry_type(self):
+        self.addCarryTrips()
+        qs, filters, _ = self.querySet(month='2026-08', carry_empty='1')
+        self.assertTrue(filters['carry_empty_only'])
+        self.assertEqual(self.ids(qs), {40, 41})
+
+    def test_trip_edit_file_accepts_empty_carry_type(self):
+        """เที่ยวที่ว่างอยู่ในรายงานแล้ว ไฟล์แก้ไขรายเที่ยวต้องแก้น้ำหนักของเที่ยวพวกนี้ได้ด้วย"""
+        self.assertTrue(views._exportDocumentCarryCounted(views.EXPORT_DOC_CARRY_TYPE))
+        self.assertTrue(views._exportDocumentCarryCounted(None))
+        self.assertTrue(views._exportDocumentCarryCounted(''))
+        self.assertFalse(views._exportDocumentCarryCounted('รับเอง'))
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_page_warns_and_highlights_empty_carry_type(self):
+        self.addCarryTrips()
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        session = self.client.session
+        session['company_code'] = 'ROI'
+        session.save()
+
+        page = self.client.get('/exportDocument/', {'month': '2026-08'})
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.context['summary']['carry_empty_count'], 2)
+        self.assertEqual(page.context['carry_empty_by_bws'], [{'bws_id': 'W1A', 'trips': 2}])
+        html = page.content.decode('utf-8')
+        self.assertIn('ประเภทการบรรทุกว่าง — นับรวมในรายงานแล้ว ต้องตรวจก่อนจ่าย', html)
+        self.assertEqual(html.count('trip-carry-empty'), 2 + 1)   # 2 แถว + ตัวเลือก CSS 1 ที่
+
+        only = self.client.get('/exportDocument/', {'month': '2026-08', 'carry_empty': '1'})
+        self.assertEqual({r['weight_id'] for r in only.context['rows']}, {40, 41})
 
     def test_case_param_on_the_page(self):
         qs, _, _ = self.querySet(month='2025-06', case=OWN)

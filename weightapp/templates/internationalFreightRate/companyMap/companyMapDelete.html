@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ลบต้นทาง / ปลายทาง</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'settingCompanyMap' %}">จัดการต้นทาง / ปลายทาง</a></li>
+            <li class="breadcrumb-item active" aria-current="page">ลบ</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card">
+      <div class="card-body">
+        <table class="table table-borderless mb-3" style="max-width: 640px;">
+          <tr><th style="width: 160px;">ชื่อ</th><td>{{ row.name }}</td></tr>
+          <tr><th>บริษัท</th><td>{% if row.base_company %}{{ row.base_company.name }}{% else %}-{% endif %}</td></tr>
+          <tr><th>รหัสลูกค้า</th><td>{{ row.base_customer_id|default:"-" }}</td></tr>
+          <tr>
+            <th>รหัสสำรอง</th>
+            <td>{% for alias in aliases %}{{ alias.base_customer_id }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}</td>
+          </tr>
+          <tr>
+            <th>ปลายทาง</th>
+            <td>
+              {% if row.is_export_destination %}ส่งออก{% endif %}
+              {% if row.is_export_destination and row.is_domestic_destination %} · {% endif %}
+              {% if row.is_domestic_destination %}ในประเทศ{% endif %}
+              {% if not row.is_export_destination and not row.is_domestic_destination %}-{% endif %}
+            </td>
+          </tr>
+        </table>
+
+        {% if rates %}
+        <div class="alert alert-danger">
+          <i class="bi bi-x-octagon"></i>
+          <b>ลบไม่ได้</b> แถวนี้ถูกใช้ในใบราคาค่าขนส่ง {{ rates|length }} ใบ (รวมทุกเวอร์ชัน)
+          ต้องลบเส้นทางเหล่านี้ในหน้าค่าขนส่งก่อน
+        </div>
+        <ul>
+          {% for rate in rates %}
+          <li>
+            {{ rate.origin.name|default:"-" }} → {{ rate.destination.name|default:"-" }}
+            <span class="text-muted">(เวอร์ชัน {{ rate.version }})</span>
+          </li>
+          {% endfor %}
+        </ul>
+        <a href="{% url 'settingCompanyMap' %}" class="btn btn-light-secondary">กลับ</a>
+        {% else %}
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          ลบแล้วกู้คืนไม่ได้
+          {% if aliases %}รหัสสำรอง {{ aliases|length }} รหัสของแถวนี้จะถูกลบไปด้วย{% endif %}
+          {% if row.is_export_destination %}
+            · เที่ยวที่ส่งให้รหัสลูกค้านี้จะหายจากหน้ารายเที่ยวส่งออก
+          {% endif %}
+        </div>
+        <form method="post" class="d-flex gap-2">
+          {% csrf_token %}
+          <a href="{% url 'settingCompanyMap' %}" class="btn btn-light-secondary">ยกเลิก</a>
+          <button type="submit" class="btn btn-danger"><i class="fa-solid fa-trash"></i> ยืนยันลบ</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+{% endblock %}

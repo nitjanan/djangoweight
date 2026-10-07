@@ -174,7 +174,7 @@
           <h5 class="card-title mb-0">ทีมขนส่ง</h5>
           <div class="d-flex gap-2">
             <button type="button" id="ifr_recalc_freight" class="btn btn-outline-secondary btn-sm rounded-pill"
-                    title="คิดค่าขนส่งของทุกแถวที่กรอกค่าสัญญาครบ จากช่วงราคาน้ำมันฐานปัจจุบัน">
+                    title="คิดค่าขนส่งของทุกแถวที่กรอกค่าสัญญาและปรับตามน้ำมันครบ จากช่วงราคาน้ำมันฐานปัจจุบัน">
               คิดค่าขนส่งใหม่จากสัญญา <i class="fa-solid fa-calculator"></i>
             </button>
             <button type="button" id="ifr_add_team" class="btn btn-primary btn-sm rounded-pill">
@@ -643,12 +643,15 @@
     tr.querySelector('.ifr-contract-date').value = row.contract_date || '';
     setPayment(tr, row.credit_days);
 
-    // ค่าขนส่งคิดจากค่าสัญญาให้ เฉพาะตอนผู้ใช้แก้ 2 ช่องนี้
+    // ค่าขนส่งคิดจากค่าสัญญาให้ เฉพาะตอนผู้ใช้แก้ 3 ช่องนี้ (ปรับตามน้ำมันอยู่ในสูตรด้วย)
     // ไม่คิดตอนเปิดหน้า เพราะค่าที่บันทึกไว้อาจเป็นค่าที่พิมพ์มือ ทับแล้วจะออกเวอร์ชันใหม่โดยไม่ตั้งใจ
     tr.querySelector('.ifr-contract-rate').addEventListener('input', function () {
       applyContractFreight(tr);
     });
     tr.querySelector('.ifr-contract-fuel').addEventListener('input', function () {
+      applyContractFreight(tr);
+    });
+    tr.querySelector('.ifr-fuel-adjustment').addEventListener('input', function () {
       applyContractFreight(tr);
     });
 
@@ -822,27 +825,32 @@
     return rows;
   }
 
-  // ---------- คิดค่าขนส่งจากค่าสัญญา ----------
-  // เทียบบัญญัติไตรยางศ์กับราคาน้ำมัน : ค่าขนส่ง = ค่าขนส่งตามสัญญา x ฐานที่ใช้ / น้ำมันฐานวันทำสัญญา
-  // ฐานที่ใช้เลือกจากช่วงราคาน้ำมันฐานของใบ [x, y] ด้วยกติกาเดียวกับส่วนปรับน้ำมัน (dead band)
-  //   น้ำมันฐานสัญญาสูงกว่าขอบบน  -> ใช้ขอบบน (น้ำมันถูกลงกว่าตอนเซ็น ค่าขนส่งจึงลด)
-  //   ต่ำกว่าขอบล่าง              -> ใช้ขอบล่าง (น้ำมันแพงขึ้น ค่าขนส่งจึงเพิ่ม)
-  //   อยู่ในช่วง                   -> ไม่คิด ใช้ค่าขนส่งตามสัญญาตรง ๆ
+  // ---------- คิดค่าขนส่งจากค่าสัญญา (issue #95) ----------
+  // ค่าขนส่ง = ค่าขนส่งตามสัญญา + (น้ำมันฐานวันทำสัญญา − ฐานที่ใช้) x ปรับตามน้ำมัน
+  // รูปแบบเดียวกับส่วนปรับน้ำมันในไฟล์ export (คอลัมน์ U = ค่าที่เทียบ − ขอบที่หลุด, K = U x ปรับตามน้ำมัน)
+  // ปรับตามน้ำมัน = ช่อง "ปรับตามน้ำมัน (ลิตรละ 1 บาท)" ของแถวนั้น หน่วย บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร
+  // ฐานที่ใช้เลือกจากช่วงราคาน้ำมันฐานของใบ [a, b] (dead band)
+  //   น้ำมันฐานสัญญา < a  -> ใช้ a
+  //   น้ำมันฐานสัญญา > b  -> ใช้ b
+  //   อยู่ในช่วง          -> ไม่ปรับ ใช้ค่าขนส่งตามสัญญาตรง ๆ
   // ขอบบนว่างให้ถือว่าเท่าขอบล่าง (ใบที่ตกลงเป็นราคาเดียว) เหมือนที่ไฟล์ export ทำ
+  // เดิมใช้บัญญัติไตรยางศ์ (ตามสัญญา x ฐานที่ใช้ / น้ำมันฐานวันทำสัญญา) ซึ่งไม่ได้ใช้ช่องปรับตามน้ำมันเลย
   function contractFreightOf(tr) {
     const contractRate = parseNumber(tr.querySelector('.ifr-contract-rate').value);
     const contractFuel = parseNumber(tr.querySelector('.ifr-contract-fuel').value);
+    const fuelAdjust = parseNumber(tr.querySelector('.ifr-fuel-adjustment').value);
     const low = parseNumber(document.getElementById('ifr_base_fuel_price').value);
     const rawHigh = parseNumber(document.getElementById('ifr_base_fuel_price_max').value);
     const high = isNaN(rawHigh) ? low : rawHigh;
-    // กรอกไม่ครบ (หรือน้ำมันฐานสัญญาเป็น 0) คิดไม่ได้ ปล่อยให้พิมพ์เอง
-    if (isNaN(contractRate) || isNaN(contractFuel) || contractFuel <= 0 || isNaN(low)) return null;
+    // กรอกไม่ครบ 3 ช่อง (หรือน้ำมันฐานสัญญาเป็น 0) คิดไม่ได้ ปล่อยให้พิมพ์เอง
+    if (isNaN(contractRate) || isNaN(contractFuel) || contractFuel <= 0
+        || isNaN(fuelAdjust) || isNaN(low)) return null;
 
     let base = null;
     if (contractFuel > high) base = high;
     else if (contractFuel < low) base = low;
     if (base === null) return roundHalfUp2(contractRate);          // อยู่ในช่วง = ไม่ปรับ
-    return roundHalfUp2(contractRate * base / contractFuel);
+    return roundHalfUp2(contractRate + (contractFuel - base) * fuelAdjust);
   }
 
   function applyContractFreight(tr) {
@@ -852,7 +860,8 @@
     field.value = value;
     field.title = 'คิดจากค่าสัญญา ' + tr.querySelector('.ifr-contract-rate').value
                 + ' กับน้ำมันฐานวันทำสัญญา ' + tr.querySelector('.ifr-contract-fuel').value
-                + ' เทียบช่วงราคาน้ำมันฐานของใบนี้ (พิมพ์ทับเองได้)';
+                + ' เทียบช่วงราคาน้ำมันฐานของใบนี้ x ปรับตามน้ำมัน '
+                + tr.querySelector('.ifr-fuel-adjustment').value + ' (พิมพ์ทับเองได้)';
     updatePerTonKm(tr);
     return true;
   }
@@ -1048,7 +1057,7 @@
       if (applyContractFreight(tr)) changed += 1;
     });
     showAlert(changed === 0
-      ? 'ไม่มีแถวไหนกรอกค่าสัญญาครบ (ต้องมีค่าขนส่งตามสัญญาและน้ำมันฐานวันทำสัญญา)'
+      ? 'ไม่มีแถวไหนกรอกครบ (ต้องมีค่าขนส่งตามสัญญา น้ำมันฐานวันทำสัญญา และปรับตามน้ำมัน)'
       : 'คิดค่าขนส่งใหม่แล้ว ' + changed + ' แถว', changed === 0);
   });
 

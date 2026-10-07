@@ -11456,6 +11456,32 @@ def baseCompanyCustomerMapOptions(request):
 # เก็บเป็นค่าคงที่ไว้เผื่อมีท่าใหม่ จะได้ไม่ต้องไล่แก้หลายที่
 EXPORT_DOC_OWN_PORT_BIZ_ID = 2
 EXPORT_DOC_CARRY_TYPE = 'ส่งให้'
+# ใบชั่งที่ "ประเภทการบรรทุก" ว่าง ก็นับเข้ารายงานด้วย นับ = ส่งให้ หรือ ว่าง (รับเอง / ค่าอื่นไม่นับ)
+# ตาชั่งบางเครื่องไม่บันทึกช่องนี้ เช่น โมบาย E1V กงตาก 3 เดือน ก.ย. 2569 ว่าง 300 จาก 319 เที่ยว
+# ทั้งที่เป็นเที่ยวรถร่วมส่งจริง ถ้าไม่นับ เที่ยวจะหายจากรายงานทั้งก้อนโดยไม่มีอะไรบอก
+# ใบชั่งเองบอกไม่ได้ว่าช่องว่างเป็นส่งให้หรือรับเอง ระบบจึงไม่เดา (ไม่ดูทีมรถด้วย เพราะทีมเดียวกันก็มีรับเอง)
+# นับเข้ามาทั้งหมดแล้วไฮไลต์ + เตือนบนหน้าเว็บ ให้คนตรวจเอง
+# ใบไหนเป็นรับเองจริง ให้แก้ใบชั่งเลือกการขนส่ง "รับเอง" ช่องนี้จะไม่ว่างแล้วหลุดออกจากรายงานเอง
+EXPORT_DOC_CARRY_EMPTY_LABEL = '(ว่าง)'
+
+
+def _exportDocumentCarryEmptyQ():
+    return Q(carry_type_name__isnull=True) | Q(carry_type_name='')
+
+
+def _exportDocumentCarryQ():
+    """ประเภทการบรรทุกที่นับเข้ารายงาน : ส่งให้ หรือ ว่าง"""
+    return Q(carry_type_name=EXPORT_DOC_CARRY_TYPE) | _exportDocumentCarryEmptyQ()
+
+
+def _exportDocumentCarryIsEmpty(value):
+    # ต้องตรงกับ _exportDocumentCarryEmptyQ : NULL หรือข้อความว่างเท่านั้น
+    return value is None or value == ''
+
+
+def _exportDocumentCarryCounted(value):
+    """ตัวเดียวกับ _exportDocumentCarryQ แต่ใช้กับใบชั่งที่โหลดมาแล้ว"""
+    return value == EXPORT_DOC_CARRY_TYPE or _exportDocumentCarryIsEmpty(value)
 
 # sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 6000 เที่ยว (แถว 6-6005)
 # ตัวเลขนี้ต้องตรงกับพื้นที่จริงในไฟล์ template (ดู xlsx_template.TRIP_REPORT_TEMPLATE)
@@ -12428,16 +12454,26 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
     return filled, no_contract, out_of_range
 
 
-# คอลัมน์ N ของ sheet อัตรา : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (M เป็นคีย์ O/P เป็นตารางกลุ่มจ่าย)
-# ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง I ว่าง
-EXPORT_DOC_RATE_NOTE_COL = 14
-# คอลัมน์ที่เพิ่มใน template v14 ต่อท้ายของเดิม (A-S ถูกใช้หมดแล้ว และ sheet สรุปจ่ายรถร่วม
-# อ้างคอลัมน์ของ sheet นี้แบบตายตัวอยู่ 2,700 สูตร แทรกกลางตารางไม่ได้)
-EXPORT_DOC_RATE_BASE_MAX_COL = 20  # T ราคาน้ำมันฐาน ขอบบน
-EXPORT_DOC_RATE_BASE_MIN_COL = 22  # V ราคาน้ำมันฐาน ขอบล่าง
-# H แสดงช่วงราคาฐานเป็นข้อความ ย้ายได้เพราะไม่มี sheet อื่นอ้างถึง H
-EXPORT_DOC_RATE_BASE_RANGE_COL = 8
-# U เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
+# ตำแหน่งคอลัมน์ของ sheet อัตราค่าขนส่งใน template v15
+# v15 แทรก H (น้ำมันฐานวันทำสัญญา) กับ J (ค่าขนส่ง) กลางตาราง ด้วยการสั่ง Insert ใน Excel จริง
+# ซึ่งเลื่อนการอ้างอิงของ sheet สรุปจ่ายรถร่วม (2,700 สูตร) กับ dropdown ให้เอง
+# ถ้าจะแทรกอีก ต้องทำใน Excel แบบเดียวกัน ห้ามแทรกด้วย openpyxl เพราะมันไม่เลื่อนสูตรให้
+#   A-F คีย์ + ระยะทาง   G ตามสัญญา   H น้ำมันฐานวันทำสัญญา   I ช่วงราคาฐาน (ข้อความ)
+#   J ค่าขนส่ง ณ ราคาน้ำมันฐาน   K ราคาน้ำมันเฉลี่ย   L ปรับค่าขนส่ง   M/N/O สูตร (ส่วนปรับ/อัตราสุทธิ/คีย์)
+#   P หมายเหตุ   Q-U ตารางกลุ่มจ่าย   V ขอบบน   W สูตรส่วนต่าง   X ขอบล่าง
+EXPORT_DOC_RATE_CONTRACT_RATE_COL = 7   # G ค่าขนส่งตามสัญญา (แสดงผล)
+EXPORT_DOC_RATE_CONTRACT_FUEL_COL = 8   # H น้ำมันฐานวันทำสัญญา (แสดงผล)
+# I แสดงช่วงราคาฐานเป็นข้อความ ไม่มี sheet อื่นอ้างถึง
+EXPORT_DOC_RATE_BASE_RANGE_COL = 9
+EXPORT_DOC_RATE_FREIGHT_COL = 10        # J ค่าขนส่ง ณ ราคาน้ำมันฐาน ตัวตั้งของอัตราสุทธิ N
+EXPORT_DOC_RATE_AVG_FUEL_COL = 11       # K ราคาน้ำมันเฉลี่ย
+EXPORT_DOC_RATE_ADJUST_COL = 12         # L ปรับค่าขนส่ง ต่อน้ำมัน 1 บาท/ลิตร
+# คอลัมน์ P : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (O เป็นคีย์ Q/R เป็นตารางกลุ่มจ่าย)
+# ใช้เขียนข้อความบอกว่าแถวไหนไม่มีราคาน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่อง K ว่าง
+EXPORT_DOC_RATE_NOTE_COL = 16
+EXPORT_DOC_RATE_BASE_MAX_COL = 22  # V ราคาน้ำมันฐาน ขอบบน
+EXPORT_DOC_RATE_BASE_MIN_COL = 24  # X ราคาน้ำมันฐาน ขอบล่าง
+# W เป็นสูตรในไฟล์ (ส่วนต่างที่ใช้คิด) ระบบไม่เขียนทับ
 
 
 def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
@@ -13009,8 +13045,8 @@ def _exportDocumentUnflaggedDestinations(other_bws, export_customers, selected_m
     # นับจากตาราง weight ตรง ๆ ไม่ใช่จาก base_qs เพราะ base_qs กรองปลายทางที่ติ๊กแล้วออกไปก่อน
     # เที่ยวของลูกค้าที่ยังไม่ติ๊กจึงไม่มีทางอยู่ใน base_qs เลย
     names = _baseCompanyMapDisplayNameById()
-    trips = Weight.objects.filter(bws_id__in=other_bws, customer_id__in=candidates,
-                                  carry_type_name=EXPORT_DOC_CARRY_TYPE, is_cancel=False)
+    trips = Weight.objects.filter(_exportDocumentCarryQ(), bws_id__in=other_bws,
+                                  customer_id__in=candidates, is_cancel=False)
     if selected_month:
         try:
             year, month = selected_month.split('-')
@@ -13193,14 +13229,15 @@ def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_p
     ใช้ร่วมกันทั้งหน้า export และแผงเที่ยวคิดเงินไม่ได้ในหน้า weight table
     สองหน้าต้องนับจากชุดเดียวกัน ไม่งั้นตัวเลขไม่ตรงกันแล้วไม่รู้จะเชื่อหน้าไหน
     """
-    # หน้านี้รวมทั้ง 2 เคสไว้ด้วยกัน เงื่อนไขร่วมคือประเภทการบรรทุก "ส่งให้"
+    # หน้านี้รวมทั้ง 2 เคสไว้ด้วยกัน เงื่อนไขร่วมคือประเภทการบรรทุก "ส่งให้" หรือว่าง
+    # (ว่าง = ตาชั่งไม่ได้บันทึก นับเข้ามาแล้วให้คนตรวจเอง ดู EXPORT_DOC_CARRY_EMPTY_LABEL)
     # เคส 1 : ชั่งที่ท่าเรือเรา
     # เคส 2 : ชั่งที่เหมืองเรา และปลายทาง (customer) ต้องอยู่ในตารางอัตราค่าขนส่งไปนอกประเทศ
     #         ถ้าไม่กรองด้วยปลายทาง จะกวาดการขายในประเทศเข้ามาทั้งหมด (~150,000 เที่ยว)
     base_qs = Weight.objects.filter(
         Q(bws_id__in=own_port_bws)
         | Q(bws_id__in=other_bws, customer_id__in=export_customers),
-        carry_type_name=EXPORT_DOC_CARRY_TYPE,
+        _exportDocumentCarryQ(),
     # ใบที่หน้างานเป็น "ใช้ภายใน" หรือ "อนุเคราะห์" ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก
     # แถวที่ไม่ได้ระบุหน้างาน (site_id เป็น NULL) ยังอยู่ครบ เพราะ exclude ของ Django ไม่ตัด NULL
     ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS)
@@ -13290,6 +13327,8 @@ def _exportDocumentQuerySet(request):
 
     # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
     include_cancel = request.GET.get('include_cancel') == '1'
+    # ไว้ไล่ตรวจเที่ยวที่ประเภทการบรรทุกว่างทีละใบ (ปุ่มในแถบเตือน)
+    carry_empty_only = request.GET.get('carry_empty') == '1'
 
     qs = base_qs
     if selected_month:
@@ -13342,6 +13381,8 @@ def _exportDocumentQuerySet(request):
     qs = _exportDocumentApplyCaseFilter(qs, selected_case, own_port_bws, own_port_customers)
     if not include_cancel:
         qs = qs.filter(is_cancel=False)
+    if carry_empty_only:
+        qs = qs.filter(_exportDocumentCarryEmptyQ())
 
     # เรียงวันที่ล่าสุดขึ้นก่อน ทั้งหน้าเว็บและ sheet บันทึกรายเที่ยว
     # การดันกลุ่ม "ไม่ระบุทีม" ขึ้นก่อน ทำที่หน้าสรุปจ่ายรถร่วมแทน (ดู _exportDocumentHoistNoTeam)
@@ -13366,6 +13407,7 @@ def _exportDocumentQuerySet(request):
         # ค่าที่ dropdown รวมต้องโชว์ว่าเลือกอยู่
         'bws_filter_value': selected_bws or ('case:%s' % selected_case if selected_case else ''),
         'include_cancel': include_cancel,
+        'carry_empty_only': carry_empty_only,
         'base_qs': base_qs,
         'option_qs': option_qs,
         'own_port_bws': own_port_bws,
@@ -13467,6 +13509,9 @@ def _exportDocumentRows(weights, own_port_bws=None, own_port_customers=None):
             'pay_group': 'ร้อยเกาะ' if (w.transport or '').startswith('ร้อยเกาะ') else 'ปกติ',
             'site_name': w.site_name,
             'is_cancel': w.is_cancel,
+            # นอกไฟล์ template : โชว์บนหน้าเว็บอย่างเดียว ไม่ได้ลงไฟล์ excel
+            'carry_type': w.carry_type_name or EXPORT_DOC_CARRY_EMPTY_LABEL,
+            'carry_empty': _exportDocumentCarryIsEmpty(w.carry_type_name),
         })
     return rows
 
@@ -13507,7 +13552,16 @@ def viewExportDocument(request):
         dest_sum=Sum(dest_val),
         pay_sum=Sum(pay_val),
         no_team_count=Count('weight_id', filter=Q(car_team_name__isnull=True) | Q(car_team_name='')),
+        carry_empty_count=Count('weight_id', filter=_exportDocumentCarryEmptyQ()),
     )
+    # แถบเตือน "ประเภทการบรรทุกว่าง" : บอกว่ามาจากตาชั่งไหน คนตรวจจะได้รู้ว่าต้องไปตามที่เครื่องไหน
+    carry_empty_by_bws = []
+    if summary['carry_empty_count']:
+        carry_empty_by_bws = list(qs.filter(_exportDocumentCarryEmptyQ())
+                                  .order_by()
+                                  .values('bws_id')
+                                  .annotate(trips=Count('weight_id'))
+                                  .order_by('-trips', 'bws_id'))
 
     p = Paginator(qs, 100)
     page = request.GET.get('page')
@@ -13600,6 +13654,8 @@ def viewExportDocument(request):
             (EXPORT_DOC_CASE_OTHER_PORT, EXPORT_DOC_CASE_LABELS[EXPORT_DOC_CASE_OTHER_PORT]),
         ],
         'include_cancel': include_cancel,
+        'carry_empty_only': filters['carry_empty_only'],
+        'carry_empty_by_bws': carry_empty_by_bws,
         'bws_options': bws_options,
         'team_options': team_options,
         'stone_options': stone_options,
@@ -13976,9 +14032,9 @@ def uploadTripEdit(request):
             errors.append('แถว %s : ไม่พบ weight_id %s ในระบบ' % (row, weight_id))
             continue
         # กันอัปไฟล์ผิดแล้วไปแก้เที่ยวที่ไม่ได้อยู่ในขอบเขตของหน้านี้
-        if weight.bws_id not in allowed_bws or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE:
-            errors.append('แถว %s : weight_id %s ไม่ได้อยู่ในเงื่อนไขของหน้านี้ (ส่งให้ + ตาชั่งของเคส 1 หรือ 2)'
-                          % (row, weight_id))
+        if weight.bws_id not in allowed_bws or not _exportDocumentCarryCounted(weight.carry_type_name):
+            errors.append('แถว %s : weight_id %s ไม่ได้อยู่ในเงื่อนไขของหน้านี้ '
+                          '(ส่งให้หรือประเภทการบรรทุกว่าง + ตาชั่งของเคส 1 หรือ 2)' % (row, weight_id))
             continue
 
         # "ชั่งที่ไหน" เป็นตัวกำหนดว่าน้ำหนักฝั่งไหนเก็บอยู่ฟิลด์ไหน ต้องหาก่อนถึงจะเทียบค่าเก่าได้ถูก
@@ -14066,7 +14122,7 @@ def confirmTripEdit(request):
             # ตรวจซ้ำอีกรอบ เผื่อมีคนแก้ระหว่างที่ค้างพรีวิวอยู่
             if (weight is None
                     or weight.bws_id not in allowed_bws
-                    or weight.carry_type_name != EXPORT_DOC_CARRY_TYPE):
+                    or not _exportDocumentCarryCounted(weight.carry_type_name)):
                 skipped += 1
                 continue
 

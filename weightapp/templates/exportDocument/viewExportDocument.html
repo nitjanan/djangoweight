@@ -97,6 +97,12 @@
     text-decoration: line-through;
     opacity: 0.55;
   }
+  /* ประเภทการบรรทุกว่าง : ตาชั่งไม่ได้บันทึก นับเข้ารายงานแล้วแต่ต้องให้คนตรวจ ทาพื้นทั้งแถวให้เห็นชัด
+     ปิดลายสลับแถวของ table-striped ในแถวนี้ ไม่งั้นแถวคู่จะสีไม่เหมือนแถวคี่ */
+  .trip-table > tbody > tr.trip-carry-empty > td {
+    --bs-table-accent-bg: transparent;
+    background-color: rgba(255, 193, 7, .22);
+  }
 
   /* ปุ่มที่กำลังทำงานอยู่ กันกดซ้ำและบอกผู้ใช้ว่ายังไม่เสร็จ */
   .btn.is-busy {
@@ -259,6 +265,11 @@
               <input class="form-check-input" type="checkbox" id="include_cancel" name="include_cancel"
                      value="1" {% if include_cancel %}checked{% endif %}>
               <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="carry_empty" name="carry_empty"
+                     value="1" {% if carry_empty_only %}checked{% endif %}>
+              <label class="form-check-label" for="carry_empty">เฉพาะเที่ยวที่ประเภทการบรรทุกว่าง</label>
             </div>
             <button type="submit" class="btn btn-primary" data-busy="กำลังโหลด...">
               <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
@@ -449,6 +460,38 @@
             </div>
           </div>
           {% endif %}
+        {% endif %}
+
+        {% comment %}
+          ประเภทการบรรทุกว่าง : ตาชั่งไม่ได้บันทึก (เช่นโมบาย E1V) ระบบนับเข้ารายงานให้แล้ว
+          แต่ใบชั่งบอกไม่ได้ว่าเป็นส่งให้หรือรับเอง ต้องให้คนตรวจก่อนจ่าย
+          แยกจากแถบ "ข้อมูลครบ / ไม่ครบ" ด้านล่าง เพราะเที่ยวพวกนี้คิดเงินได้ ไม่ได้ขึ้น 0
+        {% endcomment %}
+        {% if summary.carry_empty_count %}
+        <div class="ifr-issue ifr-issue-warn mb-3">
+          <div class="ifr-issue-num">{{ summary.carry_empty_count|intcomma }} เที่ยว</div>
+          <div class="ifr-issue-body">
+            <div class="ifr-issue-title">ประเภทการบรรทุกว่าง — นับรวมในรายงานแล้ว ต้องตรวจก่อนจ่าย</div>
+            <div class="ifr-issue-text">
+              ตาชั่งไม่ได้บันทึกว่าเป็น "ส่งให้" หรือ "รับเอง" ระบบนับเข้ามาให้ (แถวพื้นเหลืองในตารางรายเที่ยว)<br />
+              <strong>ถ้าเที่ยวไหนเป็นรับเอง:</strong> แก้ใบชั่งนั้น เลือกการขนส่งเป็น "รับเอง"
+              แล้วเที่ยวจะหลุดออกจากรายงานเอง
+              <ul class="ifr-missing-list">
+                {% for b in carry_empty_by_bws %}
+                <li>
+                  <span class="fw-semibold">ตาชั่ง {{ b.bws_id }}</span>
+                  <span class="text-muted small">— {{ b.trips|intcomma }} เที่ยว</span>
+                </li>
+                {% endfor %}
+              </ul>
+              {% if not carry_empty_only %}
+              <a class="btn btn-sm btn-outline-warning mt-1" href="{% my_url 1 'carry_empty' request.GET.urlencode %}">
+                ดูเฉพาะเที่ยวที่ว่าง
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
         {% endif %}
 
         {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count %}
@@ -747,18 +790,19 @@
                 <th class="trip-num">นน.ส่วนต่าง</th>
                 <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
                 <th>weight_id</th>
+                <th>ประเภทการบรรทุก</th>
               </tr>
               <tr class="col-letter">
                 {# ข้าม G (นามที่จ่าย) เพราะไม่มีที่เก็บใน db เว้นว่างทุกแถว แต่ในไฟล์ยังมีคอลัมน์อยู่ #}
                 <th>-</th>
                 <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
                 <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
-                <th>นอกไฟล์ template</th>
+                <th colspan="2">นอกไฟล์ template</th>
               </tr>
             </thead>
             <tbody>
               {% for r in rows %}
-              <tr {% if r.is_cancel %}class="trip-cancel"{% endif %}>
+              <tr class="{% if r.is_cancel %}trip-cancel{% endif %} {% if r.carry_empty %}trip-carry-empty{% endif %}">
                 <td>
                   <span class="badge {% if r.case == '1' %}bg-primary{% else %}bg-secondary{% endif %}"
                         title="{{ r.case_label }}">{{ r.case_label }}</span>
@@ -777,10 +821,13 @@
                 <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
                 <td>{{ r.weight_id }}</td>
+                <td>
+                  {% if r.carry_empty %}<span class="badge bg-warning text-dark">{{ r.carry_type }}</span>{% else %}{{ r.carry_type }}{% endif %}
+                </td>
               </tr>
               {% empty %}
               <tr>
-                <td colspan="14" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
+                <td colspan="15" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
               </tr>
               {% endfor %}
             </tbody>

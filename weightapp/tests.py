@@ -221,6 +221,62 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.car_company, 5)
         self.assertEqual(do.car_customer, 2)
 
+    def _post_weight_delivery(self, weight_id, do_doc_no, is_cancel, weight_ton=26.6):
+        return self.client.post(
+            '/api/uc_weight_delivery/',
+            data=json.dumps({
+                'weight_id': weight_id,
+                'bws': 'BWS_01',
+                'delivery_date': '2026-10-07',
+                'do_id': 1,
+                'do_doc_no': do_doc_no,
+                'carry_type_name': 'รับเอง',
+                'weight_ton': weight_ton,
+                'weight_q': 0.0,
+                'unit_name': 'ตัน',
+                'car_company': 0,
+                'car_customer': 5,
+                'is_cancel': is_cancel,
+                'status': 'open',
+                'qty': 1000,
+            }),
+            content_type='application/json'
+        )
+
+    def test_uc_weight_delivery_new_weight_switched_do_before_save(self):
+        # รายการชั่งใหม่ เลือก DO_A แล้วเปลี่ยนเป็น DO_B ก่อนบันทึก
+        # ตาชั่งส่ง cancel DO_A ก่อน แล้วค่อยส่ง DO_B (prepareWeightDelivery)
+        self.assertEqual(self._post_weight_delivery(201, 'DO_A', True).status_code, 200)
+        self.assertEqual(self._post_weight_delivery(201, 'DO_B', False).status_code, 200)
+
+        do_a = DeliveryOrder.objects.get(doc_no='DO_A', comp_code='TEST_COMP')
+        self.assertEqual(do_a.car_customer_tot, 0)
+        self.assertEqual(do_a.car_customer_rem, 5)
+        self.assertEqual(float(do_a.qty_tot), 0.0)
+
+        do_b = DeliveryOrder.objects.get(doc_no='DO_B', comp_code='TEST_COMP')
+        self.assertEqual(do_b.car_customer_tot, 1)
+        self.assertAlmostEqual(float(do_b.qty_tot), 26.6)
+
+    def test_uc_weight_delivery_move_existing_weight_recalculates_old_do(self):
+        # รายการที่บันทึกกับ DO_A ไปแล้ว ถูกแก้ไขย้ายไป DO_B โดยตรง
+        self.assertEqual(self._post_weight_delivery(202, 'DO_A', False).status_code, 200)
+        self.assertEqual(DeliveryOrder.objects.get(doc_no='DO_A').car_customer_tot, 1)
+
+        self.assertEqual(self._post_weight_delivery(202, 'DO_B', False).status_code, 200)
+
+        do_a = DeliveryOrder.objects.get(doc_no='DO_A', comp_code='TEST_COMP')
+        self.assertEqual(do_a.car_customer_tot, 0)
+        self.assertEqual(float(do_a.qty_tot), 0.0)
+        self.assertEqual(DeliveryOrder.objects.get(doc_no='DO_B').car_customer_tot, 1)
+
+    def test_uc_weight_delivery_update_bumps_v_stamp(self):
+        # ตาชั่งดึงรายการแก้ไขด้วย v_stamp ถ้า update แล้ว v_stamp ไม่ขยับ จะไม่เห็นการแก้ไข
+        self._post_weight_delivery(203, 'DO_A', False)
+        before = WeightDelivery.objects.get(weight_id=203).v_stamp
+        self._post_weight_delivery(203, 'DO_A', True)
+        self.assertGreater(WeightDelivery.objects.get(weight_id=203).v_stamp, before)
+
     def test_uc_status_cancel_do_single_dict(self):
         # Create a DeliveryOrder
         DeliveryOrder.objects.create(

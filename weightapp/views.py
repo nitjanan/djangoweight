@@ -10098,10 +10098,18 @@ def uc_weight_delivery(request):
                     if other_count >= car_customer:
                         raise CapacityExceeded('car_customer limit exceeded')
 
+            # จำ DO เดิมของรายการนี้ไว้ ถ้ารายการถูกย้ายไป DO อื่น ต้องคำนวณ DO เดิมใหม่ด้วย
+            # ไม่งั้น DO เดิมจะค้างยอดเที่ยว/ตันของรายการที่ย้ายออกไปแล้ว
+            previous = WeightDelivery.objects.filter(
+                weight_id=weight_id
+            ).values('do_doc_no', 'comp_code', 'delivery_date').first()
+
             # UPDATE FIRST
+            # QuerySet.update() ไม่อัปเดต auto_now ให้ ต้องใส่ v_stamp เอง ตาชั่งดึงรายการแก้ไขตาม v_stamp
             updated = WeightDelivery.objects.filter(
                 weight_id=weight_id
             ).update(
+                v_stamp=django_timezone.now(),
                 delivery_date=delivery_date,
                 bws=data.get('bws'),
                 comp_code=comp_code,
@@ -10112,11 +10120,13 @@ def uc_weight_delivery(request):
                 weight_ton=data.get('weight_ton'),
                 weight_q=data.get('weight_q'),
                 unit_name=data.get('unit_name'),
-                is_cancel=data.get('is_cancel')
+                is_cancel=is_cancel
             )
 
             # CREATE IF NOT EXISTS
             if not updated:
+                # ต้องส่ง is_cancel ด้วย: รายการชั่งใหม่ที่เปลี่ยน DO ก่อนบันทึก ตาชั่งจะส่ง cancel DO เดิมมาก่อน
+                # ถ้าไม่ส่ง is_cancel รายการจะถูกสร้างเป็น active และไปนับเป็นเที่ยวของ DO เดิม
                 wd = WeightDelivery.objects.create(
                     weight_id=weight_id,
                     delivery_date=delivery_date,
@@ -10130,7 +10140,8 @@ def uc_weight_delivery(request):
 
                     weight_ton=data.get('weight_ton'),
                     weight_q=data.get('weight_q'),
-                    unit_name=data.get('unit_name')
+                    unit_name=data.get('unit_name'),
+                    is_cancel=is_cancel
                 )
 
                 status = 'Create New Item'
@@ -10142,6 +10153,18 @@ def uc_weight_delivery(request):
             if 'comp_code' not in data or not data['comp_code']:
                 data = {**data, 'comp_code': comp_code}
             uc_delivery_order(data) #คำนวน delivery_order ทั้งหมดตามสาขาบริษัท
+
+            # รายการถูกย้ายออกจาก DO เดิม -> คำนวณ DO เดิมใหม่ (ค่า car_company/car_customer/qty/status เดิมจะถูกคงไว้)
+            if previous and (
+                previous['do_doc_no'] != do_doc_no
+                or previous['comp_code'] != comp_code
+                or str(previous['delivery_date']) != str(delivery_date)
+            ):
+                uc_delivery_order({
+                    'do_doc_no': previous['do_doc_no'],
+                    'comp_code': previous['comp_code'],
+                    'delivery_date': previous['delivery_date'],
+                })
 
         return JsonResponse({
             'status': status,

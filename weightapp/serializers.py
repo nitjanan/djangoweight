@@ -1,5 +1,6 @@
+from decimal import Decimal
 from rest_framework import serializers
-from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, InternationalFreightRateStatus, InternationalFreightRateApproval, InternationalFreightRateApprovalAction, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE
+from weightapp.models import BaseScoop, BaseMill, Weight, BaseCustomer, BaseStoneType, BaseCarTeam, BaseDriver, BaseCarRegistration, BaseCar, BaseSite, BaseJobType, BaseCustomerSite, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, UserScale, BaseCompanyMapBaseCustomer, InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, InternationalFreightRateStatus, InternationalFreightRateApproval, InternationalFreightRateApprovalAction, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, DomesticFreightRate, DomesticFreightRateTeam, DomesticFreightWeightBand
 from django.contrib.auth.models import User
 from django.db import models, transaction
 from django.utils import timezone
@@ -683,3 +684,113 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         instance.status = InternationalFreightRateStatus.PENDING
         instance.save(update_fields=['submitted_at', 'status'])
         return instance
+
+# ======================== ค่าขนส่งในประเทศ (issue #118) ========================
+
+class DomesticFreightRateTeamSerializer(serializers.ModelSerializer):
+    # รับ/ส่งด้วยคีย์ team_id เหมือนฝั่งส่งออก · null = ทุกทีม
+    team_id = serializers.PrimaryKeyRelatedField(
+        source='team', queryset=BaseCarTeam.objects.all(),
+        required=False, allow_null=True, default=None)
+
+    class Meta:
+        model = DomesticFreightRateTeam
+        exclude = ['rate', 'team']
+        extra_kwargs = {
+            'freight_rate': {'required': True, 'allow_null': False, 'min_value': 0},
+            'loss_percent': {'required': False, 'min_value': 0, 'max_value': Decimal('99.99')},
+            'note': {'required': False, 'allow_null': True, 'allow_blank': True},
+        }
+
+
+class DomesticFreightRateSerializer(serializers.ModelSerializer):
+    teams = DomesticFreightRateTeamSerializer(many=True)
+
+    class Meta:
+        model = DomesticFreightRate
+        fields = '__all__'
+        extra_kwargs = {
+            'origin': {'required': True, 'allow_null': False},
+            'destination': {'required': True, 'allow_null': False},
+            'effective_date': {'required': False, 'allow_null': True},
+            # ฟิลด์ของระบบเวอร์ชัน/อนุมัติ ระบบกำหนดเอง (เหตุผลเดียวกับ InternationalFreightRateSerializer)
+            'root': {'read_only': True},
+            'version': {'read_only': True},
+            'status': {'read_only': True},
+            'user_created': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
+
+    def validate_destination(self, value):
+        # ปลายทางต้องเป็นแถว map ที่ติ๊ก "ใช้เป็นปลายทางในประเทศ" กันเลือกท่าเรือส่งออกมาผิด
+        if not value.is_domestic_destination:
+            raise serializers.ValidationError(
+                '"%s" ยังไม่ได้ติ๊ก "ใช้เป็นปลายทางในประเทศ" ในหน้าจัดการต้นทาง / ปลายทาง' % value.name)
+        return value
+
+    def validate_teams(self, teams):
+        if not teams:
+            raise serializers.ValidationError('ต้องมีทีมอย่างน้อย 1 แถว')
+        # ทีมเดียวกัน : "ทุกน้ำหนัก" แถวเดียว หรือแยกช่วง ห้ามปนกัน ห้ามช่วงซ้ำ
+        # ไม่งั้นน้ำหนักค่าเดียวเข้าได้สองราคา ระบบเลือกไม่ได้ว่าจะคิดอันไหน
+        bands_by_team = {}
+        for team_data in teams:
+            team = team_data.get('team')
+            bands_by_team.setdefault(team.pk if team else None, []).append(team_data.get('weight_band'))
+        for team_pk, bands in bands_by_team.items():
+            label = DomesticFreightRateSerializer._teamLabel(team_pk)
+            if len(bands) != len(set(bands)):
+                raise serializers.ValidationError('ทีม "%s" มีช่วงน้ำหนักซ้ำกัน' % label)
+            if DomesticFreightWeightBand.ALL in bands and len(bands) > 1:
+                raise serializers.ValidationError(
+                    'ทีม "%s" ใส่ "ทุกน้ำหนัก" แล้ว จะแยกช่วงน้ำหนักอีกไม่ได้ ให้เลือกอย่างใดอย่างหนึ่ง' % label)
+        return teams
+
+    @staticmethod
+    def _teamLabel(team_pk):
+        if team_pk is None:
+            return 'ทุกทีม'
+        team = BaseCarTeam.objects.filter(pk=team_pk).first()
+        return team.car_team_name if team and team.car_team_name else str(team_pk)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        low, high = attrs.get('base_fuel_price'), attrs.get('base_fuel_price_max')
+        if low is not None and high is not None and high < low:
+            raise serializers.ValidationError({
+                'base_fuel_price_max': 'ราคาน้ำมันฐานขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s)' % (high, low)})
+        if high is not None and low is None:
+            raise serializers.ValidationError({'base_fuel_price': 'กรอกขอบบนแล้ว ต้องกรอกขอบล่างด้วย'})
+        step_price, step_amount = attrs.get('fuel_step_price'), attrs.get('fuel_step_amount')
+        if (step_price is None) != (step_amount is None):
+            raise serializers.ValidationError({
+                'fuel_step_price': 'ขั้นปรับน้ำมันต้องกรอกทั้ง "ทุกกี่บาท/ลิตร" และ "ปรับกี่บาท/ตัน" หรือเว้นว่างทั้งคู่'})
+        if step_price is not None and step_price <= 0:
+            raise serializers.ValidationError({'fuel_step_price': 'ขั้นน้ำมันต้องมากกว่า 0'})
+        if step_price is not None and low is None:
+            raise serializers.ValidationError({'base_fuel_price': 'มีขั้นปรับน้ำมันแล้ว ต้องกรอกราคาน้ำมันฐานด้วย'})
+        # ต้นทาง + ปลายทางเดียวกันมีได้เส้นทางเดียว ปรับราคาให้ออกเวอร์ชันใหม่ (หน้าแก้ไขรอบหน้า)
+        if self.instance is None:
+            origin, destination = attrs.get('origin'), attrs.get('destination')
+            if origin and destination and DomesticFreightRate.objects.filter(
+                    origin=origin, destination=destination).exists():
+                raise serializers.ValidationError(
+                    'มีเส้นทาง "%s → %s" อยู่แล้ว' % (origin.name, destination.name))
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        """ใบแรกของเส้นทาง : v1 อนุมัติทันที ไม่กรอกวันเริ่มใช้ = ตั้งแต่ต้น (เหตุผลเดียวกับส่งออก)"""
+        teams_data = validated_data.pop('teams', [])
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        rate = DomesticFreightRate.objects.create(
+            version=1,
+            status=InternationalFreightRateStatus.APPROVED,
+            effective_date=validated_data.pop('effective_date', None) or INTERNATIONAL_FREIGHT_RATE_FIRST_DATE,
+            user_created=user if user is not None and user.is_authenticated else None,
+            **validated_data)
+        for team_data in teams_data:
+            DomesticFreightRateTeam.objects.create(rate=rate, **team_data)
+        return rate

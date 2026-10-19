@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<style>
+  .dfr-team-table { min-width: 860px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none"><i class="bi bi-justify fs-3"></i></a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>เพิ่มค่าขนส่ง ในประเทศ</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewDomesticFreightRate' %}">ค่าขนส่ง ในประเทศ</a></li>
+            <li class="breadcrumb-item active" aria-current="page">เพิ่มเส้นทาง</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  {{ dfr_teams|json_script:"dfr_teams_data" }}
+  {{ dfr_bands|json_script:"dfr_bands_data" }}
+
+  <section class="section">
+    <div id="dfr_alert" class="alert d-none" role="alert" style="white-space: pre-line;"></div>
+
+    <form id="dfr_form" novalidate>
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">ข้อมูลเส้นทาง</h5></div>
+        <div class="card-body">
+          <div class="row gx-3 gy-2">
+            <div class="form-group col-md-4">
+              <label for="dfr_origin">ต้นทาง <span class="text-danger">*</span></label>
+              <select class="form-select" id="dfr_origin">
+                <option value="">-- เลือกต้นทาง --</option>
+                {% for o in dfr_origins %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="form-group col-md-4">
+              <label for="dfr_destination">ปลายทาง (ลูกค้า) <span class="text-danger">*</span></label>
+              <select class="form-select" id="dfr_destination">
+                <option value="">-- เลือกปลายทาง --</option>
+                {% for d in dfr_destinations %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+              </select>
+              {% if not dfr_destinations %}
+              <small class="text-danger">ยังไม่มีปลายทางที่ติ๊ก "ใช้เป็นปลายทางในประเทศ" — เพิ่มที่หน้าจัดการต้นทาง / ปลายทางก่อน</small>
+              {% else %}
+              <small class="text-muted">แสดงเฉพาะแถวที่ติ๊ก "ใช้เป็นปลายทางในประเทศ"</small>
+              {% endif %}
+            </div>
+            <div class="form-group col-md-4">
+              <label for="dfr_distance">ระยะทาง (กม.)</label>
+              <input type="text" inputmode="decimal" class="form-control" id="dfr_distance" placeholder="เช่น 36" />
+            </div>
+            <div class="form-group col-md-4">
+              <label for="dfr_base_fuel_price">ราคาน้ำมันฐาน (บาท/ลิตร)</label>
+              <div class="input-group">
+                <input type="text" inputmode="decimal" class="form-control" id="dfr_base_fuel_price" placeholder="32.00" />
+                <span class="input-group-text">ถึง</span>
+                <input type="text" inputmode="decimal" class="form-control" id="dfr_base_fuel_price_max" placeholder="32.99" />
+              </div>
+              <small class="text-muted">น้ำมันอยู่ในช่วงนี้ = ไม่ปรับค่าขนส่ง</small>
+            </div>
+            <div class="form-group col-md-4">
+              <label for="dfr_fuel_step_price">ขั้นปรับน้ำมัน</label>
+              <div class="input-group">
+                <span class="input-group-text">ทุก</span>
+                <input type="text" inputmode="decimal" class="form-control" id="dfr_fuel_step_price" placeholder="0.50" />
+                <span class="input-group-text">บาท/ลิตร ปรับ</span>
+                <input type="text" inputmode="decimal" class="form-control" id="dfr_fuel_step_amount" placeholder="0.86" />
+                <span class="input-group-text">บาท/ตัน</span>
+              </div>
+              <small class="text-muted">เว้นว่างทั้งคู่ = เส้นทางนี้ไม่ปรับตามน้ำมัน</small>
+            </div>
+            <div class="form-group col-md-4">
+              <label for="dfr_effective_date">วันที่เริ่มใช้</label>
+              <input type="date" class="form-control" id="dfr_effective_date" />
+              <small class="text-muted">เว้นว่าง = ใช้ได้ตั้งแต่เดือนแรกสุดที่มีข้อมูล</small>
+            </div>
+            <div class="form-group col-md-12">
+              <label for="dfr_note">หมายเหตุ</label>
+              <input type="text" class="form-control" id="dfr_note" maxlength="255" placeholder="เช่น ปรับตามราคาน้ำมัน ณ วันที่ 1 และ 15" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">ทีมขนส่ง</h5>
+          <button type="button" id="dfr_add_team" class="btn btn-primary btn-sm rounded-pill">เพิ่มทีม <i class="fa-solid fa-circle-plus"></i></button>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle dfr-team-table">
+              <thead class="table-dark">
+                <tr>
+                  <th style="min-width: 220px;">ทีม <span class="text-danger">*</span></th>
+                  <th style="min-width: 190px;">ช่วงน้ำหนัก <span class="text-danger">*</span></th>
+                  <th style="min-width: 140px;">อัตราค่าขนส่ง<br /><small class="fw-normal">บาท/ตัน</small> <span class="text-danger">*</span></th>
+                  <th style="min-width: 120px;">หักค่าสูญเสีย<br /><small class="fw-normal">%</small></th>
+                  <th style="min-width: 160px;">หมายเหตุ</th>
+                  <th style="width: 70px;">ลบ</th>
+                </tr>
+              </thead>
+              <tbody id="dfr_team_rows"></tbody>
+            </table>
+          </div>
+          <p class="text-muted small mb-0">
+            ทีม "ทุกทีม" = ราคากลางของรถร่วม ทีมที่คิดต่างให้เพิ่มแถวที่ระบุทีมแยก ·
+            ทีมเดียวกันเลือก "ทุกน้ำหนัก" แถวเดียว หรือแยก 2 แถว (0 - 30.99 / 31 ขึ้นไป)
+          </p>
+        </div>
+      </div>
+
+      <div class="mb-5">
+        <button type="submit" id="dfr_submit" class="btn btn-info btn-lg rounded-pill">บันทึกรายการ <i class="fa-solid fa-circle-plus"></i></button>
+        <a href="{% url 'viewDomesticFreightRate' %}" class="btn btn-secondary btn-lg rounded-pill">ยกเลิก</a>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script>
+  const DFR_CSRF = "{{ csrf_token }}";
+  const DFR_SUBMIT_URL = "{% url 'domesticFreightRateCreate' %}";
+  const DFR_LIST_URL = "{% url 'viewDomesticFreightRate' %}";
+  const DFR_TEAMS = JSON.parse(document.getElementById('dfr_teams_data').textContent);
+  const DFR_BANDS = JSON.parse(document.getElementById('dfr_bands_data').textContent);
+  const ALL_TEAMS = '__all__';
+  const LABELS = {
+    origin: 'ต้นทาง', destination: 'ปลายทาง', distance: 'ระยะทาง',
+    base_fuel_price: 'ราคาน้ำมันฐาน (ขอบล่าง)', base_fuel_price_max: 'ราคาน้ำมันฐาน (ขอบบน)',
+    fuel_step_price: 'ขั้นน้ำมัน', fuel_step_amount: 'ปรับต่อขั้น', effective_date: 'วันที่เริ่มใช้',
+    note: 'หมายเหตุ', teams: 'ทีม', team_id: 'ทีม', weight_band: 'ช่วงน้ำหนัก',
+    freight_rate: 'อัตราค่าขนส่ง', loss_percent: 'หักค่าสูญเสีย', errors: '',
+  };
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function orNull(value) {
+    const v = (value || '').trim().replace(/,/g, '');
+    return v === '' ? null : v;
+  }
+  function showAlert(message, isError) {
+    const box = document.getElementById('dfr_alert');
+    box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    box.textContent = message;
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function teamOptionsHtml() {
+    return '<option value="">-- เลือกทีม --</option>' +
+      '<option value="' + ALL_TEAMS + '">ทุกทีม (รถร่วม)</option>' +
+      DFR_TEAMS.map(function (t) {
+        return '<option value="' + escapeHtml(t.id) + '">' + escapeHtml(t.id + ' : ' + t.name) + '</option>';
+      }).join('');
+  }
+  function bandOptionsHtml() {
+    return DFR_BANDS.map(function (b) {
+      return '<option value="' + escapeHtml(b[0]) + '">' + escapeHtml(b[1]) + '</option>';
+    }).join('');
+  }
+
+  function addTeamRow() {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select class="form-select dfr-team">' + teamOptionsHtml() + '</select></td>' +
+      '<td><select class="form-select dfr-band">' + bandOptionsHtml() + '</select></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control dfr-rate" /></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control dfr-loss" value="0" /></td>' +
+      '<td><input type="text" class="form-control dfr-team-note" maxlength="255" /></td>' +
+      '<td class="text-center"><button type="button" class="btn btn-danger btn-sm dfr-remove" title="ลบแถวนี้">' +
+        '<i class="fas fa-trash-alt"></i></button></td>';
+    tr.querySelector('.dfr-remove').addEventListener('click', function () { tr.remove(); });
+    document.getElementById('dfr_team_rows').appendChild(tr);
+  }
+
+  function collectTeams() {
+    return Array.from(document.querySelectorAll('#dfr_team_rows tr')).map(function (tr) {
+      const team = tr.querySelector('.dfr-team').value;
+      return {
+        team_id: team === ALL_TEAMS ? null : team,
+        weight_band: tr.querySelector('.dfr-band').value,
+        freight_rate: orNull(tr.querySelector('.dfr-rate').value),
+        loss_percent: orNull(tr.querySelector('.dfr-loss').value) || '0',
+        note: orNull(tr.querySelector('.dfr-team-note').value),
+      };
+    });
+  }
+
+  function flatten(value) {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.map(flatten).join(' ');
+    if (typeof value === 'object') {
+      return Object.keys(value).map(function (k) { return (LABELS[k] || k) + ' ' + flatten(value[k]); }).join(' ');
+    }
+    return String(value);
+  }
+  function formatErrors(data) {
+    const lines = [];
+    Object.keys(data).forEach(function (key) {
+      const value = data[key];
+      if (key === 'teams' && Array.isArray(value)) {
+        value.forEach(function (item, index) {
+          if (!item) return;
+          if (typeof item === 'string') { lines.push(item); return; }
+          Object.keys(item).forEach(function (field) {
+            lines.push('ทีมแถวที่ ' + (index + 1) + ' : ' + (LABELS[field] || field) + ' - ' + flatten(item[field]));
+          });
+        });
+      } else {
+        const label = LABELS[key] === undefined ? key : LABELS[key];
+        lines.push((label ? label + ' : ' : '') + flatten(value));
+      }
+    });
+    return lines.join('\n');
+  }
+
+  document.getElementById('dfr_add_team').addEventListener('click', addTeamRow);
+  addTeamRow();
+
+  document.getElementById('dfr_form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const rows = Array.from(document.querySelectorAll('#dfr_team_rows tr'));
+    if (rows.length === 0) { showAlert('ต้องมีทีมอย่างน้อย 1 แถว', true); return; }
+    const noTeam = [];
+    rows.forEach(function (tr, i) { if (tr.querySelector('.dfr-team').value === '') noTeam.push(i + 1); });
+    if (noTeam.length) {
+      showAlert('กรุณาเลือกทีมในแถวที่ ' + noTeam.join(', ') + ' (ราคากลางของรถร่วมให้เลือก "ทุกทีม")', true);
+      return;
+    }
+
+    const payload = {
+      origin: orNull(document.getElementById('dfr_origin').value),
+      destination: orNull(document.getElementById('dfr_destination').value),
+      distance: orNull(document.getElementById('dfr_distance').value),
+      base_fuel_price: orNull(document.getElementById('dfr_base_fuel_price').value),
+      base_fuel_price_max: orNull(document.getElementById('dfr_base_fuel_price_max').value),
+      fuel_step_price: orNull(document.getElementById('dfr_fuel_step_price').value),
+      fuel_step_amount: orNull(document.getElementById('dfr_fuel_step_amount').value),
+      effective_date: orNull(document.getElementById('dfr_effective_date').value),
+      note: orNull(document.getElementById('dfr_note').value),
+      teams: collectTeams(),
+    };
+
+    const btn = document.getElementById('dfr_submit');
+    btn.disabled = true;
+    fetch(DFR_SUBMIT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': DFR_CSRF },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (result) {
+        if (result.ok) { window.location.href = DFR_LIST_URL; return; }
+        showAlert('บันทึกไม่สำเร็จ\n' + formatErrors(result.data), true);
+        btn.disabled = false;
+      })
+      .catch(function () {
+        showAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+        btn.disabled = false;
+      });
+  });
+</script>
+{% endblock %}

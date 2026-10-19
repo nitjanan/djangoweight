@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<style>
+  .dfr-col-num { text-align: right; white-space: nowrap; }
+  .dfr-origin-head {
+    display: flex; align-items: center; gap: .6rem; width: 100%;
+    padding: .8rem 1rem; border: 0; border-radius: .5rem;
+    background: linear-gradient(135deg, #2f438f 0%, #435ebe 100%); color: #fff; text-align: left;
+  }
+  .dfr-origin-head .dfr-origin-name { font-size: 1.05rem; font-weight: 700; color: #fff; }
+  .dfr-origin-head .dfr-origin-count { background-color: #fff; color: #2f438f; font-weight: 700; }
+  .dfr-origin-head[aria-expanded="false"] .dfr-chevron { transform: rotate(-90deg); }
+  .dfr-origin-group + .dfr-origin-group { margin-top: 1.25rem; }
+  .dfr-route-table { table-layout: fixed; min-width: 900px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none"><i class="bi bi-justify fs-3"></i></a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ค่าขนส่ง ในประเทศ</h3>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">ค่าขนส่ง ในประเทศ</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div id="dfr_alert" class="alert d-none" role="alert"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <a href="{% url 'createDomesticFreightRate' %}" class="btn btn-primary rounded-pill">เพิ่มเส้นทาง <i class="fa-solid fa-circle-plus"></i></a>
+        <a href="{% url 'exportExcelDomesticFreightRate' %}" class="btn btn-success rounded-pill">Export Excel <i class="fa-solid fa-file-excel"></i></a>
+        {% if perms.weightapp.change_basecompanymapbasecustomer %}
+        <a href="{% url 'settingCompanyMap' %}?kind=domestic" class="btn btn-outline-primary rounded-pill">
+          จัดการต้นทาง / ปลายทาง <i class="fa-solid fa-map-location-dot"></i>
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="card-body">
+        <form method="get" class="row g-2 align-items-end mb-3" id="dfr_origin_filter">
+          <div class="col-12 col-md-6 col-lg-5">
+            <label for="dfr_origin" class="form-label mb-1">ต้นทาง</label>
+            <select name="origin" id="dfr_origin" class="form-select">
+              <option value="">ทั้งหมด ({{ dfr_route_total }} เส้นทาง)</option>
+              {% for o in dfr_origin_options %}
+              <option value="{{ o.id }}" {% if o.id == dfr_selected_origin %}selected{% endif %}>{{ o.name }} ({{ o.count }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto">
+            <noscript><button type="submit" class="btn btn-primary">แสดง</button></noscript>
+            {% if dfr_selected_origin is not None %}
+            <a href="{% url 'viewDomesticFreightRate' %}" class="btn btn-light-secondary">ล้างตัวกรอง</a>
+            {% endif %}
+          </div>
+        </form>
+
+        {% for g in dfr_groups %}
+        <div class="dfr-origin-group">
+          <button type="button" class="dfr-origin-head" aria-expanded="true" data-target="dfr-origin-{{ forloop.counter }}">
+            <i class="fa-solid fa-chevron-down dfr-chevron"></i>
+            <i class="fa-solid fa-location-dot"></i>
+            <span class="dfr-origin-name">{{ g.origin_name }}</span>
+            <span class="badge dfr-origin-count ms-auto">{{ g.rows|length }} ปลายทาง</span>
+          </button>
+
+          <div id="dfr-origin-{{ forloop.counter }}" class="table-responsive mt-2">
+            <table class="table table-hover mb-0 dfr-route-table">
+              <thead class="table-dark">
+                <tr>
+                  <th>ปลายทาง</th>
+                  <th style="width: 100px;">ทีม</th>
+                  <th class="dfr-col-num" style="width: 90px;">ระยะทาง</th>
+                  <th class="dfr-col-num" style="width: 130px;">น้ำมันฐาน<br />(บาท/ลิตร)</th>
+                  <th style="width: 220px;">ขั้นปรับน้ำมัน</th>
+                  <th style="width: 120px;">วันที่เริ่มใช้</th>
+                  <th style="width: 80px;">ลบ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for i in g.rows %}
+                <tr>
+                  <td>{{ i.destination_display }}{% if i.note %}<br /><small class="text-muted">{{ i.note }}</small>{% endif %}</td>
+                  <td>
+                    <button type="button" class="btn btn-outline-primary btn-sm dfr-toggle-teams" data-target="dfr-teams-{{ i.id }}">
+                      <i class="fas fa-users"></i> {{ i.team_group_count }} ทีม
+                    </button>
+                  </td>
+                  <td class="dfr-col-num">{{ i.distance|default_if_none:"-" }}</td>
+                  <td class="dfr-col-num">{{ i.baseFuelPriceLabel|default_if_none:"-" }}</td>
+                  <td>{{ i.fuelStepLabel|default_if_none:"ไม่ปรับตามน้ำมัน" }}</td>
+                  <td>{{ i.effective_date|date:"d/m/Y" }}</td>
+                  <td>
+                    <button type="button" class="btn btn-danger btn-sm dfr-delete-btn" data-id="{{ i.id }}"
+                            data-name="{{ g.origin_name }} → {{ i.destination_display }}">
+                      <i class="fas fa-trash-alt"></i> ลบ
+                    </button>
+                  </td>
+                </tr>
+                <tr id="dfr-teams-{{ i.id }}" class="d-none">
+                  <td colspan="7" class="bg-light">
+                    <table class="table table-sm table-bordered mb-0">
+                      <thead><tr><th>ทีม</th><th>ช่วงน้ำหนัก</th><th class="dfr-col-num">อัตราค่าขนส่ง (บาท/ตัน)</th><th class="dfr-col-num">หักค่าสูญเสีย (%)</th><th>หมายเหตุ</th></tr></thead>
+                      <tbody>
+                        {% for t in i.sorted_teams %}
+                        <tr>
+                          <td>
+                            {% if t.team %}{{ t.team.car_team_id }} : {{ t.team.car_team_name|default_if_none:"-" }}
+                            {% elif i.has_specific_team %}<span class="badge bg-warning">ทีมที่เหลือ</span>
+                            {% else %}<span class="badge bg-info">ทุกทีม</span>{% endif %}
+                          </td>
+                          <td>{{ t.get_weight_band_display }}</td>
+                          <td class="dfr-col-num">{{ t.freight_rate }}</td>
+                          <td class="dfr-col-num">{{ t.loss_percent }}</td>
+                          <td>{{ t.note|default_if_none:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% empty %}
+        <div class="alert alert-light-warning color-warning mb-0">
+          <i class="bi bi-exclamation-triangle"></i>
+          {% if dfr_selected_origin is not None %}
+            ไม่พบเส้นทางของต้นทางที่เลือก <a href="{% url 'viewDomesticFreightRate' %}">ดูทั้งหมด</a>
+          {% else %}
+            ยังไม่มีเส้นทางค่าขนส่งในประเทศ
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start"><p>2023 &copy; Nitjanan</p></div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<script>
+  const DFR_CSRF = "{{ csrf_token }}";
+  const DFR_DELETE_URL = "{% url 'domesticFreightRateDelete' 0 %}";
+
+  function dfrShowAlert(message, isError) {
+    const box = document.getElementById('dfr_alert');
+    box.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    box.textContent = message;
+  }
+
+  document.querySelectorAll('.dfr-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!confirm('ลบเส้นทาง "' + btn.dataset.name + '" ทุกเวอร์ชัน ?')) return;
+      btn.disabled = true;
+      fetch(DFR_DELETE_URL.replace(/0\/$/, btn.dataset.id + '/'), {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': DFR_CSRF },
+      })
+        .then(function (res) {
+          if (res.ok) { window.location.reload(); return; }
+          dfrShowAlert('ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', true);
+          btn.disabled = false;
+        })
+        .catch(function () {
+          dfrShowAlert('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', true);
+          btn.disabled = false;
+        });
+    });
+  });
+
+  document.querySelectorAll('.dfr-toggle-teams').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const row = document.getElementById(btn.dataset.target);
+      if (row) row.classList.toggle('d-none');
+    });
+  });
+
+  document.getElementById('dfr_origin').addEventListener('change', function () {
+    document.getElementById('dfr_origin_filter').submit();
+  });
+
+  document.querySelectorAll('.dfr-origin-head').forEach(function (head) {
+    head.addEventListener('click', function () {
+      const open = head.getAttribute('aria-expanded') !== 'true';
+      document.getElementById(head.dataset.target).classList.toggle('d-none', !open);
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+</script>
+{% endblock %}

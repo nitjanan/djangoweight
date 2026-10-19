@@ -150,6 +150,17 @@ def domesticFreightRateDelete(request, id):
     return Response({'message': 'ลบสำเร็จ (ลบไป %s รายการ)' % removed}, status=status.HTTP_200_OK)
 
 
+# ข้อความที่ผู้ใช้พิมพ์เอง (หมายเหตุ ชื่อทีม ชื่อในตาราง map) ห้ามลงไฟล์ดิบ ๆ
+# openpyxl ถือว่าข้อความที่ขึ้นต้นด้วย = เป็นสูตร เปิดไฟล์แล้ว Excel จะรันสูตรนั้น (formula injection)
+EXCEL_FORMULA_PREFIXES = ('=', '+', '-', '@', chr(9), chr(13))
+
+
+def _excelText(value):
+    if isinstance(value, str) and value.startswith(EXCEL_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def _teamColumnLabel(team_row):
     team = (team_row.team.car_team_name or team_row.team_id) if team_row.team_id else 'ทุกทีม'
     if team_row.weight_band == DomesticFreightWeightBand.ALL:
@@ -185,18 +196,18 @@ def exportExcelDomesticFreightRate(request):
     ws.title = 'อัตราค่าขนส่ง'
     ws.append(['อัตราค่าขนส่ง ในประเทศ (ไม่รวมภาษีมูลค่าเพิ่ม) ณ วันที่ %s' % date.today().strftime('%d/%m/%Y')])
     ws.append([])
-    header = ['ที่', 'ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ระยะทาง (กม.)'] + [columns[k] for k in column_keys] + [
+    header = ['ที่', 'ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ระยะทาง (กม.)'] + [_excelText(columns[k]) for k in column_keys] + [
         'ราคาน้ำมันฐาน (บาท/ลิตร)', 'ขั้นปรับน้ำมัน', 'วันที่เริ่มใช้', 'หมายเหตุ']
     ws.append(header)
     header_row = ws.max_row
     for no, rate in enumerate(rates, start=1):
         price = {(t.team_id is None, t.team_id or '', BAND_ORDER.get(t.weight_band, 9)): t.freight_rate
                  for t in rate.teams.all()}
-        ws.append([no, map_names.get(rate.origin_id), map_names.get(rate.destination_id),
+        ws.append([no, _excelText(map_names.get(rate.origin_id)), _excelText(map_names.get(rate.destination_id)),
                    float(rate.distance) if rate.distance is not None else None]
                   + [float(price[k]) if price.get(k) is not None else None for k in column_keys]
                   + [rate.baseFuelPriceLabel(), rate.fuelStepLabel(),
-                     rate.effective_date, rate.note])
+                     rate.effective_date, _excelText(rate.note)])
     for cell in ws[header_row]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
@@ -213,9 +224,10 @@ def exportExcelDomesticFreightRate(request):
                    'หักค่าสูญเสีย (%)', 'หมายเหตุ'])
     for rate in rates:
         for t in _sortedTeams(rate.teams.all()):
-            detail.append([map_names.get(rate.origin_id), map_names.get(rate.destination_id),
-                           (t.team.car_team_name or t.team_id) if t.team_id else 'ทุกทีม',
-                           t.get_weight_band_display(), float(t.freight_rate), float(t.loss_percent), t.note])
+            detail.append([_excelText(map_names.get(rate.origin_id)), _excelText(map_names.get(rate.destination_id)),
+                           _excelText((t.team.car_team_name or t.team_id) if t.team_id else 'ทุกทีม'),
+                           t.get_weight_band_display(), float(t.freight_rate), float(t.loss_percent),
+                           _excelText(t.note)])
     for cell in detail[1]:
         cell.font = Font(bold=True)
     for i, width in enumerate([22, 34, 22, 22, 18, 16, 30], start=1):

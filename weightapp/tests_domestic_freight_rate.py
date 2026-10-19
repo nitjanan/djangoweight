@@ -175,3 +175,14 @@ class DomesticFreightRateTests(TestCase):
         row = [c.value for c in ws[4]]
         self.assertEqual(row[1:7], ['ศิลาชัย', 'ปูนซิเมนต์ไทย/พุนพิน', 36.0, 81.48, 76.48, 71.48])
         self.assertEqual(wb['รายละเอียดทีม'].max_row, 4)      # หัว + 3 แถวทีม
+
+    def test_excel_export_neutralises_formula_text(self):
+        # หมายเหตุที่ขึ้นต้นด้วย = ต้องลงไฟล์เป็นข้อความ ไม่ใช่สูตรที่ Excel จะรันตอนเปิดไฟล์
+        self.create(note='=HYPERLINK("http://evil","x")',
+                    teams=[{'team_id': None, 'weight_band': 'all', 'freight_rate': '70', 'note': '+1+1'}])
+        res = self.client.get(reverse('exportExcelDomesticFreightRate'))
+        wb = openpyxl.load_workbook(io.BytesIO(res.content))
+        note = wb['อัตราค่าขนส่ง'].cell(row=4, column=wb['อัตราค่าขนส่ง'].max_column)
+        self.assertEqual(note.data_type, 's')
+        self.assertTrue(note.value.startswith("'="))
+        self.assertEqual(wb['รายละเอียดทีม'].cell(row=2, column=7).value, "'+1+1")

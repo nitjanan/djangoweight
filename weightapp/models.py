@@ -1981,3 +1981,138 @@ class ExpressFuelBillSync(models.Model):
 
     def __str__(self):
         return '%s @ %s' % (self.month, self.synced_at)
+
+
+# ======================== ค่าขนส่งในประเทศ (issue #118) ========================
+# ตารางแยกจากส่งออก แต่ใช้หลักเดียวกับ InternationalFreightRate / InternationalFreightRateTeam
+# (1 แถว = 1 ใบ = 1 เวอร์ชันของเส้นทาง · ทีมเก็บในตารางลูก · ต้นทาง/ปลายทางชี้ตาราง map)
+# แยกตารางเพราะฟิลด์ต่างกันมาก (ช่วงน้ำหนัก 2 ช่วง, % สูญเสีย, ขั้นปรับน้ำมัน)
+# และไม่อยากให้ใบในประเทศมีโอกาสหลุดเข้ายอดของหน้าส่งออก
+
+
+class DomesticFreightWeightBand(models.TextChoices):
+    """ช่วงน้ำหนักของค่าขนส่งในประเทศ มีแค่ 2 ช่วง ไม่ใช้ตาราง CarryingweightRate ของส่งออก
+
+    ตอนคิดเงินแบ่งที่ "ต่ำกว่า 31 ตัน" กับ "31 ตันขึ้นไป" (ไม่ใช่ <= 30.99)
+    น้ำหนักมีทศนิยม 3 ตำแหน่ง ถ้าใช้ 30.99 เป็นขอบ 30.995 ตันจะไม่ตกช่องไหนเลย
+    ALL = ทีมนี้ราคาเดียวทุกน้ำหนัก (เช่น ROI ในไฟล์เดิมมีราคาเดียว)
+    """
+    ALL = 'all', 'ทุกน้ำหนัก'
+    UNDER_31 = 'under_31', 'น้ำหนัก 0 - 30.99 ตัน'
+    FROM_31 = 'from_31', 'น้ำหนัก 31 ตันขึ้นไป'
+
+
+
+class DomesticFreightRate(models.Model):
+    """ใบราคาค่าขนส่งในประเทศ 1 แถว = 1 ใบ = 1 เวอร์ชันของเส้นทางหนึ่ง (หัวใบ)
+
+    root = ใบแรกสุดของเส้นทาง ใช้เป็นตัวแทน "เส้นทาง" (ใบแรกชี้ตัวเอง) เหมือน InternationalFreightRate
+    ตอนนี้มีแค่หน้าเพิ่ม/ลบ ทุกใบจึงเป็น v1 อนุมัติทันที โครงเวอร์ชันเตรียมไว้ให้หน้าแก้ไขรอบหน้า
+    """
+    # ต้นทาง = แถว map ของเหมือง (ผูก base_company) · ปลายทาง = แถว map ของลูกค้า (ผูก base_customer)
+    # PROTECT : ห้ามลบแถว map ที่ยังมีใบราคาอ้างอยู่
+    origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT,
+                               related_name='domestic_rate_origins', verbose_name="ต้นทาง")
+    destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT,
+                                    related_name='domestic_rate_destinations', verbose_name="ปลายทาง")
+    distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                   verbose_name="ระยะทาง (กม.)")
+    # ราคาน้ำมันฐานเป็นช่วง เช่น 32.00 - 32.99 น้ำมันอยู่ในช่วงนี้ = ไม่ปรับค่าขนส่ง
+    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                          verbose_name="ราคาน้ำมันฐาน (ขอบล่าง)")
+    base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                              verbose_name="ราคาน้ำมันฐาน (ขอบบน)")
+    # ขั้นปรับน้ำมันของเส้นทาง เช่น "น้ำมันขึ้นลงทุก 0.50 บาท/ลิตร ปรับ 0.86 บาท/ตัน"
+    # ต่างจากส่งออกที่คิด "ต่อน้ำมัน 1 บาท" และเก็บรายทีม ในไฟล์ในประเทศเป็นค่าเดียวทั้งเส้นทาง
+    # ว่างทั้งคู่ = เส้นทางนี้ไม่ปรับตามน้ำมัน
+    fuel_step_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                          verbose_name="ขั้นน้ำมัน (ทุกกี่บาท/ลิตร)")
+    fuel_step_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                           verbose_name="ปรับต่อ 1 ขั้น (บาท/ตัน)")
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")
+
+    # --- การทำเวอร์ชัน (หลักเดียวกับ InternationalFreightRate) ---
+    root = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                             related_name='versions', verbose_name="เส้นทาง (ใบแรกสุด)")
+    version = models.IntegerField(default=1, verbose_name="เวอร์ชัน")
+    effective_date = models.DateField(null=True, blank=True, verbose_name="วันที่เริ่มใช้")
+    status = models.CharField(max_length=20, choices=InternationalFreightRateStatus.choices,
+                              default=InternationalFreightRateStatus.APPROVED, verbose_name="สถานะ")
+    user_created = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='domestic_freight_rates_created', verbose_name="ผู้ออกใบ")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่สร้าง")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="วันที่แก้ไขล่าสุด")
+
+    class Meta:
+        db_table = 'domestic_freight_rate'
+        ordering = ['id']
+        unique_together = ('root', 'version')
+        verbose_name = 'อัตราค่าขนส่งในประเทศ'
+        verbose_name_plural = 'อัตราค่าขนส่งในประเทศ'
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # ใบแรกของเส้นทางชี้ตัวเอง ต้องรอให้มี id ก่อนถึงจะตั้งได้
+        if self.root_id is None:
+            self.root_id = self.id
+            super().save(update_fields=['root'])
+
+    @classmethod
+    def effectiveOn(cls, as_of=None, queryset=None):
+        """ใบที่ใช้จริงของทุกเส้นทาง ณ วันที่ที่ระบุ เส้นทางละ 1 ใบ (กฎเดียวกับ InternationalFreightRate)"""
+        qs = cls.objects.all() if queryset is None else queryset
+        qs = qs.filter(status=InternationalFreightRateStatus.APPROVED)
+        if as_of is not None:
+            qs = qs.filter(effective_date__lte=as_of)
+        by_root = {}
+        for rate in qs.order_by('root_id', 'id'):
+            by_root[rate.root_id] = rate
+        return list(by_root.values())
+
+    def baseFuelPriceLabel(self):
+        if self.base_fuel_price is None:
+            return None
+        if self.base_fuel_price_max is None:
+            return '%s' % self.base_fuel_price
+        return '%s - %s' % (self.base_fuel_price, self.base_fuel_price_max)
+
+    def fuelStepLabel(self):
+        if self.fuel_step_price is None or self.fuel_step_amount is None:
+            return None
+        return 'ทุก %s บาท/ลิตร ปรับ %s บาท/ตัน' % (self.fuel_step_price, self.fuel_step_amount)
+
+    def __str__(self):
+        return '%s - %s (v%s)' % (self.origin.name if self.origin_id else '-',
+                                  self.destination.name if self.destination_id else '-', self.version)
+
+
+class DomesticFreightRateTeam(models.Model):
+    """แถวทีมของใบราคาในประเทศ (หลักเดียวกับ InternationalFreightRateTeam)
+
+    team = NULL แปลว่า "ทุกทีม" (รถร่วมที่คิดราคาเท่ากัน) ทีมที่คิดต่างค่อยเพิ่มแถวที่ระบุทีมมาทับ
+    การหาราคา : หาแถวที่ตรงทีมก่อน ไม่เจอค่อยใช้แถว team = NULL
+    ทีมเดียวกันมีได้ "ทุกน้ำหนัก" แถวเดียว หรือแยก 2 ช่วง (ห้ามปนกัน ห้ามซ้ำ) ตรวจใน serializer
+    """
+    rate = models.ForeignKey(DomesticFreightRate, on_delete=models.CASCADE, related_name='teams',
+                             verbose_name="อัตราค่าขนส่งในประเทศ")
+    # base_car_team เป็นตารางเก่า collation ไม่ตรงกับคอลัมน์ใหม่ MySQL ไม่ยอมสร้าง FK ข้าม collation
+    # จึงไม่สร้าง constraint ที่ระดับ DB (แบบเดียวกับ BaseCompanyMapCustomerAlias.base_customer)
+    team = models.ForeignKey(BaseCarTeam, on_delete=models.CASCADE, null=True, blank=True,
+                             db_constraint=False, verbose_name="ทีมขนส่ง (ว่าง = ทุกทีม)")
+    weight_band = models.CharField(max_length=10, choices=DomesticFreightWeightBand.choices,
+                                   default=DomesticFreightWeightBand.ALL, verbose_name="ช่วงน้ำหนัก")
+    freight_rate = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="อัตราค่าขนส่ง (บาท/ตัน)")
+    # ค่าตั้งต้น ตอนทำรายงานรายเดือนจะให้แก้ทับได้ (ยังไม่ได้ทำหน้ารายงาน)
+    loss_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                       verbose_name="หักค่าสูญเสีย (%)")
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")
+
+    class Meta:
+        db_table = 'domestic_freight_rate_team'
+        ordering = ['id']
+        verbose_name = 'อัตราค่าขนส่งในประเทศ (ทีม)'
+        verbose_name_plural = 'อัตราค่าขนส่งในประเทศ (ทีม)'
+
+    def __str__(self):
+        team_name = self.team.car_team_name if self.team else 'ทุกทีม'
+        return '%s - %s' % (team_name, self.get_weight_band_display())

@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate, DomesticFreightRate, DomesticFreightRateTeam
 from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
@@ -740,3 +740,16 @@ class InternationalFreightRateTeamAdmin(ImportExportModelAdmin, admin.ModelAdmin
 admin.site.register(InternationalFreightRateFuelPrice, InternationalFreightRateFuelPriceAdmin)
 admin.site.register(InternationalFreightRateTeam, InternationalFreightRateTeamAdmin)
 admin.site.register(CarryingweightRate, CarryingweightRateAdmin)
+
+# ค่าขนส่งในประเทศ (issue #118) : หน้าหลักคือ /domesticFreightRate/ ที่นี่ไว้ตรวจข้อมูล
+class DomesticFreightRateTeamInline(admin.TabularInline):
+    model = DomesticFreightRateTeam
+    extra = 0
+    raw_id_fields = ('team',)
+
+@admin.register(DomesticFreightRate)
+class DomesticFreightRateAdmin(admin.ModelAdmin):
+    list_display = ('id', 'origin', 'destination', 'distance', 'version', 'effective_date', 'status')
+    list_filter = ('status',)
+    raw_id_fields = ('root',)
+    inlines = [DomesticFreightRateTeamInline]

@@ -1,6 +1,6 @@
 from django.urls import path
 from weightapp import views
-from weightapp import views_company_map
+from weightapp import views_company_map, views_domestic_freight_rate
 from django.contrib.auth import views as auth_views
 from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList, LoginApiView, SignUpApiView
 from rest_framework_simplejwt.views import(
@@ -327,6 +327,11 @@ urlpatterns = [
       path('internationalFreightRate/destinations/edit/<int:id>/', views_company_map.editCompanyMap, name="editCompanyMap"),
       path('internationalFreightRate/destinations/delete/<int:id>/', views_company_map.deleteCompanyMap, name="deleteCompanyMap"),
       path('internationalFreightRate/destinations/api/customers/', views_company_map.companyMapCustomerSearch, name="companyMapCustomerSearch"),
+      # ค่าขนส่งในประเทศ (issue #118) ตารางแยกจากส่งออก ดู views_domestic_freight_rate.py · ยังไม่ผูกเมนู
+      path('domesticFreightRate/', views_domestic_freight_rate.viewDomesticFreightRate, name="viewDomesticFreightRate"),
+      path('domesticFreightRate/create', views_domestic_freight_rate.createDomesticFreightRate, name="createDomesticFreightRate"),
+      path('domesticFreightRate/api/create/', views_domestic_freight_rate.domesticFreightRateCreate, name="domesticFreightRateCreate"),
+      path('domesticFreightRate/api/delete/<int:id>/', views_domestic_freight_rate.domesticFreightRateDelete, name="domesticFreightRateDelete"),
       path('exportDocument/', views.viewExportDocument, name="viewExportDocument"),
       path('exportDocument/excel/', views.exportExcelExportDocument, name="exportExcelExportDocument"),
       path('exportDocument/progress/', views.exportDocumentProgress, name="exportDocumentProgress"),

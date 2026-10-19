@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ตารางราคา ค่าขนส่งในประเทศ (issue #118) : หน้ารายการ / เพิ่ม / ลบ เส้นทาง
+"""ตารางราคา ค่าขนส่งในประเทศ (issue #118) : หน้ารายการ / เพิ่ม / ลบ เส้นทาง + export Excel
 
 ตาราง DomesticFreightRate / DomesticFreightRateTeam แยกจากส่งออก แต่ใช้หลักเดียวกัน
 ยังไม่ผูกเมนู navbar เข้าด้วย URL ตรง ๆ (/domesticFreightRate/)
@@ -7,10 +7,14 @@
 """
 from datetime import date
 
+import openpyxl
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Prefetch
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -144,3 +148,81 @@ def domesticFreightRateDelete(request, id):
         DomesticFreightRate.objects.filter(id=root_id).update(root=None)
         DomesticFreightRate.objects.filter(id=root_id).delete()
     return Response({'message': 'ลบสำเร็จ (ลบไป %s รายการ)' % removed}, status=status.HTTP_200_OK)
+
+
+def _teamColumnLabel(team_row):
+    team = (team_row.team.car_team_name or team_row.team_id) if team_row.team_id else 'ทุกทีม'
+    if team_row.weight_band == DomesticFreightWeightBand.ALL:
+        return team
+    return '%s\n%s' % (team, team_row.get_weight_band_display())
+
+
+@login_required(login_url='login')
+def exportExcelDomesticFreightRate(request):
+    """ตารางราคาที่ใช้อยู่ปัจจุบัน หน้าตาคล้ายชีต "อัตราค่าขนส่ง ใช้งาน" ของไฟล์เดิม
+
+    คอลัมน์ราคาแตกตาม (ทีม, ช่วงน้ำหนัก) ที่มีจริง เช่น ROI | ทุกทีม 0-30.99 | ทุกทีม 31 ขึ้นไป
+    ชีตที่ 2 เป็นรายการทีมแบบแถวเรียบ มี % สูญเสียและหมายเหตุของแต่ละแถว
+    """
+    if not request.session.get('company_code'):
+        return redirect('logout')
+    map_names = core_views._baseCompanyMapDisplayNameById()
+    rates = _currentRates()
+    rates.sort(key=lambda r: (core_views._thaiSortKey(map_names.get(r.origin_id) or ''),
+                              r.distance if r.distance is not None else 0,
+                              core_views._thaiSortKey(map_names.get(r.destination_id) or '')))
+
+    # คอลัมน์ราคา : ทีมที่ระบุชื่อก่อน แล้วค่อย "ทุกทีม" ในทีมเดียวกันเรียงตามช่วงน้ำหนัก
+    columns = {}
+    for rate in rates:
+        for t in rate.teams.all():
+            key = (t.team_id is None, t.team_id or '', BAND_ORDER.get(t.weight_band, 9))
+            columns.setdefault(key, _teamColumnLabel(t))
+    column_keys = sorted(columns)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'อัตราค่าขนส่ง'
+    ws.append(['อัตราค่าขนส่ง ในประเทศ (ไม่รวมภาษีมูลค่าเพิ่ม) ณ วันที่ %s' % date.today().strftime('%d/%m/%Y')])
+    ws.append([])
+    header = ['ที่', 'ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ระยะทาง (กม.)'] + [columns[k] for k in column_keys] + [
+        'ราคาน้ำมันฐาน (บาท/ลิตร)', 'ขั้นปรับน้ำมัน', 'วันที่เริ่มใช้', 'หมายเหตุ']
+    ws.append(header)
+    header_row = ws.max_row
+    for no, rate in enumerate(rates, start=1):
+        price = {(t.team_id is None, t.team_id or '', BAND_ORDER.get(t.weight_band, 9)): t.freight_rate
+                 for t in rate.teams.all()}
+        ws.append([no, map_names.get(rate.origin_id), map_names.get(rate.destination_id),
+                   float(rate.distance) if rate.distance is not None else None]
+                  + [float(price[k]) if price.get(k) is not None else None for k in column_keys]
+                  + [rate.baseFuelPriceLabel(), rate.fuelStepLabel(),
+                     rate.effective_date, rate.note])
+    for cell in ws[header_row]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
+    ws['A1'].font = Font(bold=True, size=13)
+    widths = [6, 22, 34, 12] + [14] * len(column_keys) + [18, 30, 14, 30]
+    for i, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    for row in ws.iter_rows(min_row=header_row + 1, min_col=len(widths) - 1, max_col=len(widths) - 1):
+        for cell in row:
+            cell.number_format = 'DD/MM/YYYY'
+
+    detail = wb.create_sheet('รายละเอียดทีม')
+    detail.append(['ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ทีม', 'ช่วงน้ำหนัก', 'อัตราค่าขนส่ง (บาท/ตัน)',
+                   'หักค่าสูญเสีย (%)', 'หมายเหตุ'])
+    for rate in rates:
+        for t in _sortedTeams(rate.teams.all()):
+            detail.append([map_names.get(rate.origin_id), map_names.get(rate.destination_id),
+                           (t.team.car_team_name or t.team_id) if t.team_id else 'ทุกทีม',
+                           t.get_weight_band_display(), float(t.freight_rate), float(t.loss_percent), t.note])
+    for cell in detail[1]:
+        cell.font = Font(bold=True)
+    for i, width in enumerate([22, 34, 22, 22, 18, 16, 30], start=1):
+        detail.column_dimensions[get_column_letter(i)].width = width
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="domestic_freight_rate_%s.xlsx"' % (
+        date.today().strftime('%Y%m%d'))
+    wb.save(response)
+    return response

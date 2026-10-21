@@ -12903,6 +12903,29 @@ EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
 # ตัดด้วยรหัส ไม่ใช่ชื่อ เพราะชื่อแก้ในหน้า admin ได้ตลอด
 EXPORT_DOC_EXCLUDED_SITE_IDS = ('200PL', '300PL')
 
+# ชนิดสินค้าที่ไม่ใช่แร่/หิน : ตาชั่งชุดเดียวกันชั่งของอย่างอื่นด้วย ไม่ใช่เที่ยวขนหินที่ต้องคิดค่าขนส่งส่งออก
+#   น้ำมัน : 45ST = น้ำมัน   46ST = น้ำมันปาล์ม
+#   ปุ๋ย   : 001S = ปุ๋ย   71ST = ปุ๋ยน้ำ bulk   40ST/41ST/42ST/43ST = ปุ๋ยโดโลไมท์ 80/150/300/325 เมช
+#   อื่น ๆ : 61ST = แอมโมเนียมไนเตรต   44ST = เศษเหล็ก   47ST = บริการชั่งน้ำหนัก
+#   ขี้แร่ (37ST) ยังนับอยู่ ตามที่ตกลง
+# ตัดด้วยรหัสเป็นหลัก แต่ดูชื่อด้วย เพราะมีใบเก่าที่ใส่แต่ชื่อไว้โดยไม่ได้ผูกรหัส (stone_type_id ว่าง)
+# รวมถึงชื่อที่สะกดผิด เช่น "นำมัน"
+# ใบที่ไม่ได้ระบุชนิดเลย ยังนับอยู่ (บอกไม่ได้ว่าเป็นอะไร ตัดทิ้งอาจทำเที่ยวหินจริงหาย)
+# แร่ (แอนไฮไดรต์ / ยิปซั่ม / แร่ก้อน) ยังนับ เพราะเป็นสินค้าส่งออกตามชื่อคอลัมน์ "ชนิดแร่/หิน"
+EXPORT_DOC_EXCLUDED_STONE_IDS = ('45ST', '46ST',
+                                 '001S', '71ST', '40ST', '41ST', '42ST', '43ST',
+                                 '61ST', '44ST', '47ST')
+EXPORT_DOC_EXCLUDED_STONE_NAMES = ('น้ำมัน', 'น้ำมันปาล์ม', 'นำมัน',
+                                   'ปุ๋ย', 'ปุ๋ยน้ำ bulk', 'ปุ๋ยโดโลไมท์ 80 เมช', 'ปุ๋ยโดโลไมท์ 150 เมช',
+                                   'ปุ๋ยโดโลไมท์ 300 เมช', 'ปุ๋ยโดโลไมท์ 325 เมช',
+                                   'แอมโมเนียมไนเตรต', 'เศษเหล็ก', 'บริการชั่งน้ำหนัก')
+
+
+def _exportDocumentExcludedStoneQ():
+    """ใบที่ต้องตัดออกเพราะไม่ใช่สินค้าแร่/หิน (ใช้กับ .exclude)"""
+    return (Q(stone_type_id__in=EXPORT_DOC_EXCLUDED_STONE_IDS)
+            | Q(stone_type_name__in=EXPORT_DOC_EXCLUDED_STONE_NAMES))
+
 # เคส = เที่ยวนี้ "ไปลงท่าเรือไหน" ดูจากปลายทาง (ใช้เป็นป้ายและตัวกรอง)
 EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท
 EXPORT_DOC_CASE_OTHER_PORT = '2'   # ลงท่าเรือบริษัทอื่น
@@ -13068,8 +13091,9 @@ def _exportDocumentUnflaggedDestinations(other_bws, export_customers, selected_m
     # นับจากตาราง weight ตรง ๆ ไม่ใช่จาก base_qs เพราะ base_qs กรองปลายทางที่ติ๊กแล้วออกไปก่อน
     # เที่ยวของลูกค้าที่ยังไม่ติ๊กจึงไม่มีทางอยู่ใน base_qs เลย
     names = _baseCompanyMapDisplayNameById()
-    trips = Weight.objects.filter(_exportDocumentCarryQ(), bws_id__in=other_bws,
-                                  customer_id__in=candidates, is_cancel=False)
+    trips = (Weight.objects.filter(_exportDocumentCarryQ(), bws_id__in=other_bws,
+                                   customer_id__in=candidates, is_cancel=False)
+             .exclude(_exportDocumentExcludedStoneQ()))
     if selected_month:
         try:
             year, month = selected_month.split('-')
@@ -13263,7 +13287,10 @@ def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_p
         _exportDocumentCarryQ(),
     # ใบที่หน้างานเป็น "ใช้ภายใน" หรือ "อนุเคราะห์" ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก
     # แถวที่ไม่ได้ระบุหน้างาน (site_id เป็น NULL) ยังอยู่ครบ เพราะ exclude ของ Django ไม่ตัด NULL
-    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS)
+    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS
+    # สินค้าที่ไม่ใช่หิน (น้ำมัน / ปุ๋ย / เศษเหล็ก ฯลฯ) ไม่ใช่เที่ยวขนหิน ดู EXPORT_DOC_EXCLUDED_STONE_IDS
+    # ใบที่ไม่ได้ระบุชนิด (ทั้งรหัสและชื่อว่าง) ยังอยู่ เพราะ exclude ของ Django ไม่ตัด NULL
+    ).exclude(_exportDocumentExcludedStoneQ())
     # ตัดท่าเรือ -> ท่าเรือ และใบเหมืองที่ซ้ำกับใบท่าเรือ ตั้งแต่ชั้น query
     # หน้าเว็บ (ยอดรวม/แบ่งหน้า) ไฟล์ export และไฟล์แก้ไขรายเที่ยว จะได้ใช้ชุดเดียวกันเสมอ
     duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)

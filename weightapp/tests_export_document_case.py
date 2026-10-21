@@ -17,8 +17,8 @@ from django.test import RequestFactory, TestCase, override_settings
 
 from weightapp import views
 from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer, BaseCustomer,
-                              BaseSite, BaseWeightStation, BaseWeightType, InternationalFreightRate,
-                              UserProfile, Weight)
+                              BaseSite, BaseStoneType, BaseWeightStation, BaseWeightType,
+                              InternationalFreightRate, UserProfile, Weight)
 
 OWN = views.EXPORT_DOC_CASE_OWN_PORT
 OTHER = views.EXPORT_DOC_CASE_OTHER_PORT
@@ -266,6 +266,39 @@ class ExportDocumentCaseTests(TestCase):
             base, OTHER, filters['own_port_bws'], filters['own_port_customers'])
         self.assertEqual(self.ids(own), {1, 2, 10, 21, 22})
         self.assertEqual(self.ids(other), {30})
+
+    # ---------- ชนิดสินค้า : น้ำมัน ----------
+
+    def test_oil_and_fertilizer_are_dropped(self):
+        """น้ำมัน / ปุ๋ย ไม่ใช่เที่ยวขนหิน ตัดทั้งใบที่ผูกรหัสและใบเก่าที่มีแต่ชื่อ (รวมชื่อสะกดผิด)"""
+        BaseStoneType.objects.create(base_stone_type_id='45ST', base_stone_type_name='น้ำมัน')
+        BaseStoneType.objects.create(base_stone_type_id='46ST', base_stone_type_name='น้ำมันปาล์ม')
+        BaseStoneType.objects.create(base_stone_type_id='001S', base_stone_type_name='ปุ๋ย')
+        BaseStoneType.objects.create(base_stone_type_id='40ST', base_stone_type_name='ปุ๋ยโดโลไมท์ 80 เมช')
+        BaseStoneType.objects.create(base_stone_type_id='61ST', base_stone_type_name='แอมโมเนียมไนเตรต')
+        BaseStoneType.objects.create(base_stone_type_id='37ST', base_stone_type_name='ขี้แร่')
+        BaseStoneType.objects.create(base_stone_type_id='39ST', base_stone_type_name='แอนไฮไดรต์ 2 นิ้ว')
+        BaseStoneType.objects.create(base_stone_type_id='01ST', base_stone_type_name='หิน 3/4')
+        for weight_id, stone_id, stone_name in ((50, '45ST', 'น้ำมัน'),
+                                                (51, '46ST', 'น้ำมันปาล์ม'),
+                                                (52, None, 'น้ำมัน'),          # ใบเก่า ไม่ได้ผูกรหัส
+                                                (55, None, 'นำมัน'),           # สะกดผิด
+                                                (56, '001S', 'ปุ๋ย'),
+                                                (57, '40ST', 'ปุ๋ยโดโลไมท์ 80 เมช'),
+                                                (58, None, 'ปุ๋ยน้ำ bulk'),
+                                                (59, '61ST', 'แอมโมเนียมไนเตรต'),
+                                                (60, '37ST', 'ขี้แร่'),              # ยังนับ
+                                                (61, None, 'เศษเหล็ก'),
+                                                (62, None, 'บริการชั่งน้ำหนัก'),
+                                                (63, '39ST', 'แอนไฮไดรต์ 2 นิ้ว'),   # แร่ ยังนับ
+                                                (53, '01ST', 'หิน 3/4'),
+                                                (54, None, None)):             # ไม่ได้ระบุชนิด
+            self.trip(weight_id, date(2026, 8, 14), 'W1A', '06-V-900', '42.000', None)
+            Weight.objects.filter(weight_id=weight_id).update(stone_type_id=stone_id,
+                                                              stone_type_name=stone_name)
+        kept = self.ids(self.querySet(month='2026-08')[0])
+        self.assertTrue({53, 54, 60, 63} <= kept)
+        self.assertFalse({50, 51, 52, 55, 56, 57, 58, 59, 61, 62} & kept)
 
     # ---------- ประเภทการบรรทุกว่าง ----------
 

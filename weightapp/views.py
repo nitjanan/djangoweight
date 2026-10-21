@@ -11506,11 +11506,11 @@ def _exportDocumentCarryCounted(value):
     """ตัวเดียวกับ _exportDocumentCarryQ แต่ใช้กับใบชั่งที่โหลดมาแล้ว"""
     return value == EXPORT_DOC_CARRY_TYPE or _exportDocumentCarryIsEmpty(value)
 
-# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 6000 เที่ยว (แถว 6-6005)
+# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 10000 เที่ยว (แถว 6-10005)
 # ตัวเลขนี้ต้องตรงกับพื้นที่จริงในไฟล์ template (ดู xlsx_template.TRIP_REPORT_TEMPLATE)
 # ถ้าตั้งเกินพื้นที่จริง ข้อมูลส่วนเกินจะถูกเขียนลงชีตแต่ไม่มีสูตรไหนมองเห็น ยอดสรุปจะขาดไปโดยไม่มี error
 EXPORT_DOC_FIRST_DATA_ROW = 6
-EXPORT_DOC_MAX_TRIPS = 6000
+EXPORT_DOC_MAX_TRIPS = 10000
 
 # ทีมรถร่วมห้ามเว้นว่างเด็ดขาด ต้องใส่ชื่อแทนเสมอ
 # sheet สรุปจ่ายรถร่วม จัดกลุ่มด้วย MATCH ชื่อทีม ถ้าเจอช่องว่าง INDEX จะคืน 0 แล้ว MATCH เป็น #N/A
@@ -11539,7 +11539,8 @@ EXPORT_DOC_RATE_MAX_ROWS = 200
 EXPORT_DOC_EDIT_SHEET = 'แก้ไขรายเที่ยว'
 EXPORT_DOC_EDIT_HEADER_ROW = 2
 EXPORT_DOC_EDIT_FIRST_ROW = 3
-EXPORT_DOC_EDIT_MAX_ROWS = 5000
+# ให้เท่ากับ EXPORT_DOC_MAX_TRIPS ไม่งั้นเดือนที่ export ได้ จะอัปไฟล์แก้ไขกลับไม่ได้
+EXPORT_DOC_EDIT_MAX_ROWS = EXPORT_DOC_MAX_TRIPS
 EXPORT_DOC_EDIT_ID_COL = 1       # A weight_id ห้ามแก้ ใช้เป็นตัว map ตอนอัปกลับ
 EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม (ดูได้อย่างเดียว)
 EXPORT_DOC_EDIT_ORIGIN_COL = 6   # F นน.ต้นทาง
@@ -13648,7 +13649,7 @@ def viewExportDocument(request):
     # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
 
-    # ไฟล์ template รับได้ 3000 เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
+    # ไฟล์ template รับได้ EXPORT_DOC_MAX_TRIPS เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
     over_limit = (summary['trip_count'] or 0) > EXPORT_DOC_MAX_TRIPS
 
     # ตัวเลือกตาชั่ง : ต้องมีทั้งของท่าเรือ (เคส 1) และของเหมือง (เคส 2)

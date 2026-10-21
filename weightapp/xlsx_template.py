@@ -29,7 +29,10 @@ _EXTLST_RE = re.compile(r'<extLst>.*?</extLst>\s*</worksheet>\s*$', re.S)
 _XR_UID_RE = re.compile(r'\s+xr:uid="[^"]*"')
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exceltemplate')
-TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v15.xlsx')
+TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v16.xlsx')
+# v16 = v15 ที่ขยายพื้นที่ข้อมูลจากแถว 6-6005 (6,000 เที่ยว) เป็น 6-10005 (10,000 เที่ยว)
+#   ทำใน Excel จริง : แทรก 4,000 แถวที่แถว 6005 (แถวสุดท้ายของช่วง) แล้วก๊อปแถว 6004 ลงไป
+#   Excel ขยายการอ้างอิง $6:$6005 ทุกชีตเป็น $6:$10005 ให้เอง รวม dropdown x14 / autofilter / print area
 # v15 = v14 ที่แทรก 2 คอลัมน์กลาง sheet อัตราค่าขนส่ง ด้วยการสั่ง Insert ใน Excel จริง
 #   G ค่าขนส่งตามสัญญา (แสดงผล)   H น้ำมันฐานวันทำสัญญา (ใหม่ แสดงผล)
 #   I ช่วงราคาฐานแบบข้อความ (เดิม H)   J ค่าขนส่ง ณ ราคาน้ำมันฐาน = ค่าขนส่งในใบราคา (ใหม่ ตัวตั้งที่ใช้คิด)

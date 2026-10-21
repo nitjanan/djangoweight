@@ -82,6 +82,12 @@
   .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
   .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
   .ifr-health-detail > summary { cursor: pointer; }
+  /* หัวกล่องแจ้งเตือน : กดทั้งแถบเพื่อพับ/กาง */
+  .ifr-health-head { cursor: pointer; user-select: none; }
+  .ifr-health-head:focus-visible { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .ifr-health-chevron { transition: transform .15s ease; }
+  .ifr-health.is-collapsed .ifr-health-chevron { transform: rotate(180deg); }
+  .ifr-health.is-collapsed .ifr-health-head { border-bottom: 0; }
   @media (max-width: 575px) {
     /* จอแคบวางตัวเลขไว้บนคำอธิบาย ไม่งั้นคำอธิบายเหลือความกว้างนิดเดียว */
     .ifr-issue { flex-direction: column; gap: .15rem; }
@@ -438,8 +444,19 @@
     จึงตอบเป็นประโยคก่อน แล้วค่อยแจกแจงทีละข้อว่า เกิดอะไร -> ผลคืออะไร -> ต้องทำอะไร
     เลี่ยงศัพท์ระบบทุกคำ (เรท / สัญญา / ช่วง / คีย์) เพราะคนกรอกไม่ได้เป็นคนตั้งค่าระบบ
     {% endcomment %}
-    <div class="card ifr-health mb-3">
-      <div class="card-body py-3">
+    {% comment %}
+      พับเก็บได้ (กดที่หัวกล่อง) จำสถานะไว้ในเบราว์เซอร์ เปลี่ยนตัวกรอง/รีเฟรชแล้วยังพับอยู่
+      ตอนพับ หัวกล่องยังโชว์จำนวนเรื่องที่เตือน จะได้ไม่พับไว้แล้วพลาดปัญหาใหม่ของเดือนที่เลือก
+    {% endcomment %}
+    <div class="card ifr-health mb-3" id="ifr_health">
+      <div class="card-header ifr-health-head d-flex align-items-center gap-2 py-2"
+           role="button" tabindex="0" aria-expanded="true" aria-controls="ifr_health_body">
+        <h6 class="mb-0">แจ้งเตือนก่อนโหลดไฟล์</h6>
+        <span class="badge d-none" id="ifr_health_count"></span>
+        <span class="ms-auto small text-muted" id="ifr_health_hint">พับเก็บ</span>
+        <i class="bi bi-chevron-up ifr-health-chevron"></i>
+      </div>
+      <div class="card-body py-3" id="ifr_health_body">
 
         {% comment %}
         สถานะการอ่านบิลเติมน้ำมันจาก Express (Postgres คนละเครื่อง ต่อไม่ติดเมื่อไหร่ก็ได้)
@@ -1165,6 +1182,53 @@
         }
       });
     }
+  })();
+
+  // ---------- กล่องแจ้งเตือน : พับ/กาง ----------
+  (function () {
+    const card = document.getElementById('ifr_health');
+    if (!card) return;
+    const head = card.querySelector('.ifr-health-head');
+    const body = document.getElementById('ifr_health_body');
+    const hint = document.getElementById('ifr_health_hint');
+    const badge = document.getElementById('ifr_health_count');
+    const KEY = 'exportdoc_health_collapsed';
+
+    // นับจากกล่องเตือนที่ขึ้นจริงบนหน้า ไม่ต้องนับซ้ำฝั่ง server
+    const issues = body.querySelectorAll('.ifr-issue').length;
+    if (issues) {
+      const bad = body.querySelector('.ifr-issue-bad');
+      badge.textContent = issues + ' เรื่อง';
+      badge.classList.add(bad ? 'bg-danger' : 'bg-warning');
+      if (!bad) badge.classList.add('text-dark');
+    } else {
+      badge.textContent = 'ข้อมูลครบ';
+      badge.classList.add('bg-success');
+    }
+    badge.classList.remove('d-none');
+
+    function setCollapsed(collapsed, remember) {
+      body.classList.toggle('d-none', collapsed);
+      card.classList.toggle('is-collapsed', collapsed);
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      hint.textContent = collapsed ? 'กดเพื่อดูรายละเอียด' : 'พับเก็บ';
+      if (remember) {
+        try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) { /* โหมดส่วนตัว / ปิด storage */ }
+      }
+    }
+
+    let saved = false;
+    try { saved = localStorage.getItem(KEY) === '1'; } catch (e) { saved = false; }
+    setCollapsed(saved, false);
+
+    function toggle() { setCollapsed(!card.classList.contains('is-collapsed'), true); }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
   })();
 </script>
 {% endblock %}

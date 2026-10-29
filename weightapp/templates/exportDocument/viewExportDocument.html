@@ -81,14 +81,24 @@
   .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
   .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
   .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
+  /* ข้อมูลประกอบ ไม่ได้ทำให้เงินในไฟล์ผิด (เช่นเที่ยวที่ไม่นับเพราะเส้นทางไม่มีในหน้าค่าขนส่ง) */
+  .ifr-issue-info { border-left-color: #6c757d; background-color: rgba(108,117,125,.05); }
+  .ifr-issue-info .ifr-issue-num { color: #6c757d; }
   .ifr-health-detail > summary { cursor: pointer; }
+  /* หัวกล่องแจ้งเตือน : กดทั้งแถบเพื่อพับ/กาง */
+  .ifr-health-head { cursor: pointer; user-select: none; }
+  .ifr-health-head:focus-visible { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .ifr-health-chevron { transition: transform .15s ease; }
+  .ifr-health.is-collapsed .ifr-health-chevron { transform: rotate(180deg); }
+  .ifr-health.is-collapsed .ifr-health-head { border-bottom: 0; }
   @media (max-width: 575px) {
     /* จอแคบวางตัวเลขไว้บนคำอธิบาย ไม่งั้นคำอธิบายเหลือความกว้างนิดเดียว */
     .ifr-issue { flex-direction: column; gap: .15rem; }
   }
 
   /* ทีมที่เราเติม "ไม่ระบุทีม" ให้ : แดงเฉพาะตัวอักษรในคอลัมน์ทีม ไม่ทาพื้น ไม่ทาทั้งแถว */
-  .trip-table > tbody > tr > td.trip-no-team {
+  .trip-table > tbody > tr > td.trip-no-team,
+  .trip-table > tbody > tr > td.trip-out-of-range {
     color: #d32f2f;
     font-weight: 700;
     opacity: 1;
@@ -438,8 +448,19 @@
     จึงตอบเป็นประโยคก่อน แล้วค่อยแจกแจงทีละข้อว่า เกิดอะไร -> ผลคืออะไร -> ต้องทำอะไร
     เลี่ยงศัพท์ระบบทุกคำ (เรท / สัญญา / ช่วง / คีย์) เพราะคนกรอกไม่ได้เป็นคนตั้งค่าระบบ
     {% endcomment %}
-    <div class="card ifr-health mb-3">
-      <div class="card-body py-3">
+    {% comment %}
+      พับเก็บได้ (กดที่หัวกล่อง) จำสถานะไว้ในเบราว์เซอร์ เปลี่ยนตัวกรอง/รีเฟรชแล้วยังพับอยู่
+      ตอนพับ หัวกล่องยังโชว์จำนวนเรื่องที่เตือน จะได้ไม่พับไว้แล้วพลาดปัญหาใหม่ของเดือนที่เลือก
+    {% endcomment %}
+    <div class="card ifr-health mb-3" id="ifr_health">
+      <div class="card-header ifr-health-head d-flex align-items-center gap-2 py-2"
+           role="button" tabindex="0" aria-expanded="true" aria-controls="ifr_health_body">
+        <h6 class="mb-0">แจ้งเตือนก่อนโหลดไฟล์</h6>
+        <span class="badge d-none" id="ifr_health_count"></span>
+        <span class="ms-auto small text-muted" id="ifr_health_hint">พับเก็บ</span>
+        <i class="bi bi-chevron-up ifr-health-chevron"></i>
+      </div>
+      <div class="card-body py-3" id="ifr_health_body">
 
         {% comment %}
         สถานะการอ่านบิลเติมน้ำมันจาก Express (Postgres คนละเครื่อง ต่อไม่ติดเมื่อไหร่ก็ได้)
@@ -527,6 +548,9 @@
               จากทั้งหมด <strong class="text-body">{{ rate_stats.wc_total|intcomma }}</strong> เที่ยว
               ({{ rate_stats.wc_filled_pct }}%) — ที่เหลือจะขึ้นเป็นเงิน 0 ในไฟล์
             </div>
+            {% if rate_stats.wc_no_contract or rate_stats.wc_out_of_range %}
+            <a class="btn btn-sm btn-outline-danger mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=unpaid#trips">ดูเฉพาะเที่ยวที่คิดเงินไม่ได้ ({{ rate_stats.wc_no_contract|add:rate_stats.wc_out_of_range|intcomma }})</a>
+            {% endif %}
           </div>
         </div>
 
@@ -560,26 +584,26 @@
           <div class="ifr-issue ifr-issue-bad">
             <div class="ifr-issue-num">{{ rate_stats.wc_no_contract|intcomma }} เที่ยว</div>
             <div class="ifr-issue-body">
-              <div class="ifr-issue-title">ยังไม่ได้ตั้งราคาค่าขนส่งของปลายทางเหล่านี้</div>
+              <div class="ifr-issue-title">มีเส้นทางแล้ว แต่ทีมรถนี้ยังไม่อยู่ในสัญญา</div>
               <div class="ifr-issue-text">
                 เที่ยวพวกนี้จะขึ้นเงิน 0 ในไฟล์<br />
                 <strong>ต้องทำ:</strong> ไปหน้า
                 <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a>
-                แล้วเพิ่มเส้นทางที่ยังขาด
+                แล้วเพิ่มทีมเหล่านี้ในเส้นทางนั้น<br />
+                <a class="btn btn-sm btn-outline-danger mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=no_contract#trips">ดูเที่ยวเหล่านี้</a>
 
                 {% comment %}
-                ราคาตั้งเป็นคู่ ต้นทาง-ปลายทาง ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งแล้ว
-                และยังไม่ได้ตั้ง ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
-                จึงต้องแจกแจงต้นทางกำกับไว้ใต้ปลายทางเสมอ
+                เที่ยวที่เส้นทางไม่มีในหน้าค่าขนส่งถูกตัดออกจากรายงานไปแล้ว (กล่องสีเทาด้านล่าง)
+                ที่เหลือในกล่องนี้จึงเป็นเส้นทางที่ตั้งไว้แล้ว ขาดแค่ทีม แจกแจงทีมให้เลย
                 {% endcomment %}
                 <ul class="ifr-missing-list">
                   {% for d in rate_stats.wc_missing_routes %}
                   <li>
-                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="fw-semibold">{{ d.route }}</span>
                     <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
                     <div class="small mt-1">
-                      ต้นทางที่ยังไม่มีราคา:
-                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                      ทีมที่ยังไม่อยู่ในสัญญา:
+                      {% for t in d.teams %}<span class="badge bg-light text-dark border">{{ t.name }} ({{ t.trips|intcomma }})</span> {% endfor %}
                     </div>
                   </li>
                   {% endfor %}
@@ -597,6 +621,8 @@
               <div class="ifr-issue-text">
                 เช่น ตั้งราคาไว้เฉพาะรถ 0–35 ตัน แต่เที่ยวนี้บรรทุก 42 ตัน ระบบจึงเลือกราคาให้ไม่ได้<br />
                 <strong>ต้องทำ:</strong> เพิ่มช่วงน้ำหนักให้ครอบคลุม หรือตรวจว่าน้ำหนักที่ชั่งถูกต้องไหม
+                (ในตารางและในไฟล์ทำสีแดงไว้ให้)<br />
+                <a class="btn btn-sm btn-outline-warning mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=out_of_range#trips">ดูเที่ยวเหล่านี้</a>
               </div>
             </div>
           </div>
@@ -609,7 +635,8 @@
               <div class="ifr-issue-title">ตอนชั่งไม่ได้เลือกทีมรถ</div>
               <div class="ifr-issue-text">
                 ในไฟล์จะขึ้นเป็นตัวแดงว่า "ไม่ระบุทีม" ถ้าปล่อยไว้ หน้าสรุปจ่ายรถร่วมจะว่างทั้งหน้า<br />
-                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง
+                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง<br />
+                <a class="btn btn-sm btn-outline-warning mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=no_team#trips">ดูเที่ยวเหล่านี้</a>
               </div>
             </div>
           </div>
@@ -709,6 +736,42 @@
         </div>
         {% endif %}
 
+        {% comment %}
+        เที่ยวที่เส้นทาง (ต้นทาง - ปลายทาง) ไม่มีในหน้าค่าขนส่งส่งออก ไม่นับในรายงานและไม่อยู่ในไฟล์
+        ส่วนใหญ่ไม่ใช่เที่ยวส่งออก (ขายออกจากกองสต๊อก / เหมืองชั่งให้ตัวเอง / ลูกค้าภายนอก)
+        แต่ต้องโชว์ไว้ เผื่อเป็นเส้นทางที่ต้องจ่ายจริงแต่ยังไม่ได้ตั้ง จะได้ไม่หายไปเงียบ ๆ
+        สีเทา ไม่ใช่สีแดง เพราะไม่ได้ทำให้เงินในไฟล์ผิด
+        {% endcomment %}
+        {% if rate_stats.off_route_trips %}
+        <div class="ifr-issues mt-3">
+          <div class="ifr-issue ifr-issue-info">
+            <div class="ifr-issue-num">{{ rate_stats.off_route_trips|intcomma }} เที่ยว</div>
+            <div class="ifr-issue-body">
+              <div class="ifr-issue-title">เส้นทางยังไม่มีในหน้าค่าขนส่ง — ไม่นับในรายงานและไม่อยู่ในไฟล์</div>
+              <div class="ifr-issue-text">
+                ส่วนใหญ่ไม่ใช่เที่ยวส่งออก เช่น ลูกค้าซื้อหินออกจากกองสต๊อกท่าเรือ หรือเหมืองชั่งให้ตัวเอง<br />
+                ถ้าเส้นไหนต้องจ่ายค่าขนส่งจริง ให้ไปหน้า
+                <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a>
+                แล้วเพิ่มเส้นทาง เที่ยวจะเข้ารายงานเอง<br />
+                <a class="btn btn-sm btn-outline-secondary mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=off_route#trips">ดูเที่ยวเหล่านี้</a>
+                <ul class="ifr-missing-list">
+                  {% for d in rate_stats.off_route %}
+                  <li>
+                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
+                    <div class="small mt-1">
+                      ต้นทาง:
+                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                    </div>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <details class="ifr-health-detail mt-3">
           <summary class="small text-muted">
             <i class="bi bi-info-circle"></i> เรื่องที่ปกติอยู่แล้ว ไม่ต้องทำอะไร
@@ -778,9 +841,18 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="trips">
       <div class="card-header">
         <h5 class="card-title mb-0">รายเที่ยว</h5>
+        {% if problem %}
+        <div class="alert alert-secondary d-flex flex-wrap align-items-center gap-2 py-2 mt-2 mb-0">
+          <span>
+            กำลังดูเฉพาะ: <strong>{{ problem_label }}</strong> ({{ problem_count|intcomma }} เที่ยว)
+            <span class="small text-muted d-block">ตัวเลขสรุปด้านบนและไฟล์ที่กด Export ยังเป็นข้อมูลทั้งชุดตามตัวกรอง</span>
+          </span>
+          <a class="btn btn-sm btn-outline-dark ms-auto" href="?{{ problem_query }}#trips">ดูทั้งหมด</a>
+        </div>
+        {% endif %}
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
           หัวตารางเรียงตามคอลัมน์ A-M ของ sheet "บันทึกรายเที่ยว" ในไฟล์ รายเที่ยว_template_v11.xlsx |
           ช่องพื้นเหลืองคือช่องที่ยังไม่มีข้อมูลใน db
@@ -827,7 +899,11 @@
                 <td title="{{ r.bws_id }}">{{ r.destination|default:"-" }}</td>
                 <td>{{ r.stone|default:"-" }}</td>
                 {# แบก นน. คิดสดจาก นน.ต้นทาง เทียบช่วงในตารางอัตรา ไม่ได้เก็บลง db #}
+                {% if r.wc_status == 'out_of_range' %}
+                <td class="trip-out-of-range" title="มีสัญญาแล้ว แต่ นน.จ่ายค่าบรรทุกไม่เข้าช่วงไหนของทีมนี้">ไม่เข้าช่วง</td>
+                {% else %}
                 <td>{{ r.weight_carried|default:"-" }}</td>
+                {% endif %}
                 <td class="{% if r.team_missing %}trip-no-team{% endif %}">{{ r.team }}</td>
                 <td>{{ r.car_registration|default:"-" }}</td>
                 <td>{{ r.doc_id|default:"-" }}</td>
@@ -1165,6 +1241,53 @@
         }
       });
     }
+  })();
+
+  // ---------- กล่องแจ้งเตือน : พับ/กาง ----------
+  (function () {
+    const card = document.getElementById('ifr_health');
+    if (!card) return;
+    const head = card.querySelector('.ifr-health-head');
+    const body = document.getElementById('ifr_health_body');
+    const hint = document.getElementById('ifr_health_hint');
+    const badge = document.getElementById('ifr_health_count');
+    const KEY = 'exportdoc_health_collapsed';
+
+    // นับจากกล่องเตือนที่ขึ้นจริงบนหน้า ไม่ต้องนับซ้ำฝั่ง server
+    const issues = body.querySelectorAll('.ifr-issue').length;
+    if (issues) {
+      const bad = body.querySelector('.ifr-issue-bad');
+      badge.textContent = issues + ' เรื่อง';
+      badge.classList.add(bad ? 'bg-danger' : 'bg-warning');
+      if (!bad) badge.classList.add('text-dark');
+    } else {
+      badge.textContent = 'ข้อมูลครบ';
+      badge.classList.add('bg-success');
+    }
+    badge.classList.remove('d-none');
+
+    function setCollapsed(collapsed, remember) {
+      body.classList.toggle('d-none', collapsed);
+      card.classList.toggle('is-collapsed', collapsed);
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      hint.textContent = collapsed ? 'กดเพื่อดูรายละเอียด' : 'พับเก็บ';
+      if (remember) {
+        try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) { /* โหมดส่วนตัว / ปิด storage */ }
+      }
+    }
+
+    let saved = false;
+    try { saved = localStorage.getItem(KEY) === '1'; } catch (e) { saved = false; }
+    setCollapsed(saved, false);
+
+    function toggle() { setCollapsed(!card.classList.contains('is-collapsed'), true); }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
   })();
 </script>
 {% endblock %}

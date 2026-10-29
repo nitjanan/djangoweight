@@ -11506,11 +11506,11 @@ def _exportDocumentCarryCounted(value):
     """ตัวเดียวกับ _exportDocumentCarryQ แต่ใช้กับใบชั่งที่โหลดมาแล้ว"""
     return value == EXPORT_DOC_CARRY_TYPE or _exportDocumentCarryIsEmpty(value)
 
-# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 6000 เที่ยว (แถว 6-6005)
+# sheet บันทึกรายเที่ยว : ข้อมูลเริ่มแถว 6 และไฟล์รองรับ 10000 เที่ยว (แถว 6-10005)
 # ตัวเลขนี้ต้องตรงกับพื้นที่จริงในไฟล์ template (ดู xlsx_template.TRIP_REPORT_TEMPLATE)
 # ถ้าตั้งเกินพื้นที่จริง ข้อมูลส่วนเกินจะถูกเขียนลงชีตแต่ไม่มีสูตรไหนมองเห็น ยอดสรุปจะขาดไปโดยไม่มี error
 EXPORT_DOC_FIRST_DATA_ROW = 6
-EXPORT_DOC_MAX_TRIPS = 6000
+EXPORT_DOC_MAX_TRIPS = 10000
 
 # ทีมรถร่วมห้ามเว้นว่างเด็ดขาด ต้องใส่ชื่อแทนเสมอ
 # sheet สรุปจ่ายรถร่วม จัดกลุ่มด้วย MATCH ชื่อทีม ถ้าเจอช่องว่าง INDEX จะคืน 0 แล้ว MATCH เป็น #N/A
@@ -11539,7 +11539,8 @@ EXPORT_DOC_RATE_MAX_ROWS = 200
 EXPORT_DOC_EDIT_SHEET = 'แก้ไขรายเที่ยว'
 EXPORT_DOC_EDIT_HEADER_ROW = 2
 EXPORT_DOC_EDIT_FIRST_ROW = 3
-EXPORT_DOC_EDIT_MAX_ROWS = 5000
+# ให้เท่ากับ EXPORT_DOC_MAX_TRIPS ไม่งั้นเดือนที่ export ได้ จะอัปไฟล์แก้ไขกลับไม่ได้
+EXPORT_DOC_EDIT_MAX_ROWS = EXPORT_DOC_MAX_TRIPS
 EXPORT_DOC_EDIT_ID_COL = 1       # A weight_id ห้ามแก้ ใช้เป็นตัว map ตอนอัปกลับ
 EXPORT_DOC_EDIT_TEAM_COL = 10    # J ทีมรถร่วม (ดูได้อย่างเดียว)
 EXPORT_DOC_EDIT_ORIGIN_COL = 6   # F นน.ต้นทาง
@@ -11620,7 +11621,7 @@ def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
 
     billable_keys = ชุดคีย์ที่มีแถวอัตรารองรับจริง เที่ยวที่ไม่มีอัตราไม่ต้องเอามาคิด
 
-    คืน {คีย์ 5 ช่อง -> (ราคาเฉลี่ย, จำนวนวันที่มีราคา, จำนวนวันที่ขาดราคา)}
+    คืน {คีย์ 5 ช่อง -> (ราคาเฉลี่ย, จำนวนวันที่มีราคา, จำนวนวันที่ขาดราคา, ชุดวันที่ที่ขาดราคา)}
     """
     map_ids = {r['origin_map_id'] for r in trip_rows if r.get('origin_map_id')}
     if not map_ids:
@@ -11667,8 +11668,36 @@ def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
             # วันที่วิ่งไม่มีราคาสักวัน ไม่หยิบวันอื่นมาแทน จะกลายเป็นตัวเลขที่อธิบายไม่ได้
             continue
         avg = sum(price_by_key[(company_id, d)] for d in priced) / Decimal(len(priced))
-        result[key] = (avg, len(priced), len(days) - len(priced))
+        missing_days = {d for d in days if (company_id, d) not in price_by_key}
+        result[key] = (avg, len(priced), len(missing_days), missing_days)
     return result
+
+
+def _exportDocumentDayRanges(days):
+    """ย่อชุดวันที่ให้อ่านง่าย เช่น {1,2,3,5,7,8} ของ ก.ย. -> '1-3, 5, 7-8 ก.ย.'
+    คนอ่านต้องเอาไปกรอกราคาน้ำมันทีละวัน ช่วงวันที่ต่อกันจึงย่อเป็นช่วงเดียว"""
+    days = sorted(days)
+    if not days:
+        return ''
+    groups = []
+    start = prev = days[0]
+    for d in days[1:]:
+        if (d - prev).days == 1 and d.month == prev.month:
+            prev = d
+            continue
+        groups.append((start, prev))
+        start = prev = d
+    groups.append((start, prev))
+
+    def month_th(d):
+        return '%s %s' % (EXPORT_DOC_THAI_MONTHS_SHORT[d.month - 1], str(d.year + 543)[-2:])
+
+    one_month = len({(d.year, d.month) for d in days}) == 1
+    parts = []
+    for a, b in groups:
+        text = str(a.day) if a == b else '%s-%s' % (a.day, b.day)
+        parts.append(text if one_month else '%s %s' % (text, month_th(a)))
+    return ', '.join(parts) + (' ' + month_th(days[0]) if one_month else '')
 
 
 # ---------- ราคาน้ำมันจากบิลเติมน้ำมันจริงในระบบ Express ----------
@@ -12219,23 +12248,27 @@ def _exportDocumentMissingRoutes(trip_rows, weight_carried_by_key):
     อันแรกต้องเพิ่มเส้นทางใหม่ อันหลังแค่เพิ่มช่วงน้ำหนักในเส้นทางที่มีอยู่แล้ว
     หน้าเว็บมีกล่องแยกให้อยู่แล้ว เอามาปนกันจะทำให้ไปแก้ผิดที่
 
-    คืน [{'destination': ..., 'trips': n, 'origins': [{'name':..., 'trips': n}, ...]}, ...]
-    เรียงจากปลายทางที่มีเที่ยวค้างมากไปน้อย
+    ตั้งแต่กรองด้วยเส้นทางที่มีในหน้าค่าขนส่ง (_exportDocumentRouteQ) ทุกเที่ยวที่เหลือ
+    มีเส้นทางอยู่แล้ว ที่ยังไม่มีสัญญาจึงเหลือแค่ "ทีมนี้ยังไม่อยู่ในสัญญาของเส้นทางนั้น"
+    แจกแจงเป็น เส้นทาง -> ทีม คนแก้จะรู้ทันทีว่าต้องไปเพิ่มทีมไหนในเส้นทางไหน
+
+    คืน [{'route': 'ต้นทาง - ปลายทาง', 'trips': n, 'teams': [{'name':..., 'trips': n}, ...]}, ...]
+    เรียงจากเส้นทางที่มีเที่ยวค้างมากไปน้อย
     """
     pending = defaultdict(lambda: defaultdict(int))
     for row in trip_rows:
         if weight_carried_by_key.get(
                 (row['origin_map_id'], row['destination_map_id'], row['team_id'])):
             continue
-        pending[row['destination']][row['origin']] += 1
+        pending['%s - %s' % (row['origin'], row['destination'])][row['team']] += 1
 
     result = []
-    for destination, origins in pending.items():
+    for route, teams in pending.items():
         result.append({
-            'destination': destination,
-            'trips': sum(origins.values()),
-            'origins': [{'name': name, 'trips': n}
-                        for name, n in sorted(origins.items(), key=lambda x: -x[1])],
+            'route': route,
+            'trips': sum(teams.values()),
+            'teams': [{'name': name, 'trips': n}
+                      for name, n in sorted(teams.items(), key=lambda x: -x[1])],
         })
     result.sort(key=lambda x: -x['trips'])
     return result
@@ -12347,6 +12380,10 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
     # ต้องบอกเหตุผลให้ถูก ไม่งั้นคนจะไปไล่ตรวจรหัสลูกค้าน้ำมันของทุกทีมโดยเปล่าประโยชน์
     express_down = bool(bill_stats.get('error')) and not from_snapshot
     snapshot_note = (' (จากสำเนาบิล ณ %s)' % bill_stats.get('snapshot_at_th')) if from_snapshot else ''
+    # เส้นทาง -> {'teams': ทีมที่ขาด, 'days': วันที่ที่ขาด}
+    # 1 เส้นทางมีได้หลายแถวอัตรา (แยกทีม / ช่วงแบก นน. / ชนิดหิน) ถ้าเตือนทีละแถว
+    # ชื่อเส้นทางจะขึ้นซ้ำหลายบรรทัดจนอ่านไม่ออก ทั้งที่สิ่งที่ต้องทำคือกรอกราคาของวันที่ขาดของต้นทางนั้น
+    partial_by_route = {}
 
     for row in rate_rows:
         route = row.pop('route')
@@ -12383,7 +12420,7 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                 row['fuel_note'] = 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)'
             continue
 
-        price, counted, missing = fuel
+        price, counted, missing = fuel[:3]
         # ปัดเหลือ 4 ตำแหน่ง : หารแล้วได้ทศนิยมยาวเหยียด อ่านไม่รู้เรื่อง
         # และไม่มีประโยชน์ เพราะสูตร K ในไฟล์ปัดเป็น 2 ตำแหน่งอยู่แล้ว
         row['average_fuel_price'] = price.quantize(Decimal('0.0001'))
@@ -12401,11 +12438,18 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
             reason = 'ต่อ Express ไม่ได้' if express_down else 'ไม่มีบิลเติมน้ำมัน'
             row['fuel_note'] = '%s จึงเฉลี่ยราคารายวันจาก %s วันที่วิ่ง' % (reason, counted)
             if missing:
-                note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
-                    route_label, counted, missing)
-                if note not in stats['fuel_partial']:
-                    stats['fuel_partial'].append(note)
-                row['fuel_note'] += ' (ขาดราคา %s วัน)' % missing
+                entry = partial_by_route.setdefault(route_label, {'teams': set(), 'days': set()})
+                entry['teams'].add(row['team'])
+                entry['days'] |= fuel[3]
+                row['fuel_note'] += ' (ขาดราคา %s วัน : %s)' % (
+                    missing, _exportDocumentDayRanges(fuel[3]))
+
+    for route_label in sorted(partial_by_route):
+        entry = partial_by_route[route_label]
+        note = '%s : ขาดราคาวันที่ %s' % (route_label, _exportDocumentDayRanges(entry['days']))
+        if len(entry['teams']) > 1:
+            note += ' (%s ทีม)' % len(entry['teams'])
+        stats['fuel_partial'].append(note)
 
 
 def _exportDocumentPickWeightCarried(options, pay_weight):
@@ -12466,13 +12510,17 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
             (r['origin_map_id'], r['destination_map_id'], r['team_id']))
         if not options:
             # ไม่มีสัญญา = ไม่มีอัตรา ใส่ช่วงไปก็ไม่ได้เงิน เว้นว่างไว้ให้เห็นว่าต้องไปเพิ่มสัญญา
+            r['wc_status'] = 'no_contract'
             no_contract += 1
             continue
         picked = _exportDocumentPickWeightCarried(options, r['pay_weight'])
         if picked:
             r['weight_carried'] = picked
+            r['wc_status'] = 'filled'
             filled += 1
         else:
+            # ทำสีแดงทั้งในหน้าเว็บและในไฟล์ แบบเดียวกับ "ไม่ระบุทีม"
+            r['wc_status'] = 'out_of_range'
             out_of_range += 1
     return filled, no_contract, out_of_range
 
@@ -12837,6 +12885,10 @@ def _exportDocumentThaiMonth(month_str):
         return month_str
 
 
+EXPORT_DOC_THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+                                'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+
+
 def _thaiDate(value):
     """วันที่แบบไทยเต็ม เช่น '23 สิงหาคม 2569'"""
     if value is None:
@@ -12902,6 +12954,29 @@ EXPORT_DOC_OTHER_PORT_WEIGHT_TYPE_ID = 1
 #   200PL = ใช้ภายใน   300PL = อนุเคราะห์
 # ตัดด้วยรหัส ไม่ใช่ชื่อ เพราะชื่อแก้ในหน้า admin ได้ตลอด
 EXPORT_DOC_EXCLUDED_SITE_IDS = ('200PL', '300PL')
+
+# ชนิดสินค้าที่ไม่ใช่แร่/หิน : ตาชั่งชุดเดียวกันชั่งของอย่างอื่นด้วย ไม่ใช่เที่ยวขนหินที่ต้องคิดค่าขนส่งส่งออก
+#   น้ำมัน : 45ST = น้ำมัน   46ST = น้ำมันปาล์ม
+#   ปุ๋ย   : 001S = ปุ๋ย   71ST = ปุ๋ยน้ำ bulk   40ST/41ST/42ST/43ST = ปุ๋ยโดโลไมท์ 80/150/300/325 เมช
+#   อื่น ๆ : 61ST = แอมโมเนียมไนเตรต   44ST = เศษเหล็ก   47ST = บริการชั่งน้ำหนัก
+#   ขี้แร่ (37ST) ยังนับอยู่ ตามที่ตกลง
+# ตัดด้วยรหัสเป็นหลัก แต่ดูชื่อด้วย เพราะมีใบเก่าที่ใส่แต่ชื่อไว้โดยไม่ได้ผูกรหัส (stone_type_id ว่าง)
+# รวมถึงชื่อที่สะกดผิด เช่น "นำมัน"
+# ใบที่ไม่ได้ระบุชนิดเลย ยังนับอยู่ (บอกไม่ได้ว่าเป็นอะไร ตัดทิ้งอาจทำเที่ยวหินจริงหาย)
+# แร่ (แอนไฮไดรต์ / ยิปซั่ม / แร่ก้อน) ยังนับ เพราะเป็นสินค้าส่งออกตามชื่อคอลัมน์ "ชนิดแร่/หิน"
+EXPORT_DOC_EXCLUDED_STONE_IDS = ('45ST', '46ST',
+                                 '001S', '71ST', '40ST', '41ST', '42ST', '43ST',
+                                 '61ST', '44ST', '47ST')
+EXPORT_DOC_EXCLUDED_STONE_NAMES = ('น้ำมัน', 'น้ำมันปาล์ม', 'นำมัน',
+                                   'ปุ๋ย', 'ปุ๋ยน้ำ bulk', 'ปุ๋ยโดโลไมท์ 80 เมช', 'ปุ๋ยโดโลไมท์ 150 เมช',
+                                   'ปุ๋ยโดโลไมท์ 300 เมช', 'ปุ๋ยโดโลไมท์ 325 เมช',
+                                   'แอมโมเนียมไนเตรต', 'เศษเหล็ก', 'บริการชั่งน้ำหนัก')
+
+
+def _exportDocumentExcludedStoneQ():
+    """ใบที่ต้องตัดออกเพราะไม่ใช่สินค้าแร่/หิน (ใช้กับ .exclude)"""
+    return (Q(stone_type_id__in=EXPORT_DOC_EXCLUDED_STONE_IDS)
+            | Q(stone_type_name__in=EXPORT_DOC_EXCLUDED_STONE_NAMES))
 
 # เคส = เที่ยวนี้ "ไปลงท่าเรือไหน" ดูจากปลายทาง (ใช้เป็นป้ายและตัวกรอง)
 EXPORT_DOC_CASE_OWN_PORT = '1'     # ลงท่าเรือของบริษัท
@@ -13068,8 +13143,9 @@ def _exportDocumentUnflaggedDestinations(other_bws, export_customers, selected_m
     # นับจากตาราง weight ตรง ๆ ไม่ใช่จาก base_qs เพราะ base_qs กรองปลายทางที่ติ๊กแล้วออกไปก่อน
     # เที่ยวของลูกค้าที่ยังไม่ติ๊กจึงไม่มีทางอยู่ใน base_qs เลย
     names = _baseCompanyMapDisplayNameById()
-    trips = Weight.objects.filter(_exportDocumentCarryQ(), bws_id__in=other_bws,
-                                  customer_id__in=candidates, is_cancel=False)
+    trips = (Weight.objects.filter(_exportDocumentCarryQ(), bws_id__in=other_bws,
+                                   customer_id__in=candidates, is_cancel=False)
+             .exclude(_exportDocumentExcludedStoneQ()))
     if selected_month:
         try:
             year, month = selected_month.split('-')
@@ -13246,6 +13322,81 @@ def _exportDocumentNameMaps():
     return origin_by_customer, port_by_company, map_id_by_customer, map_id_by_company
 
 
+def _exportDocumentRouteQ(own_port_bws, other_bws, rate_as_of):
+    """ใบที่ ต้นทาง -> ปลายทาง มีอยู่ในหน้าค่าขนส่งส่งออก (ใบราคาที่ใช้ ณ rate_as_of)
+
+    รายงานส่งออกนับเฉพาะเส้นทางที่ตั้งราคาไว้แล้ว เส้นทางที่ไม่มีในหน้านั้น
+    (ขายออกจากกองสต๊อกท่าเรือ / เหมืองชั่งให้ตัวเอง / โอนระหว่างเหมือง / ลูกค้าภายนอก)
+    ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก ถ้าปล่อยไว้จะไปกองเป็นคำเตือนแดง "ยังไม่ได้ตั้งราคา"
+    จนแยกไม่ออกว่าอันไหนต้องทำจริง (สรุปร่วมกับฝ่ายบัญชี 2026-10)
+    เที่ยวที่ถูกตัดตรงนี้ยังเตือนอยู่ในกล่องสีเทา ดู _exportDocumentOffRouteSummary
+
+    ดูแค่คู่ ต้นทาง + ปลายทาง ไม่ดูทีม : เส้นทางมีแล้วแต่ทีมไม่อยู่ในสัญญา ยังนับเข้ารายงาน
+    และไปขึ้นกล่องแดง เพราะเป็นเที่ยวที่ต้องจ่ายจริง แค่ยังไม่ได้ใส่ทีม
+
+    ใช้ใบราคาชุดเดียวกับที่ไฟล์ใช้ (InternationalFreightRate.effectiveOn) ใบที่ยังไม่อนุมัติไม่นับ
+    แปลงแถว map -> รหัสลูกค้า / บริษัท ด้วยตัวเดียวกับ _exportDocumentRows (_exportDocumentNameMaps)
+    ต้นทาง/ปลายทางที่ได้จึงตรงกับคอลัมน์ B/C ในไฟล์เสมอ
+      ใบท่าเรือเรา : ตาชั่ง = ปลายทาง | ลูกค้า = ต้นทาง
+      ใบเหมืองเรา  : ตาชั่ง = ต้นทาง  | ลูกค้า = ปลายทาง
+    ต้องแยกตาชั่งสองฝั่งให้ขาด ไม่งั้นเส้น 39 ศิลาทอง -> ครีเอทีฟ จะไปจับใบที่ครีเอทีฟขายให้ 39 ศิลาทอง ด้วย
+    """
+    routes = {(rate.origin_id, rate.destination_id)
+              for rate in InternationalFreightRate.effectiveOn(rate_as_of)
+              if rate.origin_id and rate.destination_id}
+    nothing = Q(pk__in=[])
+    if not routes:
+        return nothing
+
+    _, _, map_id_by_customer, map_id_by_company = _exportDocumentNameMaps()
+    customers_by_map = defaultdict(set)
+    for customer_id, map_id in map_id_by_customer.items():
+        customers_by_map[map_id].add(customer_id)
+    companies_by_map = defaultdict(set)
+    for company_id, map_id in map_id_by_company.items():
+        companies_by_map[map_id].add(company_id)
+    stations_by_company = defaultdict(list)
+    for station_id, company_id in (BaseWeightStation.objects
+                                   .filter(id__in=list(own_port_bws) + list(other_bws))
+                                   .values_list('id', 'company_id')):
+        stations_by_company[company_id].append(station_id)
+
+    own = set(own_port_bws)
+    other = set(other_bws)
+    port_side = defaultdict(set)   # map id ปลายทาง -> รหัสลูกค้าของต้นทาง (ใบท่าเรือ)
+    mine_side = defaultdict(set)   # map id ต้นทาง  -> รหัสลูกค้าของปลายทาง (ใบเหมือง)
+    for origin_id, dest_id in routes:
+        port_side[dest_id] |= customers_by_map.get(origin_id, set())
+        mine_side[origin_id] |= customers_by_map.get(dest_id, set())
+
+    def stations_of(map_id, allowed):
+        return sorted(s for c in companies_by_map.get(map_id, ())
+                      for s in stations_by_company.get(c, ()) if s in allowed)
+
+    condition = nothing
+    for side, allowed in ((port_side, own), (mine_side, other)):
+        for map_id, customers in side.items():
+            stations = stations_of(map_id, allowed)
+            if stations and customers:
+                condition |= Q(bws_id__in=stations, customer_id__in=sorted(customers))
+    return condition
+
+
+def _exportDocumentOffRouteSummary(trip_rows):
+    """เที่ยวที่ไม่นับเพราะเส้นทางไม่มีในหน้าค่าขนส่ง จัดกลุ่ม "ปลายทาง แล้วแจกแจงต้นทาง"
+    รูปแบบเดียวกับกล่องเตือนเดิม คืน [{'destination', 'trips', 'origins': [{'name', 'trips'}]}]"""
+    pending = defaultdict(lambda: defaultdict(int))
+    for row in trip_rows:
+        pending[row['destination'] or '-'][row['origin'] or '-'] += 1
+    result = [{'destination': destination,
+               'trips': sum(origins.values()),
+               'origins': [{'name': name, 'trips': n}
+                           for name, n in sorted(origins.items(), key=lambda x: -x[1])]}
+              for destination, origins in pending.items()]
+    result.sort(key=lambda x: -x['trips'])
+    return result
+
+
 def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_port_customers):
     """เที่ยวทั้งหมดที่เข้าข่ายรายงานส่งออก (ทุกเดือน ทุกต้นทาง ยังไม่ตัดใบยกเลิก)
 
@@ -13263,7 +13414,10 @@ def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_p
         _exportDocumentCarryQ(),
     # ใบที่หน้างานเป็น "ใช้ภายใน" หรือ "อนุเคราะห์" ไม่ใช่เที่ยวที่ต้องจ่ายค่าขนส่งส่งออก
     # แถวที่ไม่ได้ระบุหน้างาน (site_id เป็น NULL) ยังอยู่ครบ เพราะ exclude ของ Django ไม่ตัด NULL
-    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS)
+    ).exclude(site_id__in=EXPORT_DOC_EXCLUDED_SITE_IDS
+    # สินค้าที่ไม่ใช่หิน (น้ำมัน / ปุ๋ย / เศษเหล็ก ฯลฯ) ไม่ใช่เที่ยวขนหิน ดู EXPORT_DOC_EXCLUDED_STONE_IDS
+    # ใบที่ไม่ได้ระบุชนิด (ทั้งรหัสและชื่อว่าง) ยังอยู่ เพราะ exclude ของ Django ไม่ตัด NULL
+    ).exclude(_exportDocumentExcludedStoneQ())
     # ตัดท่าเรือ -> ท่าเรือ และใบเหมืองที่ซ้ำกับใบท่าเรือ ตั้งแต่ชั้น query
     # หน้าเว็บ (ยอดรวม/แบ่งหน้า) ไฟล์ export และไฟล์แก้ไขรายเที่ยว จะได้ใช้ชุดเดียวกันเสมอ
     duplicate_q = _exportDocumentDuplicateTicketsQ(own_port_bws, own_port_customers)
@@ -13386,6 +13540,15 @@ def _exportDocumentQuerySet(request):
     if selected_date_to:
         qs = qs.filter(date__lte=datetime.strptime(selected_date_to, '%Y-%m-%d').date())
 
+    # ดึงเลขที่ใบของเดือนนี้ครั้งเดียว แล้วให้ query ที่เหลือทั้งหน้าค้นด้วยเลขที่ใบ (primary key)
+    # เงื่อนไขของ base_qs มี OR หลายชั้น MySQL เลยไม่ยอมใช้ index แล้วไล่ทั้งตาราง (~1.1 ล้านแถว)
+    # ~3 วินาทีต่อ query ทั้งที่เดือนหนึ่งมีไม่กี่พันใบ หน้านี้ยิงแบบนั้น 6-7 ครั้ง (สรุป / dropdown /
+    # คำเตือน / กล่องเทา / แบ่งหน้า) รวมเกือบ 25 วินาที พอเหลือไล่ครั้งเดียว ที่เหลือแทบไม่กินเวลา
+    # ทำเฉพาะตอนเลือกเดือน (ปกติเลือกเสมอ) ถ้าไม่เลือกเดือน ใบทั้งหมดมีเป็นแสน เก็บเป็นรายการไม่ไหว
+    if selected_month:
+        scope_ids = list(qs.order_by().values_list('weight_id', flat=True))
+        qs = Weight.objects.filter(weight_id__in=scope_ids)
+
     # ตัวเลือกใน dropdown ทีม/ชนิดหิน คิดจากเดือน+ช่วงวันที่ที่เลือกเท่านั้น
     # ถ้าใช้ base_qs (ทุกเดือน) จะเป็น DISTINCT ทั้งช่วงข้อมูล ~1.5 วินาทีต่อ dropdown
     # และต้องแยกจาก qs ด้วย ไม่งั้นพอเลือกทีมแล้ว dropdown จะเหลือทีมเดียว
@@ -13406,6 +13569,17 @@ def _exportDocumentQuerySet(request):
         qs = qs.filter(is_cancel=False)
     if carry_empty_only:
         qs = qs.filter(_exportDocumentCarryEmptyQ())
+
+    # ชั้นสุดท้าย : ต้นทาง -> ปลายทาง ต้องมีในหน้าค่าขนส่งส่งออก ดู _exportDocumentRouteQ
+    # ทำหลังตัวกรองอื่นทั้งหมด เพราะต้องรู้เดือนก่อนถึงจะเลือกใบราคาได้
+    # และเที่ยวที่หลุดตรงนี้ต้องผ่านตัวกรองบนจอชุดเดียวกัน กล่องเตือนจะได้ตรงกับที่เลือกไว้
+    route_q = _exportDocumentRouteQ(own_port_bws, other_bws,
+                                    _exportDocumentRateAsOf(selected_month))
+    off_route_qs = (qs.exclude(route_q)
+                    .select_related('bws', 'bws__company')
+                    .order_by('-date', '-weight_id'))
+    qs = qs.filter(route_q)
+    option_qs = option_qs.filter(route_q)
 
     # เรียงวันที่ล่าสุดขึ้นก่อน ทั้งหน้าเว็บและ sheet บันทึกรายเที่ยว
     # การดันกลุ่ม "ไม่ระบุทีม" ขึ้นก่อน ทำที่หน้าสรุปจ่ายรถร่วมแทน (ดู _exportDocumentHoistNoTeam)
@@ -13433,6 +13607,8 @@ def _exportDocumentQuerySet(request):
         'carry_empty_only': carry_empty_only,
         'base_qs': base_qs,
         'option_qs': option_qs,
+        # เที่ยวที่ผ่านตัวกรองบนจอแต่เส้นทางไม่มีในหน้าค่าขนส่ง ใช้ทำกล่องเตือนสีเทา
+        'off_route_qs': off_route_qs,
         'own_port_bws': own_port_bws,
         'own_port_customers': own_port_customers,
         'export_customers': export_customers,
@@ -13539,6 +13715,21 @@ def _exportDocumentRows(weights, own_port_bws=None, own_port_customers=None):
     return rows
 
 
+# ปุ่มในกล่องเตือนหน้า /exportDocument/ (?problem=) : กรองตารางรายเที่ยวให้เหลือเฉพาะเที่ยวกลุ่มนั้น
+# ค่า -> (ป้ายที่โชว์ตอนกรองอยู่, เงื่อนไขของแถว) ใช้สถานะที่ _exportDocumentAssignWeightCarried เติมไว้
+# off_route ไม่มีเงื่อนไขแถว เพราะเป็นเที่ยวที่อยู่นอกรายงาน ใช้ off_route_qs ตรง ๆ
+EXPORT_DOC_PROBLEM_FILTERS = {
+    'unpaid': ('เที่ยวที่คิดเงินไม่ได้ (ขึ้นเงิน 0 ในไฟล์)',
+               lambda r: r.get('wc_status') in ('no_contract', 'out_of_range')),
+    'no_contract': ('มีเส้นทางแล้ว แต่ทีมรถนี้ยังไม่อยู่ในสัญญา',
+                    lambda r: r.get('wc_status') == 'no_contract'),
+    'out_of_range': ('ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วง',
+                     lambda r: r.get('wc_status') == 'out_of_range'),
+    'no_team': ('ตอนชั่งไม่ได้เลือกทีมรถ', lambda r: r.get('team_missing')),
+    'off_route': ('เส้นทางยังไม่มีในหน้าค่าขนส่ง (ไม่นับในรายงาน)', None),
+}
+
+
 @login_required(login_url='login')
 def viewExportDocument(request):
     #active : active คือแท็ปบริษัท active
@@ -13586,12 +13777,7 @@ def viewExportDocument(request):
                                   .annotate(trips=Count('weight_id'))
                                   .order_by('-trips', 'bws_id'))
 
-    p = Paginator(qs, 100)
-    page = request.GET.get('page')
-    trips = p.get_page(page)
-
     own_port_customers = filters['own_port_customers']
-    rows = _exportDocumentRows(trips, own_port_bws, own_port_customers)
 
     # เช็คความครอบคลุมของตารางอัตราค่าขนส่ง จากทั้งเดือน ไม่ใช่แค่หน้าที่เปิดอยู่
     # จะได้รู้ก่อนกดปุ่มว่าไฟล์ที่ได้จะมีตัวเงินหรือจะขึ้น 0
@@ -13618,10 +13804,35 @@ def viewExportDocument(request):
         'unflagged_destinations': _exportDocumentUnflaggedDestinations(
             _exportDocumentOtherBwsIds(), filters['export_customers'], selected_month),
     })
+    # เที่ยวที่เส้นทางไม่มีในหน้าค่าขนส่ง : ไม่นับในรายงาน แต่ต้องโชว์ไว้ ไม่ให้หายเงียบ
+    off_route_rows = _exportDocumentRows(filters['off_route_qs'], own_port_bws, own_port_customers)
+    rate_stats['off_route_trips'] = len(off_route_rows)
+    rate_stats['off_route'] = _exportDocumentOffRouteSummary(off_route_rows)
+    # ปุ่มในกล่องเตือน : กรองเฉพาะ "ตารางรายเที่ยว" กล่องเตือน ตัวเลขสรุป และปุ่ม export
+    # ยังคิดจากทั้งชุดเหมือนเดิม จะได้ไม่หลอกว่าปัญหาหายไปแล้ว และไฟล์ที่โหลดยังครบทั้งเดือน
+    # (ปุ่ม export เรียก _exportDocumentQuerySet ซึ่งไม่รู้จัก ?problem= อยู่แล้ว)
+    problem = request.GET.get('problem') or ''
+    if problem not in EXPORT_DOC_PROBLEM_FILTERS:
+        problem = ''
+    table_qs = qs
+    if problem == 'off_route':
+        table_qs = filters['off_route_qs']
+    elif problem:
+        match = EXPORT_DOC_PROBLEM_FILTERS[problem][1]
+        table_qs = qs.filter(weight_id__in=[r['weight_id'] for r in all_rows if match(r)])
+    # ลิงก์ของปุ่มต้องกลับไปหน้า 1 เสมอ ไม่งั้นกดจากหน้า 5 ของทั้งเดือนจะไปตกหน้าที่ไม่มีอยู่
+    problem_query = request.GET.copy()
+    problem_query.pop('page', None)
+    problem_query.pop('problem', None)
+
+    p = Paginator(table_qs, 100)
+    page = request.GET.get('page')
+    trips = p.get_page(page)
+    rows = _exportDocumentRows(trips, own_port_bws, own_port_customers)
     # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
 
-    # ไฟล์ template รับได้ 3000 เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
+    # ไฟล์ template รับได้ EXPORT_DOC_MAX_TRIPS เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
     over_limit = (summary['trip_count'] or 0) > EXPORT_DOC_MAX_TRIPS
 
     # ตัวเลือกตาชั่ง : ต้องมีทั้งของท่าเรือ (เคส 1) และของเหมือง (เคส 2)
@@ -13685,6 +13896,10 @@ def viewExportDocument(request):
         'over_limit': over_limit,
         'max_trips': EXPORT_DOC_MAX_TRIPS,
         'rate_stats': rate_stats,
+        'problem': problem,
+        'problem_label': EXPORT_DOC_PROBLEM_FILTERS[problem][0] if problem else '',
+        'problem_count': p.count,
+        'problem_query': problem_query.urlencode(),
         # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
         'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
     }
@@ -13809,7 +14024,14 @@ def _weightTableIncompleteData(company_code, month):
     items, counts = _exportDocumentIncomplete([])
     if month:
         y, m = month.split('-')
-        month_qs = (tab_qs.filter(date__year=int(y), date__month=int(m))
+        # นับเฉพาะเส้นทางที่มีในหน้าค่าขนส่ง ให้ตรงกับหน้า export ดู _exportDocumentRouteQ
+        route_q = _exportDocumentRouteQ(own_port_bws, _exportDocumentOtherBwsIds(),
+                                        _exportDocumentRateAsOf(month))
+        # ไล่ตารางครั้งเดียวเอาเลขที่ใบ แล้วค่อยกรองเส้นทาง เหตุผลเดียวกับใน _exportDocumentQuerySet
+        month_ids = list(tab_qs.filter(date__year=int(y), date__month=int(m))
+                         .order_by().values_list('weight_id', flat=True))
+        month_qs = (Weight.objects.filter(weight_id__in=month_ids)
+                    .filter(route_q)
                     .select_related('bws', 'bws__company')
                     .order_by('-date', '-weight_id'))
         rows = _exportDocumentRows(month_qs, own_port_bws, own_port_customers)
@@ -14246,6 +14468,14 @@ def exportExcelExportDocument(request):
             team_cell.fill = no_team_fill
             team_cell.font = no_team_font
             has_no_team = True
+        # มีสัญญาแต่น้ำหนักไม่เข้าช่วง : ทาแดงแบบเดียวกับ "ไม่ระบุทีม"
+        # E ปล่อยว่าง (เป็นส่วนหนึ่งของคีย์หาราคา และมี dropdown ให้บัญชีเลือกช่วงเอง) ทาแค่พื้น
+        # M เป็นสูตรของ template อยู่แล้ว เปลี่ยนแค่สี ไม่แตะค่า
+        if r.get('wc_status') == 'out_of_range':
+            worksheet.cell(row=excel_row, column=5).fill = no_team_fill
+            pay_cell = worksheet.cell(row=excel_row, column=13)
+            pay_cell.fill = no_team_fill
+            pay_cell.font = no_team_font
         worksheet.cell(row=excel_row, column=7).value = r['payer'] or None            # G นามที่จ่าย (ยังว่าง)
         worksheet.cell(row=excel_row, column=8).value = r['car_registration'] or None # H ทะเบียนรถ
         worksheet.cell(row=excel_row, column=9).value = r['doc_id'] or None           # I เลขที่ชั่ง

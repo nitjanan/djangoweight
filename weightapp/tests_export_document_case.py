@@ -16,9 +16,11 @@ from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
 
 from weightapp import views
-from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer, BaseCustomer,
-                              BaseSite, BaseWeightStation, BaseWeightType, InternationalFreightRate,
-                              UserProfile, Weight)
+from weightapp.models import (CarryingweightRate, BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer,
+                              BaseCompanyMapCustomerAlias, BaseCustomer,
+                              BaseSite, BaseStoneType, BaseWeightStation, BaseWeightType,
+                              INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRate,
+                              InternationalFreightRateStatus, UserProfile, Weight)
 
 OWN = views.EXPORT_DOC_CASE_OWN_PORT
 OTHER = views.EXPORT_DOC_CASE_OTHER_PORT
@@ -58,7 +60,8 @@ class ExportDocumentCaseTests(TestCase):
         # ปลายทางในตารางราคา = ลูกค้าที่ใบเหมืองจะเข้ารายงานได้
         for dest in ('06-V-013', '06-V-018', '06-V-900'):
             InternationalFreightRate.objects.create(
-                origin=cls.map_rows['06-V-011'], destination=cls.map_rows[dest])
+                origin=cls.map_rows['06-V-011'], destination=cls.map_rows[dest],
+                effective_date=INTERNATIONAL_FREIGHT_RATE_FIRST_DATE)
 
         # วันเปิดใช้ตาชั่ง = ใบแรกสุดของตาชั่งท่าเรือนั้น : สุราษฎร์ 1/7/2025 · กระบี่ 6/7/2026
         cls.trip(1, date(2025, 7, 1), 'P1V', '06-V-011', '44.000', '43.800')
@@ -267,6 +270,39 @@ class ExportDocumentCaseTests(TestCase):
         self.assertEqual(self.ids(own), {1, 2, 10, 21, 22})
         self.assertEqual(self.ids(other), {30})
 
+    # ---------- ชนิดสินค้า : น้ำมัน ----------
+
+    def test_oil_and_fertilizer_are_dropped(self):
+        """น้ำมัน / ปุ๋ย ไม่ใช่เที่ยวขนหิน ตัดทั้งใบที่ผูกรหัสและใบเก่าที่มีแต่ชื่อ (รวมชื่อสะกดผิด)"""
+        BaseStoneType.objects.create(base_stone_type_id='45ST', base_stone_type_name='น้ำมัน')
+        BaseStoneType.objects.create(base_stone_type_id='46ST', base_stone_type_name='น้ำมันปาล์ม')
+        BaseStoneType.objects.create(base_stone_type_id='001S', base_stone_type_name='ปุ๋ย')
+        BaseStoneType.objects.create(base_stone_type_id='40ST', base_stone_type_name='ปุ๋ยโดโลไมท์ 80 เมช')
+        BaseStoneType.objects.create(base_stone_type_id='61ST', base_stone_type_name='แอมโมเนียมไนเตรต')
+        BaseStoneType.objects.create(base_stone_type_id='37ST', base_stone_type_name='ขี้แร่')
+        BaseStoneType.objects.create(base_stone_type_id='39ST', base_stone_type_name='แอนไฮไดรต์ 2 นิ้ว')
+        BaseStoneType.objects.create(base_stone_type_id='01ST', base_stone_type_name='หิน 3/4')
+        for weight_id, stone_id, stone_name in ((50, '45ST', 'น้ำมัน'),
+                                                (51, '46ST', 'น้ำมันปาล์ม'),
+                                                (52, None, 'น้ำมัน'),          # ใบเก่า ไม่ได้ผูกรหัส
+                                                (55, None, 'นำมัน'),           # สะกดผิด
+                                                (56, '001S', 'ปุ๋ย'),
+                                                (57, '40ST', 'ปุ๋ยโดโลไมท์ 80 เมช'),
+                                                (58, None, 'ปุ๋ยน้ำ bulk'),
+                                                (59, '61ST', 'แอมโมเนียมไนเตรต'),
+                                                (60, '37ST', 'ขี้แร่'),              # ยังนับ
+                                                (61, None, 'เศษเหล็ก'),
+                                                (62, None, 'บริการชั่งน้ำหนัก'),
+                                                (63, '39ST', 'แอนไฮไดรต์ 2 นิ้ว'),   # แร่ ยังนับ
+                                                (53, '01ST', 'หิน 3/4'),
+                                                (54, None, None)):             # ไม่ได้ระบุชนิด
+            self.trip(weight_id, date(2026, 8, 14), 'W1A', '06-V-900', '42.000', None)
+            Weight.objects.filter(weight_id=weight_id).update(stone_type_id=stone_id,
+                                                              stone_type_name=stone_name)
+        kept = self.ids(self.querySet(month='2026-08')[0])
+        self.assertTrue({53, 54, 60, 63} <= kept)
+        self.assertFalse({50, 51, 52, 55, 56, 57, 58, 59, 61, 62} & kept)
+
     # ---------- ประเภทการบรรทุกว่าง ----------
 
     def addCarryTrips(self):
@@ -335,6 +371,95 @@ class ExportDocumentCaseTests(TestCase):
         qs, _, _ = self.querySet(month='2025-06', case=OTHER)
         self.assertEqual(self.ids(qs), set())
 
+    # ---------- นับเฉพาะเส้นทางที่มีในหน้าค่าขนส่ง ----------
+
+    def addOffRouteTrips(self):
+        """เที่ยวที่ผ่านกติกาใบชั่งทุกข้อ แต่ ต้นทาง -> ปลายทาง ไม่มีใบราคาที่ใช้อยู่"""
+        BaseCustomer.objects.create(customer_id='07-V-001', customer_name='เงินสด')
+        self.trip(60, date(2026, 8, 12), 'P1V', '07-V-001', '20.000', None)    # ขายออกจากกองสต๊อก
+        self.trip(61, date(2026, 8, 12), 'W1A', '06-V-011', '41.000', None)    # เหมืองชั่งให้ตัวเอง
+        Weight.objects.create(weight_id=62, date=date(2026, 8, 12), bws_id='P1V', customer_id=None,
+                              carry_type_name=views.EXPORT_DOC_CARRY_TYPE, is_cancel=False,
+                              weight_total=Decimal('20.000'))                   # ไม่ระบุลูกค้า
+        # ปลายทางที่ติ๊กส่งออกแล้ว แต่มีแค่ใบราคาที่ยังรออนุมัติ = ยังไม่มีเส้นทาง
+        BaseCustomer.objects.create(customer_id='06-V-901', customer_name='ท่าเรือใหม่')
+        new_port = BaseCompanyMapBaseCustomer.objects.create(
+            name='ท่าเรือใหม่', base_customer_id='06-V-901', is_export_destination=True)
+        InternationalFreightRate.objects.create(
+            origin=self.map_rows['06-V-011'], destination=new_port,
+            effective_date=INTERNATIONAL_FREIGHT_RATE_FIRST_DATE,
+            status=InternationalFreightRateStatus.PENDING)
+        self.trip(63, date(2026, 8, 12), 'W1A', '06-V-901', '42.000', None)
+
+    def test_only_routes_in_freight_rate_page_are_counted(self):
+        self.addOffRouteTrips()
+        qs, filters, _ = self.querySet(month='2026-08')
+        self.assertEqual(self.ids(qs), {10, 30})
+        self.assertEqual(self.ids(filters['off_route_qs']), {60, 61, 62, 63})
+
+    def test_route_without_approved_rate_moves_in_once_approved(self):
+        self.addOffRouteTrips()
+        InternationalFreightRate.objects.filter(destination__base_customer_id='06-V-901').update(
+            status=InternationalFreightRateStatus.APPROVED)
+        qs, filters, _ = self.querySet(month='2026-08')
+        self.assertIn(63, self.ids(qs))
+        self.assertNotIn(63, self.ids(filters['off_route_qs']))
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_page_lists_off_route_trips_in_grey_box(self):
+        self.addOffRouteTrips()
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        session = self.client.session
+        session['company_code'] = 'ROI'
+        session.save()
+
+        page = self.client.get('/exportDocument/', {'month': '2026-08'})
+        self.assertEqual(page.status_code, 200)
+        stats = page.context['rate_stats']
+        self.assertEqual(stats['off_route_trips'], 4)
+        self.assertEqual(stats['wc_total'], 2)           # นับแค่เที่ยวในเส้นทาง
+        by_dest = {d['destination']: d['trips'] for d in stats['off_route']}
+        self.assertEqual(by_dest['ท่าเรือสุราษฎร์'], 2)    # เงินสด + ไม่ระบุลูกค้า
+        html = page.content.decode('utf-8')
+        self.assertIn('เส้นทางยังไม่มีในหน้าค่าขนส่ง', html)
+        self.assertIn('ifr-issue-info', html)
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_warning_buttons_filter_only_the_trip_table(self):
+        """ปุ่มในกล่องเตือน : ตารางเหลือเฉพาะกลุ่มนั้น แต่ตัวเลขสรุปและกล่องเตือนยังเป็นทั้งชุด"""
+        self.addOffRouteTrips()
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        session = self.client.session
+        session['company_code'] = 'ROI'
+        session.save()
+
+        def table(problem):
+            page = self.client.get('/exportDocument/', {'month': '2026-08', 'problem': problem, 'page': '3'})
+            self.assertEqual(page.status_code, 200)
+            self.assertEqual(page.context['summary']['trip_count'], 2)       # ตัวเลขสรุปไม่เปลี่ยน
+            self.assertEqual(page.context['rate_stats']['off_route_trips'], 4)
+            return page, {r['weight_id'] for r in page.context['rows']}
+
+        # ใบราคาในเทสต์ยังไม่มีทีม : ทุกเที่ยวในเส้นทางจึงเป็น "ทีมไม่อยู่ในสัญญา" และไม่มีทีม
+        page, ids = table('no_contract')
+        self.assertEqual(ids, {10, 30})
+        self.assertEqual(page.context['problem_count'], 2)
+        self.assertIn('กำลังดูเฉพาะ', page.content.decode('utf-8'))
+        self.assertEqual(table('unpaid')[1], {10, 30})
+        self.assertEqual(table('no_team')[1], {10, 30})
+        self.assertEqual(table('out_of_range')[1], set())
+        self.assertEqual(table('off_route')[1], {60, 61, 62, 63})
+        # ค่าที่ไม่รู้จัก = ไม่กรอง
+        page, ids = table('xxx')
+        self.assertEqual(page.context['problem'], '')
+        self.assertEqual(ids, {10, 30})
+        # ลิงก์ของปุ่มไม่พา page เดิมไปด้วย
+        self.assertNotIn('page=3', page.context['problem_query'])
+
     # ---------- ช่องน้ำหนักในไฟล์แก้ไขรายเที่ยว ----------
 
     def test_ton_attr_follows_where_it_was_weighed(self):
@@ -370,7 +495,8 @@ class ExportDocumentCustomerAliasTests(TestCase):
         cls.spt = BaseCompanyMapBaseCustomer.objects.create(
             name='สุราษฎร์พอร์ท', base_customer_id='06-V-024', is_export_destination=True)
         # ใบราคาผูกกับรหัสหลัก 06-V-024 อย่างเดียว
-        InternationalFreightRate.objects.create(origin=cls.origin, destination=cls.spt)
+        InternationalFreightRate.objects.create(origin=cls.origin, destination=cls.spt,
+                                                effective_date=INTERNATIONAL_FREIGHT_RATE_FIRST_DATE)
 
         for weight_id, customer in ((1, '06-V-024'), (2, '77-V-007')):
             Weight.objects.create(
@@ -428,3 +554,49 @@ class ExportDocumentCustomerAliasTests(TestCase):
             name='ท่าเรือเรา', base_customer_id='06-V-013', base_company=surat)
         BaseCompanyMapCustomerAlias.objects.create(map_row=port_row, base_customer_id='77-V-013')
         self.assertIn('77-V-013', views._exportDocumentOwnPortCustomers())
+
+
+class ExportDocumentDayRangesTests(TestCase):
+    """ย่อวันที่ที่ขาดราคาน้ำมันในคำเตือน ให้คนเอาไปกรอกต่อได้ทันที"""
+
+    def test_consecutive_days_collapse_to_one_range(self):
+        days = {date(2026, 9, d) for d in range(1, 16)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '1-15 ก.ย. 69')
+
+    def test_gaps_split_ranges_and_single_days(self):
+        days = {date(2026, 9, d) for d in (1, 2, 3, 5, 7, 8)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '1-3, 5, 7-8 ก.ย. 69')
+
+    def test_two_months_label_each_range(self):
+        days = {date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '30 ก.ย. 69, 1-2 ต.ค. 69')
+
+    def test_empty(self):
+        self.assertEqual(views._exportDocumentDayRanges(set()), '')
+
+
+class ExportDocumentContractStatusTests(TestCase):
+    """เที่ยวในเส้นทางที่มีแล้ว : ทีมไม่อยู่ในสัญญา (กล่องแดง) / น้ำหนักไม่เข้าช่วง (ทำสีแดง)"""
+
+    def row(self, team_id, team, pay_weight):
+        return {'origin_map_id': 1, 'destination_map_id': 2, 'team_id': team_id, 'team': team,
+                'origin': 'เหมือง', 'destination': 'ท่าเรือ', 'pay_weight': Decimal(pay_weight),
+                'weight_carried': None}
+
+    def test_status_per_trip(self):
+        band = CarryingweightRate(name='0-35', min_weight=Decimal('0'), max_weight=Decimal('35'))
+        key = {(1, 2, 10): [band]}
+        rows = [self.row(10, 'ทีม ก', '30'), self.row(10, 'ทีม ก', '42'), self.row(11, 'ทีม ข', '30')]
+        counts = views._exportDocumentAssignWeightCarried(rows, key)
+        self.assertEqual(counts, (1, 1, 1))
+        self.assertEqual([r['wc_status'] for r in rows], ['filled', 'out_of_range', 'no_contract'])
+        self.assertEqual(rows[0]['weight_carried'], '0-35')
+
+    def test_missing_contract_lists_teams_per_route(self):
+        key = {(1, 2, 10): {'x'}}
+        rows = [self.row(10, 'ทีม ก', '30'), self.row(11, 'ทีม ข', '30'),
+                self.row(11, 'ทีม ข', '31'), self.row(12, 'ทีม ค', '30')]
+        missing = views._exportDocumentMissingRoutes(rows, key)
+        self.assertEqual(missing, [{'route': 'เหมือง - ท่าเรือ', 'trips': 3,
+                                    'teams': [{'name': 'ทีม ข', 'trips': 2},
+                                              {'name': 'ทีม ค', 'trips': 1}]}])

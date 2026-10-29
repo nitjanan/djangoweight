@@ -12,6 +12,7 @@ from django.dispatch import receiver
 import datetime
 import hashlib
 import base64
+import re
 from django.apps import apps
 
 def hash_password_sha1(password):
@@ -20,6 +21,12 @@ def hash_password_sha1(password):
 
 def default_userscale_permission():
     return hash_password_sha1('weight')
+
+# ผลลัพธ์ของ hash_password_sha1 = base64 ของ SHA1 (20 bytes) ยาว 28 ตัวอักษรเสมอ ลงท้าย '='
+_SHA1_B64_RE = re.compile(r'^[A-Za-z0-9+/]{27}=$')
+
+def is_sha1_b64(value):
+    return bool(value) and bool(_SHA1_B64_RE.match(value))
 
 def get_first_name(self):
     return self.first_name
@@ -1026,6 +1033,19 @@ class UserScale(models.Model):
     class Meta:
         verbose_name = 'ผู้ชั่ง'
         verbose_name_plural = 'ข้อมูลผู้ชั่ง'
+
+    def save(self, *args, **kwargs):
+        # ตาชั่ง (C#) เทียบรหัสผ่าน/สิทธิ์ แบบ hash เสมอ ถ้าบันทึกเป็นข้อความธรรมดา (เช่น Import Excel ในหน้า admin
+        # ซึ่งไม่ผ่าน save_model) ผู้ชั่งจะ login ที่ตาชั่งไม่ได้ จึง hash ที่ model ทุกช่องทาง
+        if self.scale_id is not None:
+            self.scale_id = self.scale_id.strip()
+        if self.password == '':
+            self.password = None
+        if self.password and not is_sha1_b64(self.password):
+            self.password = hash_password_sha1(self.password)
+        if self.permission and not is_sha1_b64(self.permission):
+            self.permission = hash_password_sha1(self.permission)
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return self.scale_name

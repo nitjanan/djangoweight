@@ -13540,6 +13540,15 @@ def _exportDocumentQuerySet(request):
     if selected_date_to:
         qs = qs.filter(date__lte=datetime.strptime(selected_date_to, '%Y-%m-%d').date())
 
+    # ดึงเลขที่ใบของเดือนนี้ครั้งเดียว แล้วให้ query ที่เหลือทั้งหน้าค้นด้วยเลขที่ใบ (primary key)
+    # เงื่อนไขของ base_qs มี OR หลายชั้น MySQL เลยไม่ยอมใช้ index แล้วไล่ทั้งตาราง (~1.1 ล้านแถว)
+    # ~3 วินาทีต่อ query ทั้งที่เดือนหนึ่งมีไม่กี่พันใบ หน้านี้ยิงแบบนั้น 6-7 ครั้ง (สรุป / dropdown /
+    # คำเตือน / กล่องเทา / แบ่งหน้า) รวมเกือบ 25 วินาที พอเหลือไล่ครั้งเดียว ที่เหลือแทบไม่กินเวลา
+    # ทำเฉพาะตอนเลือกเดือน (ปกติเลือกเสมอ) ถ้าไม่เลือกเดือน ใบทั้งหมดมีเป็นแสน เก็บเป็นรายการไม่ไหว
+    if selected_month:
+        scope_ids = list(qs.order_by().values_list('weight_id', flat=True))
+        qs = Weight.objects.filter(weight_id__in=scope_ids)
+
     # ตัวเลือกใน dropdown ทีม/ชนิดหิน คิดจากเดือน+ช่วงวันที่ที่เลือกเท่านั้น
     # ถ้าใช้ base_qs (ทุกเดือน) จะเป็น DISTINCT ทั้งช่วงข้อมูล ~1.5 วินาทีต่อ dropdown
     # และต้องแยกจาก qs ด้วย ไม่งั้นพอเลือกทีมแล้ว dropdown จะเหลือทีมเดียว
@@ -14018,7 +14027,10 @@ def _weightTableIncompleteData(company_code, month):
         # นับเฉพาะเส้นทางที่มีในหน้าค่าขนส่ง ให้ตรงกับหน้า export ดู _exportDocumentRouteQ
         route_q = _exportDocumentRouteQ(own_port_bws, _exportDocumentOtherBwsIds(),
                                         _exportDocumentRateAsOf(month))
-        month_qs = (tab_qs.filter(date__year=int(y), date__month=int(m))
+        # ไล่ตารางครั้งเดียวเอาเลขที่ใบ แล้วค่อยกรองเส้นทาง เหตุผลเดียวกับใน _exportDocumentQuerySet
+        month_ids = list(tab_qs.filter(date__year=int(y), date__month=int(m))
+                         .order_by().values_list('weight_id', flat=True))
+        month_qs = (Weight.objects.filter(weight_id__in=month_ids)
                     .filter(route_q)
                     .select_related('bws', 'bws__company')
                     .order_by('-date', '-weight_id'))

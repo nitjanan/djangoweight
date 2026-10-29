@@ -11621,7 +11621,7 @@ def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
 
     billable_keys = ชุดคีย์ที่มีแถวอัตรารองรับจริง เที่ยวที่ไม่มีอัตราไม่ต้องเอามาคิด
 
-    คืน {คีย์ 5 ช่อง -> (ราคาเฉลี่ย, จำนวนวันที่มีราคา, จำนวนวันที่ขาดราคา)}
+    คืน {คีย์ 5 ช่อง -> (ราคาเฉลี่ย, จำนวนวันที่มีราคา, จำนวนวันที่ขาดราคา, ชุดวันที่ที่ขาดราคา)}
     """
     map_ids = {r['origin_map_id'] for r in trip_rows if r.get('origin_map_id')}
     if not map_ids:
@@ -11668,8 +11668,36 @@ def _exportDocumentFuelPriceByGroup(trip_rows, billable_keys=None):
             # วันที่วิ่งไม่มีราคาสักวัน ไม่หยิบวันอื่นมาแทน จะกลายเป็นตัวเลขที่อธิบายไม่ได้
             continue
         avg = sum(price_by_key[(company_id, d)] for d in priced) / Decimal(len(priced))
-        result[key] = (avg, len(priced), len(days) - len(priced))
+        missing_days = {d for d in days if (company_id, d) not in price_by_key}
+        result[key] = (avg, len(priced), len(missing_days), missing_days)
     return result
+
+
+def _exportDocumentDayRanges(days):
+    """ย่อชุดวันที่ให้อ่านง่าย เช่น {1,2,3,5,7,8} ของ ก.ย. -> '1-3, 5, 7-8 ก.ย.'
+    คนอ่านต้องเอาไปกรอกราคาน้ำมันทีละวัน ช่วงวันที่ต่อกันจึงย่อเป็นช่วงเดียว"""
+    days = sorted(days)
+    if not days:
+        return ''
+    groups = []
+    start = prev = days[0]
+    for d in days[1:]:
+        if (d - prev).days == 1 and d.month == prev.month:
+            prev = d
+            continue
+        groups.append((start, prev))
+        start = prev = d
+    groups.append((start, prev))
+
+    def month_th(d):
+        return '%s %s' % (EXPORT_DOC_THAI_MONTHS_SHORT[d.month - 1], str(d.year + 543)[-2:])
+
+    one_month = len({(d.year, d.month) for d in days}) == 1
+    parts = []
+    for a, b in groups:
+        text = str(a.day) if a == b else '%s-%s' % (a.day, b.day)
+        parts.append(text if one_month else '%s %s' % (text, month_th(a)))
+    return ', '.join(parts) + (' ' + month_th(days[0]) if one_month else '')
 
 
 # ---------- ราคาน้ำมันจากบิลเติมน้ำมันจริงในระบบ Express ----------
@@ -12348,6 +12376,10 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
     # ต้องบอกเหตุผลให้ถูก ไม่งั้นคนจะไปไล่ตรวจรหัสลูกค้าน้ำมันของทุกทีมโดยเปล่าประโยชน์
     express_down = bool(bill_stats.get('error')) and not from_snapshot
     snapshot_note = (' (จากสำเนาบิล ณ %s)' % bill_stats.get('snapshot_at_th')) if from_snapshot else ''
+    # เส้นทาง -> {'teams': ทีมที่ขาด, 'days': วันที่ที่ขาด}
+    # 1 เส้นทางมีได้หลายแถวอัตรา (แยกทีม / ช่วงแบก นน. / ชนิดหิน) ถ้าเตือนทีละแถว
+    # ชื่อเส้นทางจะขึ้นซ้ำหลายบรรทัดจนอ่านไม่ออก ทั้งที่สิ่งที่ต้องทำคือกรอกราคาของวันที่ขาดของต้นทางนั้น
+    partial_by_route = {}
 
     for row in rate_rows:
         route = row.pop('route')
@@ -12384,7 +12416,7 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
                 row['fuel_note'] = 'ไม่มีราคาน้ำมัน (ไม่มีบิลเติมน้ำมัน และวันที่วิ่งยังไม่ได้กรอกราคา)'
             continue
 
-        price, counted, missing = fuel
+        price, counted, missing = fuel[:3]
         # ปัดเหลือ 4 ตำแหน่ง : หารแล้วได้ทศนิยมยาวเหยียด อ่านไม่รู้เรื่อง
         # และไม่มีประโยชน์ เพราะสูตร K ในไฟล์ปัดเป็น 2 ตำแหน่งอยู่แล้ว
         row['average_fuel_price'] = price.quantize(Decimal('0.0001'))
@@ -12402,11 +12434,18 @@ def _exportDocumentFillFuelPrice(rate_rows, trip_rows, weight_carried_by_key,
             reason = 'ต่อ Express ไม่ได้' if express_down else 'ไม่มีบิลเติมน้ำมัน'
             row['fuel_note'] = '%s จึงเฉลี่ยราคารายวันจาก %s วันที่วิ่ง' % (reason, counted)
             if missing:
-                note = '%s : คิดจาก %s วัน ขาดราคาอีก %s วัน' % (
-                    route_label, counted, missing)
-                if note not in stats['fuel_partial']:
-                    stats['fuel_partial'].append(note)
-                row['fuel_note'] += ' (ขาดราคา %s วัน)' % missing
+                entry = partial_by_route.setdefault(route_label, {'teams': set(), 'days': set()})
+                entry['teams'].add(row['team'])
+                entry['days'] |= fuel[3]
+                row['fuel_note'] += ' (ขาดราคา %s วัน : %s)' % (
+                    missing, _exportDocumentDayRanges(fuel[3]))
+
+    for route_label in sorted(partial_by_route):
+        entry = partial_by_route[route_label]
+        note = '%s : ขาดราคาวันที่ %s' % (route_label, _exportDocumentDayRanges(entry['days']))
+        if len(entry['teams']) > 1:
+            note += ' (%s ทีม)' % len(entry['teams'])
+        stats['fuel_partial'].append(note)
 
 
 def _exportDocumentPickWeightCarried(options, pay_weight):
@@ -12836,6 +12875,10 @@ def _exportDocumentThaiMonth(month_str):
         return '%s %s' % (EXPORT_DOC_THAI_MONTHS[int(m) - 1], int(y) + 543)
     except (ValueError, TypeError, IndexError):
         return month_str
+
+
+EXPORT_DOC_THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+                                'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
 
 def _thaiDate(value):

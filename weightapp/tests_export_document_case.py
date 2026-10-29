@@ -16,7 +16,8 @@ from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
 
 from weightapp import views
-from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer, BaseCustomer,
+from weightapp.models import (BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer,
+                              BaseCompanyMapCustomerAlias, BaseCustomer,
                               BaseSite, BaseStoneType, BaseWeightStation, BaseWeightType,
                               InternationalFreightRate, UserProfile, Weight)
 
@@ -461,3 +462,22 @@ class ExportDocumentCustomerAliasTests(TestCase):
             name='ท่าเรือเรา', base_customer_id='06-V-013', base_company=surat)
         BaseCompanyMapCustomerAlias.objects.create(map_row=port_row, base_customer_id='77-V-013')
         self.assertIn('77-V-013', views._exportDocumentOwnPortCustomers())
+
+
+class ExportDocumentDayRangesTests(TestCase):
+    """ย่อวันที่ที่ขาดราคาน้ำมันในคำเตือน ให้คนเอาไปกรอกต่อได้ทันที"""
+
+    def test_consecutive_days_collapse_to_one_range(self):
+        days = {date(2026, 9, d) for d in range(1, 16)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '1-15 ก.ย. 69')
+
+    def test_gaps_split_ranges_and_single_days(self):
+        days = {date(2026, 9, d) for d in (1, 2, 3, 5, 7, 8)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '1-3, 5, 7-8 ก.ย. 69')
+
+    def test_two_months_label_each_range(self):
+        days = {date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2)}
+        self.assertEqual(views._exportDocumentDayRanges(days), '30 ก.ย. 69, 1-2 ต.ค. 69')
+
+    def test_empty(self):
+        self.assertEqual(views._exportDocumentDayRanges(set()), '')

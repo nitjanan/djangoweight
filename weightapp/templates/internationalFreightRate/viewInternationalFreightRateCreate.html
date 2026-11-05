@@ -4,11 +4,9 @@
 {% block css %}
 <link rel="stylesheet" href="{% static 'extensions/choices.js/public/assets/styles/choices.min.css' %}" />
 <style>
-  /* ตารางทีมมีหลายคอลัมน์จนกว้างเกินการ์ด ต้องเลื่อนแนวนอนได้ทุกขนาดจอ (.table-responsive)
-     แต่ overflow-x: auto ทำให้แกน y เป็น auto ตามไปด้วย dropdown ของ choices.js ที่กางลงมาจะโดนตัด
-     เดิมแก้ด้วยการปิด overflow บนจอใหญ่ ซึ่งทำให้ตารางล้นการ์ดออกไป
-     ตอนนี้ให้ dropdown ที่กางอยู่ลอยด้วย position: fixed แทน (ดู floatTeamDropdown)
-     กรอบที่เลื่อนได้จึงตัดมันไม่ได้ และยังลอยทับการ์ดด้านล่างได้เหมือนเดิม */
+  /* แถวทีมเป็นกล่อง 2 บรรทัดที่พับตามความกว้างจอ ไม่ต้องเลื่อนแนวนอนแล้ว
+     dropdown ของ choices.js ที่กางอยู่ยังลอยด้วย position: fixed (ดู floatTeamDropdown)
+     กันโดนกรอบใด ๆ ตัด และลอยทับการ์ดด้านล่างได้ */
   .ifr-team-table-wrap .choices__list--dropdown.ifr-dropdown-floating {
     position: fixed;
     z-index: 1060;
@@ -39,38 +37,139 @@
     max-width: min(360px, 90vw);
   }
 
-  /* จัดกลุ่มทีม : เส้นหนาคั่นระหว่างทีม ส่วนแถวที่เป็นทีมเดิมต่อจากด้านบนทำให้จางลง
-     ยังคงให้แก้ทีมในทุกแถวได้ตามเดิม แค่ทำให้เห็นด้วยตาว่าแถวไหนเป็นทีมเดียวกัน */
-  #ifr_team_rows tr.ifr-team-group-start > td {
-    border-top: 2px solid rgba(0, 0, 0, .18);
+  /* ---------- จัดกลุ่มทีม ----------
+     ของเดิมทุกแถวหน้าตาเหมือนกันหมด พอข้อมูลเยอะ ๆ แถวที่ 2-3 ของทีมหนึ่ง
+     จึงดูไม่ต่างจากแถวแรกของอีกทีม แยกไม่ออกว่าอันไหนเป็นของใคร
+     คราวนี้ทำให้ "ทีม" เป็นก้อนที่เห็นได้ด้วยตา :
+       - แถบสีประจำทีมด้านซ้าย + พื้นจางสีเดียวกัน ไล่สีวนตามลำดับทีมบนจอ
+       - หัวกลุ่มบอกชื่อทีม + จำนวนช่วงน้ำหนัก แสดงครั้งเดียวที่แถวแรกของทีม
+       - เว้นช่องว่างระหว่างทีม ก้อนของแต่ละทีมจึงไม่ไหลติดกัน
+       - แถวช่วงน้ำหนักถัดมาไม่โชว์ dropdown ทีมซ้ำ (ตัว <select> ยังอยู่ใน DOM
+         collectTeams จึงอ่านค่าได้เหมือนเดิม) เหลือเป็นป้ายเล็ก ๆ กด "เปลี่ยนทีม" ค่อยกางออกมา */
+  #ifr_team_rows td.ifr-band-cell {
+    padding: .75rem;
+    border-left: 5px solid var(--ifr-accent, #adb5bd);
+    background: var(--ifr-accent-soft, transparent);
+    /* พื้นหลังหยุดที่ขอบ padding เพื่อให้ border ใสของแถวสุดท้ายกลายเป็นช่องว่างจริง */
+    background-clip: padding-box;
   }
-  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell {
-    position: relative;
-    padding-left: 2rem;
+  /* <tr> ใส่ margin ไม่ได้ ใช้ border ใสหนา ๆ ที่แถวท้ายกลุ่มแทนเป็นช่องไฟระหว่างทีม */
+  #ifr_team_rows tr.ifr-group-end > td {
+    border-bottom: 12px solid transparent;
+    background-clip: padding-box;
   }
-  /* ทำให้จางเฉพาะกล่องที่แสดงชื่อทีม ห้ามใส่ opacity ที่ตัวช่อง td
-     opacity < 1 ทำให้ td กลายเป็น stacking context ของตัวเอง รายการ dropdown ของ choices.js
-     ที่อยู่ข้างในจะถูกขังไว้ใน td นั้น z-index ไม่มีผลข้ามออกไป
-     เลยโดนการ์ด "ความเห็นตอนขออนุมัติ" ด้านล่างทับ และรายการยังจางตามไปด้วย
-     .choices__inner เป็นพี่น้องกับรายการ dropdown ไม่ได้ครอบมัน จางตรงนี้จึงไม่กระทบ dropdown */
-  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell .choices__inner,
-  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell > select.form-select {
-    opacity: .55;
+  /* เส้นคั่นบาง ๆ ระหว่างช่วงน้ำหนักในทีมเดียวกัน ไม่หนาจนแข่งกับช่องไฟระหว่างทีม */
+  #ifr_team_rows tr.ifr-team-cont > td {
+    border-top: 1px dashed rgba(128, 128, 128, .3);
   }
-  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell .choices.is-open .choices__inner {
-    opacity: 1;
+  /* หัวกลุ่ม : ช่อง "ทีม" อยู่บนสุดของก้อน ทำหน้าที่เป็นชื่อกลุ่มในตัว
+     ไม่ต้องมีข้อความชื่อทีมซ้ำอีกชั้น และไม่ต้องไปแย่งที่ในตารางช่องกรอกด้านล่าง */
+  .ifr-group-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .65rem;
   }
+  .ifr-group-head .choices,
+  .ifr-group-head .ifr-team-select {
+    width: auto;
+    min-width: 20rem;
+    max-width: 100%;
+  }
+  .ifr-group-head .choices__inner,
+  .ifr-group-head .ifr-team-select {
+    font-weight: 700;
+    border-color: var(--ifr-accent, #ced4da);
+  }
+  .ifr-group-count {
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .12rem .55rem;
+    border-radius: 999px;
+    background: var(--ifr-accent, #adb5bd);
+    color: #fff;
+    white-space: nowrap;
+  }
+  /* หัวเรื่องของแถว : ทีมเดียวกันหลายช่วงน้ำหนักแล้วทุกแถวหน้าตาเหมือนกัน แยกไม่ออกว่าแถวไหนช่วงไหน
+     จึงยก "ประเภทการแบกน้ำหนัก" ออกจากกลางตารางขึ้นมาเป็นหัวเรื่องของแถว
+     คู่กับลำดับช่วง (ช่วงที่ 2/3) ให้รู้ว่ากำลังดูช่วงไหนของทีมนี้โดยไม่ต้องนับเอง */
+  .ifr-row-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .6rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .22);
+  }
+  .ifr-band-ordinal {
+    font-size: .8rem;
+    font-weight: 700;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    border: 1px solid var(--ifr-accent, #adb5bd);
+    color: var(--ifr-accent, inherit);
+    white-space: nowrap;
+  }
+  /* ทีมที่มีช่วงเดียวไม่ต้องขึ้น "ช่วงที่ 1/1" ให้รก groupTeamRows ปล่อยเป็นค่าว่างไว้ */
+  .ifr-band-ordinal:empty { display: none; }
+  .ifr-row-head .ifr-weight-carried {
+    width: auto;
+    min-width: 14rem;
+    max-width: 100%;
+    font-weight: 600;
+    border-color: var(--ifr-accent, #ced4da);
+  }
+  /* ป้ายของแถวต่อ : ย้ำว่ายังเป็นทีมเดิม พร้อมทางออกไว้เปลี่ยนทีมถ้ากดผิด */
+  .ifr-cont-chip {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+    font-size: .8rem;
+    margin-left: auto;
+    opacity: .7;
+  }
+  /* แถวต่อของทีมเดิมไม่ต้องโชว์หัวกลุ่มซ้ำ จนกว่าจะกด "เปลี่ยนทีม" แล้วค่อยกางช่องทีมออกมา
+     ตอนกางก็ไม่ต้องมีป้ายจำนวนช่วง เพราะเป็นข้อมูลของกลุ่ม ไม่ใช่ของแถวนี้ */
+  #ifr_team_rows tr.ifr-team-cont:not(.ifr-show-team) .ifr-group-head { display: none; }
+  #ifr_team_rows tr.ifr-team-cont .ifr-group-count { display: none; }
+  #ifr_team_rows tr.ifr-group-start .ifr-cont-chip { display: none; }
+  /* หัวกลุ่มกับหัวแถวติดกันอยู่แล้ว ไม่ต้องมีช่องไฟซ้อน */
+  #ifr_team_rows tr.ifr-group-start .ifr-group-head { margin-bottom: .45rem; }
+
+  /* ตัวเลขในหน้านี้อย่างมากหลักพัน (ค่าขนส่ง/ตัน, ราคาน้ำมัน/ลิตร) ช่องกว้างเต็มคอลัมน์จึงเปลืองที่เปล่า ๆ
+     ย่อให้พอดีค่าที่กรอกจริง แถวหนึ่งเลยใส่ได้หลายช่องโดยไม่ต้องพับบรรทัด และกวาดตาเทียบตัวเลขกันง่ายขึ้น */
+  #ifr_team_rows .ifr-num { max-width: 7rem; }
+  #ifr_team_rows .ifr-contract-date { max-width: 9.5rem; }
+  #ifr_team_rows td.ifr-band-actions {
+    width: 84px;
+    vertical-align: top;
+    padding: .75rem .5rem;
+  }
+  .ifr-field-label {
+    font-size: .95rem;
+    font-weight: 600;
+    opacity: .9;
+    margin-bottom: .2rem;
+    line-height: 1.25;
+  }
+  /* คำอธิบายหน่วยขึ้นบรรทัดของตัวเองใต้ชื่อช่อง ไม่โดนตัดทิ้งในช่องแคบ
+     ตั้งขนาดเป็น rem ตรง ๆ ไม่ปล่อยให้ <small> คิด 0.875 ของป้ายชื่อ จะได้ไม่เล็กจนอ่านไม่ออก */
+  .ifr-field-label small {
+    display: block;
+    font-weight: 400;
+    font-size: .82rem;
+    opacity: .85;
+  }
+  /* เลขแถวให้ตรงกับข้อความเตือน "ในแถวที่ N" ตอนบันทึก นับด้วย CSS เลยตามลำดับบนจอเสมอ */
+  #ifr_team_rows { counter-reset: ifr-band; }
+  #ifr_team_rows > tr { counter-increment: ifr-band; }
+  #ifr_team_rows .ifr-row-no::before { content: "แถว " counter(ifr-band); }
   /* dropdown ที่กางอยู่ต้องลอยเหนือการ์ดถัดไปเสมอ ไม่ว่าอยู่แถวไหน */
   .ifr-team-table-wrap .choices.is-open {
     z-index: 10;
-  }
-  #ifr_team_rows tr.ifr-team-cont .ifr-team-cell::before {
-    content: "↳";
-    position: absolute;
-    left: .75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: rgba(0, 0, 0, .45);
   }
 </style>
 {% endblock %}
@@ -133,22 +232,6 @@
               <input type="text" inputmode="decimal" class="form-control" id="ifr_distance" placeholder="เช่น 450.00" value="{{ ifr_obj.distance|default_if_none:'' }}" />
             </div>
             <div class="form-group col-md-3">
-              <label for="ifr_base_fuel_price">ราคาน้ำมันฐาน (บาท/ลิตร) <span class="text-danger">*</span></label>
-              {% comment %}
-              สัญญาตกลงราคาน้ำมันฐานเป็นช่วง เช่น 30.00 - 30.99 แปลว่าน้ำมันยังอยู่ในช่วงนี้
-              ค่าขนส่งไม่ต้องปรับ แต่ตอนคิดเงินใช้ขอบล่างเสมอ จึงต้องบอกไว้ใต้ช่อง
-              ไม่งั้นคนกรอกจะเดาไม่ออกว่าเลขไหนถูกเอาไปคิด
-              {% endcomment %}
-              <div class="input-group">
-                <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price"
-                       placeholder="30.00" value="{{ ifr_obj.base_fuel_price|default_if_none:'' }}" />
-                <span class="input-group-text">ถึง</span>
-                <input type="text" inputmode="decimal" class="form-control" id="ifr_base_fuel_price_max"
-                       placeholder="30.99" value="{{ ifr_obj.base_fuel_price_max|default_if_none:'' }}" />
-              </div>
-              <small class="text-muted">คิดค่าขนส่งจากเลขซ้าย · ตกลงเป็นราคาเดียวให้เว้นช่องขวาไว้</small>
-            </div>
-            <div class="form-group col-md-3">
               <label for="ifr_fuel_used_per_trip">ใช้น้ำมัน (ลิตร/เที่ยว) <span class="text-danger">*</span></label>
               <input type="text" inputmode="decimal" class="form-control" id="ifr_fuel_used_per_trip" placeholder="เช่น 120.00" value="{{ ifr_obj.fuel_used_per_trip|default_if_none:'' }}" />
             </div>
@@ -173,34 +256,14 @@
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">ทีมขนส่ง</h5>
           <div class="d-flex gap-2">
-            <button type="button" id="ifr_recalc_freight" class="btn btn-outline-secondary btn-sm rounded-pill"
-                    title="คิดค่าขนส่งของทุกแถวที่กรอกค่าสัญญาและปรับตามน้ำมันครบ จากช่วงราคาน้ำมันฐานปัจจุบัน">
-              คิดค่าขนส่งใหม่จากสัญญา <i class="fa-solid fa-calculator"></i>
-            </button>
             <button type="button" id="ifr_add_team" class="btn btn-primary btn-sm rounded-pill">
               เพิ่มทีม <i class="fa-solid fa-circle-plus"></i>
             </button>
           </div>
         </div>
         <div class="card-body">
-          <div class="table-responsive ifr-team-table-wrap">
-            <table class="table table-bordered align-middle">
-              <thead class="table-dark">
-                <tr>
-                  <th style="min-width: 180px;">ทีม <span class="text-danger">*</span></th>
-                  <th style="min-width: 200px;">ประเภทการแบกน้ำหนัก <span class="text-danger">*</span></th>
-                  <th style="min-width: 140px;">ค่าขนส่งตามสัญญา<br /><small class="fw-normal">บาท/ตัน</small></th>
-                  <th style="min-width: 160px;">น้ำมันฐานวันทำสัญญา<br /><small class="fw-normal">บาท/ลิตร</small></th>
-                  <th style="min-width: 160px;">วันทำสัญญา</th>
-                  <th style="min-width: 120px;">ค่าขนส่ง</th>
-                  <th style="min-width: 150px;">ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small> <span class="text-danger">*</span></th>
-                  <th style="min-width: 120px;">ลดบาท/ตัน</th>
-                  <th style="min-width: 140px;">ค่าขนส่ง บาท/ตัน/กม.<br /><small class="fw-normal">คำนวณอัตโนมัติ</small></th>
-                  <th style="min-width: 200px;">เงื่อนไขการชำระเงิน</th>
-                  <th style="min-width: 160px;">หมายเหตุ</th>
-                  <th style="width: 96px;">จัดการ</th>
-                </tr>
-              </thead>
+          <div class="ifr-team-table-wrap">
+            <table class="table table-bordered mb-0">
               <tbody id="ifr_team_rows"></tbody>
             </table>
           </div>
@@ -507,6 +570,24 @@
     return BAND_RANGE[select.value] || [Infinity, Infinity];
   }
 
+  // สีประจำทีม : ไล่วนตามลำดับก้อนที่ปรากฏบนจอ ไม่ได้ผูกกับรหัสทีมถาวร
+  // ตั้งใจให้ "ก้อนติดกันคนละสี" เป็นหลัก ผู้ใช้จะได้กวาดตาแล้วรู้ทันทีว่าหมดทีมหนึ่งแล้ว
+  const TEAM_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed',
+                       '#0891b2', '#ca8a04', '#db2777', '#0f766e'];
+  const ALL_TEAMS_COLOR = '#64748b';   // แถว "ทุกทีม/ทีมที่เหลือ" เป็นสีกลาง ไม่แย่งสายตาทีมจริง
+  const UNSET_TEAM_COLOR = '#adb5bd';  // ยังไม่เลือกทีม
+
+  function softColor(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  }
+
+  // ป้ายบนแถวต่อใช้แค่รหัสทีมสั้น ๆ ชื่อเต็มอยู่บนหัวกลุ่มแล้ว ซ้ำอีกจะยาวจนเบียดช่องน้ำหนัก
+  function teamShortOf(select) {
+    if (select.value === '') return 'ยังไม่ได้เลือก';
+    return select.value === ALL_TEAMS ? 'ทุกทีม' : select.value;
+  }
+
   function groupTeamRows() {
     const tbody = document.getElementById('ifr_team_rows');
     const rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
@@ -523,6 +604,9 @@
       return ba[0] - bb[0] || ba[1] - bb[1];
     });
 
+    // แบ่งเป็นก้อนตามทีม : แถวที่ยังไม่เลือกทีม (key '￿') ให้แต่ละแถวเป็นก้อนของตัวเอง
+    // ไม่งั้นจะถูกมัดรวมกันเป็นทีมเดียวทั้งที่ยังไม่รู้ว่าเป็นทีมไหน
+    const groups = [];
     let previousKey = null;
     rows.forEach(function (tr) {
       // ย้าย <tr> ทั้งก้อน instance ของ choices.js ที่อยู่ข้างในจึงไม่ถูกทำลาย
@@ -530,9 +614,41 @@
 
       const key = teamSortKey(tr.querySelector('.ifr-team-select'));
       const isContinuation = key === previousKey && key !== '￿';
-      tr.classList.toggle('ifr-team-cont', isContinuation);
-      tr.classList.toggle('ifr-team-group-start', !isContinuation);
+      if (isContinuation) {
+        groups[groups.length - 1].push(tr);
+      } else {
+        groups.push([tr]);
+      }
       previousKey = key;
+    });
+
+    groups.forEach(function (groupRows, index) {
+      const head = groupRows[0].querySelector('.ifr-team-select');
+      const key = teamSortKey(head);
+      const color = key === ' ' ? ALL_TEAMS_COLOR
+                  : key === '￿' ? UNSET_TEAM_COLOR
+                  : TEAM_COLORS[index % TEAM_COLORS.length];
+      const short = teamShortOf(head);
+
+      groupRows.forEach(function (tr, position) {
+        const isContinuation = position > 0;
+        tr.style.setProperty('--ifr-accent', color);
+        tr.style.setProperty('--ifr-accent-soft', softColor(color, 0.05));
+        tr.classList.toggle('ifr-team-cont', isContinuation);
+        tr.classList.toggle('ifr-group-start', !isContinuation);
+        tr.classList.toggle('ifr-group-end', position === groupRows.length - 1);
+        // กลับไปซ่อน dropdown ทีมทุกครั้งที่จัดกลุ่มใหม่ : แถวที่เคยกด "เปลี่ยนทีม"
+        // แล้วเปลี่ยนจริงจะกลายเป็นหัวกลุ่มของตัวเอง ไม่ต้องค้างสถานะกางไว้
+        if (!isContinuation) tr.classList.remove('ifr-show-team');
+        tr.querySelector('.ifr-cont-chip-name').textContent = short;
+        // ทีมที่มีช่วงเดียวไม่ต้องขึ้นลำดับ (CSS ซ่อนป้ายที่ไม่มีข้อความไว้)
+        tr.querySelector('.ifr-band-ordinal').textContent = groupRows.length > 1
+          ? 'ช่วงที่ ' + (position + 1) + '/' + groupRows.length
+          : '';
+      });
+
+      groupRows[0].querySelector('.ifr-group-count').textContent =
+        groupRows.length + ' ช่วงน้ำหนัก';
     });
   }
 
@@ -586,6 +702,22 @@
     document.getElementById('ifr_team_empty').classList.toggle('d-none', hasRows);
   }
 
+  // ช่องกรอก 1 ช่องในกล่องของแถว : ป้ายชื่อด้านบน + ตัวช่อง
+  function bandField(colClass, label, required, inputHtml) {
+    return '<div class="' + colClass + '">' +
+      '<div class="ifr-field-label">' + label + (required ? ' <span class="text-danger">*</span>' : '') + '</div>' +
+      inputHtml +
+    '</div>';
+  }
+
+  // วันนี้ตามเวลาเครื่องผู้ใช้ รูปแบบ yyyy-mm-dd ของ input type=date
+  // ไม่ใช้ toISOString เพราะเป็นเวลา UTC ช่วงตี 0-7 ของไทยจะได้วันเมื่อวาน
+  function todayIso() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-'
+      + String(d.getDate()).padStart(2, '0');
+  }
+
   // data : แถวเดิมตอนแก้ไข (ไม่ส่งมา = แถวเปล่าที่กดปุ่ม "เพิ่มทีม")
   function addTeamRow(data) {
     const row = data || {};
@@ -595,44 +727,85 @@
       : row.team_id;
 
     const tr = document.createElement('tr');
+    // 1 แถว = กล่องเดียว 2 บรรทัด มีป้ายชื่อทุกช่อง (เดิม 11 คอลัมน์ต้องเลื่อนขวาจนกรอกยาก)
+    // บรรทัดแรก = ค่าที่บังคับกรอก บรรทัดสอง = ค่าประกอบ · ปุ่มจัดการอยู่ช่องขวาสุดให้เห็นตลอด
     tr.innerHTML =
-      '<td class="ifr-team-cell"><select class="form-select ifr-team-select" data-selected="'
-        + escapeHtml(teamValueForSelect) + '">' + teamOptionsHtml() + '</select></td>' +
-      '<td><select class="form-select ifr-weight-carried">' + weightCarriedOptionsHtml() + '</select></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-contract-rate" ' +
-             'title="ค่าขนส่งที่ตกลงกันตอนทำสัญญา เก็บไว้เทียบเฉย ๆ" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-contract-fuel" ' +
-             'title="ราคาน้ำมันวันที่เซ็นสัญญาของช่วงน้ำหนักนี้" /></td>' +
-      '<td><input type="date" class="form-control ifr-contract-date" ' +
-             'title="วันที่เซ็นสัญญาของช่วงน้ำหนักนี้ ทีมเดียวกันคนละช่วงทำสัญญาคนละวันได้" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-freight-rate" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-fuel-adjustment" /></td>' +
-      '<td><input type="text" inputmode="decimal" class="form-control ifr-discount-per-ton" /></td>' +
-      '<td><input type="text" class="form-control ifr-rate-per-ton-km bg-light" readonly tabindex="-1" ' +
-             'title="ค่าขนส่ง ÷ ระยะทาง" placeholder="กรอกค่าขนส่งและระยะทาง" /></td>' +
-      '<td><div class="d-flex gap-1">' +
-        '<select class="form-select ifr-pay-type">' +
-          '<option value="">ยังไม่ระบุ</option>' +
-          '<option value="cash">เงินสด</option>' +
-          '<option value="credit">เครดิต</option>' +
-        '</select>' +
-        '<input type="number" min="1" max="365" step="1" inputmode="numeric" list="ifr_credit_days_list" ' +
-               'class="form-control ifr-credit-days d-none" placeholder="วัน" style="width: 80px;" />' +
-      '</div></td>' +
-      '<td><input type="text" class="form-control ifr-team-note" /></td>' +
-      '<td class="text-center text-nowrap">' +
-        '<button type="button" class="btn btn-success btn-sm ifr-add-band" ' +
-                'title="เพิ่มช่วงน้ำหนักให้ทีมนี้">' +
-          '<i class="fas fa-plus"></i>' +
-        '</button> ' +
-        '<button type="button" class="btn btn-danger btn-sm ifr-remove-team" title="ลบแถวนี้">' +
-          '<i class="fas fa-trash-alt"></i>' +
-        '</button>' +
+      '<td class="ifr-band-cell">' +
+        // หัวกลุ่ม : ช่องทีมอยู่บนสุดของก้อน เป็นชื่อกลุ่มในตัว + ป้ายจำนวนช่วง
+        // โชว์เฉพาะแถวแรกของทีม (groupTeamRows เติมจำนวนช่วงให้)
+        '<div class="ifr-group-head">' +
+          '<select class="form-select ifr-team-select" title="ทีมขนส่ง" data-selected="'
+            + escapeHtml(teamValueForSelect) + '">' + teamOptionsHtml() + '</select>' +
+          '<span class="ifr-group-count"></span>' +
+        '</div>' +
+        // หัวแถว : ช่วงน้ำหนักคือสิ่งที่ใช้แยกแถวในทีมเดียวกัน จึงอยู่บนสุดของแถว ไม่ใช่จมอยู่กลางตาราง
+        '<div class="ifr-row-head">' +
+          '<span class="ifr-band-ordinal"></span>' +
+          '<select class="form-select ifr-weight-carried" title="ประเภทการแบกน้ำหนักของช่วงนี้">' +
+            weightCarriedOptionsHtml() +
+          '</select>' +
+          '<div class="ifr-cont-chip">' +
+            '<span>↳ ทีมเดิม <strong class="ifr-cont-chip-name"></strong></span>' +
+            '<button type="button" class="btn btn-link btn-sm p-0 ifr-change-team">เปลี่ยนทีม</button>' +
+          '</div>' +
+        '</div>' +
+        // col-auto : ช่องตัวเลขถูกจำกัดความกว้างไว้แล้ว ให้แต่ละช่องกินแค่ที่ที่ต้องใช้ ไม่ยืดเต็มคอลัมน์
+        // align-items-end : ป้ายชื่อสูงไม่เท่ากัน (บางช่องมีหน่วย) ให้ตัวช่องกรอกยังเรียงแนวเดียวกัน
+        '<div class="row g-2 align-items-end">' +
+          bandField('col-auto', 'ค่าขนส่งตามสัญญา <small>บาท/ตัน</small>', true,
+            '<input type="text" inputmode="decimal" class="form-control ifr-num ifr-contract-rate" ' +
+                   'title="ค่าขนส่งที่ตกลงกันตอนทำสัญญา เป็นตัวตั้งของค่าขนส่งที่จ่ายจริง" />') +
+          bandField('col-auto', 'ปรับตามน้ำมัน <small>ลิตรละ 1 บาท</small>', true,
+            '<input type="text" inputmode="decimal" class="form-control ifr-num ifr-fuel-adjustment" />') +
+          bandField('col-auto', 'วันทำสัญญา', false,
+            '<input type="date" class="form-control ifr-contract-date" ' +
+                   'title="วันที่เซ็นสัญญาของช่วงน้ำหนักนี้ ทีมเดียวกันคนละช่วงทำสัญญาคนละวันได้" />') +
+          // ช่องนี้กว้างอยู่แล้ว (สองช่อง + คำว่า "ถึง") ป้ายจึงเอาสั้นที่สุดที่ยังรู้เรื่อง
+          // รายละเอียดว่าขอบไหนหมายถึงอะไรอยู่ใน title ของแต่ละช่องแล้ว
+          bandField('col-auto',
+            'น้ำมันฐานวันทำสัญญา <small>บาท/ลิตร · ราคาเดียวใส่เลขเดิมทั้งสองช่อง</small>', true,
+            '<div class="input-group flex-nowrap">' +
+              '<input type="text" inputmode="decimal" class="form-control ifr-num ifr-contract-fuel" placeholder="ขอบล่าง" ' +
+                     'title="น้ำมันฐานวันทำสัญญา ขอบล่าง : ราคาเฉลี่ยต่ำกว่านี้ = ปรับลด" />' +
+              '<span class="input-group-text px-2">ถึง</span>' +
+              '<input type="text" inputmode="decimal" class="form-control ifr-num ifr-contract-fuel-max" placeholder="ขอบบน" ' +
+                     'title="น้ำมันฐานวันทำสัญญา ขอบบน : ราคาเฉลี่ยสูงกว่านี้ = ปรับเพิ่ม · อยู่ในช่วง = ไม่ปรับ · ตกลงราคาเดียวใส่เลขเดียวกับขอบล่าง" />' +
+            '</div>') +
+          bandField('col-auto', 'ลด <small>บาท/ตัน</small>', false,
+            '<input type="text" inputmode="decimal" class="form-control ifr-num ifr-discount-per-ton" />') +
+          bandField('col-auto', 'บาท/ตัน/กม. <small>ตามสัญญา ÷ ระยะทาง</small>', false,
+            '<input type="text" class="form-control ifr-num ifr-rate-per-ton-km bg-light" readonly tabindex="-1" ' +
+                   'title="ค่าขนส่งตามสัญญา ÷ ระยะทาง" placeholder="อัตโนมัติ" />') +
+          bandField('col-auto', 'เงื่อนไขการชำระเงิน', false,
+            '<div class="d-flex gap-1">' +
+              '<select class="form-select ifr-pay-type" style="width: 7.5rem;">' +
+                '<option value="">ยังไม่ระบุ</option>' +
+                '<option value="cash">เงินสด</option>' +
+                '<option value="credit">เครดิต</option>' +
+              '</select>' +
+              '<input type="number" min="1" max="365" step="1" inputmode="numeric" list="ifr_credit_days_list" ' +
+                     'class="form-control ifr-credit-days d-none" placeholder="วัน" style="width: 80px;" />' +
+            '</div>') +
+          // หมายเหตุเป็นข้อความอิสระ ให้กินที่ที่เหลือของบรรทัด
+          bandField('col-12 col-md', 'หมายเหตุ', false,
+            '<input type="text" class="form-control ifr-team-note" />') +
+        '</div>' +
+      '</td>' +
+      '<td class="ifr-band-actions text-center">' +
+        '<div class="ifr-row-no small text-muted mb-2"></div>' +
+        '<div class="d-flex flex-column gap-1">' +
+          '<button type="button" class="btn btn-success btn-sm ifr-add-band" ' +
+                  'title="เพิ่มช่วงน้ำหนักให้ทีมนี้">' +
+            '<i class="fas fa-plus"></i> ช่วง' +
+          '</button>' +
+          '<button type="button" class="btn btn-danger btn-sm ifr-remove-team" title="ลบแถวนี้">' +
+            '<i class="fas fa-trash-alt"></i> ลบ' +
+          '</button>' +
+        '</div>' +
       '</td>';
     
     tr.querySelector('.ifr-team-select').value = teamValueForSelect;
     tr.querySelector('.ifr-weight-carried').value = row.weight_carried || '';
-    tr.querySelector('.ifr-freight-rate').value = row.freight_rate == null ? '' : row.freight_rate;
     tr.querySelector('.ifr-fuel-adjustment').value = row.fuel_freight_adjustment == null ? '' : row.fuel_freight_adjustment;
     tr.querySelector('.ifr-discount-per-ton').value = row.discount_per_ton == null ? '' : row.discount_per_ton;
     tr.querySelector('.ifr-team-note').value = row.note == null ? '' : row.note;
@@ -640,24 +813,31 @@
     // จึงไม่ sync ข้ามแถวเหมือนเงื่อนไขการชำระเงิน
     tr.querySelector('.ifr-contract-rate').value = row.contract_freight_rate == null ? '' : row.contract_freight_rate;
     tr.querySelector('.ifr-contract-fuel').value = row.contract_base_fuel_price == null ? '' : row.contract_base_fuel_price;
-    tr.querySelector('.ifr-contract-date').value = row.contract_date || '';
+    // แถวเก่าที่บันทึกตอนกติกายังเป็น "ราคาเดียวให้เว้นขอบบน" จะมีแต่ขอบล่าง
+    // เติมขอบบนให้เท่ากันตั้งแต่ตอนโหลด จะได้เห็นเป็นเลขสองช่องเหมือนกติกาใหม่
+    // (สูตรในไฟล์ Excel ใช้ IF(I="",H,I) ขอบบนว่างกับขอบบนเท่าขอบล่างจึงคิดออกมาเท่ากัน)
+    tr.querySelector('.ifr-contract-fuel-max').value = row.contract_base_fuel_price_max == null
+      ? (row.contract_base_fuel_price == null ? '' : row.contract_base_fuel_price)
+      : row.contract_base_fuel_price_max;
+    // แถวที่เพิ่งกดเพิ่ม (ไม่มี key contract_date) ตั้งวันทำสัญญาเป็นวันนี้ไว้ก่อน แก้ทับได้
+    // แถวเดิมจาก db ที่ไม่เคยกรอกวันไว้ (null) ปล่อยว่างตามเดิม ไม่เดาวันให้
+    tr.querySelector('.ifr-contract-date').value = 'contract_date' in row
+      ? (row.contract_date || '')
+      : todayIso();
     setPayment(tr, row.credit_days);
 
-    // ค่าขนส่งคิดจากค่าสัญญาให้ เฉพาะตอนผู้ใช้แก้ 3 ช่องนี้ (ปรับตามน้ำมันอยู่ในสูตรด้วย)
-    // ไม่คิดตอนเปิดหน้า เพราะค่าที่บันทึกไว้อาจเป็นค่าที่พิมพ์มือ ทับแล้วจะออกเวอร์ชันใหม่โดยไม่ตั้งใจ
-    tr.querySelector('.ifr-contract-rate').addEventListener('input', function () {
-      applyContractFreight(tr);
-    });
-    tr.querySelector('.ifr-contract-fuel').addEventListener('input', function () {
-      applyContractFreight(tr);
-    });
-    tr.querySelector('.ifr-fuel-adjustment').addEventListener('input', function () {
-      applyContractFreight(tr);
+    // ตกลงราคาเดียวให้ใส่เลขเดิมทั้งสองช่อง ผู้ใช้ไม่ต้องพิมพ์ซ้ำเอง
+    // เติมตอนออกจากช่องขอบล่าง ไม่ใช่ตอนพิมพ์ ไม่งั้นพิมพ์ "30" ยังไม่ทันครบจะไปโผล่อีกช่องก่อน
+    // ไม่แตะถ้าขอบบนมีค่าอยู่แล้ว เพราะอาจเป็นช่วงจริงที่กรอกไว้
+    tr.querySelector('.ifr-contract-fuel').addEventListener('blur', function () {
+      const low = tr.querySelector('.ifr-contract-fuel').value.trim();
+      const high = tr.querySelector('.ifr-contract-fuel-max');
+      if (low !== '' && high.value.trim() === '') high.value = low;
     });
 
     // บาท/ตัน/กม. ไม่ได้อ่านจากค่าที่เก็บไว้ คิดสดจากช่องบนจอเสมอ ให้ตรงกับที่ server จะคิดตอนบันทึก
     updatePerTonKm(tr);
-    tr.querySelector('.ifr-freight-rate').addEventListener('input', function () {
+    tr.querySelector('.ifr-contract-rate').addEventListener('input', function () {
       updatePerTonKm(tr);
     });
 
@@ -701,6 +881,16 @@
         team_id: select.value === ALL_TEAMS ? null : select.value,
         credit_days: creditDaysOf(tr),
       });
+    });
+
+    // แถวต่อของทีมเดิมซ่อน dropdown ทีมไว้ กดปุ่มนี้ค่อยกางออกมาถ้าจะย้ายแถวไปทีมอื่น
+    tr.querySelector('.ifr-change-team').addEventListener('click', function () {
+      tr.classList.add('ifr-show-team');
+      const select = tr.querySelector('.ifr-team-select');
+      // choices.js ซ่อน <select> ตัวจริงไว้ ต้องสั่งกางที่ instance ไม่ใช่ focus() ที่ตัว select
+      const picker = TEAM_PICKERS.get(select);
+      if (picker) picker.showDropdown();
+      else select.focus();
     });
 
     tr.querySelector('.ifr-remove-team').addEventListener('click', function () {
@@ -747,6 +937,19 @@
     const rows = [];
     document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
       if (tr.querySelector('.ifr-fuel-adjustment').value.trim() === '') rows.push(index + 1);
+    });
+    return rows;
+  }
+
+  // ค่าขนส่งตามสัญญา + น้ำมันฐานวันทำสัญญา (ขอบล่าง) เป็นตัวตั้งของสูตรค่าขนส่งที่จ่าย (issue #125)
+  //   ค่าขนส่งที่จ่าย = ค่าขนส่งตามสัญญา + (ราคาน้ำมันเฉลี่ย − ขอบที่หลุด) × ปรับตามน้ำมัน
+  //   ราคาเฉลี่ยอยู่ในช่วง ขอบล่าง ถึง ขอบบน = ไม่ปรับ (ขอบบนว่าง = ราคาเดียว)
+  // ขาดช่องไหนแถวนั้นคิดเงินไม่ได้ จึงบังคับกรอกทุกแถว (ขอบบนไม่บังคับ)
+  function findRowsWithoutContract() {
+    const rows = [];
+    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr, index) {
+      if (tr.querySelector('.ifr-contract-rate').value.trim() === ''
+          || tr.querySelector('.ifr-contract-fuel').value.trim() === '') rows.push(index + 1);
     });
     return rows;
   }
@@ -825,49 +1028,8 @@
     return rows;
   }
 
-  // ---------- คิดค่าขนส่งจากค่าสัญญา (issue #95) ----------
-  // ค่าขนส่ง = ค่าขนส่งตามสัญญา + (น้ำมันฐานวันทำสัญญา − ฐานที่ใช้) x ปรับตามน้ำมัน
-  // รูปแบบเดียวกับส่วนปรับน้ำมันในไฟล์ export (คอลัมน์ U = ค่าที่เทียบ − ขอบที่หลุด, K = U x ปรับตามน้ำมัน)
-  // ปรับตามน้ำมัน = ช่อง "ปรับตามน้ำมัน (ลิตรละ 1 บาท)" ของแถวนั้น หน่วย บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร
-  // ฐานที่ใช้เลือกจากช่วงราคาน้ำมันฐานของใบ [a, b] (dead band)
-  //   น้ำมันฐานสัญญา < a  -> ใช้ a
-  //   น้ำมันฐานสัญญา > b  -> ใช้ b
-  //   อยู่ในช่วง          -> ไม่ปรับ ใช้ค่าขนส่งตามสัญญาตรง ๆ
-  // ขอบบนว่างให้ถือว่าเท่าขอบล่าง (ใบที่ตกลงเป็นราคาเดียว) เหมือนที่ไฟล์ export ทำ
-  // เดิมใช้บัญญัติไตรยางศ์ (ตามสัญญา x ฐานที่ใช้ / น้ำมันฐานวันทำสัญญา) ซึ่งไม่ได้ใช้ช่องปรับตามน้ำมันเลย
-  function contractFreightOf(tr) {
-    const contractRate = parseNumber(tr.querySelector('.ifr-contract-rate').value);
-    const contractFuel = parseNumber(tr.querySelector('.ifr-contract-fuel').value);
-    const fuelAdjust = parseNumber(tr.querySelector('.ifr-fuel-adjustment').value);
-    const low = parseNumber(document.getElementById('ifr_base_fuel_price').value);
-    const rawHigh = parseNumber(document.getElementById('ifr_base_fuel_price_max').value);
-    const high = isNaN(rawHigh) ? low : rawHigh;
-    // กรอกไม่ครบ 3 ช่อง (หรือน้ำมันฐานสัญญาเป็น 0) คิดไม่ได้ ปล่อยให้พิมพ์เอง
-    if (isNaN(contractRate) || isNaN(contractFuel) || contractFuel <= 0
-        || isNaN(fuelAdjust) || isNaN(low)) return null;
-
-    let base = null;
-    if (contractFuel > high) base = high;
-    else if (contractFuel < low) base = low;
-    if (base === null) return roundHalfUp2(contractRate);          // อยู่ในช่วง = ไม่ปรับ
-    return roundHalfUp2(contractRate + (contractFuel - base) * fuelAdjust);
-  }
-
-  function applyContractFreight(tr) {
-    const value = contractFreightOf(tr);
-    if (value === null) return false;
-    const field = tr.querySelector('.ifr-freight-rate');
-    field.value = value;
-    field.title = 'คิดจากค่าสัญญา ' + tr.querySelector('.ifr-contract-rate').value
-                + ' กับน้ำมันฐานวันทำสัญญา ' + tr.querySelector('.ifr-contract-fuel').value
-                + ' เทียบช่วงราคาน้ำมันฐานของใบนี้ x ปรับตามน้ำมัน '
-                + tr.querySelector('.ifr-fuel-adjustment').value + ' (พิมพ์ทับเองได้)';
-    updatePerTonKm(tr);
-    return true;
-  }
-
   // ---------- ค่าขนส่ง บาท/ตัน/กม. ----------
-  // = ค่าขนส่ง / ระยะทาง  แสดงให้ดูเฉย ๆ ไม่ส่งไป server เพราะ server คิดเองตอนบันทึก (ปัด 2 ตำแหน่ง)
+  // = ค่าขนส่งตามสัญญา / ระยะทาง  แสดงให้ดูเฉย ๆ ไม่ส่งไป server เพราะ server คิดเองตอนบันทึก (ปัด 2 ตำแหน่ง)
   function parseNumber(value) {
     const text = String(value == null ? '' : value).replace(/,/g, '').trim();
     return text === '' ? NaN : Number(text);
@@ -880,7 +1042,7 @@
   }
 
   function updatePerTonKm(tr) {
-    const rate = parseNumber(tr.querySelector('.ifr-freight-rate').value);
+    const rate = parseNumber(tr.querySelector('.ifr-contract-rate').value);
     const distance = parseNumber(document.getElementById('ifr_distance').value);
     const out = tr.querySelector('.ifr-rate-per-ton-km');
     out.value = (isNaN(rate) || isNaN(distance) || distance <= 0) ? '' : roundHalfUp2(rate / distance);
@@ -896,12 +1058,12 @@
       teams.push({
         team_id: teamValue(tr.querySelector('.ifr-team-select')),
         weight_carried: orNull(tr.querySelector('.ifr-weight-carried').value),
-        freight_rate: orNull(tr.querySelector('.ifr-freight-rate').value),
         fuel_freight_adjustment: orNull(tr.querySelector('.ifr-fuel-adjustment').value),
         discount_per_ton: orNull(tr.querySelector('.ifr-discount-per-ton').value),
         credit_days: creditDaysOf(tr),
         contract_freight_rate: orNull(tr.querySelector('.ifr-contract-rate').value),
         contract_base_fuel_price: orNull(tr.querySelector('.ifr-contract-fuel').value),
+        contract_base_fuel_price_max: orNull(tr.querySelector('.ifr-contract-fuel-max').value),
         contract_date: orNull(tr.querySelector('.ifr-contract-date').value),
         note: orNull(tr.querySelector('.ifr-team-note').value),
       });
@@ -918,15 +1080,13 @@
     origin: 'ต้นทาง',
     destination: 'ปลายทาง',
     distance: 'ระยะทาง',
-    base_fuel_price: 'ราคาน้ำมันฐาน (ขอบล่าง)',
-    base_fuel_price_max: 'ราคาน้ำมันฐาน (ขอบบน)',
     fuel_used_per_trip: 'ใช้น้ำมัน (ลิตร/เที่ยว)',
     fuel_freight_adjustment: 'ปรับตามน้ำมัน (ลิตรละ 1 บาท)',
     weight_carried: 'ประเภทการแบกน้ำหนัก',
-    freight_rate: 'ค่าขนส่ง',
     credit_days: 'เครดิต (วัน)',
     contract_freight_rate: 'ค่าขนส่งตามสัญญา',
-    contract_base_fuel_price: 'ราคาน้ำมันฐานวันทำสัญญา',
+    contract_base_fuel_price: 'น้ำมันฐานวันทำสัญญา (ขอบล่าง)',
+    contract_base_fuel_price_max: 'น้ำมันฐานวันทำสัญญา (ขอบบน)',
     contract_date: 'วันทำสัญญา',
     team_id: 'ทีมขนส่ง',
     teams: 'ทีมขนส่ง',
@@ -1002,6 +1162,13 @@
     }
 
     const rowsCreditWithoutDays = findRowsCreditWithoutDays();
+    const rowsWithoutContract = findRowsWithoutContract();
+    if (rowsWithoutContract.length > 0) {
+      showAlert('กรุณากรอก "ค่าขนส่งตามสัญญา" และ "น้ำมันฐานวันทำสัญญา" ในแถวที่ '
+                + rowsWithoutContract.join(', ') + ' — สองช่องนี้เป็นตัวตั้งของค่าขนส่งที่จ่ายจริง', true);
+      return;
+    }
+
     if (rowsCreditWithoutDays.length > 0) {
       showAlert('เลือก "เครดิต" แล้ว กรุณากรอกจำนวนวันเครดิต (1-365) ในแถวที่ '
                 + rowsCreditWithoutDays.join(', '), true);
@@ -1013,8 +1180,6 @@
     const payload = {
       origin: orNull(document.getElementById('ifr_origin').value),
       destination: orNull(document.getElementById('ifr_destination').value),
-      base_fuel_price: orNull(document.getElementById('ifr_base_fuel_price').value),
-      base_fuel_price_max: orNull(document.getElementById('ifr_base_fuel_price_max').value),
       distance: orNull(document.getElementById('ifr_distance').value),
       fuel_used_per_trip: orNull(document.getElementById('ifr_fuel_used_per_trip').value),
       note: orNull(document.getElementById('ifr_note').value),
@@ -1049,18 +1214,6 @@
   });
 
   // ห่อไว้ ไม่ส่ง addTeamRow ตรงๆ ไม่งั้น Event object จะถูกส่งเข้าไปเป็น data
-  // แก้ช่วงราคาน้ำมันฐานที่หัวหน้าแล้วค่าขนส่งของแถวเดิมจะยังเป็นของช่วงเก่า
-  // ไม่คิดทับให้เองเพราะบางแถวพิมพ์มือไว้ ให้กดปุ่มนี้เมื่อต้องการคิดใหม่ทั้งตาราง
-  document.getElementById('ifr_recalc_freight').addEventListener('click', function () {
-    let changed = 0;
-    document.querySelectorAll('#ifr_team_rows tr').forEach(function (tr) {
-      if (applyContractFreight(tr)) changed += 1;
-    });
-    showAlert(changed === 0
-      ? 'ไม่มีแถวไหนกรอกครบ (ต้องมีค่าขนส่งตามสัญญา น้ำมันฐานวันทำสัญญา และปรับตามน้ำมัน)'
-      : 'คิดค่าขนส่งใหม่แล้ว ' + changed + ' แถว', changed === 0);
-  });
-
   document.getElementById('ifr_add_team').addEventListener('click', function () {
     addTeamRow();
   });

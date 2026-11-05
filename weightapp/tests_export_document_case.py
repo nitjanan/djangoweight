@@ -13,14 +13,17 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import RequestFactory, TestCase, override_settings
+from unittest import mock
+
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from weightapp import views
 from weightapp.models import (CarryingweightRate, BaseBusiness, BaseCompany, BaseCompanyMapBaseCustomer,
                               BaseCompanyMapCustomerAlias, BaseCustomer,
                               BaseSite, BaseStoneType, BaseWeightStation, BaseWeightType,
                               INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRate,
-                              InternationalFreightRateStatus, UserProfile, Weight)
+                              InternationalFreightRateStatus, InternationalFreightRateTeam,
+                              UserProfile, Weight)
 
 OWN = views.EXPORT_DOC_CASE_OWN_PORT
 OTHER = views.EXPORT_DOC_CASE_OTHER_PORT
@@ -107,6 +110,49 @@ class ExportDocumentCaseTests(TestCase):
 
     def ids(self, qs):
         return set(qs.values_list('weight_id', flat=True))
+
+    def querySetTab(self, tab, **params):
+        request = RequestFactory().get('/exportDocument/', params)
+        request.session = {'company_code': tab}
+        return views._exportDocumentQuerySet(request)
+
+    # ---------- แท็บบริษัท = ชั่งที่ไหน (bws.company) ----------
+
+    def test_tab_sees_only_trips_weighed_at_its_stations(self):
+        """แท็บท่าเรือต้องเห็นเที่ยวที่ชั่งที่ท่าเรือนั้น (เดิมกรองด้วยต้นทาง แท็บท่าเรือจึงว่าง)"""
+        all_qs, _, _ = self.querySet(month='2026-08')
+        station_of = dict(all_qs.values_list('weight_id', 'bws_id'))
+        seen = set()
+        for tab, stations in (('STPS', ['P1V']), ('STPK', ['K1V']), ('SLC', ['W1A'])):
+            qs, filters, _ = self.querySetTab(tab, month='2026-08')
+            expected = {wid for wid, bws in station_of.items() if bws in stations}
+            self.assertEqual(self.ids(qs), expected, tab)
+            self.assertEqual([b['id'] for b in filters['bws_options']], stations)
+            seen |= expected
+        # ทุกเที่ยวของแท็บร้อยเกาะ (เห็นทุกตาชั่ง) ต้องมีแท็บเจ้าของตาชั่งรองรับ
+        self.assertEqual(seen, set(station_of))
+        self.assertTrue(seen)
+
+    def test_tab_without_station_sees_nothing(self):
+        BaseCompany.objects.create(name='บริษัทไม่มีตาชั่ง', code='NOST', biz_id=1)
+        qs, filters, _ = self.querySetTab('NOST', month='2026-08')
+        self.assertTrue(filters['tab_no_station'])
+        self.assertEqual(self.ids(qs), set())
+
+    def test_station_of_another_tab_is_ignored(self):
+        """สลับแท็บแล้ว ?bws= ของแท็บเดิมค้างอยู่ : ถือว่าไม่ได้เลือก = ทุกตาชั่งของแท็บนี้"""
+        plain, _, _ = self.querySetTab('STPS', month='2026-08')
+        qs, filters, _ = self.querySetTab('STPS', month='2026-08', bws='W1A')
+        self.assertEqual(filters['selected_bws'], '')
+        self.assertEqual(self.ids(qs), self.ids(plain))
+
+    def test_rows_tell_who_weighed(self):
+        qs, filters, _ = self.querySet(month='2026-08')
+        rows = views._exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+        names = {'P1V': 'ท่าเรือสุราษฏร์', 'K1V': 'ท่าเรือกระบี่', 'W1A': 'ศิลาชัย'}
+        self.assertTrue(rows)
+        for r in rows:
+            self.assertEqual(r['bws_company'], names[r['bws_id']])
 
     # ---------- ใบไหนเข้ารายงาน ----------
 
@@ -311,41 +357,30 @@ class ExportDocumentCaseTests(TestCase):
         self.trip(41, date(2026, 8, 12), 'W1A', '06-V-900', '42.000', None, carry='')
         self.trip(42, date(2026, 8, 13), 'W1A', '06-V-900', '42.000', None, carry='รับเอง')
 
-    def test_empty_carry_type_is_counted_but_pickup_is_not(self):
-        """ตาชั่งไม่ได้บันทึกประเภทการบรรทุก (เช่นโมบาย E1V) ต้องไม่หายจากรายงาน ส่วนรับเองยังตัดเหมือนเดิม"""
+    def test_only_deliver_carry_type_is_counted(self):
+        """นับเฉพาะ "ส่งให้" : ใบที่ว่าง (NULL / ข้อความว่าง) กับรับเอง ไม่อยู่ในรายงาน"""
         self.addCarryTrips()
         qs, _, _ = self.querySet(month='2026-08')
         kept = self.ids(qs)
-        self.assertTrue({40, 41} <= kept)    # NULL และข้อความว่าง
         self.assertIn(30, kept)              # ส่งให้
-        self.assertNotIn(42, kept)           # รับเอง
+        self.assertFalse({40, 41, 42} & kept)
 
-    def test_rows_mark_empty_carry_type(self):
+    def test_empty_carry_type_is_split_out_as_a_warning(self):
+        """ใบว่างไม่ได้หายเงียบ : แยกเป็นชุดคำเตือน ส่วนรับเองไม่ต้องเตือน"""
         self.addCarryTrips()
-        qs, filters, _ = self.querySet(month='2026-08')
-        rows = {r['weight_id']: r for r in views._exportDocumentRows(
-            qs, filters['own_port_bws'], filters['own_port_customers'])}
-        self.assertTrue(rows[40]['carry_empty'])
-        self.assertEqual(rows[40]['carry_type'], views.EXPORT_DOC_CARRY_EMPTY_LABEL)
-        self.assertTrue(rows[41]['carry_empty'])
-        self.assertFalse(rows[30]['carry_empty'])
-        self.assertEqual(rows[30]['carry_type'], views.EXPORT_DOC_CARRY_TYPE)
+        _, filters, _ = self.querySet(month='2026-08')
+        self.assertEqual(self.ids(filters['carry_empty_qs']), {40, 41})
+        self.assertFalse({40, 41} & self.ids(filters['off_route_qs']))
 
-    def test_filter_only_empty_carry_type(self):
-        self.addCarryTrips()
-        qs, filters, _ = self.querySet(month='2026-08', carry_empty='1')
-        self.assertTrue(filters['carry_empty_only'])
-        self.assertEqual(self.ids(qs), {40, 41})
-
-    def test_trip_edit_file_accepts_empty_carry_type(self):
-        """เที่ยวที่ว่างอยู่ในรายงานแล้ว ไฟล์แก้ไขรายเที่ยวต้องแก้น้ำหนักของเที่ยวพวกนี้ได้ด้วย"""
+    def test_trip_edit_file_accepts_only_deliver_carry_type(self):
+        """ไฟล์แก้ไขรายเที่ยวแก้ได้เฉพาะเที่ยวที่อยู่ในรายงาน = ส่งให้"""
         self.assertTrue(views._exportDocumentCarryCounted(views.EXPORT_DOC_CARRY_TYPE))
-        self.assertTrue(views._exportDocumentCarryCounted(None))
-        self.assertTrue(views._exportDocumentCarryCounted(''))
+        self.assertFalse(views._exportDocumentCarryCounted(None))
+        self.assertFalse(views._exportDocumentCarryCounted(''))
         self.assertFalse(views._exportDocumentCarryCounted('รับเอง'))
 
     @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
-    def test_page_warns_and_highlights_empty_carry_type(self):
+    def test_page_warns_about_empty_carry_type(self):
         self.addCarryTrips()
         user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
         UserProfile.objects.create(user=user)
@@ -358,12 +393,14 @@ class ExportDocumentCaseTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page.context['summary']['carry_empty_count'], 2)
         self.assertEqual(page.context['carry_empty_by_bws'], [{'bws_id': 'W1A', 'trips': 2}])
+        self.assertFalse({40, 41} & {r['weight_id'] for r in page.context['rows']})
         html = page.content.decode('utf-8')
-        self.assertIn('ประเภทการบรรทุกว่าง — นับรวมในรายงานแล้ว ต้องตรวจก่อนจ่าย', html)
-        self.assertEqual(html.count('trip-carry-empty'), 2 + 1)   # 2 แถว + ตัวเลือก CSS 1 ที่
+        self.assertIn('ประเภทการบรรทุกว่าง — ไม่นับในรายงาน', html)
+        self.assertIn('problem=carry_empty#trips', html)
 
-        only = self.client.get('/exportDocument/', {'month': '2026-08', 'carry_empty': '1'})
+        only = self.client.get('/exportDocument/', {'month': '2026-08', 'problem': 'carry_empty'})
         self.assertEqual({r['weight_id'] for r in only.context['rows']}, {40, 41})
+        self.assertEqual(only.context['problem_count'], 2)
 
     def test_case_param_on_the_page(self):
         qs, _, _ = self.querySet(month='2025-06', case=OWN)
@@ -460,6 +497,67 @@ class ExportDocumentCaseTests(TestCase):
         # ลิงก์ของปุ่มไม่พา page เดิมไปด้วย
         self.assertNotIn('page=3', page.context['problem_query'])
 
+    # ---------- แผงเตือนในหน้า /internationalFreightRate/ ----------
+
+    def addBandOnOtherPortRoute(self):
+        """เส้น เหมือง -> ท่าเรือบริษัทอื่น : ทุกทีมได้ช่วง 0-35 ตัน (เที่ยว 30 หนัก 42 ตัน = ไม่เข้าช่วง)
+        เส้น เหมือง -> สุราษฎร์ ยังไม่มีทีมในสัญญา (เที่ยว 10 = ทีมไม่อยู่ในสัญญา)"""
+        band = CarryingweightRate.objects.create(name='0-35', description='0 ถึง 35',
+                                                 min_weight=Decimal('0'), max_weight=Decimal('35'))
+        rate = InternationalFreightRate.objects.get(destination=self.map_rows['06-V-900'])
+        InternationalFreightRateTeam.objects.create(international_freight_rate=rate, team=None,
+                                                    weight_carried=band, freight_rate=Decimal('100'))
+        # แถวราคาของ sheet ใช้ชนิดหินเป็นส่วนหนึ่งของคีย์ เที่ยวที่ไม่ระบุชนิดหินจึงจับสัญญาไม่ได้
+        Weight.objects.filter(weight_id__in=[10, 30]).update(stone_type_name='หิน 3/4')
+        return rate
+
+    def test_freight_rate_alert_lists_missing_team_and_band(self):
+        rate = self.addBandOnOtherPortRoute()
+        data = views._ifrContractAlertData('2026-08')
+        self.assertEqual(data['trip_count'], 2)
+        self.assertEqual(data['no_contract_trips'], 1)
+        self.assertEqual(data['no_contract'][0]['route'], 'ศิลาชัยสุราษฎร์ - ท่าเรือสุราษฎร์')
+        self.assertEqual(data['no_contract'][0]['teams'], [{'name': views.EXPORT_DOC_NO_TEAM, 'trips': 1}])
+        self.assertEqual(data['out_of_range_trips'], 1)
+        group = data['out_of_range'][0]
+        self.assertEqual((group['trips'], group['min'], group['max'], group['rate_id']),
+                         (1, Decimal('42.000'), Decimal('42.000'), rate.id))
+        team = group['teams'][0]
+        self.assertEqual((team['team'], team['trips'], team['bands']), (views.EXPORT_DOC_NO_TEAM, 1, ['0-35']))
+
+    def test_freight_rate_alert_cache_is_cleared_when_a_rate_changes(self):
+        before = views._ifrContractAlertData('2026-08')
+        self.assertEqual(before['out_of_range_trips'], 0)
+        self.addBandOnOtherPortRoute()
+        self.assertEqual(views._ifrContractAlertData('2026-08')['out_of_range_trips'], 0)   # ยังเป็นค่าที่เก็บไว้
+        views._ifrContractAlertClearCache()
+        self.assertEqual(views._ifrContractAlertData('2026-08')['out_of_range_trips'], 1)
+
+    def test_rate_apis_clear_the_alert_cache(self):
+        user = User.objects.create_user('acc2', 'acc2@t.com', 'pw12345!')
+        self.client.force_login(user)
+        with mock.patch.object(views, '_ifrContractAlertClearCache') as clear:
+            self.client.delete('/internationalFreightRate/api/delete/999999/')
+            self.client.patch('/internationalFreightRate/api/update/999999/', {}, content_type='application/json')
+            self.client.post('/internationalFreightRate/api/create/', {}, content_type='application/json')
+        self.assertEqual(clear.call_count, 3)
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_freight_rate_alert_fragment(self):
+        self.addBandOnOtherPortRoute()
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        with mock.patch.object(views, '_ifrContractAlertMonthOptions', return_value=['2026-09', '2026-08']):
+            page = self.client.get('/internationalFreightRate/alert/', {'month': '2026-08'})
+            fallback = self.client.get('/internationalFreightRate/alert/', {'month': 'xxx'})
+        self.assertEqual(page.status_code, 200)
+        html = page.content.decode('utf-8')
+        self.assertIn('มีเส้นทางแล้ว แต่ทีมรถนี้ยังไม่อยู่ในสัญญา', html)
+        self.assertIn('ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วงที่ตั้งไว้', html)
+        self.assertIn('problem=out_of_range', html)
+        self.assertEqual(fallback.context['month'], '2026-08')   # ค่าแปลก -> เดือนก่อน
+
     # ---------- ช่องน้ำหนักในไฟล์แก้ไขรายเที่ยว ----------
 
     def test_ton_attr_follows_where_it_was_weighed(self):
@@ -554,6 +652,152 @@ class ExportDocumentCustomerAliasTests(TestCase):
             name='ท่าเรือเรา', base_customer_id='06-V-013', base_company=surat)
         BaseCompanyMapCustomerAlias.objects.create(map_row=port_row, base_customer_id='77-V-013')
         self.assertIn('77-V-013', views._exportDocumentOwnPortCustomers())
+
+
+class ExportDocumentRemainingTeamsTests(TestCase):
+    """แถว "ทีมที่เหลือ" (team = NULL) ใช้กับทีมที่ไม่มีราคาของตัวเองในใบเดียวกันเท่านั้น"""
+
+    def test_named_team_keeps_its_own_rate(self):
+        from weightapp.models import BaseCarTeam
+        origin = BaseCompanyMapBaseCustomer.objects.create(name='เหมือง')
+        destination = BaseCompanyMapBaseCustomer.objects.create(name='ท่าเรือ')
+        named = BaseCarTeam.objects.create(car_team_id='TNAM', car_team_name='ทีมมีราคาเอง')
+        other = BaseCarTeam.objects.create(car_team_id='TOTH', car_team_name='ทีมอื่น')
+        band = CarryingweightRate.objects.create(name='50.01 ขึ้นไป', min_weight=Decimal('50.01'),
+                                                 max_weight=Decimal('999999'))
+        rate = InternationalFreightRate.objects.create(origin=origin, destination=destination,
+                                                       effective_date=INTERNATIONAL_FREIGHT_RATE_FIRST_DATE)
+        InternationalFreightRateTeam.objects.create(international_freight_rate=rate, team=None,
+                                                    weight_carried=band, contract_freight_rate=Decimal('180'))
+        InternationalFreightRateTeam.objects.create(international_freight_rate=rate, team=named,
+                                                    weight_carried=band, contract_freight_rate=Decimal('200'))
+        trips = [{'origin_map_id': origin.id, 'destination_map_id': destination.id, 'origin': 'เหมือง',
+                  'destination': 'ท่าเรือ', 'team_id': team.pk, 'team': team.car_team_name,
+                  'stone': 'หิน', 'pay_weight': Decimal('60'), 'weight_carried': None, 'date': date(2026, 9, 1)}
+                 for team in (named, other)]
+        rate_rows, _, _ = views._exportDocumentRatePlan(trips, '2026-09')
+        by_team = {}
+        for row in rate_rows:
+            by_team.setdefault(row['team'], []).append(row['contract_freight_rate'])
+        self.assertEqual(by_team, {'ทีมมีราคาเอง': [Decimal('200')], 'ทีมอื่น': [Decimal('180')]})
+
+
+class ExportDocumentTripRateTests(SimpleTestCase):
+    """อัตรารายเที่ยวฝั่ง Python ต้องเท่ากับสูตร O ในไฟล์ (รายงานค่าขนส่งเฉลี่ยใช้ตัวนี้)"""
+
+    def rate(self, **extra):
+        row = {'contract_freight_rate': Decimal('100'), 'contract_base_fuel_price': Decimal('30.00'),
+               'contract_base_fuel_price_max': Decimal('30.99'), 'fuel_freight_adjustment': Decimal('2')}
+        row.update(extra)
+        return row
+
+    def test_band_rules(self):
+        trip_rate = views._exportDocumentTripRate
+        self.assertEqual(trip_rate({'fuel_price': Decimal('30.50')}, self.rate()), Decimal('100.00'))  # ในช่วง
+        self.assertEqual(trip_rate({'fuel_price': Decimal('29.00')}, self.rate()), Decimal('98.00'))   # ต่ำกว่า
+        self.assertEqual(trip_rate({'fuel_price': Decimal('32.00')}, self.rate()), Decimal('102.02'))  # สูงกว่า
+        single = self.rate(contract_base_fuel_price_max=None)
+        self.assertEqual(trip_rate({'fuel_price': Decimal('32.00')}, single), Decimal('104.00'))      # ราคาเดียว
+
+    def test_missing_values(self):
+        trip_rate = views._exportDocumentTripRate
+        self.assertEqual(trip_rate({'fuel_price': Decimal('32')}, None), Decimal(0))               # ไม่มีแถวอัตรา
+        self.assertIsNone(trip_rate({'fuel_price': None}, self.rate()))                            # ไม่มีราคาน้ำมัน
+        no_fuel_clause = self.rate(contract_base_fuel_price=None)
+        self.assertEqual(trip_rate({'fuel_price': None}, no_fuel_clause), Decimal('100.00'))      # ไม่ปรับตามน้ำมัน
+        self.assertEqual(trip_rate({'fuel_price': Decimal('32')},
+                                   self.rate(contract_freight_rate=None)), Decimal(0))          # ไม่มีค่าสัญญา
+
+
+class FreightAverageReportTests(TestCase):
+    """รายงานค่าขนส่งเฉลี่ย : รวมรายเที่ยวเป็นกลุ่ม แยกช่วงน้ำหนัก และปุ่มโหลดในหน้าค่าขนส่ง"""
+
+    def test_group_puts_every_banded_trip_into_its_band(self):
+        """ตันเข้าช่วงน้ำหนักแม้เที่ยวนั้นยังคิดเงินไม่ได้ (เช่นไม่มีราคาน้ำมัน) ค่าเฉลี่ยคิดจากเที่ยวที่คิดเงินได้"""
+        rows = [{'pay_weight': Decimal('40'), 'paid': True, 'amount': Decimal('4000'), 'weight_carried': '35.01-50'},
+                {'pay_weight': Decimal('45'), 'paid': False, 'amount': Decimal(0), 'weight_carried': '35.01-50'},
+                {'pay_weight': Decimal('30'), 'paid': True, 'amount': Decimal('3300'), 'weight_carried': '0-35'},
+                {'pay_weight': Decimal('20'), 'paid': False, 'amount': Decimal(0), 'weight_carried': None}]
+        g = views._freightReportGroup(rows, lambda r: 'all')['all']
+        self.assertEqual((g['trips'], g['tons'], g['paid_tons'], g['amount']),
+                         (4, Decimal('135'), Decimal('70'), Decimal('7300')))
+        self.assertEqual((g['unpaid_tons'], g['no_band_tons']), (Decimal('65'), Decimal('20')))
+        heavy = g['bands']['35.01-50']
+        self.assertEqual((heavy['trips'], heavy['tons'], heavy['paid_tons'], heavy['amount']),
+                         (2, Decimal('85'), Decimal('40'), Decimal('4000')))
+        self.assertEqual(views._freightReportAvg(heavy['amount'], heavy['paid_tons']), 100.0)
+        self.assertEqual(g['bands']['0-35']['tons'], Decimal('30'))
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_download_has_three_sheets(self):
+        import openpyxl
+        from io import BytesIO
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        session = self.client.session
+        session['company_code'] = 'ROI'
+        session.save()
+        month = views._ifrContractAlertMonthOptions()[1]
+        response = self.client.get('/internationalFreightRate/averageReport/', {'month': month})
+        self.assertEqual(response.status_code, 200)
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertEqual(workbook.sheetnames, [views.FREIGHT_REPORT_SHEET_COMPANY,
+                                               views.FREIGHT_REPORT_SHEET_STONE,
+                                               views.FREIGHT_REPORT_SHEET_BAND])
+        page = self.client.get('/internationalFreightRate/')
+        self.assertContains(page, 'รายงานค่าขนส่งเฉลี่ย')
+
+
+class ExportDocumentFuelPricePerTripTests(TestCase):
+    """ราคาน้ำมันรายเที่ยว : ราคาวันที่วิ่งของบริษัทต้นทาง ไม่มีใช้ของปลายทาง ไม่มีทั้งคู่ = ว่าง"""
+
+    @classmethod
+    def setUpTestData(cls):
+        from weightapp.models import InternationalFreightRateFuelPrice
+        cls.mine = BaseCompany.objects.create(name='เหมืองทดสอบ', code='TMIN')
+        cls.port = BaseCompany.objects.create(name='ท่าเรือทดสอบ', code='TPRT')
+        cls.origin = BaseCompanyMapBaseCustomer.objects.create(name='เหมือง', base_company=cls.mine)
+        cls.destination = BaseCompanyMapBaseCustomer.objects.create(name='ท่าเรือ', base_company=cls.port)
+        for company, day, price in ((cls.mine, 1, '32.00'), (cls.port, 1, '40.00'), (cls.port, 2, '33.50')):
+            InternationalFreightRateFuelPrice.objects.create(
+                base_comp=company, date=date(2026, 9, day), average_fuel_price=Decimal(price))
+
+    def trip(self, day, team='ทีม A'):
+        return {'origin_map_id': self.origin.id, 'destination_map_id': self.destination.id,
+                'origin': 'เหมือง', 'destination': 'ท่าเรือ', 'team': team, 'stone': 'หิน',
+                'weight_carried': '0-35', 'date': date(2026, 9, day)}
+
+    def rateRow(self, team='ทีม A', **extra):
+        row = {'team': team, 'origin': 'เหมือง', 'destination': 'ท่าเรือ', 'weight_carried': '0-35',
+               'stone': 'หิน', 'contract_freight_rate': Decimal('100'),
+               'contract_base_fuel_price': Decimal('30'), 'fuel_freight_adjustment': Decimal('1')}
+        row.update(extra)
+        return row
+
+    def test_origin_price_first_then_destination(self):
+        trips = [self.trip(1), self.trip(2)]
+        views._exportDocumentAssignFuelPrice(trips, [self.rateRow()])
+        self.assertEqual(trips[0]['fuel_price'], Decimal('32.00'))   # ต้นทางมี ใช้ต้นทาง (ไม่ใช่ 40)
+        self.assertEqual(trips[1]['fuel_price'], Decimal('33.50'))   # ต้นทางไม่มี ใช้ปลายทาง
+        self.assertFalse(trips[0]['fuel_missing'] or trips[1]['fuel_missing'])
+
+    def test_no_price_on_either_side_is_left_blank_and_flagged(self):
+        trips = [self.trip(3), self.trip(3), self.trip(4)]
+        summary = views._exportDocumentAssignFuelPrice(trips, [self.rateRow()])
+        self.assertIsNone(trips[0]['fuel_price'])
+        self.assertTrue(all(t['fuel_missing'] for t in trips))
+        self.assertEqual(summary['trips'], 3)
+        self.assertEqual(summary['routes'], [{'route': 'เหมือง - ท่าเรือ', 'trips': 3,
+                                              'days': '3-4 ก.ย. 69'}])
+
+    def test_missing_price_does_not_matter_without_fuel_clause(self):
+        """สัญญาไม่ปรับตามน้ำมัน หรือทีมไม่มีสัญญา : ราคาว่างไม่กระทบเงิน ไม่ต้องเตือน"""
+        trips = [self.trip(3), self.trip(3, team='ทีมไม่มีสัญญา')]
+        summary = views._exportDocumentAssignFuelPrice(
+            trips, [self.rateRow(contract_base_fuel_price=None)])
+        self.assertFalse(trips[0]['fuel_missing'] or trips[1]['fuel_missing'])
+        self.assertEqual(summary['trips'], 0)
 
 
 class ExportDocumentDayRangesTests(TestCase):

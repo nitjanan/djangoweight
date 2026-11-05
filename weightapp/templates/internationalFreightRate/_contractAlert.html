@@ -1,0 +1,120 @@
+{% load humanize %}
+{% comment %}
+  fragment ที่ viewInternationalFreightRate.html โหลดมาแทรกผ่าน fetch (ดู internationalFreightRateAlert)
+  เตือนแค่ 2 เรื่องที่คนตั้งราคาแก้ได้เองในหน้านี้ : ทีมไม่อยู่ในสัญญา / น้ำหนักไม่เข้าช่วง
+  ตัวเลขคิดแบบเดียวกับกล่องเตือนหน้า /exportDocument/ (เฉพาะเส้นทางที่ตั้งราคาไว้แล้ว)
+{% endcomment %}
+{% with nc=alert.no_contract_trips oor=alert.out_of_range_trips %}
+<div class="ifr-alert-head">
+  <button type="button" class="ifr-alert-toggle" aria-expanded="true" aria-controls="ifr_contract_alert_body">
+    <i class="bi bi-chevron-down ifr-alert-chevron"></i>
+    <span class="fw-bold">แจ้งเตือนสัญญาค่าขนส่ง</span>
+    {% if nc or oor %}
+      {% if nc %}<span class="badge bg-danger">ทีมไม่อยู่ในสัญญา {{ nc|intcomma }} เที่ยว</span>{% endif %}
+      {% if oor %}<span class="badge bg-warning text-dark">น้ำหนักไม่เข้าช่วง {{ oor|intcomma }} เที่ยว</span>{% endif %}
+    {% else %}
+      <span class="badge bg-success">ครบ</span>
+    {% endif %}
+  </button>
+  <label class="ifr-alert-month small text-muted mb-0">
+    เดือน
+    <select class="form-select form-select-sm d-inline-block w-auto" data-ifr-alert-month>
+      {% for value, label in month_options %}
+      <option value="{{ value }}" {% if value == month %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</div>
+
+<div id="ifr_contract_alert_body" class="ifr-alert-body">
+  {% if not nc and not oor %}
+  <div class="small text-muted">
+    {% if alert.trip_count %}
+      เดือนนี้ทุกเที่ยวในเส้นทางที่ตั้งราคาไว้ ({{ alert.trip_count|intcomma }} เที่ยว) จับสัญญาและช่วงน้ำหนักได้ครบ
+    {% else %}
+      เดือนนี้ยังไม่มีเที่ยวในเส้นทางที่ตั้งราคาไว้
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if nc %}
+  <div class="ifr-issue ifr-issue-bad">
+    <div class="ifr-issue-num">{{ nc|intcomma }} เที่ยว</div>
+    <div class="ifr-issue-body">
+      <div class="ifr-issue-title">มีเส้นทางแล้ว แต่ทีมรถนี้ยังไม่อยู่ในสัญญา</div>
+      <div class="ifr-issue-text">
+        เที่ยวพวกนี้จะขึ้นเงิน 0 ในไฟล์ Export เอกสาร —
+        <strong>ต้องทำ:</strong> แก้ไขเส้นทางนั้น แล้วเพิ่มทีมเหล่านี้ (หรือตั้งเป็น "ทุกทีม")
+        {% comment %}
+        จัดเป็นกลุ่มตามเส้นทาง พับไว้ก่อน เห็นแค่หัว กดแล้วค่อยกางดูรายทีม
+        {% endcomment %}
+        <div class="ifr-groups">
+          {% for d in alert.no_contract %}
+          <details class="ifr-group">
+            <summary>
+              <span class="fw-semibold">{{ d.route }}</span>
+              <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว · {{ d.teams|length }} ทีม</span>
+            </summary>
+            <div class="ifr-group-body">
+              ทีมที่ยังไม่อยู่ในสัญญา:
+              {% for t in d.teams %}<span class="badge bg-light text-dark border">{{ t.name }} ({{ t.trips|intcomma }})</span> {% endfor %}
+              {% if d.rate_id %}
+              <div class="mt-1"><a class="btn btn-sm btn-outline-danger py-0" href="{% url 'editInternationalFreightRate' d.rate_id %}">แก้ไขเส้นทางนี้</a></div>
+              {% endif %}
+            </div>
+          </details>
+          {% endfor %}
+        </div>
+        <a class="small" href="{% url 'viewExportDocument' %}?month={{ month }}&amp;problem=no_contract#trips">ดูรายเที่ยวในหน้า Export เอกสาร</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if oor %}
+  <div class="ifr-issue ifr-issue-warn">
+    <div class="ifr-issue-num">{{ oor|intcomma }} เที่ยว</div>
+    <div class="ifr-issue-body">
+      <div class="ifr-issue-title">ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วงที่ตั้งไว้</div>
+      <div class="ifr-issue-text">
+        เทียบ นน.จ่ายค่าบรรทุก กับช่วงน้ำหนักที่ทีมนั้นมีในสัญญาของเส้นทางนั้น —
+        <strong>ต้องทำ:</strong> เพิ่มช่วงน้ำหนักให้ครอบคลุม หรือตรวจว่าน้ำหนักที่ชั่งถูกต้องไหม
+        <div class="ifr-groups">
+          {% for d in alert.out_of_range %}
+          <details class="ifr-group">
+            <summary>
+              <span class="fw-semibold">{{ d.route }}</span>
+              <span class="text-muted small">
+                — {{ d.trips|intcomma }} เที่ยว · {{ d.teams|length }} ทีม
+                {% if d.min is not None %}· น้ำหนักจริง {{ d.min|floatformat:2 }}{% if d.max != d.min %} – {{ d.max|floatformat:2 }}{% endif %} ตัน{% endif %}
+              </span>
+            </summary>
+            <div class="ifr-group-body">
+              <ul class="ifr-missing-list mb-1">
+                {% for t in d.teams %}
+                <li>
+                  ทีม <span class="fw-semibold">{{ t.team }}</span>
+                  <span class="text-muted">— {{ t.trips|intcomma }} เที่ยว</span>
+                  {% if t.min is not None %}
+                    · น้ำหนักจริง <strong>{{ t.min|floatformat:2 }}{% if t.max != t.min %} – {{ t.max|floatformat:2 }}{% endif %} ตัน</strong>
+                  {% endif %}
+                  {% if t.no_weight %}<span class="text-danger">· ไม่มีน้ำหนัก {{ t.no_weight|intcomma }} เที่ยว</span>{% endif %}
+                  · สัญญามีช่วง:
+                  {% for b in t.bands %}<span class="badge bg-light text-dark border">{{ b }}</span> {% endfor %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% if d.rate_id %}
+              <a class="btn btn-sm btn-outline-warning py-0" href="{% url 'editInternationalFreightRate' d.rate_id %}">แก้ไขเส้นทางนี้</a>
+              {% endif %}
+            </div>
+          </details>
+          {% endfor %}
+        </div>
+        <a class="small" href="{% url 'viewExportDocument' %}?month={{ month }}&amp;problem=out_of_range#trips">ดูรายเที่ยวในหน้า Export เอกสาร</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endwith %}

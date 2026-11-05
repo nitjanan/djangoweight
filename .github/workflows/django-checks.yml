@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # ระบุรุ่นตรง ๆ : ubuntu-latest ย้ายไป 26.04 แล้วไม่มี Python 3.9 ให้ setup-python ติดตั้ง
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     services:

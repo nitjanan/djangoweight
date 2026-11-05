@@ -1572,22 +1572,11 @@ class InternationalFreightRate(models.Model):
     # ชื่อดึงจาก origin.name เอา ไม่เก็บซ้ำในตารางนี้ กันข้อมูลขัดกันเองเวลามีคนแก้ชื่อในตาราง map
     origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_origins', null=True, blank=True, verbose_name="ต้นทาง")
     destination = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.PROTECT, related_name='freight_rate_destinations', null=True, blank=True, verbose_name="ปลายทาง")
-    # ราคาน้ำมันฐานในสัญญาเป็น "ช่วง" ไม่ใช่ตัวเลขเดียว เช่น 30.00 - 30.99
-    # แปลว่าตราบใดที่ราคาน้ำมันจริงยังอยู่ในช่วงนี้ ค่าขนส่งไม่ต้องปรับ
-    #
-    # เก็บเป็นสองช่อง และให้ช่องล่างชื่อเดิมคือ base_fuel_price เพราะเป็นตัวที่เอาไปคิดเงิน
-    # สูตร K ในไฟล์ excel คือ (ราคาน้ำมันเฉลี่ย - ราคาน้ำมันฐาน) x อัตราปรับ
-    # ต้องใช้ขอบล่างเสมอ ตามที่เจ้าของงานกำหนด ("เอาเลขด้านหน้ามาคิด")
-    # ถ้าเปลี่ยนไปใช้ขอบบนหรือค่ากลาง ยอดเงินที่จ่ายรถร่วมจะเปลี่ยนทันทีทั้งระบบ
-    #
-    # base_fuel_price_max มีไว้แสดงและไว้ให้คนกรอกเห็นช่วงที่ตกลงกันไว้ ไม่มีสูตรไหนใช้คิดเงิน
-    # ว่างได้ = สัญญานั้นตกลงเป็นราคาเดียว ไม่ได้ตกลงเป็นช่วง
-    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน (ขอบล่าง)")#
-    base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ราคาน้ำมันฐาน (ขอบบน)")
+    # ราคาน้ำมันฐานของเส้นทาง (base_fuel_price / base_fuel_price_max เป็นช่วง) ถูกลบใน issue #125
+    # ใช้ "น้ำมันฐานวันทำสัญญา" ของแต่ละแถวทีม (ทีม + ช่วงน้ำหนัก) แทน ดู InternationalFreightRateTeam
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ระยะทาง")#
     fuel_used_per_trip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="ใช้น้ำมัน (ลิตร/เที่ยว)")#
     # ราคาน้ำมันเฉลี่ยย้ายไปตาราง InternationalFreightRateFuelPrice เพราะเปลี่ยนทุกเดือน
-    # ส่วน base_fuel_price ยังอยู่ที่นี่ เป็นเงื่อนไขในสัญญาที่ไม่เปลี่ยนรายเดือน
     # ส่วนค่าปรับตามน้ำมันย้ายไปอยู่รายแถวทีม (ดู InternationalFreightRateTeam) เพราะแต่ละทีม
     # และแต่ละช่วงแบก นน. ต่อรองกันคนละอัตรา เก็บค่าเดียวทั้งใบทำให้กรอกค่าจริงไม่ได้
     # น้ำหนักบรรทุก (payload_weight) ถูกลบทิ้งใน migration 0297 ไม่มีสูตรไหนเคยใช้
@@ -1674,18 +1663,6 @@ class InternationalFreightRate(models.Model):
     def isFirstVersion(self):
         """ใบแรกของเส้นทาง แก้ทับได้เลยไม่ต้องขึ้นเวอร์ชัน ถ้ายังไม่มีใบอื่นตามมา"""
         return self.root_id == self.id
-
-    def baseFuelPriceLabel(self):
-        """ราคาน้ำมันฐานสำหรับเอาไปแสดง เช่น "30.00 - 30.99" หรือ "30.00" ถ้าไม่ได้ตกลงเป็นช่วง
-
-        รวมไว้ที่เดียวเพราะมีหลายหน้าที่ต้องแสดงค่านี้ (ตารางรายการ การ์ดเวอร์ชัน ฟอร์มแก้ไข)
-        ถ้าปล่อยให้แต่ละ template ประกอบเอง เดี๋ยวจะแสดงไม่เหมือนกัน
-        """
-        if self.base_fuel_price is None:
-            return None
-        if self.base_fuel_price_max is None:
-            return '%s' % self.base_fuel_price
-        return '%s - %s' % (self.base_fuel_price, self.base_fuel_price_max)
 
     def __str__(self):
         origin = self.origin.name if self.origin else "-"
@@ -1808,8 +1785,13 @@ class InternationalFreightRateTeam(models.Model):
                                                 verbose_name="ค่าขนส่งตามสัญญา (บาท/ตัน)")
     # ราคาน้ำมันวันที่เซ็นสัญญา เก็บรายแถว เพราะทีมเดียวกันคนละช่วงแบก นน. ทำสัญญาคนละวันได้
     # เก็บเป็นค่าเดียว ไม่ใช่ช่วง ต่างจากราคาน้ำมันฐานของใบที่เป็นช่วง
+    # น้ำมันฐานวันทำสัญญาเป็น "ช่วง" ได้ เช่น 30.00 - 30.99 (issue #125)
+    #   ราคาเฉลี่ยอยู่ในช่วง = ไม่ปรับ / ต่ำกว่าขอบล่าง หรือสูงกว่าขอบบน = ปรับจากขอบที่หลุด
+    # ขอบบนว่างได้ = ตกลงเป็นราคาเดียว (ใช้ขอบล่างเป็นทั้งสองขอบ)
     contract_base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
-                                                   verbose_name="ราคาน้ำมันฐานวันทำสัญญา (บาท/ลิตร)")
+                                                   verbose_name="ราคาน้ำมันฐานวันทำสัญญา ขอบล่าง (บาท/ลิตร)")
+    contract_base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                       verbose_name="ราคาน้ำมันฐานวันทำสัญญา ขอบบน (บาท/ลิตร)")
     # วันที่เซ็นสัญญาของแถวนี้ (ทีม + ช่วงแบก นน.) ว่างได้ แถวเก่าปล่อยว่าง ยังไม่ใช้คิดเงิน
     contract_date = models.DateField(null=True, blank=True, verbose_name="วันทำสัญญา")
 
@@ -1822,6 +1804,24 @@ class InternationalFreightRateTeam(models.Model):
     def __str__(self):
         team_name = self.team.car_team_name if self.team else "ทุกทีม"
         return f"{team_name} - {self.weight_carried}"
+
+    def contractFuelIsSingle(self):
+        """ตกลงน้ำมันฐานเป็นราคาเดียวหรือไม่
+
+        หน้ากรอกให้ใส่เลขเดิมทั้งสองช่องเมื่อเป็นราคาเดียว (อ่านง่ายกว่าเว้นขอบบนไว้)
+        แต่แถวที่บันทึกตอนกติกายังเป็น "เว้นขอบบน" ยังมี null อยู่ จึงต้องนับทั้งสองแบบ
+        ทั้งคู่ให้ผลเท่ากันในสูตรของไฟล์ Excel อยู่แล้ว เพราะสูตรใช้ IF(I="",H,I)
+        """
+        return (self.contract_base_fuel_price_max is None
+                or self.contract_base_fuel_price_max == self.contract_base_fuel_price)
+
+    def contractFuelLabel(self):
+        """น้ำมันฐานวันทำสัญญาสำหรับแสดงผล เช่น "30.00 - 30.99" หรือ "30.00" ถ้าตกลงราคาเดียว"""
+        if self.contract_base_fuel_price is None:
+            return None
+        if self.contractFuelIsSingle():
+            return '%s' % self.contract_base_fuel_price
+        return '%s - %s' % (self.contract_base_fuel_price, self.contract_base_fuel_price_max)
 
     def paymentTermLabel(self):
         """ข้อความเงื่อนไขการชำระเงินสำหรับแสดงผล คืน None ถ้ายังไม่ระบุ"""

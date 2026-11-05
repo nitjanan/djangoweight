@@ -33,11 +33,15 @@ class IfrRateFixtureMixin:
             name='นน. 40.01-50 ตัน', description='นน. 40.01-50 ตัน',
             min_weight=Decimal('40.01'), max_weight=Decimal('50.00'))
 
-    def basePayload(self, teams):
+    def basePayload(self, teams, fill_contract=True):
+        """fill_contract : เติมค่าสัญญาให้แถวที่ไม่ได้ระบุ (issue #125 บังคับกรอก)
+        เทสต์ส่วนใหญ่ไม่ได้สนค่าสัญญา ไม่ต้องใส่เองทุกแถว"""
+        if fill_contract:
+            teams = [dict({'contract_freight_rate': '1200.00', 'contract_base_fuel_price': '30.00'}, **t)
+                     for t in teams]
         return {
             'origin': self.origin.id,
             'destination': self.destination.id,
-            'base_fuel_price': '32.50',
             'distance': '450.00',
             'fuel_used_per_trip': '120.00',
             'teams': teams,
@@ -75,18 +79,22 @@ class IfrFuelAdjustmentPerTeamTests(IfrRateFixtureMixin, TestCase):
         self.assertIn('fuel_freight_adjustment', serializer.errors['teams'][0])
 
     def test_rate_no_longer_accepts_the_removed_fields(self):
-        """payload_weight กับค่าปรับระดับใบ ไม่มีในโมเดลแล้ว ส่งมาก็ต้องไม่ถูกเก็บ"""
+        """payload_weight / ค่าปรับระดับใบ / ราคาน้ำมันฐานของเส้นทาง (#125) ไม่มีในโมเดลแล้ว ส่งมาก็ต้องไม่ถูกเก็บ"""
         payload = self.basePayload([
             {'team_id': self.team.pk, 'weight_carried': self.band_low.id,
              'freight_rate': '1200.00', 'fuel_freight_adjustment': '1.00'},
         ])
         payload['payload_weight'] = '25.00'
         payload['fuel_freight_adjustment'] = '9.99'
+        payload['base_fuel_price'] = '32.50'
+        payload['base_fuel_price_max'] = '32.99'
         serializer = InternationalFreightRateSerializer(data=payload)
         self.assertTrue(serializer.is_valid(), serializer.errors)
         rate = serializer.save()
         self.assertFalse(hasattr(rate, 'payload_weight'))
         self.assertFalse(hasattr(rate, 'fuel_freight_adjustment'))
+        self.assertFalse(hasattr(rate, 'base_fuel_price'))
+        self.assertFalse(hasattr(rate, 'base_fuel_price_max'))
 
     def test_changing_only_the_adjustment_issues_a_new_version(self):
         """กับดักหลัก : ถ้า _teamKey ไม่รวมช่องนี้ ระบบจะคิดว่า "ไม่มีอะไรเปลี่ยน" แล้วทับใบเดิม"""

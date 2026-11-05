@@ -298,13 +298,34 @@ class InternationalFreightRateTeamSerializer(serializers.ModelSerializer):
             'fuel_freight_adjustment': {'required': True, 'allow_null': False},
             # 0 = เงินสด ไม่บังคับกรอก (null = ยังไม่ระบุ) กันพิมพ์เกินปีไว้ เพราะบัญชีใช้สูงสุด 60 วัน
             'credit_days': {'required': False, 'allow_null': True, 'min_value': 0, 'max_value': 365},
-            # คำนวณเองจาก ค่าขนส่ง / ระยะทาง ของใบ (ดู _perTonKm) client ส่งมาก็ไม่รับ
+            # คำนวณเองจาก ค่าขนส่งตามสัญญา / ระยะทาง ของใบ (ดู _perTonKm) client ส่งมาก็ไม่รับ
             'freight_rate_per_ton_km': {'read_only': True},
-            # ค่าตอนทำสัญญา ไม่บังคับกรอก (null = ยังไม่ได้กรอก) ยังไม่มีสูตรไหนเอาไปคิดเงิน
-            'contract_freight_rate': {'required': False, 'allow_null': True, 'min_value': 0},
-            'contract_base_fuel_price': {'required': False, 'allow_null': True, 'min_value': 0},
+            # ค่าขนส่งรายแถวเลิกใช้แล้ว (issue #125) ไม่รับจาก client ค่าเดิมในใบเก่ายังเก็บไว้ให้ดูย้อนหลัง
+            'freight_rate': {'read_only': True},
+            # issue #125 : ค่าสัญญาเป็นตัวตั้งของค่าขนส่งที่จ่าย บังคับกรอกทุกแถว
+            #   ค่าขนส่งที่จ่าย = ค่าขนส่งตามสัญญา + (ราคาน้ำมันเฉลี่ย − น้ำมันฐานวันทำสัญญา) × ปรับตามน้ำมัน
+            'contract_freight_rate': {'required': True, 'allow_null': False, 'min_value': 0},
+            'contract_base_fuel_price': {'required': True, 'allow_null': False, 'min_value': 0},
+            # ขอบบนของช่วงน้ำมันฐาน ตกลงราคาเดียวให้ใส่เลขเดิมทั้งสองช่อง
+            # ยังรับ null ได้ เพราะแถวที่บันทึกตอนกติกาเป็น "เว้นขอบบน" ยังมีอยู่ใน db
+            'contract_base_fuel_price_max': {'required': False, 'allow_null': True, 'min_value': 0},
             'contract_date': {'required': False, 'allow_null': True},
         }
+
+    def validate(self, attrs):
+        return _validateContractFuelRange(super().validate(attrs))
+
+
+def _validateContractFuelRange(attrs):
+    """ขอบบนของน้ำมันฐานวันทำสัญญาต้องไม่ต่ำกว่าขอบล่าง (ตรวจรายแถวทีม)"""
+    low = attrs.get('contract_base_fuel_price')
+    high = attrs.get('contract_base_fuel_price_max')
+    if low is not None and high is not None and high < low:
+        raise serializers.ValidationError({
+            'contract_base_fuel_price_max':
+                'น้ำมันฐานวันทำสัญญา ขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s) '
+                '— ถ้าตกลงเป็นราคาเดียวให้ใส่เลขเดิมทั้งสองช่อง' % (high, low)})
+    return attrs
 
 
 THAI_MONTH_NAMES = [
@@ -314,7 +335,7 @@ THAI_MONTH_NAMES = [
 
 
 def _perTonKm(freight_rate, distance):
-    """ค่าขนส่ง บาท/ตัน/กม. = ค่าขนส่ง (บาท/ตัน) / ระยะทาง (กม.) ปัด 2 ตำแหน่ง (ปัดครึ่งขึ้น) ตามคอลัมน์ใน db
+    """ค่าขนส่ง บาท/ตัน/กม. = ค่าขนส่งตามสัญญา (บาท/ตัน) / ระยะทาง (กม.) ปัด 2 ตำแหน่ง (ปัดครึ่งขึ้น) ตามคอลัมน์ใน db
 
     คำนวณฝั่ง server ทุกครั้งที่บันทึก ไม่เชื่อค่าจาก client เพราะเป็นค่าที่ได้มาจากช่องอื่นล้วน ๆ
     ถ้าให้กรอกเองได้ พอแก้ค่าขนส่งหรือระยะทางแล้วลืมแก้ช่องนี้ ตัวเลขจะขัดกันเงียบ ๆ
@@ -380,7 +401,6 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             # ห้ามใส่ allow_blank เพราะเป็น option ของฟิลด์ข้อความเท่านั้น จะ error ตอนสร้าง serializer
             'origin': {'required': True, 'allow_null': False},
             'destination': {'required': True, 'allow_null': False},
-            'base_fuel_price': {'required': True, 'allow_null': False},
             'distance': {'required': True, 'allow_null': False},
             'fuel_used_per_trip': {'required': True, 'allow_null': False},
             # ระบบเป็นคนใส่เวลาเอง ไม่ให้ client ส่งมาทับ
@@ -408,34 +428,16 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         return team.car_team_name if team and team.car_team_name else str(team_pk)
 
     def validate(self, attrs):
-        """ขอบบนของราคาน้ำมันฐานต้องไม่ต่ำกว่าขอบล่าง
-
-        ต้องเช็คใน validate ระดับ object ไม่ใช่ validate_base_fuel_price_max
-        เพราะต้องเห็นค่าทั้งสองช่องพร้อมกัน
-
-        ตอนแก้ใบเดิม client อาจส่งมาแค่ช่องเดียว จึงต้องดึงอีกช่องจากใบเดิมมาเทียบ
-        ไม่งั้นแก้ขอบล่างให้สูงกว่าขอบบนเดิมได้โดยไม่มีอะไรเตือน
-        """
+        """เติมค่าที่คิดจากช่องอื่นของแถวทีม"""
         attrs = super().validate(attrs)
-        low = attrs.get('base_fuel_price')
-        high = attrs.get('base_fuel_price_max')
-        if self.instance is not None:
-            if 'base_fuel_price' not in attrs:
-                low = self.instance.base_fuel_price
-            if 'base_fuel_price_max' not in attrs:
-                high = self.instance.base_fuel_price_max
-        if low is not None and high is not None and high < low:
-            raise serializers.ValidationError({
-                'base_fuel_price_max':
-                    'ราคาน้ำมันฐานขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s) '
-                    '— ถ้าตกลงเป็นราคาเดียวให้เว้นช่องขอบบนไว้' % (high, low)})
-
-        # บาท/ตัน/กม. ของทุกแถวทีม คิดจากระยะทางของใบ ตอนแก้ใบเดิมแล้วไม่ได้ส่งระยะทางมา ใช้ของเดิม
+        # บาท/ตัน/กม. ของทุกแถวทีม = ค่าขนส่งตามสัญญา / ระยะทางของใบ
+        # ตอนแก้ใบเดิมแล้วไม่ได้ส่งระยะทางมา ใช้ของเดิม
         teams = attrs.get('teams')
         if teams is not None:
             distance = attrs['distance'] if 'distance' in attrs else getattr(self.instance, 'distance', None)
             for team_data in teams:
-                team_data['freight_rate_per_ton_km'] = _perTonKm(team_data.get('freight_rate'), distance)
+                team_data['freight_rate_per_ton_km'] = _perTonKm(
+                    team_data.get('contract_freight_rate'), distance)
         return attrs
 
     def validate_teams(self, teams_data):
@@ -562,7 +564,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
     # ช่องที่ถือว่าเป็น "ตัวค่าขนส่ง" จริง ๆ ถ้าช่องพวกนี้เปลี่ยนถึงจะนับเป็นการปรับราคา
     # effective_date รวมอยู่ด้วย เพราะการเปลี่ยนวันเริ่มใช้ต้อง save ลง DB จริง
-    _RATE_FIELDS = ('origin', 'destination', 'base_fuel_price', 'base_fuel_price_max',
+    _RATE_FIELDS = ('origin', 'destination',
                     'distance', 'fuel_used_per_trip', 'note', 'effective_date')
 
     @staticmethod
@@ -585,7 +587,8 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
         return (
             s(getattr(team, 'pk', team)),
             s(getattr(band, 'pk', band)),
-            s(get('freight_rate')),
+            # ไม่เทียบ freight_rate : เลิกใช้แล้ว (issue #125) แถวเก่ายังมีค่า แถวใหม่เป็น null
+            # ถ้าเทียบด้วย กดบันทึกโดยไม่แก้อะไรจะออกเวอร์ชันใหม่ทุกครั้ง
             s(get('fuel_freight_adjustment')),
             s(get('discount_per_ton')),
             # ไม่เทียบ freight_rate_per_ton_km : คำนวณจาก freight_rate กับระยะทางที่เทียบอยู่แล้ว
@@ -594,6 +597,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
             s(get('credit_days')),
             s(get('contract_freight_rate')),
             s(get('contract_base_fuel_price')),
+            s(get('contract_base_fuel_price_max')),
             s(get('contract_date')),
         )
 
@@ -626,7 +630,7 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
 
         rate = InternationalFreightRate(root=root, version=last_version + 1)
         # ยกค่าทุกช่องจากใบเดิมมาก่อน แล้วค่อยทับเฉพาะช่องที่ส่งมาแก้
-        for field in ('origin', 'destination', 'base_fuel_price', 'base_fuel_price_max',
+        for field in ('origin', 'destination',
                       'distance', 'fuel_used_per_trip', 'note'):
             setattr(rate, field, getattr(instance, field))
         for attr, value in validated_data.items():
@@ -645,10 +649,11 @@ class InternationalFreightRateSerializer(serializers.ModelSerializer):
              'fuel_freight_adjustment': t.fuel_freight_adjustment,
              'discount_per_ton': t.discount_per_ton,
              # ระยะทางของใบใหม่อาจเปลี่ยน ต้องคิดใหม่ ไม่ยกค่าเดิมมาตรง ๆ
-             'freight_rate_per_ton_km': _perTonKm(t.freight_rate, rate.distance), 'note': t.note,
+             'freight_rate_per_ton_km': _perTonKm(t.contract_freight_rate, rate.distance), 'note': t.note,
              'credit_days': t.credit_days,
              'contract_freight_rate': t.contract_freight_rate,
              'contract_base_fuel_price': t.contract_base_fuel_price,
+             'contract_base_fuel_price_max': t.contract_base_fuel_price_max,
              'contract_date': t.contract_date}
             for t in instance.teams.all()
         ]

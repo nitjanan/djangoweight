@@ -6221,7 +6221,10 @@ def weightCreate(request):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
             logger.error("weightCreate IntegrityError: %s | data=%s", e, request.data)
-            return Response({**serializer.data, 'error': str(e)}, status=status.HTTP_409_CONFLICT)
+            # ไม่ส่งข้อความจากฐานข้อมูลกลับไปตรง ๆ (เผยโครงสร้างตาราง) บอกแค่ชนิดของปัญหา
+            # คง "Duplicate entry" ไว้ เผื่อโปรแกรมตาชั่งดูคำนี้เพื่อรู้ว่าเป็นใบซ้ำ
+            error = 'Duplicate entry' if 'Duplicate entry' in str(e) else 'IntegrityError'
+            return Response({**serializer.data, 'error': error}, status=status.HTTP_409_CONFLICT)
     else:
         logger.error("weightCreate validation errors: %s | data=%s", serializer.errors, request.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -10021,7 +10024,19 @@ def exportLoadingRate(request):
     return response
 
 class CapacityExceeded(Exception):
-    pass
+    """รถเกินจำนวนที่ใบสั่งสินค้ารับได้ message คือข้อความคงที่ที่ส่งกลับให้โปรแกรมตาชั่ง
+
+    เก็บข้อความไว้ที่ class ไม่ส่ง str(e) กลับไปตรง ๆ (CodeQL : stack trace exposure)
+    """
+    message = 'capacity exceeded'
+
+
+class CarCompanyLimitExceeded(CapacityExceeded):
+    message = 'car_company limit exceeded'
+
+
+class CarCustomerLimitExceeded(CapacityExceeded):
+    message = 'car_customer limit exceeded'
 
 ######## update or create WeightDelivery จาก จากตาชั่ง local เก็บข้อมูลตามรายการชั่งที่มีใบสั่งสินค้า ########
 @csrf_exempt
@@ -10085,7 +10100,7 @@ def uc_weight_delivery(request):
                     ).exclude(weight_id=weight_id).count()
 
                     if other_count >= car_company:
-                        raise CapacityExceeded('car_company limit exceeded')
+                        raise CarCompanyLimitExceeded()
 
                 elif carry_type_name == 'รับเอง':
                     other_count = WeightDelivery.objects.filter(
@@ -10097,7 +10112,7 @@ def uc_weight_delivery(request):
                     ).exclude(weight_id=weight_id).count()
 
                     if other_count >= car_customer:
-                        raise CapacityExceeded('car_customer limit exceeded')
+                        raise CarCustomerLimitExceeded()
 
             # จำ DO เดิมของรายการนี้ไว้ ถ้ารายการถูกย้ายไป DO อื่น ต้องคำนวณ DO เดิมใหม่ด้วย
             # ไม่งั้น DO เดิมจะค้างยอดเที่ยว/ตันของรายการที่ย้ายออกไปแล้ว
@@ -10173,17 +10188,17 @@ def uc_weight_delivery(request):
             'do_id': wd.do_id
         })
 
-    except CapacityExceeded as e:
+    except CarCompanyLimitExceeded:
+        return JsonResponse({'status': 'fail', 'message': CarCompanyLimitExceeded.message}, status=422)
+    except CarCustomerLimitExceeded:
+        return JsonResponse({'status': 'fail', 'message': CarCustomerLimitExceeded.message}, status=422)
+
+    except Exception:
+        # รายละเอียดเก็บใน log ไม่ส่ง str(e) กลับไป (CodeQL : stack trace exposure)
+        logger.exception('update/create WeightDelivery failed')
         return JsonResponse({
             'status': 'fail',
-            'message': str(e)
-        }, status=422)
-
-    except Exception as e:
-
-        return JsonResponse({
-            'status': 'fail',
-            'message': str(e)
+            'message': 'internal error'
         }, status=500)
 
 
@@ -10326,12 +10341,12 @@ def uc_status_cancel_do(request):
             'updated_count': updated_count_total
         })
 
-    except Exception as e:
-        # Print log in English to avoid UnicodeEncodeError on Windows console
-        # print(f"Error in uc_status_cancel_do: {str(e)}")
+    except Exception:
+        # รายละเอียดเก็บใน log ไม่ส่ง str(e) กลับไป (CodeQL : stack trace exposure)
+        logger.exception('uc_status_cancel_do failed')
         return JsonResponse({
             'status': 'fail',
-            'message': str(e)
+            'message': 'internal error'
         }, status=500)
 
 ########################################################################################
@@ -10487,8 +10502,10 @@ def internationalFreightRateCreate(request):
                 serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        # รายละเอียดเก็บใน log ไม่ส่ง str(e) กลับไป (CodeQL : stack trace exposure)
+        logger.exception('internationalFreightRateCreate failed')
+        return Response({"error": "บันทึกไม่สำเร็จ เกิดข้อผิดพลาดในระบบ"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['PUT', 'PATCH'])
@@ -10512,8 +10529,10 @@ def internationalFreightRateUpdate(request, id):
                 serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        # รายละเอียดเก็บใน log ไม่ส่ง str(e) กลับไป (CodeQL : stack trace exposure)
+        logger.exception('internationalFreightRateUpdate failed')
+        return Response({"error": "บันทึกไม่สำเร็จ เกิดข้อผิดพลาดในระบบ"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['DELETE'])
@@ -12616,10 +12635,18 @@ EXPORT_DOC_PROGRESS_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 
 
 def _exportProgressPath(token):
-    """path ของไฟล์ความคืบหน้า คืน None ถ้า token ไม่ผ่านการกรอง"""
+    """path ของไฟล์ความคืบหน้า คืน None ถ้า token ไม่ผ่านการกรอง
+
+    token มาจาก query string : กรองตัวอักษรแล้ว ยังเช็คซ้ำว่า path จริงอยู่ใต้โฟลเดอร์นี้
+    (แบบที่ CodeQL รู้จัก) กัน ../ หรือ path แปลก ๆ ที่หลุดการกรองไปเขียนไฟล์อื่น
+    """
     if not token or not EXPORT_DOC_PROGRESS_TOKEN_RE.match(token):
         return None
-    return os.path.join(EXPORT_DOC_PROGRESS_DIR, '%s.json' % token)
+    base = os.path.realpath(EXPORT_DOC_PROGRESS_DIR)
+    path = os.path.realpath(os.path.join(base, '%s.json' % token))
+    if not path.startswith(base + os.sep):
+        return None
+    return path
 
 
 def _exportProgressSet(request, percent, label, done=False):
@@ -12678,16 +12705,19 @@ def exportDocumentProgress(request):
         return JsonResponse({'percent': None})
 
 
+EXPORT_DOC_DOWNLOAD_COOKIE = 'exportDownloadDone'
+
+
 def _exportDocumentMarkDownloadDone(request, response):
     """ส่ง cookie บอกฝั่งหน้าเว็บว่าไฟล์พร้อมแล้ว
 
     การกดลิงก์ดาวน์โหลดไม่ทำให้หน้าเปลี่ยน หน้าเว็บเลยไม่มีทางรู้เองว่าเสร็จเมื่อไหร่
-    จึงให้ js แนบ token มากับ query string แล้วเราส่ง token เดิมกลับไปเป็น cookie
-    js คอยดู cookie นี้เพื่อหยุดวงกลมหมุนตอนไฟล์เริ่มโหลดจริง
+    js แนบ token มากับ query string (ใช้ถามความคืบหน้า) แล้วเราตอบกลับด้วย cookie
+    js ล้าง cookie ก่อนกดทุกครั้ง แล้วคอยดูว่ามันกลับมาเมื่อไหร่ เพื่อหยุดวงกลมหมุนตอนไฟล์เริ่มโหลดจริง
+    ค่าใน cookie เป็นค่าคงที่ ไม่เอา token จาก query string ใส่ลงไปตรง ๆ (CodeQL : cookie injection)
     """
-    token = request.GET.get('dl')
-    if token:
-        response.set_cookie('exportDownloadToken', token, max_age=300, samesite='Lax')
+    if request.GET.get('dl'):
+        response.set_cookie(EXPORT_DOC_DOWNLOAD_COOKIE, '1', max_age=300, samesite='Lax')
     return response
 
 

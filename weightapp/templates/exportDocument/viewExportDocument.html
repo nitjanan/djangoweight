@@ -1048,6 +1048,8 @@
 
         var progress = startButtonProgress(link);
         if (!progress) return;   // กดซ้ำระหว่างที่ยังทำอยู่
+        // ล้าง cookie ของรอบก่อน cookie กลับมาเมื่อไหร่ = ไฟล์ของรอบนี้ถูกส่งออกมาแล้ว
+        document.cookie = 'exportDownloadDone=; Max-Age=0; path=/';
 
         var stopPoll = pollServerProgress(token, function (d) {
           // percent = null แปลว่ายังไม่รู้ (ยังไม่เริ่มเขียน หรืออยู่คนละ server)
@@ -1059,11 +1061,11 @@
         var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
         var watcher = setInterval(function () {
           // cookie กลับมา = ไฟล์ถูกส่งออกมาแล้ว จบงานไม่ว่า % จะค้างอยู่ตรงไหน
-          if (document.cookie.indexOf('exportDownloadToken=' + token) !== -1) {
+          if (document.cookie.indexOf('exportDownloadDone=1') !== -1) {
             clearInterval(watcher);
             stopPoll();
             progress.finish('ไฟล์พร้อมแล้ว');
-            document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
+            document.cookie = 'exportDownloadDone=; Max-Age=0; path=/';
           } else if (Date.now() > deadline) {
             clearInterval(watcher);
             stopPoll();

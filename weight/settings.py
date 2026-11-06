@@ -102,14 +102,14 @@ WSGI_APPLICATION = 'weight.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'djangoweightdb3',#djangoweightdb #real_weight_20/09/2026
+        'NAME': 'djangoweightdb',#djangoweightdb #real_weight_20/09/2026
         'USER': 'root',
         'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT': '13306',
+        'PORT': '',
     },
     # Postgres ของระบบ Express (บัญชี/สต๊อก) — อ่านอย่างเดียว ไม่เคยเขียน
-    # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam
+    # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาหคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam
     # ตารางฝั่งนี้ประกาศเป็น managed = False ทั้งหมด migrate จึงไม่แตะ
     #
     # รหัสผ่าน/ผู้ใช้/เครื่อง อยู่ในไฟล์ .env (ถูก gitignore ไว้) ห้ามเขียนค่าจริงลงไฟล์นี้

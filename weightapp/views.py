@@ -11,6 +11,9 @@ from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
 from weightapp import xlsx_template
+from weightapp.views_similar_base import similarBaseContext
+from weightapp.views_base_usage import weightUsageContext
+from weightapp.base_view_mode import blockSaveInViewMode
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
 from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
@@ -5127,7 +5130,7 @@ def settingBaseMill(request):
     page = request.GET.get('page')
     base_mill = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill, 'page_obj': base_mill, 'table_name': 'ต้นทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseMill/baseMill.html",context)
 
 
@@ -5155,13 +5158,16 @@ def createBaseMill(request):
         'setting_base_mill_page': 'active',
         'table_name' : 'ต้นทาง',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseMill',
         'id_name' : '#id_mill_id',
+        **similarBaseContext('BaseMill'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseMill/formBaseMill.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseMill(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5187,8 +5193,11 @@ def editBaseMill(request, id):
         'setting_base_mill_page': 'active',
         'table_name' : 'ต้นทาง',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseMill',
+        **similarBaseContext('BaseMill', id),
         'id_name' : '#id_mill_id',
         'mode' : 1,
+        **weightUsageContext('BaseMill', id),
         active :"active",
     }
 
@@ -5215,7 +5224,7 @@ def settingBaseJobType(request):
     page = request.GET.get('page')
     base_job_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type, 'page_obj': base_job_type, 'table_name': 'ประเภทงานของลูกค้า','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseJobType.html",context)
 
 def createBaseJobType(request):
@@ -5242,12 +5251,15 @@ def createBaseJobType(request):
         'setting_base_job_type_page': 'active',
         'table_name' : 'ประเภทงานของลูกค้า',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseJobType',
         'id_name' : '#id_base_job_type_id',
+        **similarBaseContext('BaseJobType'),
         'mode' : 0,
         active :"active",
     }
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseJobType(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
@@ -5269,8 +5281,11 @@ def editBaseJobType(request, id):
         'setting_base_job_type_page': 'active',
         'table_name' : 'ประเภทงานของลูกค้า',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseJobType',
+        **similarBaseContext('BaseJobType', id),
         'id_name' : '#id_base_job_type_id',
         'mode' : 1,
+        **weightUsageContext('BaseJobType', id),
         active :"active",
     }
  
@@ -5297,7 +5312,7 @@ def settingBaseStoneType(request):
     page = request.GET.get('page')
     base_stone_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), 'is_add_stone' : is_add_stone(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type, 'page_obj': base_stone_type, 'table_name': 'ชนิดหิน','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), 'is_add_stone' : is_add_stone(request.user), active :"active",}
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):
@@ -5324,13 +5339,16 @@ def createBaseStoneType(request):
         'setting_base_stone_type_page': 'active',
         'table_name' : 'ชนิดหิน',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseStoneType',
         'id_name' : '#id_base_stone_type_id',
+        **similarBaseContext('BaseStoneType'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseStoneType(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)            
@@ -5361,8 +5379,11 @@ def editBaseStoneType(request, id):
         'setting_base_stone_type_page': 'active',
         'table_name' : 'ชนิดหิน',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseStoneType',
+        **similarBaseContext('BaseStoneType', id),
         'id_name' : '#id_base_stone_type_id',
         'mode' : 1,
+        **weightUsageContext('BaseStoneType', id),
         active :"active",
     }
 
@@ -5389,7 +5410,7 @@ def settingBaseScoop(request):
     page = request.GET.get('page')
     base_scoop = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop, 'page_obj': base_scoop, 'table_name': 'ผู้ตัก','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseScoop.html",context)
 
 def createBaseScoop(request):
@@ -5416,13 +5437,16 @@ def createBaseScoop(request):
         'setting_base_scoop_page': 'active',
         'table_name' : 'ผู้ตัก',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseScoop',
         'id_name' : '#id_scoop_id',
+        **similarBaseContext('BaseScoop'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseScoop(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request) 
@@ -5453,8 +5477,11 @@ def editBaseScoop(request, id):
         'setting_base_scoop_page': 'active',
         'table_name' : 'ผู้ตัก',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseScoop',
+        **similarBaseContext('BaseScoop', id),
         'id_name' : '#id_scoop_id',
         'mode' : 1,
+        **weightUsageContext('BaseScoop', id),
         active :"active",
     }
 
@@ -5481,7 +5508,7 @@ def settingBaseCarTeam(request):
     page = request.GET.get('page')
     base_car_team = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team, 'page_obj': base_car_team, 'table_name': 'ทีม','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarTeam.html",context)
 
 def createBaseCarTeam(request):
@@ -5509,13 +5536,16 @@ def createBaseCarTeam(request):
         'setting_base_car_team_page': 'active',
         'table_name' : 'ทีม',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCarTeam',
         'id_name' : '#id_car_team_id',
+        **similarBaseContext('BaseCarTeam'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCarTeam(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request) 
@@ -5546,8 +5576,11 @@ def editBaseCarTeam(request, id):
         'setting_base_car_team_page': 'active',
         'table_name' : 'ทีม',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCarTeam',
+        **similarBaseContext('BaseCarTeam', id),
         'id_name' : '#id_car_team_id',
         'mode' : 1,
+        **weightUsageContext('BaseCarTeam', id),
         active :"active",
     }
 
@@ -5574,7 +5607,7 @@ def settingBaseCar(request):
     page = request.GET.get('page')
     base_car = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car, 'page_obj': base_car, 'table_name': 'รถร่วม','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCar/baseCar.html",context)
 
 def createBaseCar(request):
@@ -5601,13 +5634,16 @@ def createBaseCar(request):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCar',
         'id_name' : '#id_car_id',
+        **similarBaseContext('BaseCar'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseCar/formBaseCar.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCar(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)         
@@ -5640,6 +5676,8 @@ def editBaseCar(request, id):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCar',
+        **similarBaseContext('BaseCar', id),
         'id_name' : '#id_car_id',
         'mode' : 1,
         active :"active",
@@ -5668,7 +5706,7 @@ def settingBaseSite(request):
     page = request.GET.get('page')
     base_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site, 'page_obj': base_site, 'table_name': 'ปลายทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseSite/baseSite.html",context)
 
 def createBaseSite(request):
@@ -5695,13 +5733,16 @@ def createBaseSite(request):
         'setting_base_site_page': 'active',
         'table_name' : 'ปลายทาง',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseSite',
         'id_name' : '#id_base_site_id',
+        **similarBaseContext('BaseSite'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseSite/formBaseSite.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseSite(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5727,8 +5768,11 @@ def editBaseSite(request, id):
         'setting_base_site_page': 'active',
         'table_name' : 'ปลายทาง',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseSite',
+        **similarBaseContext('BaseSite', id),
         'id_name' : '#id_base_site_id',
         'mode' : 1,
+        **weightUsageContext('BaseSite', id),
         active :"active",
     }
 
@@ -5755,7 +5799,7 @@ def settingBaseCustomer(request):
     page = request.GET.get('page')
     base_customer = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer, 'page_obj': base_customer, 'table_name': 'ลูกค้า','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomer/baseCustomer.html",context)
 
 def createBaseCustomer(request):
@@ -5782,14 +5826,17 @@ def createBaseCustomer(request):
         'setting_base_customer_page': 'active',
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCustomer',
         'id_name' : '#id_customer_id',
         'is_edit_base_id': is_edit_base_id(request.user),
+        **similarBaseContext('BaseCustomer'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCustomer(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5815,9 +5862,12 @@ def editBaseCustomer(request, id):
         'setting_base_customer_page': 'active',
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCustomer',
+        **similarBaseContext('BaseCustomer', id),
         'id_name' : '#id_customer_id',
         'is_edit_base_id': is_edit_base_id(request.user),
         'mode' : 1,
+        **weightUsageContext('BaseCustomer', id),
         active :"active",
     }
 
@@ -5844,7 +5894,7 @@ def settingBaseDriver(request):
     page = request.GET.get('page')
     base_driver = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver, 'page_obj': base_driver, 'table_name': 'ผู้ขับ','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseDriver.html",context)
 
 def createBaseDriver(request):
@@ -5871,13 +5921,16 @@ def createBaseDriver(request):
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseDriver',
         'id_name' : '#id_driver_id',
+        **similarBaseContext('BaseDriver'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseDriver(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5908,8 +5961,11 @@ def editBaseDriver(request, id):
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseDriver',
+        **similarBaseContext('BaseDriver', id),
         'id_name' : '#id_driver_id',
         'mode' : 1,
+        **weightUsageContext('BaseDriver', id),
         active :"active",
     }
 
@@ -5936,7 +5992,7 @@ def settingBaseCarRegistration(request):
     page = request.GET.get('page')
     base_car_registration = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration, 'page_obj': base_car_registration, 'table_name': 'ทะเบียนรถ','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarRegistration.html",context)
 
 def createBaseCarRegistration(request):
@@ -5963,13 +6019,16 @@ def createBaseCarRegistration(request):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCarRegistration',
         'id_name' : '#id_car_registration_id',
+        **similarBaseContext('BaseCarRegistration'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCarRegistration(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5995,8 +6054,11 @@ def editBaseCarRegistration(request, id):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCarRegistration',
+        **similarBaseContext('BaseCarRegistration', id),
         'id_name' : '#id_car_registration_id',
         'mode' : 1,
+        **weightUsageContext('BaseCarRegistration', id),
         active :"active",
     }
 
@@ -6023,7 +6085,7 @@ def settingBaseCustomerSite(request):
     page = request.GET.get('page')
     base_customer_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site, 'page_obj': base_customer_site, 'table_name': 'ลูกค้าและปลายทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
 
 def createBaseCustomerSite(request):
@@ -6048,11 +6110,13 @@ def createBaseCustomerSite(request):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCustomerSite',
         active :"active",
     }
 
     return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCustomerSite(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -6076,6 +6140,8 @@ def editBaseCustomerSite(request, id):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCustomerSite',
+        **weightUsageContext('BaseCustomerSite', id),
         active :"active",
     }
 

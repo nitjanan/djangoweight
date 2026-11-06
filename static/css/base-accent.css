@@ -1,0 +1,23 @@
+/* ชุดสีประจำหน้าข้อมูลพื้นฐาน ใช้ร่วมกันโดย
+ *   หน้ารายการ (listBaseLayout : .base-list-page.bl-accent-settingBaseXxx)
+ *   หน้าเพิ่ม / ดูข้อมูล (formBaseLayout : .bf-theme-create / .bf-theme-view + .bl-accent-settingBaseXxx)
+ * แต่ละหน้ามีสีหลัก 2 ค่า (RGB) : --bl-a สีสด, --bl-a2 สีเข้ม  เพิ่มหน้าใหม่แค่เพิ่มบรรทัดสี */
+.base-list-page,
+.bf-theme-create,
+.bf-theme-view { --bl-a: 67, 94, 190; --bl-a2: 47, 66, 140; --bl-ink: rgb(var(--bl-a2)); }
+/* โทนฟ้า-น้ำเงิน ไล่อ่อนเข้ม ให้เข้ากับสีหลักของระบบ (#435ebe) */
+.bl-accent-settingBaseMill            { --bl-a: 67, 94, 190;   --bl-a2: 47, 66, 140; }   /* ต้นทาง : น้ำเงินหลักของระบบ */
+.bl-accent-settingBaseJobType         { --bl-a: 79, 70, 229;   --bl-a2: 55, 48, 163; }   /* ประเภทงาน : น้ำเงินคราม */
+.bl-accent-settingBaseStoneType       { --bl-a: 8, 145, 178;   --bl-a2: 14, 116, 144; }  /* ชนิดหิน : ฟ้าน้ำทะเลเข้ม */
+.bl-accent-settingBaseScoop           { --bl-a: 37, 99, 235;   --bl-a2: 29, 78, 216; }   /* ผู้ตัก : น้ำเงินสด */
+.bl-accent-settingBaseCarTeam         { --bl-a: 99, 102, 241;  --bl-a2: 67, 56, 202; }   /* ทีม : ครามอ่อน */
+.bl-accent-settingBaseCar             { --bl-a: 14, 165, 233;  --bl-a2: 3, 105, 161; }   /* รถร่วม : ฟ้า */
+.bl-accent-settingBaseSite            { --bl-a: 6, 182, 212;   --bl-a2: 14, 116, 144; }  /* ปลายทาง : ฟ้าอมเขียว */
+.bl-accent-settingBaseCustomer        { --bl-a: 59, 130, 246;  --bl-a2: 37, 99, 235; }   /* ลูกค้า : น้ำเงินกลาง */
+.bl-accent-settingBaseDriver          { --bl-a: 56, 189, 248;  --bl-a2: 2, 132, 199; }   /* ผู้ขับ : ฟ้าอ่อน */
+.bl-accent-settingBaseCarRegistration { --bl-a: 30, 64, 175;   --bl-a2: 30, 58, 138; }   /* ทะเบียนรถ : น้ำเงินกรมท่า */
+.bl-accent-settingBaseCustomerSite    { --bl-a: 96, 165, 250;  --bl-a2: 37, 99, 235; }   /* ลูกค้าและปลายทาง : ฟ้าน้ำเงินอ่อน */
+/* โหมดมืด : ผสมขาวให้ตัวอักษรสว่างพอ (น้ำเงินกรมท่าบนพื้นมืดจะอ่านยาก) */
+[data-bs-theme="dark"] .base-list-page,
+[data-bs-theme="dark"] .bf-theme-create,
+[data-bs-theme="dark"] .bf-theme-view { --bl-ink: rgb(var(--bl-a)); --bl-ink: color-mix(in srgb, rgb(var(--bl-a)) 55%, #fff); }

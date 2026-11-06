@@ -1,6 +1,7 @@
 from django.urls import path
 from weightapp import views
 from weightapp import views_company_map
+from weightapp import views_similar_base
 from django.contrib.auth import views as auth_views
 from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList, LoginApiView, SignUpApiView
 from rest_framework_simplejwt.views import(
@@ -112,6 +113,9 @@ urlpatterns = [
     path('baseCustomer/create',views.createBaseCustomer,name="createBaseCustomer"),
     path('baseCustomer/edit/<str:id>',views.editBaseCustomer,name="editBaseCustomer"),
     path('createCustomerId/',views.createCustomerId,name="createCustomerId"),
+    # เสนอรหัส/ชื่อที่คล้ายกันในหน้าเพิ่มข้อมูลพื้นฐาน ดู views_similar_base.py
+    path('searchSimilarBase/',views_similar_base.searchSimilarBase,name="searchSimilarBase"),
+    path('similarBaseDetail/',views_similar_base.similarBaseDetail,name="similarBaseDetail"),
 
     path('baseCustomerSite/setting',views.settingBaseCustomerSite,name="settingBaseCustomerSite"),
     path('baseCustomerSite/create',views.createBaseCustomerSite,name="createBaseCustomerSite"),

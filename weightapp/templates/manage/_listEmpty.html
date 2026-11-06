@@ -1,0 +1,12 @@
+{# แถวว่างของหน้ารายการ เมื่อไม่พบข้อมูล #}
+<tr class="bl-empty-row">
+  <td colspan="20">
+    <div class="bl-empty">
+      <i class="bi bi-inbox"></i>
+      <div class="bl-empty-title">ไม่พบข้อมูล{{ table_name }}</div>
+      {% if request.GET %}
+        <div class="bl-empty-sub">ลองเปลี่ยนคำค้นหา หรือ <a href="{{ request.path }}">ล้างตัวกรอง</a></div>
+      {% endif %}
+    </div>
+  </td>
+</tr>

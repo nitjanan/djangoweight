@@ -1,0 +1,8 @@
+{# ปุ่มแก้ไขท้ายแถว (แสดงเฉพาะคนที่มีสิทธิ์)  ใช้: include with url_name='editBaseX' pk=i.pk #}
+{% if is_edit_setting %}
+<td class="bl-col-action">
+  <a class="btn btn-sm bl-edit-btn" href="{% url url_name pk %}" title="แก้ไข">
+    <i class="bi bi-pencil"></i><span class="bl-edit-text"> แก้ไข</span>
+  </a>
+</td>
+{% endif %}

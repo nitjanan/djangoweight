@@ -412,7 +412,41 @@ class WeightPortForm(forms.ModelForm):
             'transport': _('ขนส่ง'),
        }
 
-class BaseMillForm(forms.ModelForm):
+class NoExactDuplicateNameMixin:
+    """กันบันทึกข้อมูลพื้นฐานที่ "ชื่อตรงกัน" กับรายการอื่นที่มีอยู่แล้ว (หน้าเพิ่ม / แก้ไข ทุกหน้า setting base)
+
+    ใช้เกณฑ์เดียวกับกล่องเสนอชื่อคล้าย (weightapp/views_similar_base.py) : ตัดคำนำหน้านิติบุคคล ช่องว่าง เครื่องหมายแล้วเทียบ
+    หน้าแก้ไข : ไม่เทียบกับตัวเอง และถ้าไม่ได้เปลี่ยนชื่อ จะบันทึกได้ (ข้อมูลเก่าที่ชื่อซ้ำอยู่แล้วยังแก้ช่องอื่นได้)
+    ตั้ง similar_model_key = ชื่อ model ใน SIMILAR_BASE_MODELS
+    ใช้ _post_clean แทน clean เพราะฟอร์มลูกหลายตัวมี clean() ของตัวเองที่ไม่ได้เรียก super
+    """
+    similar_model_key = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # เก็บรหัสเดิมไว้ก่อน construct_instance เขียนทับ (กรณีหน้าแก้ไขเปลี่ยนรหัส)
+        self._original_pk = None if self.instance._state.adding else self.instance.pk
+
+    def _post_clean(self):
+        super()._post_clean()
+        from weightapp.views_similar_base import SIMILAR_BASE_MODELS, findSimilarBase, normalizeBaseName
+        name_field = SIMILAR_BASE_MODELS[self.similar_model_key][2]
+        name = (self.cleaned_data.get(name_field) or '').strip()
+        if not name or name_field in self.errors:
+            return
+        if self._original_pk is not None:
+            old_name = self.initial.get(name_field) or ''
+            if normalizeBaseName(old_name) == normalizeBaseName(name):
+                return
+        exact = [r for r in findSimilarBase(self.similar_model_key, name, exclude=self._original_pk) if r['exact']]
+        if exact:
+            dup = exact[0]
+            self.add_error(name_field, 'มีข้อมูลชื่อนี้อยู่แล้วในระบบ (รหัส %s : %s) ไม่สามารถบันทึกได้ กรุณาใช้ข้อมูลเดิม หรือเปลี่ยนชื่อ'
+                           % (dup['id'], dup['name']))
+
+
+class BaseMillForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseMill'
     class Meta:
        model = BaseMill
        fields = ('mill_id' , 'mill_name', 'weight_type', 'mill_source', 'user_created')
@@ -453,7 +487,8 @@ class BaseMillForm(forms.ModelForm):
 
         return instance
 
-class BaseJobTypeForm(forms.ModelForm):
+class BaseJobTypeForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseJobType'
     class Meta:
        model = BaseJobType
        fields = ('base_job_type_id' , 'base_job_type_name', 'user_created')
@@ -490,7 +525,8 @@ class BaseJobTypeForm(forms.ModelForm):
         return instance
 
 
-class BaseStoneTypeForm(forms.ModelForm):
+class BaseStoneTypeForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseStoneType'
     class Meta:
        model = BaseStoneType
        fields = ('base_stone_type_id' , 'base_stone_type_name', 'cal_q', 'user_created')
@@ -535,7 +571,8 @@ class BaseStoneTypeForm(forms.ModelForm):
 
         return instance
 
-class BaseScoopForm(forms.ModelForm):
+class BaseScoopForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseScoop'
     class Meta:
        model = BaseScoop
        fields = ('scoop_id' , 'scoop_name', 'company', 'user_created')
@@ -591,7 +628,8 @@ class BaseScoopForm(forms.ModelForm):
 
         return instance
 
-class BaseCarTeamForm(forms.ModelForm):
+class BaseCarTeamForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseCarTeam'
     class Meta:
        model = BaseCarTeam
        fields = ('car_team_id' , 'car_team_name', 'user_created') #, 'oil_customer_id'
@@ -641,7 +679,8 @@ class BaseCarTeamForm(forms.ModelForm):
 
         return instance
 
-class BaseCarForm(forms.ModelForm):
+class BaseCarForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseCar'
     class Meta:
        model = BaseCar
        fields = ('base_car_team', 'car_id' , 'car_name', 'user_created')
@@ -685,7 +724,8 @@ class BaseCarForm(forms.ModelForm):
 
         return instance
 
-class BaseSiteForm(forms.ModelForm):
+class BaseSiteForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseSite'
     class Meta:
        model = BaseSite
        fields = ('base_site_id' , 'base_site_name', 'weight_type', 'user_created', 'store')
@@ -727,7 +767,8 @@ class BaseSiteForm(forms.ModelForm):
 
         return instance
 
-class BaseCustomerForm(forms.ModelForm):
+class BaseCustomerForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseCustomer'
     customer_name = forms.CharField(label='ชื่อลูกค้า', required=True)
     weight_type = forms.ModelChoiceField(label='ชนิดเครื่องชั่ง', queryset = BaseWeightType.objects.filter(Q(id = 1) | Q(id = 2)))
     base_job_type = forms.ModelChoiceField(label='ประเภทงานของลูกค้า', queryset = BaseJobType.objects.filter(~Q(base_job_type_id = '10') & ~Q(base_job_type_id = '90')), required = False) # 10 = อนุเคราะห์, 90 = ลูกค้าน้ำมัน ใช้ตั้งรหัสลูกค้าน้ำมันในทีม
@@ -793,7 +834,8 @@ class BaseCustomerSiteForm(forms.ModelForm):
        }
 
 
-class BaseDriverForm(forms.ModelForm):
+class BaseDriverForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseDriver'
     class Meta:
         model = BaseDriver
         fields = ('driver_id', 'driver_name' ,'company', 'user_created')
@@ -856,7 +898,8 @@ CT_CHOICES =(
     ("จีน", "จีน"),
 ) 
 
-class BaseCarRegistrationForm(forms.ModelForm):
+class BaseCarRegistrationForm(NoExactDuplicateNameMixin, forms.ModelForm):
+    similar_model_key = 'BaseCarRegistration'
     car_type = forms.ChoiceField(choices = CT_CHOICES)
 
     class Meta:

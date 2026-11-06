@@ -1,0 +1,13 @@
+{% load static %}
+{# กล่องเสนอรหัส/ชื่อที่คล้ายกัน ในหน้าเพิ่ม / แก้ไขข้อมูลพื้นฐาน : view ส่ง similar_model / similar_input มาจาก similarBaseContext() #}
+<link rel="stylesheet" href="{% static 'css/similar-base.css' %}" />
+<script src="{% static 'js/pages/similar-base.js' %}"></script>
+<script>
+  initSimilarBase({
+    url: '{% url "searchSimilarBase" %}',
+    detailUrl: '{% url "similarBaseDetail" %}',
+    model: '{{ similar_model|escapejs }}',
+    input: '{{ similar_input|escapejs }}',
+    exclude: '{{ similar_exclude|default:''|escapejs }}'  {# หน้าแก้ไข : ไม่เสนอรายการที่กำลังแก้ #}
+  });
+</script>

@@ -1,0 +1,247 @@
+/* หน้าเพิ่ม / แก้ไขข้อมูลพื้นฐาน  ดู weightapp/templates/manage/formBaseLayout.html
+ * ใช้ตัวแปรสีของ Bootstrap 5.3 จึงสลับ light / dark ตาม data-bs-theme ได้เอง */
+
+/* หัวหน้า */
+.base-form-page .page-title { margin-bottom: 1.25rem; }
+.bf-title { display: flex; align-items: center; gap: .85rem; }
+.bf-title-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: .75rem;
+  background: rgba(var(--bs-primary-rgb), .12);
+  color: rgb(var(--bs-primary-rgb));
+  font-size: 1.35rem;
+}
+.bf-title-icon i,
+.bf-title-icon i::before { display: block; line-height: 1; vertical-align: 0; }
+.bf-title-icon.bf-edit {
+  background: rgba(var(--bs-warning-rgb), .16);
+  color: rgb(var(--bs-warning-rgb));
+}
+.bf-subtitle { color: var(--bs-secondary-color); font-size: .9rem; }
+.bf-id {
+  display: inline-block;
+  margin-right: .35rem;
+  padding: .05rem .5rem;
+  border-radius: .35rem;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-emphasis-color);
+  font-family: var(--bs-font-monospace);
+  font-size: .8rem;
+}
+
+/* การ์ดฟอร์ม */
+.bf-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+.bf-required-note { font-size: .8rem; color: var(--bs-secondary-color); white-space: nowrap; }
+.bf-card .card-body { padding-top: 1.5rem; }
+
+.bf-alert { display: flex; gap: .6rem; align-items: flex-start; }
+.bf-alert > i { font-size: 1.1rem; line-height: 1.4; }
+
+/* ช่องกรอก */
+.bf-form .form-label { font-weight: 600; margin-bottom: .35rem; color: var(--bs-emphasis-color); }
+.bf-form .form-control,
+.bf-form .form-select { min-height: 2.6rem; }
+.bf-form .form-control[readonly] {
+  background-color: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+  cursor: not-allowed;
+}
+.bf-form .form-select:disabled { background-color: var(--bs-secondary-bg); }
+
+/* ฟอร์มแนวนอน : ชื่อช่องคอลัมน์ซ้ายตรงกันหมด ให้อยู่กึ่งกลางความสูงช่องกรอก (2.6rem) */
+.bf-form .bf-label-col {
+  padding-top: .6rem;
+  padding-bottom: .6rem;
+  font-weight: 600;
+  color: var(--bs-emphasis-color);
+  line-height: 1.4;
+}
+.bf-form .bf-check { padding-top: .6rem; }
+.bf-form .bf-section { margin-bottom: -.25rem; }
+
+@media (max-width: 767.98px) {
+  /* จอแคบ : กลับเป็นชื่อช่องอยู่บน ช่องกรอกอยู่ล่าง */
+  .bf-form .bf-label-col { padding-top: 0; padding-bottom: .35rem; }
+  .bf-form .bf-label-col:empty { display: none; }
+}
+
+/* หัวข้อกลุ่มช่องกรอก */
+.bf-section {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .5rem;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--bs-secondary-color);
+}
+.bf-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bs-border-color-translucent);
+}
+.bf-section:first-child { margin-top: 0; }
+.bf-section:not(:first-child) { margin-top: 1.25rem; }
+
+/* .row.g-3 มี margin-top ติดลบ ทำให้กล่องด้านบนชิดช่องกรอกเกินไป */
+.bf-card .wu-box,
+.bf-card .bf-alert { margin-bottom: 1.75rem; }
+
+/* แถบปุ่ม */
+.bf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1rem;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--bs-border-color-translucent);
+}
+.bf-actions-note { font-size: .85rem; color: var(--bs-secondary-color); }
+.bf-actions-buttons { display: flex; gap: .5rem; margin-left: auto; }
+.bf-actions-buttons .btn { min-width: 7.5rem; }
+.bf-actions-buttons .btn i { margin-right: .25rem; }
+
+@media (max-width: 575.98px) {
+  .bf-actions-buttons { width: 100%; }
+  .bf-actions-buttons .btn { flex: 1; min-width: 0; }
+  .bf-required-note { display: none; }
+}
+
+/* select2 ให้สูงเท่าช่องอื่น */
+.bf-form .select2-container--bootstrap-5 .select2-selection { min-height: 2.6rem; }
+
+/* =====================================================================
+ * ธีมสี  formBaseLayout ใส่ class ให้ .base-form-page ตามโหมด
+ *   bf-theme-create : สีเดียวกับหน้ารายการ (โทนฟ้า-น้ำเงินประจำหน้า จาก base-accent.css)
+ *   bf-theme-edit   : เหลือง  (หน้าแก้ไข)
+ * --bf-a สีเริ่ม, --bf-b สีปลาย (RGB), --bf-ink สีตัวอักษร
+ * ===================================================================== */
+.bf-theme-create,
+.bf-theme-view   { --bf-a: var(--bl-a);  --bf-b: var(--bl-a2);   --bf-ink: var(--bl-ink);     --bf-on: #fff; }
+.bf-theme-edit   { --bf-a: 250, 204, 21; --bf-b: 234, 160, 8;  --bf-ink: rgb(161, 98, 7);  --bf-on: #422006; }
+[data-bs-theme="dark"] .bf-theme-edit   { --bf-ink: rgb(253, 224, 71); }
+
+/* หัวหน้าเป็นแถบไล่สี */
+.base-form-page .bf-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.1rem 1.5rem 1.25rem;
+  border: 1px solid rgba(var(--bf-a), .25);
+  border-radius: 1rem;
+  background: linear-gradient(115deg, rgba(var(--bf-a), .16) 0%, rgba(var(--bf-b), .12) 100%);
+}
+.base-form-page .bf-hero::after {
+  content: "";
+  position: absolute;
+  right: -3rem;
+  top: -4rem;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--bf-b), .25) 0%, rgba(var(--bf-b), 0) 70%);
+  pointer-events: none;
+}
+.base-form-page .bf-hero > * { position: relative; z-index: 1; }
+.base-form-page .bf-hero .breadcrumb { margin-bottom: 0; }
+.base-form-page .bf-hero .breadcrumb a { color: var(--bf-ink); }
+.base-form-page .bf-title-icon,
+.base-form-page .bf-title-icon.bf-edit {
+  width: 3rem;
+  height: 3rem;
+  border-radius: .9rem;
+  background: linear-gradient(135deg, rgb(var(--bf-a)) 0%, rgb(var(--bf-b)) 100%);
+  color: var(--bf-on);
+  box-shadow: 0 .45rem 1rem rgba(var(--bf-a), .35);
+}
+.base-form-page .bf-id { background: rgba(var(--bf-a), .16); color: var(--bf-ink); font-weight: 700; }
+
+/* การ์ด : แถบไล่สีด้านบน (วาดเป็นพื้นหลัง เพราะ Mazer โหมดมืดลบ border ของ .card) */
+.base-form-page .bf-card {
+  background-image: linear-gradient(90deg, rgb(var(--bf-a)), rgb(var(--bf-b)));
+  background-size: 100% 4px;
+  background-repeat: no-repeat;
+  border-radius: 1rem;
+  box-shadow: 0 .5rem 1.5rem rgba(var(--bf-a), .08);
+}
+/* Mazer โหมดมืดใส่พื้นทึบให้ card-header ซึ่งบังแถบสี */
+html .base-form-page .card.bf-card .bf-card-header { background: transparent; border-bottom-color: rgba(var(--bf-a), .2); }
+.base-form-page .bf-card-header .card-title { color: var(--bf-ink); }
+.base-form-page .bf-card-header .card-title::before {
+  content: "";
+  display: inline-block;
+  width: .3rem;
+  height: 1.1rem;
+  margin-right: .5rem;
+  border-radius: .2rem;
+  background: linear-gradient(180deg, rgb(var(--bf-a)), rgb(var(--bf-b)));
+  vertical-align: -.15rem;
+}
+
+/* ช่องกรอก : ชื่อช่องและกรอบเมื่อคลิกเป็นสีธีม */
+.base-form-page .bf-form .bf-label-col,
+.base-form-page .bf-form .form-label { color: var(--bf-ink); }
+.base-form-page .bf-form .form-control:focus,
+.base-form-page .bf-form .form-select:focus {
+  border-color: rgb(var(--bf-a));
+  box-shadow: 0 0 0 .2rem rgba(var(--bf-a), .2);
+}
+.base-form-page .bf-form .form-check-input:checked { background-color: rgb(var(--bf-a)); border-color: rgb(var(--bf-a)); }
+.base-form-page .bf-section { color: var(--bf-ink); }
+.base-form-page .bf-section::after { background: linear-gradient(90deg, rgba(var(--bf-a), .4), rgba(var(--bf-b), 0)); }
+.base-form-page .bf-form .bf-row:hover .bf-label-col { color: rgb(var(--bf-a)); }
+
+/* แถบปุ่ม */
+.base-form-page .bf-actions { border-top-color: rgba(var(--bf-a), .2); }
+.base-form-page .btn.bf-save-btn {
+  --bs-btn-color: var(--bf-on);
+  --bs-btn-hover-color: var(--bf-on);
+  --bs-btn-active-color: var(--bf-on);
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-active-border-color: transparent;
+  border: 0;
+  border-radius: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgb(var(--bf-a)) 0%, rgb(var(--bf-b)) 100%);
+  box-shadow: 0 .4rem 1rem rgba(var(--bf-a), .35);
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.base-form-page .btn.bf-save-btn:hover,
+.base-form-page .btn.bf-save-btn:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: 0 .6rem 1.4rem rgba(var(--bf-a), .45);
+}
+.base-form-page .bf-actions-buttons .btn-light-secondary { border-radius: 2rem; }
+/* หน้าแก้ไขพื้นเหลือง ใช้ตัวอักษรน้ำตาลเข้ม (--bf-on) แทนสีขาวเพื่อให้อ่านชัด */
+
+@media (max-width: 767.98px) {
+  .base-form-page .bf-hero { padding: 1rem; }
+}
+
+/* โหมดดูข้อมูลอย่างเดียว (?view=1) : ช่องที่ปิดไว้ให้อ่านง่าย ไม่จางเหมือนช่อง disabled ทั่วไป */
+.bf-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.bf-theme-view .bf-fieldset:disabled .form-control,
+.bf-theme-view .bf-fieldset:disabled .form-select {
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-emphasis-color);
+  opacity: 1;
+  cursor: default;
+}
+.bf-theme-view .bf-view-note-icon { color: rgb(var(--bf-a)); }

@@ -116,35 +116,63 @@ class ExportDocumentCaseTests(TestCase):
         request.session = {'company_code': tab}
         return views._exportDocumentQuerySet(request)
 
-    # ---------- แท็บบริษัท = ชั่งที่ไหน (bws.company) ----------
+    # ---------- แท็บบริษัท = ต้นทาง · ช่อง "ชั่งที่ (ตาชั่ง)" = bws_id ----------
 
-    def test_tab_sees_only_trips_weighed_at_its_stations(self):
-        """แท็บท่าเรือต้องเห็นเที่ยวที่ชั่งที่ท่าเรือนั้น (เดิมกรองด้วยต้นทาง แท็บท่าเรือจึงว่าง)"""
-        all_qs, _, _ = self.querySet(month='2026-08')
-        station_of = dict(all_qs.values_list('weight_id', 'bws_id'))
-        seen = set()
-        for tab, stations in (('STPS', ['P1V']), ('STPK', ['K1V']), ('SLC', ['W1A'])):
-            qs, filters, _ = self.querySetTab(tab, month='2026-08')
-            expected = {wid for wid, bws in station_of.items() if bws in stations}
-            self.assertEqual(self.ids(qs), expected, tab)
-            self.assertEqual([b['id'] for b in filters['bws_options']], stations)
-            seen |= expected
-        # ทุกเที่ยวของแท็บร้อยเกาะ (เห็นทุกตาชั่ง) ต้องมีแท็บเจ้าของตาชั่งรองรับ
-        self.assertEqual(seen, set(station_of))
-        self.assertTrue(seen)
+    def test_tab_sees_trips_whose_origin_belongs_to_it(self):
+        """แท็บศิลาชัยเห็นเที่ยวต้นทางศิลาชัยทั้งที่ชั่งที่ท่าเรือเรา (10) และที่ชั่งที่เหมือง (30)"""
+        qs, filters, _ = self.querySetTab('SLC', month='2026-08')
+        self.assertEqual(self.ids(qs), {10, 30})
+        self.assertEqual([b['id'] for b in filters['bws_options']], ['P1V', 'W1A'])
+        self.assertFalse(filters['tab_no_origin'])
 
-    def test_tab_without_station_sees_nothing(self):
-        BaseCompany.objects.create(name='บริษัทไม่มีตาชั่ง', code='NOST', biz_id=1)
-        qs, filters, _ = self.querySetTab('NOST', month='2026-08')
-        self.assertTrue(filters['tab_no_station'])
-        self.assertEqual(self.ids(qs), set())
+    def test_station_filter_narrows_the_tab(self):
+        qs, filters, _ = self.querySetTab('SLC', month='2026-08', bws='P1V')
+        self.assertEqual(filters['selected_bws'], 'P1V')
+        self.assertEqual(self.ids(qs), {10})
+        qs, _, _ = self.querySetTab('SLC', month='2026-08', bws='W1A')
+        self.assertEqual(self.ids(qs), {30})
 
-    def test_station_of_another_tab_is_ignored(self):
-        """สลับแท็บแล้ว ?bws= ของแท็บเดิมค้างอยู่ : ถือว่าไม่ได้เลือก = ทุกตาชั่งของแท็บนี้"""
-        plain, _, _ = self.querySetTab('STPS', month='2026-08')
-        qs, filters, _ = self.querySetTab('STPS', month='2026-08', bws='W1A')
+    def test_station_without_trips_in_tab_is_ignored(self):
+        """สลับแท็บแล้ว ?bws= ของแท็บเดิมค้างอยู่ : ถือว่าไม่ได้เลือก = ทุกตาชั่ง"""
+        qs, filters, _ = self.querySetTab('SLC', month='2026-08', bws='K1V')
         self.assertEqual(filters['selected_bws'], '')
-        self.assertEqual(self.ids(qs), self.ids(plain))
+        self.assertEqual(self.ids(qs), {10, 30})
+
+    def test_case_filter_inside_a_mine_tab(self):
+        """แท็บเหมืองเลือกได้ว่าจะดูเที่ยวที่ลงท่าเรือเรา หรือที่ลงท่าเรือบริษัทอื่น"""
+        qs, filters, _ = self.querySetTab('SLC', month='2026-08', case=OWN)
+        self.assertEqual(filters['selected_case'], OWN)
+        self.assertEqual(self.ids(qs), {10})
+        qs, _, _ = self.querySetTab('SLC', month='2026-08', case=OTHER)
+        self.assertEqual(self.ids(qs), {30})
+
+    @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+    def test_page_offers_case_filter(self):
+        user = User.objects.create_user('acc', 'acc@t.com', 'pw12345!')
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        session = self.client.session
+        session['company_code'] = 'SLC'
+        session.save()
+        page = self.client.get('/exportDocument/', {'month': '2026-08', 'case': OTHER})
+        self.assertEqual({r['weight_id'] for r in page.context['rows']}, {30})
+        html = page.content.decode('utf-8')
+        self.assertIn('name="case"', html)
+        self.assertIn('<option value="%s" selected>' % OTHER, html)
+
+    def test_port_tab_sees_trips_weighed_at_its_station(self):
+        """แท็บท่าเรือเรา = ที่ชั่งที่ท่าเรือนั้น ทุกต้นทาง (ถ้ากรองด้วยต้นทาง แท็บท่าเรือจะว่างเสมอ)"""
+        qs, filters, _ = self.querySetTab('STPS', month='2026-08')
+        self.assertEqual(self.ids(qs), {10})
+        self.assertEqual([b['id'] for b in filters['bws_options']], ['P1V'])
+        qs, _, _ = self.querySetTab('STPK', month='2026-07')
+        self.assertEqual(self.ids(qs), {2})
+
+    def test_tab_without_origin_sees_nothing(self):
+        BaseCompany.objects.create(name='บริษัทไม่มีต้นทาง', code='NOOR', biz_id=1)
+        qs, filters, _ = self.querySetTab('NOOR', month='2026-08')
+        self.assertTrue(filters['tab_no_origin'])
+        self.assertEqual(self.ids(qs), set())
 
     def test_rows_tell_who_weighed(self):
         qs, filters, _ = self.querySet(month='2026-08')

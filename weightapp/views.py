@@ -13054,22 +13054,84 @@ def _baseCompanyMapRows():
 COMPANY_TAB_SEES_ALL = ('ROI', 'ALL')
 
 
-def _exportDocumentTabStations(company_code, own_port_bws, other_bws):
-    """ตาชั่งที่แท็บบริษัทนี้เห็นในหน้า export : ตาชั่งของรายงานส่งออก (ท่าเรือเรา + ตาชั่งขายของเหมือง)
-    ที่บริษัทเจ้าของตาชั่ง (bws.company) เป็นบริษัทของแท็บ · แท็บร้อยเกาะ / ทั้งหมด เห็นทุกตาชั่ง
+def _exportDocumentOriginNames(company_code=None):
+    """ชื่อต้นทางของแท็บบริษัท = ชื่อของแถว map ที่ผูกกับบริษัทนั้น (1 แถว 1 ชื่อ)
 
-    คืน [{'id', 'label', 'company'}] เรียงตามรหัสตาชั่ง
+        base_company_map_base_customer.base_company_id == base_comp.id ของแท็บ
+    แท็บร้อยเกาะ / ทั้งหมด (COMPANY_TAB_SEES_ALL) ไม่กรอง
+
+    แถวที่ base_company_id เป็น NULL จับคู่กับแท็บไหนไม่ได้ จึงไม่ขึ้นในแท็บใดเลย
+    ต้องไปผูก base_comp ให้แถวนั้นก่อนถึงจะเห็น (แท็บร้อยเกาะยังเห็นทุกแถว)
     """
-    stations = (BaseWeightStation.objects
-                .filter(id__in=list(own_port_bws) + list(other_bws))
-                .select_related('company')
-                .order_by('id'))
-    if company_code not in COMPANY_TAB_SEES_ALL:
-        stations = stations.filter(company__code=company_code)
+    rows = [r for r in _baseCompanyMapRows() if r['display']]
+    if company_code and company_code not in COMPANY_TAB_SEES_ALL:
+        company_id = (BaseCompany.objects
+                      .filter(code=company_code)
+                      .values_list('id', flat=True)
+                      .first())
+        rows = [r for r in rows if r['base_company_id'] == company_id]
+    return sorted({r['display'] for r in rows})
+
+
+def _exportDocumentOriginFilter(origin_name, own_port_bws, other_bws):
+    """เงื่อนไขกรอง "ต้นทาง" ที่ใช้ได้กับทั้งสองเคส
+
+    ต้นทางของสองเคสมาจากคนละฟิลด์ แต่ชื่อมาจากตาราง map เดียวกัน
+      เคส 1 ชั่งที่ท่าเรือเรา  -> ต้นทางคือ customer  จึงกรองด้วย customer_id
+      เคส 2 ชั่งที่เหมืองเรา   -> ต้นทางคือ bws       จึงกรองด้วยบริษัทเจ้าของตาชั่ง
+    คืน Q ที่รวมทั้งสองทางไว้แล้ว
+    """
+    # หาย้อนจาก "ชื่อที่แสดง" กลับไปเป็น id ด้วยกติกาเดียวกับตอนแสดงผล
+    rows = [r for r in _baseCompanyMapRows() if r['display'] == origin_name]
+    customer_ids = [r['base_customer_id'] for r in rows if r['base_customer_id']]
+    row_ids = {r['id'] for r in rows}
+    customer_ids += [customer_id for customer_id, row_id in _baseCompanyMapCustomerAliases().items()
+                     if row_id in row_ids]
+    company_ids = [r['base_company_id'] for r in rows if r['base_company_id']]
+
+    condition = Q(pk__in=[])   # ไม่ตรงอะไรเลย ใช้เป็นตัวตั้งต้น
+    if customer_ids:
+        condition |= Q(bws_id__in=own_port_bws, customer_id__in=customer_ids)
+    if company_ids:
+        condition |= Q(bws_id__in=other_bws, bws__company_id__in=company_ids)
+    return condition
+
+
+def _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws):
+    """ขอบเขตของแท็บบริษัท คืน (Q, แท็บนี้ยังไม่มีขอบเขตให้ดูเลย)
+
+    แท็บร้อยเกาะ / ทั้งหมด     : ทุกเที่ยว (Q() = ไม่กรอง)
+    แท็บท่าเรือเรา (biz = 2)   : เที่ยวที่ "ชั่งที่" ตาชั่งของท่าเรือนั้น ทุกต้นทาง
+                                 ไว้ให้คนที่ท่าเรือตรวจของที่เข้าท่า (ท่าเรือไม่ใช่ต้นทางของเที่ยวไหน
+                                 ถ้ากรองด้วยต้นทางแท็บท่าเรือจะว่างเสมอ)
+    แท็บเหมือง                 : เที่ยวที่ "ต้นทาง" เป็นของบริษัทนั้น (ทุกต้นทางของแท็บรวมกัน)
+                                 ทั้งที่ชั่งออกจากเหมืองเอง และที่ไปชั่งที่ท่าเรือเรา = เที่ยวทั้งหมดของ "นาม" นั้น
+                                 ถ้ากรองด้วยตาชั่ง เที่ยวที่ลงท่าเรือเราจะไปอยู่แท็บท่าเรือหมด
+    เที่ยวที่เหมืองส่งลงท่าเรือเราจึงเห็นได้ทั้งแท็บเหมืองต้นทางและแท็บท่าเรือ (แท็บเป็นมุมมอง ไม่ได้นับซ้ำในรายงาน)
+    """
+    if company_code in COMPANY_TAB_SEES_ALL:
+        return Q(), False
+    port_bws = list(BaseWeightStation.objects
+                    .filter(id__in=list(own_port_bws), company__code=company_code)
+                    .values_list('id', flat=True))
+    if port_bws:
+        return Q(bws_id__in=port_bws), False
+    origins = _exportDocumentOriginNames(company_code)
+    condition = Q(pk__in=[])
+    for name in origins:
+        condition |= _exportDocumentOriginFilter(name, own_port_bws, other_bws)
+    return condition, not origins
+
+
+def _exportDocumentStationOptions(qs):
+    """ตัวเลือกช่อง "ชั่งที่ (ตาชั่ง)" = ตาชั่งที่มีเที่ยวอยู่จริงในขอบเขตของแท็บ+เดือนนี้
+    คืน [{'id', 'company', 'label'}] เรียงตามรหัสตาชั่ง"""
+    ids = set(qs.order_by().values_list('bws_id', flat=True).distinct())
     return [{'id': b.id,
              'company': b.company.name if b.company else '',
              'label': '%s - %s' % (b.id, b.company.name if b.company else '-')}
-            for b in stations]
+            for b in (BaseWeightStation.objects.filter(id__in=ids)
+                      .select_related('company').order_by('id'))]
 
 
 def _exportDocumentOtherBwsIds():
@@ -13289,24 +13351,17 @@ def _exportDocumentQuerySet(request):
     selected_team = request.GET.get('team') or ''
     # ชนิดหินเก็บเป็นชื่อใน Weight ไม่มีตารางอ้างอิง จึงกรองด้วยชื่อตรง ๆ
     selected_stone = request.GET.get('stone') or ''
-    # ขอบเขตของแท็บบริษัท = "ชั่งที่ไหน" : เห็นเฉพาะเที่ยวที่ชั่งที่ตาชั่งของบริษัทในแท็บ (bws.company)
-    # แท็บร้อยเกาะ / ทั้งหมด เห็นทุกตาชั่ง
-    # เดิมกรองด้วย "ต้นทาง (นาม)" จากตาราง map แท็บท่าเรือจึงได้ต้นทางเป็นท่าเรือตัวเอง แล้วไม่เห็นอะไรเลย
-    # ทั้งที่เที่ยวส่วนใหญ่ชั่งที่ท่าเรือ (ก.ย. 69 : K1V 1,074 เที่ยว ไม่โผล่ในแท็บท่าเรือกระบี่)
+    # ขอบเขตของแท็บบริษัท (ดู _exportDocumentTabOriginQ) : แท็บเหมือง = ตามต้นทาง · แท็บท่าเรือเรา = ตามที่ชั่ง
+    # แท็บร้อยเกาะ / ทั้งหมด เห็นทุกเที่ยว · ช่อง "ชั่งที่ (ตาชั่ง)" กรองต่อจากนี้ด้วย bws_id
     company_code = request.session.get('company_code')
     tab_sees_all = company_code in COMPANY_TAB_SEES_ALL
-    tab_stations = _exportDocumentTabStations(company_code, own_port_bws, other_bws)
-    tab_bws = [b['id'] for b in tab_stations]
-    # แท็บที่ไม่มีตาชั่งของรายงานส่งออกเลย (เช่น ศิลาชัยที่ส่งของลงท่าเรือเราทั้งหมด)
-    # ไม่แสดงอะไร แล้วบอกเหตุผลบนหน้าจอ ปล่อยให้เห็นทุกบริษัทแทนไม่ได้ เพราะขัดกับขอบเขตของแท็บ
-    tab_no_station = not tab_bws and not tab_sees_all
+    tab_q, tab_no_origin = _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws)
     # ค่าว่าง = แสดงทั้งสองเคสรวมกัน
     selected_case = request.GET.get('case') or ''
     selected_bws = ''
     if raw_bws.startswith('case:'):
         selected_case = raw_bws.split(':', 1)[1]
-    elif raw_bws in tab_bws:
-        # ตาชั่งที่ไม่ใช่ของแท็บนี้ (สลับแท็บแล้ว query string เดิมค้างอยู่) ถือว่าไม่ได้เลือก = ทุกตาชั่งของแท็บ
+    else:
         selected_bws = raw_bws
     if selected_case not in (EXPORT_DOC_CASE_OWN_PORT, EXPORT_DOC_CASE_OTHER_PORT):
         selected_case = ''
@@ -13358,11 +13413,16 @@ def _exportDocumentQuerySet(request):
         scope_ids = list(qs.order_by().values_list('weight_id', flat=True))
         qs = Weight.objects.filter(weight_id__in=scope_ids)
 
-    # ขอบเขตของแท็บก่อนทำ dropdown ทีม/หิน ตัวเลือกจะได้มีแค่ของแท็บนี้
-    if tab_no_station:
+    # ขอบเขตของแท็บก่อนทำ dropdown ตาชั่ง/ทีม/หิน ตัวเลือกจะได้มีแค่ของแท็บนี้
+    # แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง map เลย ไม่แสดงอะไร แล้วบอกเหตุผลบนหน้าจอ
+    if tab_no_origin:
         qs = qs.none()
     elif not tab_sees_all:
-        qs = qs.filter(bws_id__in=tab_bws)
+        qs = qs.filter(tab_q)
+    bws_options = _exportDocumentStationOptions(qs)
+    # ตาชั่งที่ไม่มีเที่ยวในแท็บนี้ (สลับแท็บแล้ว query string เดิมค้างอยู่) ถือว่าไม่ได้เลือก = ทุกตาชั่ง
+    if selected_bws not in {b['id'] for b in bws_options}:
+        selected_bws = ''
 
     # ตัวเลือกใน dropdown ทีม/ชนิดหิน คิดจากเดือน+ช่วงวันที่ที่เลือกเท่านั้น
     # ถ้าใช้ base_qs (ทุกเดือน) จะเป็น DISTINCT ทั้งช่วงข้อมูล ~1.5 วินาทีต่อ dropdown
@@ -13413,10 +13473,10 @@ def _exportDocumentQuerySet(request):
         'selected_bws': selected_bws,
         'selected_team': selected_team,
         'selected_stone': selected_stone,
-        'tab_no_station': tab_no_station,
+        'tab_no_origin': tab_no_origin,
         # ส่งรายการออกไปด้วย ไม่ให้หน้าเว็บไปคำนวณเองซ้ำ ไม่งั้นมีโอกาสที่ตัวเลือกบนจอ
         # กับตัวที่ใช้กรองจริงไม่ตรงกัน เวลาแก้กติกาแล้วลืมแก้อีกฝั่ง
-        'bws_options': tab_stations,
+        'bws_options': bws_options,
         'tab_sees_all': tab_sees_all,
         'selected_case': selected_case,
         # ค่าที่ dropdown รวมต้องโชว์ว่าเลือกอยู่
@@ -13688,7 +13748,7 @@ def viewExportDocument(request):
         'selected_bws': selected_bws,
         'selected_team': selected_team,
         'selected_stone': selected_stone,
-        'tab_no_station': filters['tab_no_station'],
+        'tab_no_origin': filters['tab_no_origin'],
         'tab_sees_all': filters['tab_sees_all'],
         'selected_case': selected_case,
         'bws_filter_value': filters['bws_filter_value'],
@@ -13782,25 +13842,23 @@ def _weightTableHasExportScope(company_code):
 
 
 def _exportDocumentTabScope(company_code):
-    """เที่ยวส่งออกของ "ทั้งแท็บบริษัท" (ทุกตาชั่งของแท็บ ไม่รวมใบยกเลิก) ทุกเดือน
+    """เที่ยวส่งออกของ "ทั้งแท็บบริษัท" (ทุกต้นทางของแท็บ ไม่รวมใบยกเลิก) ทุกเดือน
 
     ต่างจากหน้า export ที่เลือกดูทีละตาชั่งได้ : แผงในหน้า weight table ต้องเห็นทุกใบที่ต้องแก้ของแท็บ
-    กติกาว่าแท็บไหนเห็นตาชั่งไหนใช้ตัวเดียวกับหน้า export (_exportDocumentTabStations)
+    กติกาว่าแท็บไหนเห็นเที่ยวไหนใช้ตัวเดียวกับหน้า export (_exportDocumentTabOriginQ)
 
-    คืน (qs, own_port_bws, own_port_customers) หรือ None ถ้าแท็บนี้ไม่มีตาชั่งของรายงานส่งออกเลย
+    คืน (qs, own_port_bws, own_port_customers) หรือ None ถ้าแท็บนี้ไม่มีต้นทางส่งออกเลย
     """
-    sees_all = company_code in COMPANY_TAB_SEES_ALL
     own_port_bws = _exportDocumentOwnPortBwsIds()
     other_bws = _exportDocumentOtherBwsIds()
-    tab_bws = [b['id'] for b in _exportDocumentTabStations(company_code, own_port_bws, other_bws)]
-    if not tab_bws and not sees_all:
+    tab_q, no_origin = _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws)
+    if no_origin:
         return None
 
     own_port_customers = _exportDocumentOwnPortCustomers()
     qs = _exportDocumentBaseQuerySet(own_port_bws, other_bws,
                                      _exportDocumentExportCustomerIds(), own_port_customers)
-    if not sees_all:
-        qs = qs.filter(bws_id__in=tab_bws)
+    qs = qs.filter(tab_q)
     # ค่าตั้งต้นของหน้า export คือไม่เอาใบยกเลิก ตัวเลขจะได้ตรงกัน
     return qs.filter(is_cancel=False), own_port_bws, own_port_customers
 

@@ -232,17 +232,33 @@
           <div class="form-group col-md-3">
             <label for="bws">ชั่งที่ (ตาชั่ง)</label>
             {% comment %}
-            ตาชั่งของแท็บบริษัทด้านบน (bws.company == บริษัทของแท็บ) แท็บร้อยเกาะ / ทั้งหมด เห็นทุกตาชั่ง
-            ไม่เลือก = ทุกตาชั่งของแท็บ
+            แท็บบริษัทด้านบนกำหนดขอบเขต (แท็บเหมือง = ทุกต้นทางของบริษัทนั้น · แท็บท่าเรือเรา = ที่ชั่งที่ท่าเรือนั้น)
+            ช่องนี้กรองต่อด้วยตาชั่งที่ชั่ง (bws_id)
+            ตัวเลือก = ตาชั่งที่มีเที่ยวของแท็บนี้ในเดือนที่เลือก · ไม่เลือก = ทุกตาชั่ง
             {% endcomment %}
-            <select class="form-select" id="bws" name="bws" {% if tab_no_station %}disabled{% endif %}>
+            <select class="form-select" id="bws" name="bws" {% if tab_no_origin %}disabled{% endif %}>
               {% if bws_options %}
-              <option value="">ทุกตาชั่ง{% if not tab_sees_all %}ของแท็บนี้{% endif %}</option>
+              <option value="">ทุกตาชั่ง</option>
               {% endif %}
               {% for b in bws_options %}
                 <option value="{{ b.id }}" {% if b.id == selected_bws %}selected{% endif %}>{{ b.label }}</option>
               {% empty %}
-                <option value="">— แท็บนี้ไม่มีตาชั่งของรายงานส่งออก —</option>
+                <option value="">— ไม่มีเที่ยวในเดือนนี้ —</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group col-md-3">
+            <label for="case">ส่งออกลงท่าเรือ</label>
+            {% comment %}
+            เคสของเที่ยว ดูจากปลายทาง (ตัวเดียวกับป้ายในคอลัมน์ "เคส" ของตาราง)
+              ลงท่าเรือของบริษัท = ปลายทางเป็นท่าเรือเรา (ชั่งที่ท่าเรือ หรือใบเหมืองก่อนท่าเรือเปิดใช้ตาชั่ง)
+              ลงท่าเรือบริษัทอื่น = ปลายทางเป็นท่าเรือของบริษัทอื่น
+            {% endcomment %}
+            <select class="form-select" id="case" name="case" {% if tab_no_origin %}disabled{% endif %}>
+              <option value="">ทั้งหมด</option>
+              {% for value, label in case_options %}
+                <option value="{{ value }}" {% if value == selected_case %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
           </div>
@@ -299,15 +315,15 @@
     </div>
 
     {% comment %}
-    แท็บที่บริษัทไม่มีตาชั่งของรายงานส่งออก (ไม่มีตาชั่งท่าเรือ และไม่มีตาชั่งขายของเหมือง)
-    หน้านี้จึงไม่มีข้อมูลให้ดู ต้องบอกเหตุผล ไม่งั้นจะดูเหมือนระบบพัง
+    แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง base_company_map_base_customer หน้านี้จึงไม่มีข้อมูลให้ดู
+    ต้องบอกเหตุผลกับทางแก้ ไม่งั้นจะดูเหมือนระบบพัง
     {% endcomment %}
-    {% if tab_no_station %}
+    {% if tab_no_origin %}
     <div class="alert alert-warning">
-      แท็บบริษัทนี้ไม่มีตาชั่งที่ออกใบชั่งของรายงานส่งออก หน้านี้จึงไม่มีข้อมูลให้ดู<br />
+      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง" ไว้ในระบบ หน้านี้จึงยังไม่มีข้อมูลให้ดู<br />
       <small>
-        หน้านี้แสดงเที่ยวตาม "ชั่งที่ไหน" ถ้าเที่ยวของบริษัทนี้ไปชั่งที่ท่าเรือ ให้ดูที่แท็บท่าเรือ
-        หรือแท็บร้อยเกาะซึ่งเห็นทุกตาชั่ง
+        ต้องไปผูกบริษัทนี้ให้แถวต้นทางในหน้าจัดการต้นทาง / ปลายทางก่อน
+        แล้วหน้านี้จะแสดงเที่ยวของต้นทางนั้นให้เอง (หรือดูที่แท็บร้อยเกาะซึ่งเห็นทุกต้นทาง)
       </small>
     </div>
     {% endif %}

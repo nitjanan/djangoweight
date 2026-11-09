@@ -45,9 +45,11 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   .wt-table tbody td { vertical-align: middle; padding: .55rem .6rem; border-color: var(--bs-border-color, #eef0f3); }
   .wt-table tbody tr:nth-child(even) td { background: rgba(128,128,128,.035); }
   .wt-table tbody tr:hover td { background: rgba(13,110,253,.06); }
+  /* แถบสีน้ำเงินซ้ายมือของแถวที่เมาส์ชี้ (แบบเดียวกับหน้า setting : base-list.css) ใช้เฉพาะตอนเป็นตาราง ไม่ใช่การ์ดมือถือ */
+  .wt-table tbody tr:hover > td:first-child:not(.wt-empty) { box-shadow: inset 3px 0 0 #435ebe; }
   .wt-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .wt-table .nowrap { white-space: nowrap; }
-  .wt-table .wrap-md { min-width: 8rem; max-width: 14rem; }
+  .wt-table .wrap-md { min-width: 6rem; max-width: 14rem; }
   .wt-table .wrap-sm { min-width: 5rem; max-width: 8rem; line-height: 1.3; }
   .wt-table .net { font-weight: 700; }
   .wt-time { display: block; font-size: .75rem; color: var(--bs-secondary-color, #6c757d); white-space: nowrap; }
@@ -60,6 +62,72 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   .wt-do { color: var(--bs-primary, #0d6efd); white-space: nowrap; font-size: .875rem; }
   /* คอลัมน์ที่ 4 = เลขที่ใบส่งของ : ให้หัวคอลัมน์ตัดเป็น 2 บรรทัด คอลัมน์จะได้แคบลง */
   .wt-table thead th:nth-child(4) { white-space: normal; width: 6.5rem; min-width: 6.5rem; line-height: 1.25; }
+  /* จอ notebook ลงไป (< 1920px) : เลขที่ใบส่งของแสดง 2 บรรทัด เช่น DO2606- / 000001 คอลัมน์จะแคบลงอีก
+     (มือถือที่เป็นการ์ดยังแสดงบรรทัดเดียว) */
+  @media (max-width: 1919.98px) {
+    .wt-table thead th:nth-child(4) { width: 4.5rem; min-width: 4.5rem; }
+    .wt-do .do-head, .wt-do .do-tail { display: block; line-height: 1.25; }
+
+    /* notebook : ตารางกระชับ ให้เห็นถึง นน.สุทธิ โดยไม่ต้องเลื่อนแนวนอน */
+    .wt-table { font-size: .875rem; }
+    .wt-table thead th { padding: .55rem .4rem; font-size: .8rem; }
+    .wt-table tbody td { padding: .45rem .4rem; }
+    .wt-table .wrap-md, .wt-table .wrap-sm { min-width: 0; line-height: 1.3; }
+    .wt-table .wrap-md { max-width: 8.5rem; }
+    .wt-table .wrap-sm { max-width: 6.5rem; }
+    .wt-status { width: 1.35rem; height: 1.35rem; font-size: .7rem; }
+    /* ปุ่มแก้ไขเหลือแค่ไอคอน (มี title บอก) */
+    .wt-edit .btn { padding: .2rem .45rem; }
+    .wt-edit .btn .wt-edit-text { display: none; }
+  }
+  /* ===== โหมดกระชับ (compact) : ให้เห็นทุกคอลัมน์ถึงปุ่มแก้ไขโดยไม่ต้องเลื่อนแนวนอน =====
+     ใช้เมื่อพื้นที่ตารางแคบ : sidebar เต็ม + จอ 1200-1919px  หรือ  sidebar ย่อ + จอ 1200-1599px
+     - ซ่อนคอลัมน์ # (สถานะเป็นจุดสีหน้าเลขที่ชั่ง)
+     - ซ้อน 2 บรรทัดในช่องเดียว : ต้นทาง/ปลายทาง, ลูกค้า/หิน, ทะเบียนรถ/ทีม, นน.เข้า/ออก, ผู้ชั่ง/lc.
+     - เวลาเข้า-ออกแสดงแค่ ชม:นาที (เต็มอยู่ใน tooltip) */
+  .wt-compact-only { display: none; }
+  .wt-dot { width: .55rem; height: .55rem; border-radius: 50%; margin-right: .35rem; vertical-align: middle; }
+  .wt-dot.ok { background: #198754; }
+  .wt-dot.no { background: #dc3545; }
+  .wt-site-line, .wt-sub { color: var(--bs-secondary-color, #6c757d); font-size: .8em; font-weight: 400; line-height: 1.3; }
+  /* ต่ำกว่า 1200px sidebar ถูกซ่อน (เมนู burger) แต่ class sidebar-mini อาจยังติดอยู่ จึงให้ทั้ง 2 บล็อกครอบจอเล็กด้วย */
+  @media (max-width: 1919.98px) {
+    html:not(.sidebar-mini) .wt-table .wt-col-status, html:not(.sidebar-mini) .wt-table .wt-col-site, html:not(.sidebar-mini) .wt-table .wt-col-team, html:not(.sidebar-mini) .wt-table .wt-col-stone, html:not(.sidebar-mini) .wt-table .wt-col-out, html:not(.sidebar-mini) .wt-table .wt-col-lc { display: none; }
+    html:not(.sidebar-mini) .wt-compact-only { display: inline; }
+    html:not(.sidebar-mini) .wt-compact-hide { display: none; }
+    html:not(.sidebar-mini) .wt-dot { display: inline-block; }
+    html:not(.sidebar-mini) .wt-site-line, html:not(.sidebar-mini) .wt-sub { display: block; }
+    html:not(.sidebar-mini) .wt-table thead th { white-space: normal; line-height: 1.25; }
+    html:not(.sidebar-mini) .wt-table thead th:nth-child(2), html:not(.sidebar-mini) .wt-table tbody td:nth-child(2) { padding-left: .6rem; }
+    html:not(.sidebar-mini) .wt-table tbody tr:hover > td:nth-child(2) { box-shadow: inset 3px 0 0 #435ebe; }
+    html:not(.sidebar-mini) .wt-edit .btn { padding: .15rem .35rem; }
+    html:not(.sidebar-mini) .wt-table td.wt-scale { white-space: normal; max-width: 5rem; line-height: 1.25; word-break: break-word; }
+  }
+  @media (max-width: 1599.98px) {
+    html.sidebar-mini .wt-table .wt-col-status, html.sidebar-mini .wt-table .wt-col-site, html.sidebar-mini .wt-table .wt-col-team, html.sidebar-mini .wt-table .wt-col-stone, html.sidebar-mini .wt-table .wt-col-out, html.sidebar-mini .wt-table .wt-col-lc { display: none; }
+    html.sidebar-mini .wt-compact-only { display: inline; }
+    html.sidebar-mini .wt-compact-hide { display: none; }
+    html.sidebar-mini .wt-dot { display: inline-block; }
+    html.sidebar-mini .wt-site-line, html.sidebar-mini .wt-sub { display: block; }
+    html.sidebar-mini .wt-table thead th { white-space: normal; line-height: 1.25; }
+    html.sidebar-mini .wt-table thead th:nth-child(2), html.sidebar-mini .wt-table tbody td:nth-child(2) { padding-left: .6rem; }
+    html.sidebar-mini .wt-table tbody tr:hover > td:nth-child(2) { box-shadow: inset 3px 0 0 #435ebe; }
+    html.sidebar-mini .wt-edit .btn { padding: .15rem .35rem; }
+    html.sidebar-mini .wt-table td.wt-scale { white-space: normal; max-width: 5rem; line-height: 1.25; word-break: break-word; }
+  }
+  /* ต่ำกว่า 1300px (notebook จอเล็ก / ซูมเบราว์เซอร์ / แท็บเล็ต) : บีบตัวอักษร/ระยะลงอีกนิด */
+  @media (max-width: 1299.98px) {
+    /* ลดขอบหน้า/การ์ด ให้ตารางได้ที่เพิ่ม (#main ของ theme มี padding 2rem) */
+    /* ใช้ #app นำหน้าเพื่อชนะ html[data-bs-theme=dark] #main ของ theme โหมดมืด */
+    #app #main { padding-left: 1rem; padding-right: 1rem; }
+    #app .wt-card > .card-body { padding-left: 1rem; padding-right: 1rem; }
+    .wt-table { font-size: .82rem; }
+    .wt-table thead th { font-size: .75rem; padding: .5rem .3rem; }
+    .wt-table tbody td { padding: .4rem .3rem; }
+    .wt-table .wrap-md { max-width: 7rem; }
+    .wt-do { font-size: .8rem; }
+    .wt-table thead th:nth-child(4) { width: 4rem; min-width: 4rem; }
+  }
   .wt-alert { font-weight: 700; color: #C0392B; }
   .wt-empty { text-align: center; padding: 2.5rem 1rem !important; color: var(--bs-secondary-color, #6c757d); }
 
@@ -72,25 +140,18 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
   html[data-bs-theme="dark"] .wt-status.no { background: rgba(220,53,69,.25); color: #ea868f; }
   html[data-bs-theme="dark"] .wt-alert { color: #f1948a; }
 
-  /* มือถือ : แสดงแต่ละรายการเป็นการ์ดแทนแถวตาราง */
+  /* จอแคบกว่า 992px : บีบลงอีกขั้น (แสดงเป็นแถวตารางเสมอ ไม่เปลี่ยนเป็นการ์ด)
+     จอที่แคบกว่าตารางจริง ๆ (เช่นมือถือแนวตั้ง) ยังเลื่อนแนวนอนในกรอบตารางได้ */
+  @media (max-width: 991.98px) {
+    #app #main { padding-left: .75rem; padding-right: .75rem; }
+    #app .wt-card > .card-body { padding-left: .75rem; padding-right: .75rem; }
+    .wt-table { font-size: .78rem; }
+    .wt-table thead th { font-size: .72rem; padding: .45rem .25rem; }
+    .wt-table tbody td { padding: .35rem .25rem; }
+    .wt-table .wrap-md { max-width: 6rem; }
+    .wt-table .wt-time { font-size: .7rem; }
+  }
   @media (max-width: 767.98px) {
-    .wt-table-wrap { border: 0; overflow: visible; }
-    .wt-table thead { display: none; }
-    .wt-table, .wt-table tbody, .wt-table tr, .wt-table td { display: block; width: 100%; }
-    .wt-table tbody tr { display: flex; flex-direction: column; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .6rem; margin-bottom: .75rem; padding: .4rem .75rem; }
-    .wt-table tbody tr:nth-child(even) td, .wt-table tbody tr:hover td { background: transparent; }
-    .wt-table tbody td { display: flex; justify-content: space-between; gap: 1rem; text-align: right; border: 0; border-bottom: 1px dashed var(--bs-border-color, #eef0f3); padding: .35rem 0; max-width: none; }
-    .wt-table tbody td:last-child { border-bottom: 0; }
-    .wt-table tbody td::before { content: attr(data-label); font-weight: 600; color: var(--bs-secondary-color, #6c757d); text-align: left; flex: 0 0 auto; }
-    .wt-table tbody td.wt-card-head { border-bottom: 1px solid var(--bs-border-color, #dee2e6); padding: .5rem 0; align-items: center; }
-    .wt-table tbody td.wt-card-head::before { content: none; }
-    .wt-table tbody td.wt-empty { justify-content: center; border: 0; }
-    .wt-table tbody td.wt-empty::before { content: none; }
-    .wt-table tbody td.wt-edit::before { content: none; }
-    .wt-table tbody td.wt-edit { order: 99; } /* มือถือ : ปุ่มแก้ไขอยู่ท้ายการ์ด */
-    .wt-table tbody td.wt-edit:empty { display: none; }
-    .wt-table tbody td.wt-edit .btn { width: 100%; }
-    .wt-time { display: inline; margin-left: .35rem; }
     .wt-toolbar .wt-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
     .wt-toolbar .wt-actions .dl-btn, .wt-toolbar .wt-actions a { white-space: normal; }
     .wt-toolbar .btn-approve { width: 100%; }
@@ -273,51 +334,49 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             <table class="table wt-table">
               <thead>
                 <tr>
-                  <th class="text-center">#</th>
+                  <th class="text-center wt-col-status">#</th>
                   <th>เลขที่ชั่ง</th>
-                  <th class="text-center">แก้ไข</th>
-                  <th>เลขที่ใบส่งของ</th>
                   <th>วันที่ / เวลา</th>
-                  <th>ทะเบียนรถ</th>
+                  <th>เลขที่ใบส่งของ</th>
+                  <th>ทะเบียนรถ{% if is_port_biz %}<span class="wt-compact-only"> / ทีม</span>{% endif %}</th>
                   {% if is_port_biz %}
-                  <th>ทีม</th>
+                  <th class="wt-col-team">ทีม</th>
                   {% endif %}
-                  <th>ลูกค้า</th>
-                  <th>หิน</th>
-                  <th>ต้นทาง</th>
-                  <th>ปลายทาง</th>
-                  <th class="text-end">นน.เข้า</th>
-                  <th class="text-end">นน.ออก</th>
+                  <th>ลูกค้า<span class="wt-compact-only"> / หิน</span></th>
+                  <th class="wt-col-stone">หิน</th>
+                  <th>ต้นทาง<span class="wt-compact-only"> / ปลายทาง</span></th>
+                  <th class="wt-col-site">ปลายทาง</th>
+                  <th class="text-end">นน.เข้า<span class="wt-compact-only"> / ออก</span></th>
+                  <th class="text-end wt-col-out">นน.ออก</th>
                   <th class="text-end">นน.สุทธิ</th>
                   {% if is_port_biz %}
-                  <th class="text-end">นน.สุทธิต้นทาง</th>
+                  <th class="text-end wt-th-wrap">นน.สุทธิต้นทาง</th>
                   {% endif %}
-                  <th>lc.</th>
-                  <th>ผู้ชั่ง</th>
+                  <th class="wt-col-lc">lc.</th>
+                  <th>ผู้ชั่ง<span class="wt-compact-only"> / lc.</span></th>
+                  <th class="text-center">แก้ไข</th>
                 </tr>
               </thead>
               <tbody>
                 {% for i in weight %}
                 <tr>
-                  <td class="text-md-center" data-label="สถานะตรวจสอบ">
+                  <td class="text-md-center wt-col-status" data-label="สถานะตรวจสอบ">
                     {% if i.is_apw == True %}
                     <span class="wt-status ok" title="ตรวจสอบแล้ว"><i class="fa-solid fa-check"></i><span class="visually-hidden">ตรวจสอบแล้ว</span></span>
                     {% else %}
                     <span class="wt-status no" title="ยังไม่ตรวจสอบ"><i class="fa-solid fa-xmark"></i><span class="visually-hidden">ยังไม่ตรวจสอบ</span></span>
                     {% endif %}
                   </td>
-                  <td data-label="เลขที่ชั่ง"><span class="wt-doc">{{i.doc_id}}</span></td>
-                  {# superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ #}
-                  <td class="text-center wt-edit">{% if is_scale and request.user.first_name == i.scale_name or request.user.is_superuser or is_account %}<a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-outline-secondary btn-sm nowrap"><i class="fas fa-pen-to-square"></i> แก้ไข</a>{% endif %}</td>
-                  <td data-label="เลขที่ใบส่งของ"><span class="wt-do">{{i.do_doc_no|default_if_none:"-"}}</span></td>
+                  <td class="nowrap" data-label="เลขที่ชั่ง">{# โหมดกระชับ : ซ่อนคอลัมน์ # แล้วแสดงสถานะเป็นจุดหน้าเลขที่ชั่งแทน #}<span class="wt-compact-only wt-dot {% if i.is_apw == True %}ok{% else %}no{% endif %}" title="{% if i.is_apw == True %}ตรวจสอบแล้ว{% else %}ยังไม่ตรวจสอบ{% endif %}"></span><span class="wt-doc">{{i.doc_id}}</span></td>
                   <td class="nowrap" data-label="วันที่ / เวลา">
                     <span>{{i.date|date:"d/m/Y"}}</span>
-                    <span class="wt-time" title="เวลาเข้า – เวลาออก"><i class="fa-regular fa-clock"></i> {{i.time_in|default_if_none:"-"}} – {{i.time_out|default_if_none:"-"}}</span>
+                    <span class="wt-time" title="เวลาเข้า {{i.time_in|default_if_none:"-"}} – เวลาออก {{i.time_out|default_if_none:"-"}}"><i class="fa-regular fa-clock"></i> <span class="wt-compact-hide">{{i.time_in|default_if_none:"-"}} – {{i.time_out|default_if_none:"-"}}</span><span class="wt-compact-only">{{i.time_in|time:"H:i"|default:"-"}}–{{i.time_out|time:"H:i"|default:"-"}}</span></span>
                   </td>
-                  <td class="nowrap" data-label="ทะเบียนรถ">{{i.car_registration_name}}</td>
+                  <td data-label="เลขที่ใบส่งของ"><span class="wt-do">{{i.do_doc_no|do_doc_no_lines}}</span></td>
+                  <td class="nowrap" data-label="ทะเบียนรถ">{{i.car_registration_name}}{% if is_port_biz %}<span class="wt-compact-only wt-sub">{% if i.carry_type_name == 'ส่งให้' and not i.car_team_name %}<span class="wt-alert">ไม่ระบุทีม</span>{% else %}{{i.car_team_name|default_if_none:""}}{% endif %}</span>{% endif %}</td>
                   {% if is_port_biz %}
                   {# ขนส่งเป็น "ส่งให้" แต่ไม่ได้ระบุทีม -> แสดง "ไม่ระบุทีม" ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
-                  <td class="nowrap" data-label="ทีม">
+                  <td class="nowrap wt-col-team" data-label="ทีม">
                     {% if i.carry_type_name == 'ส่งให้' and not i.car_team_name %}
                       <span class="wt-alert">ไม่ระบุทีม</span>
                     {% else %}
@@ -325,12 +384,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     {% endif %}
                   </td>
                   {% endif %}
-                  <td class="wrap-md" data-label="ลูกค้า">{{i.customer__customer_name}}</td>
-                  <td class="wrap-md" data-label="หิน">{{i.stone_type__base_stone_type_name}}</td>
-                  <td class="wrap-md" data-label="ต้นทาง">{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}</td>
-                  <td class="wrap-sm" data-label="ปลายทาง">{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
-                  <td class="num" data-label="นน.เข้า">{{i.weight_in|intcomma}}</td>
-                  <td class="num" data-label="นน.ออก">{{i.weight_out|intcomma}}</td>
+                  <td class="wrap-md" data-label="ลูกค้า">{{i.customer__customer_name}}<span class="wt-compact-only wt-sub">{{i.stone_type__base_stone_type_name}}</span></td>
+                  <td class="wrap-md wt-col-stone" data-label="หิน">{{i.stone_type__base_stone_type_name}}</td>
+                  <td class="wrap-md" data-label="ต้นทาง">{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}<span class="wt-compact-only wt-site-line">→ {% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</span></td>
+                  <td class="wrap-sm wt-col-site" data-label="ปลายทาง">{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
+                  <td class="num" data-label="นน.เข้า">{{i.weight_in|intcomma}}<span class="wt-compact-only wt-sub">{{i.weight_out|intcomma}}</span></td>
+                  <td class="num wt-col-out" data-label="นน.ออก">{{i.weight_out|intcomma}}</td>
                   <td class="num net" data-label="นน.สุทธิ">{{i.weight_total|intcomma}}</td>
                   {% if is_port_biz %}
                   {# น้ำหนักสุทธิต้นทางน้อยกว่า 10.000 -> ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
@@ -342,8 +401,10 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                     {% endif %}
                   </td>
                   {% endif %}
-                  <td class="nowrap" data-label="lc.">{{i.base_weight_station_name}}</td>
-                  <td class="nowrap" data-label="ผู้ชั่ง">{{i.scale_name}}</td>
+                  <td class="nowrap wt-col-lc" data-label="lc.">{{i.base_weight_station_name}}</td>
+                  <td class="nowrap wt-scale" data-label="ผู้ชั่ง">{{i.scale_name}}<span class="wt-compact-only wt-sub">{{i.base_weight_station_name}}</span></td>
+                  {# superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ #}
+                  <td class="text-center wt-edit">{% if is_scale and request.user.first_name == i.scale_name or request.user.is_superuser or is_account %}<a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-outline-secondary btn-sm nowrap" title="แก้ไข"><i class="fas fa-pen-to-square"></i><span class="wt-edit-text"> แก้ไข</span></a>{% endif %}</td>
                 </tr>
                 {% empty %}
                 <tr>

@@ -17,6 +17,7 @@ class WeightFilter(django_filters.FilterSet):
     start_created = django_filters.DateFilter(field_name = "date", lookup_expr='gte', widget=DateInput(attrs={'type':'date'}))
     end_created = django_filters.DateFilter(field_name = "date", lookup_expr='lte', widget=DateInput(attrs={'type':'date'}))
     doc_id = django_filters.CharFilter(field_name="doc_id", lookup_expr='icontains')
+    do_doc_no = django_filters.CharFilter(field_name="do_doc_no", lookup_expr='icontains')
     customer_name = django_filters.CharFilter(field_name="customer_name", lookup_expr='icontains')
     stone_type_name = django_filters.CharFilter(field_name="stone_type_name", lookup_expr='icontains')
     car_registration_name = django_filters.CharFilter(field_name="car_registration_name", lookup_expr='icontains')
@@ -36,6 +37,7 @@ class WeightFilter(django_filters.FilterSet):
         # fields = '__all__'
 
 WeightFilter.base_filters['doc_id'].label = 'เลขที่ชั่ง'
+WeightFilter.base_filters['do_doc_no'].label = 'เลขที่ใบส่งของ'
 WeightFilter.base_filters['start_created'].label = 'วันที่'
 WeightFilter.base_filters['end_created'].label = 'ถึง'
 WeightFilter.base_filters['customer_name'].label = 'ชื่อลูกค้า'

@@ -82,7 +82,13 @@
         fontFamily: 'inherit',
         foreColor: t.text,
         background: 'transparent',
-        toolbar: { show: false },
+        // เมนู ≡ มุมขวาบน : ดาวน์โหลดเป็นรูป (SVG/PNG) หรือ CSV (เปิดใน Excel ได้)
+        toolbar: {
+          show: true,
+          offsetY: -4,
+          tools: { download: true, selection: false, zoom: false, zoomin: false, zoomout: false, pan: false, reset: false },
+          export: { csv: { headerCategory: 'หมวด', dateFormatter: (t) => new Date(t).toLocaleDateString('en-GB') } },
+        },
         animations: { enabled: true, speed: 450, animateGradually: { enabled: false } },
       },
       grid: {

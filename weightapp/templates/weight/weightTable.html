@@ -11,9 +11,151 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
 <style>
-  .col-md-1-5 {
-    flex: 0 0 12.5%;
-    max-width: 12.5%;
+  /* ===== Weight Table : layout ===== */
+  .wt-card { border-radius: .75rem; }
+  .wt-section-title { font-size: .875rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--bs-secondary-color, #6c757d); margin-bottom: .5rem; }
+
+  /* ตัวกรอง */
+  .wt-filter-card .card-body { padding: .75rem 1rem; }
+  .wt-filter .form-label, .wt-filter label { font-size: .85rem; font-weight: 600; margin-bottom: .15rem; line-height: 1.2; }
+  .wt-filter .mb-3 { margin-bottom: 0 !important; }
+  .wt-filter .form-control, .wt-filter .form-select { font-size: .95rem; padding-top: .3rem; padding-bottom: .3rem; min-height: 0; height: auto; }
+  .wt-filter .form-select { padding-right: 2rem; }
+  .wt-filter .btn { padding-top: .3rem; padding-bottom: .3rem; font-size: .95rem; }
+  .wt-filter-toggle .bi { transition: transform .15s; }
+  .wt-filter-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+
+  /* ปุ่มรายงาน/ดาวน์โหลด (มี progress bar ซ้อนในปุ่ม) */
+  .wt-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .wt-toolbar .wt-actions { display: flex; flex-wrap: wrap; gap: .5rem; flex: 1 1 auto; }
+  .dl-btn { position: relative; overflow: hidden; white-space: nowrap; font-size: .925rem; }
+  .dl-btn .dl-progress { position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: rgba(255,255,255,.4); transition: width .1s; }
+  .dl-btn .dl-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-weight: bold; display: none; }
+  .btn-sales-daily { background-color: #5dade2; color: #10242f; }
+  .btn-sales-daily:hover { background-color: #4a9fd6; color: #10242f; }
+  .btn-sales-monthly { background-color: #2e86c1; color: #fff; }
+  .btn-sales-monthly:hover { background-color: #2874a6; color: #fff; }
+  .btn-approve { background-color: #af7ac5; color: #fff; white-space: nowrap; }
+  .btn-approve:hover { background-color: #9b59b6; color: #fff; }
+
+  /* ตาราง */
+  .wt-table-wrap { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; }
+  .wt-table { margin-bottom: 0; font-size: .95rem; }
+  .wt-table thead th { position: sticky; top: 0; z-index: 1; background: #f2f4f8; color: #475467; font-size: .85rem; font-weight: 600; white-space: nowrap; vertical-align: middle; border-bottom: 1px solid var(--bs-border-color, #dee2e6); padding: .65rem .6rem; }
+  .wt-table tbody td { vertical-align: middle; padding: .55rem .6rem; border-color: var(--bs-border-color, #eef0f3); }
+  .wt-table tbody tr:nth-child(even) td { background: rgba(128,128,128,.035); }
+  .wt-table tbody tr:hover td { background: rgba(13,110,253,.06); }
+  /* แถบสีน้ำเงินซ้ายมือของแถวที่เมาส์ชี้ (แบบเดียวกับหน้า setting : base-list.css) ใช้เฉพาะตอนเป็นตาราง ไม่ใช่การ์ดมือถือ */
+  .wt-table tbody tr:hover > td:first-child:not(.wt-empty) { box-shadow: inset 3px 0 0 #435ebe; }
+  .wt-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .wt-table .nowrap { white-space: nowrap; }
+  .wt-table .wrap-md { min-width: 6rem; max-width: 14rem; }
+  .wt-table .wrap-sm { min-width: 5rem; max-width: 8rem; line-height: 1.3; }
+  .wt-table .net { font-weight: 700; }
+  .wt-time { display: block; font-size: .75rem; color: var(--bs-secondary-color, #6c757d); white-space: nowrap; }
+  .wt-status { display: inline-flex; width: 1.6rem; height: 1.6rem; align-items: center; justify-content: center; border-radius: 50%; font-size: .85rem; }
+  .wt-status.ok { background: #d1e7dd; color: #146c43; }
+  .wt-status.no { background: #f8d7da; color: #b02a37; }
+  .wt-status.sm { width: 1.15rem; height: 1.15rem; font-size: .65rem; }
+  .wt-count { display: inline-block; margin-left: .35rem; padding: .15rem .55rem; border-radius: 1rem; font-size: .85rem; font-weight: 600; background: rgba(13,110,253,.1); color: var(--bs-primary, #0d6efd); }
+  .wt-doc { font-weight: 600; white-space: nowrap; }
+  .wt-do { color: var(--bs-primary, #0d6efd); white-space: nowrap; font-size: .875rem; }
+  /* คอลัมน์ที่ 4 = เลขที่ใบส่งของ : ให้หัวคอลัมน์ตัดเป็น 2 บรรทัด คอลัมน์จะได้แคบลง */
+  .wt-table thead th:nth-child(4) { white-space: normal; width: 6.5rem; min-width: 6.5rem; line-height: 1.25; }
+  /* จอ notebook ลงไป (< 1920px) : เลขที่ใบส่งของแสดง 2 บรรทัด เช่น DO2606- / 000001 คอลัมน์จะแคบลงอีก
+     (มือถือที่เป็นการ์ดยังแสดงบรรทัดเดียว) */
+  @media (max-width: 1919.98px) {
+    .wt-table thead th:nth-child(4) { width: 4.5rem; min-width: 4.5rem; }
+    .wt-do .do-head, .wt-do .do-tail { display: block; line-height: 1.25; }
+
+    /* notebook : ตารางกระชับ ให้เห็นถึง นน.สุทธิ โดยไม่ต้องเลื่อนแนวนอน */
+    .wt-table { font-size: .875rem; }
+    .wt-table thead th { padding: .55rem .4rem; font-size: .8rem; }
+    .wt-table tbody td { padding: .45rem .4rem; }
+    .wt-table .wrap-md, .wt-table .wrap-sm { min-width: 0; line-height: 1.3; }
+    .wt-table .wrap-md { max-width: 8.5rem; }
+    .wt-table .wrap-sm { max-width: 6.5rem; }
+    .wt-status { width: 1.35rem; height: 1.35rem; font-size: .7rem; }
+    /* ปุ่มแก้ไขเหลือแค่ไอคอน (มี title บอก) */
+    .wt-edit .btn { padding: .2rem .45rem; }
+    .wt-edit .btn .wt-edit-text { display: none; }
+  }
+  /* ===== โหมดกระชับ (compact) : ให้เห็นทุกคอลัมน์ถึงปุ่มแก้ไขโดยไม่ต้องเลื่อนแนวนอน =====
+     ใช้เมื่อพื้นที่ตารางแคบ : sidebar เต็ม + จอ 1200-1919px  หรือ  sidebar ย่อ + จอ 1200-1599px
+     - ซ่อนคอลัมน์ # (สถานะเป็นจุดสีหน้าเลขที่ชั่ง)
+     - ซ้อน 2 บรรทัดในช่องเดียว : ต้นทาง/ปลายทาง, ลูกค้า/หิน, ทะเบียนรถ/ทีม, นน.เข้า/ออก, ผู้ชั่ง/lc.
+     - เวลาเข้า-ออกแสดงแค่ ชม:นาที (เต็มอยู่ใน tooltip) */
+  .wt-compact-only { display: none; }
+  .wt-dot { width: .55rem; height: .55rem; border-radius: 50%; margin-right: .35rem; vertical-align: middle; }
+  .wt-dot.ok { background: #198754; }
+  .wt-dot.no { background: #dc3545; }
+  .wt-site-line, .wt-sub { color: var(--bs-secondary-color, #6c757d); font-size: .8em; font-weight: 400; line-height: 1.3; }
+  /* ต่ำกว่า 1200px sidebar ถูกซ่อน (เมนู burger) แต่ class sidebar-mini อาจยังติดอยู่ จึงให้ทั้ง 2 บล็อกครอบจอเล็กด้วย */
+  @media (max-width: 1919.98px) {
+    html:not(.sidebar-mini) .wt-table .wt-col-status, html:not(.sidebar-mini) .wt-table .wt-col-site, html:not(.sidebar-mini) .wt-table .wt-col-team, html:not(.sidebar-mini) .wt-table .wt-col-stone, html:not(.sidebar-mini) .wt-table .wt-col-out, html:not(.sidebar-mini) .wt-table .wt-col-lc { display: none; }
+    html:not(.sidebar-mini) .wt-compact-only { display: inline; }
+    html:not(.sidebar-mini) .wt-compact-hide { display: none; }
+    html:not(.sidebar-mini) .wt-dot { display: inline-block; }
+    html:not(.sidebar-mini) .wt-site-line, html:not(.sidebar-mini) .wt-sub { display: block; }
+    html:not(.sidebar-mini) .wt-table thead th { white-space: normal; line-height: 1.25; }
+    html:not(.sidebar-mini) .wt-table thead th:nth-child(2), html:not(.sidebar-mini) .wt-table tbody td:nth-child(2) { padding-left: .6rem; }
+    html:not(.sidebar-mini) .wt-table tbody tr:hover > td:nth-child(2) { box-shadow: inset 3px 0 0 #435ebe; }
+    html:not(.sidebar-mini) .wt-edit .btn { padding: .15rem .35rem; }
+    html:not(.sidebar-mini) .wt-table td.wt-scale { white-space: normal; max-width: 5rem; line-height: 1.25; word-break: break-word; }
+  }
+  @media (max-width: 1599.98px) {
+    html.sidebar-mini .wt-table .wt-col-status, html.sidebar-mini .wt-table .wt-col-site, html.sidebar-mini .wt-table .wt-col-team, html.sidebar-mini .wt-table .wt-col-stone, html.sidebar-mini .wt-table .wt-col-out, html.sidebar-mini .wt-table .wt-col-lc { display: none; }
+    html.sidebar-mini .wt-compact-only { display: inline; }
+    html.sidebar-mini .wt-compact-hide { display: none; }
+    html.sidebar-mini .wt-dot { display: inline-block; }
+    html.sidebar-mini .wt-site-line, html.sidebar-mini .wt-sub { display: block; }
+    html.sidebar-mini .wt-table thead th { white-space: normal; line-height: 1.25; }
+    html.sidebar-mini .wt-table thead th:nth-child(2), html.sidebar-mini .wt-table tbody td:nth-child(2) { padding-left: .6rem; }
+    html.sidebar-mini .wt-table tbody tr:hover > td:nth-child(2) { box-shadow: inset 3px 0 0 #435ebe; }
+    html.sidebar-mini .wt-edit .btn { padding: .15rem .35rem; }
+    html.sidebar-mini .wt-table td.wt-scale { white-space: normal; max-width: 5rem; line-height: 1.25; word-break: break-word; }
+  }
+  /* ต่ำกว่า 1300px (notebook จอเล็ก / ซูมเบราว์เซอร์ / แท็บเล็ต) : บีบตัวอักษร/ระยะลงอีกนิด */
+  @media (max-width: 1299.98px) {
+    /* ลดขอบหน้า/การ์ด ให้ตารางได้ที่เพิ่ม (#main ของ theme มี padding 2rem) */
+    /* ใช้ #app นำหน้าเพื่อชนะ html[data-bs-theme=dark] #main ของ theme โหมดมืด */
+    #app #main { padding-left: 1rem; padding-right: 1rem; }
+    #app .wt-card > .card-body { padding-left: 1rem; padding-right: 1rem; }
+    .wt-table { font-size: .82rem; }
+    .wt-table thead th { font-size: .75rem; padding: .5rem .3rem; }
+    .wt-table tbody td { padding: .4rem .3rem; }
+    .wt-table .wrap-md { max-width: 7rem; }
+    .wt-do { font-size: .8rem; }
+    .wt-table thead th:nth-child(4) { width: 4rem; min-width: 4rem; }
+  }
+  .wt-alert { font-weight: 700; color: #C0392B; }
+  .wt-empty { text-align: center; padding: 2.5rem 1rem !important; color: var(--bs-secondary-color, #6c757d); }
+
+  /* ส่วนท้ายตาราง : จำนวนรายการ + แบ่งหน้า */
+  .wt-foot { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; margin-top: 1rem; }
+  .wt-foot .pagination { margin: 0; flex-wrap: wrap; }
+
+  html[data-bs-theme="dark"] .wt-table thead th { background: #2b2d3c; color: #c2c6d1; }
+  html[data-bs-theme="dark"] .wt-status.ok { background: rgba(25,135,84,.25); color: #75b798; }
+  html[data-bs-theme="dark"] .wt-status.no { background: rgba(220,53,69,.25); color: #ea868f; }
+  html[data-bs-theme="dark"] .wt-alert { color: #f1948a; }
+
+  /* จอแคบกว่า 992px : บีบลงอีกขั้น (แสดงเป็นแถวตารางเสมอ ไม่เปลี่ยนเป็นการ์ด)
+     จอที่แคบกว่าตารางจริง ๆ (เช่นมือถือแนวตั้ง) ยังเลื่อนแนวนอนในกรอบตารางได้ */
+  @media (max-width: 991.98px) {
+    #app #main { padding-left: .75rem; padding-right: .75rem; }
+    #app .wt-card > .card-body { padding-left: .75rem; padding-right: .75rem; }
+    .wt-table { font-size: .78rem; }
+    .wt-table thead th { font-size: .72rem; padding: .45rem .25rem; }
+    .wt-table tbody td { padding: .35rem .25rem; }
+    .wt-table .wrap-md { max-width: 6rem; }
+    .wt-table .wt-time { font-size: .7rem; }
+  }
+  @media (max-width: 767.98px) {
+    .wt-toolbar .wt-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .wt-toolbar .wt-actions .dl-btn, .wt-toolbar .wt-actions a { white-space: normal; }
+    .wt-toolbar .btn-approve { width: 100%; }
+    .wt-foot { justify-content: center; text-align: center; }
   }
 
   /* แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ (เนื้อหามาจาก weight/_incompletePanel.html) */
@@ -79,114 +221,96 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 
     <!-- Basic Tables start -->
     <section class="section">
-      <div class="card">
+      <!-- ตัวกรอง -->
+      <div class="card wt-card wt-filter-card mb-3">
         <div class="card-body">
-          <form method="get" class="row gx-3 gy-2 align-items-center">
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.doc_id|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.do_doc_no|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.scale_name|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1-5 mb-0">
-              {{ filter.form.start_created|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1-5 mb-0">
-              {{ filter.form.end_created|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.car_registration_name|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.customer_name|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.stone_type_name|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.lc|as_crispy_field }}
-            </div>
-            <div class="form-group col-md-1 mb-0">
-              {{ filter.form.weight_type|as_crispy_field }}
-            </div>
-
-            <div class="form-group col-md-1 mb-0">
-              <div>
-                <label for=""></label>
-                <div class="my-2">
-                  <button type="submit" class="btn btn-outline-info"><i class="fas fa-filter"></i> กรอง</button>
-                </div>
+          <div class="d-flex align-items-center justify-content-between mb-md-1">
+            <div class="wt-section-title mb-0"><i class="fas fa-filter"></i> ตัวกรอง</div>
+            <button class="btn btn-sm btn-outline-secondary d-md-none wt-filter-toggle" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#wt-filter-body"
+                    aria-expanded="{% if request.GET %}true{% else %}false{% endif %}" aria-controls="wt-filter-body">
+              แสดง/ซ่อน <i class="bi bi-chevron-down"></i>
+            </button>
+          </div>
+          <div id="wt-filter-body" class="collapse d-md-block{% if request.GET %} show{% endif %}">
+            <form method="get" class="row g-2 align-items-end wt-filter mt-1 mt-md-0">
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.start_created|as_crispy_field }}
               </div>
-            </div>
-          </form>
-          <div class="row mb-1">
-            <div class="col-10">
-              <!-- Weight to Express -->
-              <button id="wt_download-btn" class="btn btn-info" style="position: relative; overflow: hidden;">
-                <span id="wt_btn-text">Weight to Express</span>
-                <div id="wt_btn-progress" 
-                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
-                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
-                <span id="wt_btn-percent" style="position: absolute; left: 50%; top: 50%; 
-                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
-                    0%
-                </span>
-              </button>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.end_created|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.doc_id|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.do_doc_no|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.car_registration_name|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.customer_name|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.stone_type_name|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.weight_type|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.scale_name|as_crispy_field }}
+              </div>
+              <div class="col-6 col-md-3 col-xl-2">
+                {{ filter.form.lc|as_crispy_field }}
+              </div>
+              <div class="col-12 col-md-auto ms-md-auto d-flex gap-2 justify-content-end">
+                <a href="{% url 'weightTable' %}" class="btn btn-outline-secondary"><i class="fas fa-rotate-left"></i> ล้างค่า</a>
+                <button type="submit" class="btn btn-primary px-3"><i class="fas fa-filter"></i> กรอง</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
-              <button id="wtb_download-btn" class="btn btn-primary" style="position: relative; overflow: hidden;">
+      <div class="card wt-card">
+        <div class="card-body">
+          <!-- รายงาน / ดาวน์โหลด -->
+          <div class="wt-section-title">รายงาน / ดาวน์โหลด (ตามตัวกรองที่เลือก)</div>
+          <div class="wt-toolbar mb-3">
+            <div class="wt-actions">
+              <button type="button" id="wtb_download-btn" class="btn btn-primary dl-btn">
                 <span id="wtb_btn-text"><i class="fas fa-file-excel"></i> Export Excel</span>
-                <div id="wtb_btn-progress"
-                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%;
-                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
-                <span id="wtb_btn-percent" style="position: absolute; left: 50%; top: 50%;
-                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
-                    0%
-                </span>
+                <div id="wtb_btn-progress" class="dl-progress"></div>
+                <span id="wtb_btn-percent" class="dl-percent">0%</span>
               </button>
-
-              <button id="sd_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#5dade2 ;color: black;">
-                <span id="sd_btn-text">ยอดขายตามประเภทหินรายวัน</span>
-                <div id="sd_btn-progress" 
-                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
-                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
-                <span id="sd_btn-percent" style="position: absolute; left: 50%; top: 50%; 
-                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
-                    0%
-                </span>
+              <button type="button" id="wt_download-btn" class="btn btn-info dl-btn">
+                <span id="wt_btn-text"><i class="fas fa-file-export"></i> Weight to Express</span>
+                <div id="wt_btn-progress" class="dl-progress"></div>
+                <span id="wt_btn-percent" class="dl-percent">0%</span>
               </button>
-
-              <button id="sm_download-btn" class="btn" style="position: relative; overflow: hidden; background-color:#2e86c1;color: black;">
-                <span id="sm_btn-text">ยอดขายตามประเภทหินรายเดือน</span>
-                <div id="sm_btn-progress" 
-                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
-                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
-                <span id="sm_btn-percent" style="position: absolute; left: 50%; top: 50%; 
-                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
-                    0%
-                </span>
+              <button type="button" id="sd_download-btn" class="btn btn-sales-daily dl-btn">
+                <span id="sd_btn-text"><i class="fas fa-calendar-day"></i> ยอดขายตามประเภทหินรายวัน</span>
+                <div id="sd_btn-progress" class="dl-progress"></div>
+                <span id="sd_btn-percent" class="dl-percent">0%</span>
               </button>
-              <button id="ts_download-btn" class="btn btn-success" style="position: relative; overflow: hidden;">
-                <span id="ts_btn-text">รายงานค่าบรรทุก</span>
-                <div id="ts_btn-progress" 
-                    style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; 
-                            background: rgba(255,255,255,0.4); transition: width 0.1s;"></div>
-                <span id="ts_btn-percent" style="position: absolute; left: 50%; top: 50%; 
-                      transform: translate(-50%, -50%); font-weight: bold; display: none;">
-                    0%
-                </span>
+              <button type="button" id="sm_download-btn" class="btn btn-sales-monthly dl-btn">
+                <span id="sm_btn-text"><i class="fas fa-calendar-alt"></i> ยอดขายตามประเภทหินรายเดือน</span>
+                <div id="sm_btn-progress" class="dl-progress"></div>
+                <span id="sm_btn-percent" class="dl-percent">0%</span>
+              </button>
+              <button type="button" id="ts_download-btn" class="btn btn-success dl-btn">
+                <span id="ts_btn-text"><i class="fas fa-truck"></i> รายงานค่าบรรทุก</span>
+                <div id="ts_btn-progress" class="dl-progress"></div>
+                <span id="ts_btn-percent" class="dl-percent">0%</span>
               </button>
               {% if request.user.is_superuser %}
-                <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight Fix Bug</a>
-                <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-danger" download>Weight History Fix Bug</a>
-              {% endif %} 
+                <a href="{% url 'exportWeightFixBug' %}?{{request.GET.urlencode}}" class="btn btn-outline-danger dl-btn" download>Weight Fix Bug</a>
+                <a href="{% url 'exportWeightHistoryFixBug' %}?{{request.GET.urlencode}}" class="btn btn-outline-danger dl-btn" download>Weight History Fix Bug</a>
+              {% endif %}
             </div>
             {% if is_approve_weight %}
-              <div class="col-2">
-                <a href="{% url 'approveWeight' %}" class="btn rounded-pill float-end" style="background-color: #af7ac5;color: white;"><i class="fa-solid fa-bars"></i> ยืนยันการตรวจสอบ</a>
-              </div>
+              <a href="{% url 'approveWeight' %}" class="btn btn-approve rounded-pill ms-auto"><i class="fa-solid fa-list-check"></i> ยืนยันการตรวจสอบ</a>
             {% endif %}
           </div>
           {% if show_incomplete_panel %}
@@ -197,138 +321,140 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
             </div>
           </div>
           {% endif %}
-          <div class="table-responsive my-3">
-            <table class="table table-hover">
-              <thead class="table-dark">
-                <tr>
-                  <th>#</th>
-                  <th>เลขที่ชั่ง</th>
-                  <th>เลขที่ใบส่งของ</th>
-                  <th>วันที่</th>
-                  <th>เวลาเข้า</th>
-                  <th>เวลาออก</th>
-                  <th>ทะเบียนรถ</th>
-                  {% if is_port_biz %}
-                  <th>ทีม</th>
-                  {% endif %}
-                  <th>ลูกค้า</th>
-                  <th>หิน</th>
-                  <th>ต้นทาง</th>
-                  <th>ปลายทาง</th>
-                  <th>นน.เข้า</th>
-                  <th>นน.ออก</th>
-                  <th>นน.สุทธิ</th>
-                  {% if is_port_biz %}
-                  <th>นน.สุทธิต้นทาง</th>
-                  {% endif %}
-                  <th>lc.</th>
-                  <th>ผู้ชั่ง</th>
 
-                  <th>แก้ไข</th>
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
+            <div class="fw-semibold">รายการชั่ง <span class="wt-count">{{ weight.paginator.count|intcomma }} รายการ</span></div>
+            <div class="small text-muted d-none d-md-flex align-items-center gap-1">
+              <span class="wt-status ok sm"><i class="fa-solid fa-check"></i></span> ตรวจสอบแล้ว
+              <span class="wt-status no sm ms-2"><i class="fa-solid fa-xmark"></i></span> ยังไม่ตรวจสอบ
+            </div>
+          </div>
+
+          <div class="table-responsive wt-table-wrap">
+            <table class="table wt-table">
+              <thead>
+                <tr>
+                  <th class="text-center wt-col-status">#</th>
+                  <th>เลขที่ชั่ง</th>
+                  <th>วันที่ / เวลา</th>
+                  <th>เลขที่ใบส่งของ</th>
+                  <th>ทะเบียนรถ{% if is_port_biz %}<span class="wt-compact-only"> / ทีม</span>{% endif %}</th>
+                  {% if is_port_biz %}
+                  <th class="wt-col-team">ทีม</th>
+                  {% endif %}
+                  <th>ลูกค้า<span class="wt-compact-only"> / หิน</span></th>
+                  <th class="wt-col-stone">หิน</th>
+                  <th>ต้นทาง<span class="wt-compact-only"> / ปลายทาง</span></th>
+                  <th class="wt-col-site">ปลายทาง</th>
+                  <th class="text-end">นน.เข้า<span class="wt-compact-only"> / ออก</span></th>
+                  <th class="text-end wt-col-out">นน.ออก</th>
+                  <th class="text-end">นน.สุทธิ</th>
+                  {% if is_port_biz %}
+                  <th class="text-end wt-th-wrap">นน.สุทธิต้นทาง</th>
+                  {% endif %}
+                  <th class="wt-col-lc">lc.</th>
+                  <th>ผู้ชั่ง<span class="wt-compact-only"> / lc.</span></th>
+                  <th class="text-center">แก้ไข</th>
                 </tr>
               </thead>
               <tbody>
-                {% for i in weight%}
+                {% for i in weight %}
                 <tr>
-                  <td>
+                  <td class="text-md-center wt-col-status" data-label="สถานะตรวจสอบ">
                     {% if i.is_apw == True %}
-                    <span class="badge bg-success"><i class="fa-regular fa-circle-check"></i></span>
+                    <span class="wt-status ok" title="ตรวจสอบแล้ว"><i class="fa-solid fa-check"></i><span class="visually-hidden">ตรวจสอบแล้ว</span></span>
                     {% else %}
-                    <span class="badge bg-danger"><i class="fa-regular fa-circle-xmark"></i></span>
+                    <span class="wt-status no" title="ยังไม่ตรวจสอบ"><i class="fa-solid fa-xmark"></i><span class="visually-hidden">ยังไม่ตรวจสอบ</span></span>
                     {% endif %}
                   </td>
-                  <td>{{i.doc_id}}</td>
-                  <td class="text-primary">{{i.do_doc_no|default_if_none:""}}</td>
-                  <td>{{i.date |date:"d/m/Y"}}</td>
-                  <td>{{i.time_in}}</td>
-                  <td>{{i.time_out}}</td>
-                  <td>{{i.car_registration_name}}</td>
+                  <td class="nowrap" data-label="เลขที่ชั่ง">{# โหมดกระชับ : ซ่อนคอลัมน์ # แล้วแสดงสถานะเป็นจุดหน้าเลขที่ชั่งแทน #}<span class="wt-compact-only wt-dot {% if i.is_apw == True %}ok{% else %}no{% endif %}" title="{% if i.is_apw == True %}ตรวจสอบแล้ว{% else %}ยังไม่ตรวจสอบ{% endif %}"></span><span class="wt-doc">{{i.doc_id}}</span></td>
+                  <td class="nowrap" data-label="วันที่ / เวลา">
+                    <span>{{i.date|date:"d/m/Y"}}</span>
+                    <span class="wt-time" title="เวลาเข้า {{i.time_in|default_if_none:"-"}} – เวลาออก {{i.time_out|default_if_none:"-"}}"><i class="fa-regular fa-clock"></i> <span class="wt-compact-hide">{{i.time_in|default_if_none:"-"}} – {{i.time_out|default_if_none:"-"}}</span><span class="wt-compact-only">{{i.time_in|time:"H:i"|default:"-"}}–{{i.time_out|time:"H:i"|default:"-"}}</span></span>
+                  </td>
+                  <td data-label="เลขที่ใบส่งของ"><span class="wt-do">{{i.do_doc_no|do_doc_no_lines}}</span></td>
+                  <td class="nowrap" data-label="ทะเบียนรถ">{{i.car_registration_name}}{% if is_port_biz %}<span class="wt-compact-only wt-sub">{% if i.carry_type_name == 'ส่งให้' and not i.car_team_name %}<span class="wt-alert">ไม่ระบุทีม</span>{% else %}{{i.car_team_name|default_if_none:""}}{% endif %}</span>{% endif %}</td>
                   {% if is_port_biz %}
                   {# ขนส่งเป็น "ส่งให้" แต่ไม่ได้ระบุทีม -> แสดง "ไม่ระบุทีม" ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
-                  <td>
+                  <td class="nowrap wt-col-team" data-label="ทีม">
                     {% if i.carry_type_name == 'ส่งให้' and not i.car_team_name %}
-                      <span class="fw-bold" style="color:#C0392B;">ไม่ระบุทีม</span>
+                      <span class="wt-alert">ไม่ระบุทีม</span>
                     {% else %}
                       {{i.car_team_name|default_if_none:""}}
                     {% endif %}
                   </td>
                   {% endif %}
-                  <td>{{i.customer__customer_name}}</td>
-                  <td>{{i.stone_type__base_stone_type_name}}</td>
-                  <td>{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}</td>
-                  <td>{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
-                  <td>{{i.weight_in |intcomma}}</td>
-                  <td>{{i.weight_out |intcomma}}</td>
-                  <td>{{i.weight_total |intcomma}}</td>
+                  <td class="wrap-md" data-label="ลูกค้า">{{i.customer__customer_name}}<span class="wt-compact-only wt-sub">{{i.stone_type__base_stone_type_name}}</span></td>
+                  <td class="wrap-md wt-col-stone" data-label="หิน">{{i.stone_type__base_stone_type_name}}</td>
+                  <td class="wrap-md" data-label="ต้นทาง">{% if i.mill__mill_name%}{{i.mill__mill_name}}{%else%}-{%endif%}<span class="wt-compact-only wt-site-line">→ {% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</span></td>
+                  <td class="wrap-sm wt-col-site" data-label="ปลายทาง">{% if i.site%}{{i.site__base_site_name}}{%elif i.site_name%}{{i.site_name}}{%else%}-{%endif%}</td>
+                  <td class="num" data-label="นน.เข้า">{{i.weight_in|intcomma}}<span class="wt-compact-only wt-sub">{{i.weight_out|intcomma}}</span></td>
+                  <td class="num wt-col-out" data-label="นน.ออก">{{i.weight_out|intcomma}}</td>
+                  <td class="num net" data-label="นน.สุทธิ">{{i.weight_total|intcomma}}</td>
                   {% if is_port_biz %}
                   {# น้ำหนักสุทธิต้นทางน้อยกว่า 10.000 -> ตัวหนาสีแดง (กติกาเดียวกับ export excel) #}
-                  <td>
+                  <td class="num" data-label="นน.สุทธิต้นทาง">
                     {% if i.origin_weight != None and i.origin_weight < 10 %}
-                      <span class="fw-bold" style="color:#C0392B;">{{i.origin_weight|intcomma}}</span>
+                      <span class="wt-alert">{{i.origin_weight|intcomma}}</span>
                     {% else %}
                       {{i.origin_weight|default_if_none:""|intcomma}}
                     {% endif %}
                   </td>
                   {% endif %}
-                  <td>{{i.base_weight_station_name}}</td>
-                  <td>{{i.scale_name}}</td>
-
-                  <td>
-                    {% if is_scale and request.user.first_name == i.scale_name  or request.user.is_superuser or is_account %} <!-- superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ -->
-                      <a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> แก้ไข</a>
-                    {% endif %}
+                  <td class="nowrap wt-col-lc" data-label="lc.">{{i.base_weight_station_name}}</td>
+                  <td class="nowrap wt-scale" data-label="ผู้ชั่ง">{{i.scale_name}}<span class="wt-compact-only wt-sub">{{i.base_weight_station_name}}</span></td>
+                  {# superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ #}
+                  <td class="text-center wt-edit">{% if is_scale and request.user.first_name == i.scale_name or request.user.is_superuser or is_account %}<a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-outline-secondary btn-sm nowrap" title="แก้ไข"><i class="fas fa-pen-to-square"></i><span class="wt-edit-text"> แก้ไข</span></a>{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td class="wt-empty" colspan="{% if is_port_biz %}17{% else %}15{% endif %}">
+                    <i class="fa-regular fa-folder-open fs-3 d-block mb-2"></i>ไม่พบรายการชั่งตามตัวกรองที่เลือก
                   </td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
+
           <!--Pagination-->
-          <nav aria-label="Page navigation">
-            <ul class="pagination float-end">
-            {% if weight.has_previous %}
-                <li class="page-item">
-                <a class="page-link" href="{% my_url weight.previous_page_number 'page' request.GET.urlencode %}">Previous</a>
-              </li>
-            {% else %}
-                <li class="page-item disabled">
-                <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
-              </li>
-            {% endif %}
+          <div class="wt-foot">
+            <div class="small text-muted">
+              {% if weight.paginator.count %}แสดง {{ weight.start_index|intcomma }}–{{ weight.end_index|intcomma }} จาก {{ weight.paginator.count|intcomma }} รายการ{% endif %}
+            </div>
+            <nav aria-label="Page navigation">
+              <ul class="pagination pagination-sm">
+              {% if weight.has_previous %}
+                <li class="page-item"><a class="page-link" href="{% my_url weight.previous_page_number 'page' request.GET.urlencode %}" aria-label="Previous">&laquo;</a></li>
+              {% else %}
+                <li class="page-item disabled"><a class="page-link" href="#" tabindex="-1" aria-disabled="true">&laquo;</a></li>
+              {% endif %}
 
-            {% if weight.number|add:'-4' > 1 %}
+              {% if weight.number|add:'-4' > 1 %}
                 <li class="page-item"><a class="page-link" href="{% my_url weight.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
-            {% endif %}
+              {% endif %}
 
-            {% for i in weight.paginator.page_range %}
+              {% for i in weight.paginator.page_range %}
                 {% if weight.number == i %}
-                    <li class="page-item active" aria-current="page">
-                  <span class="page-link">
-                    {{ i }}
-                    <span class="sr-only">(current)</span>
-                  </span>
-                </li>
+                  <li class="page-item active" aria-current="page"><span class="page-link">{{ i }}</span></li>
                 {% elif i > weight.number|add:'-5' and i < weight.number|add:'5' %}
-                    <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+                  <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
                 {% endif %}
-            {% endfor %}
+              {% endfor %}
 
-            {% if weight.paginator.num_pages > weight.number|add:'4' %}
-              <li class="page-item"><a class="page-link" href="{% my_url weight.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
-            {% endif %}
+              {% if weight.paginator.num_pages > weight.number|add:'4' %}
+                <li class="page-item"><a class="page-link" href="{% my_url weight.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+              {% endif %}
 
-            {% if weight.has_next %}
-                <li class="page-item">
-                <a class="page-link"  href="{% my_url weight.next_page_number 'page' request.GET.urlencode %}">Next</a>
-              </li>
-            {% else %}
-                <li class="page-item disabled">
-                <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
-              </li>
-            {% endif %}
-          </ul>
-        </nav>
-        <!--end of Pagination-->
+              {% if weight.has_next %}
+                <li class="page-item"><a class="page-link" href="{% my_url weight.next_page_number 'page' request.GET.urlencode %}" aria-label="Next">&raquo;</a></li>
+              {% else %}
+                <li class="page-item disabled"><a class="page-link" href="#" tabindex="-1" aria-disabled="true">&raquo;</a></li>
+              {% endif %}
+              </ul>
+            </nav>
+          </div>
+          <!--end of Pagination-->
         </div>
       </div>
     </section>

@@ -93,7 +93,14 @@
                   <label for="do_doc_no">เลขที่ใบส่งของ</label>
                 </div>
                 <div class="col-md-2-5 form-group">
-                  {{form.do_doc_no |attr:"readonly"| add_class:"form-control text-primary"}}
+                  <div class="input-group">
+                    {{form.do_doc_no |attr:"readonly"| add_class:"form-control text-primary"}}
+                    {% if weight.do_doc_no %}
+                    <button type="button" class="btn btn-outline-danger" id="btUnlinkDO" title="ยกเลิกการอ้างใบส่งของ"
+                      onclick="unlinkDeliveryOrder()"><i class="bi bi-x-lg"></i></button>
+                    {% endif %}
+                  </div>
+                  <input type="hidden" name="unlink_do" id="id_unlink_do" value="">
                 </div>
                 <div class="col-lg-2 form-group">
                   <label for="first-name-horizontal">จ่ายเงิน</label>
@@ -499,8 +506,8 @@
     }
     //set data to id
     var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
-    var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
-    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+    var doDocNo = isDOUnlinked() ? "" : ($('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}");
+    if (isSiteEmpty && ((doDocNo && doDocNo.trim() !== "") || (isDOUnlinked() && !$("#select_site").val()))) {
       // Keep manual input of site_name, don't clear or copy from empty select_site
     } else {
       $("#id_site").val($("#select_site").val());
@@ -531,6 +538,28 @@
     //vat 
     $("#id_vat_type").val($('input[name="vat_type_group"]:checked').val());
   });
+
+  function isDOUnlinked() {
+    return $('#id_unlink_do').val() === '1';
+  }
+
+  // ยกเลิกการอ้างใบส่งของ: ล้างเลขที่ใบส่งของ ปลดล็อกหน้างาน/ชนิดหิน
+  // ตอนบันทึก server จะตั้งรายการนี้เป็นยกเลิกใน WeightDelivery และคำนวณยอดของใบส่งของเดิมใหม่
+  function unlinkDeliveryOrder() {
+    var doNo = $('#id_do_doc_no').val();
+    if (!doNo) return;
+    if (!confirm('ต้องการยกเลิกการอ้างใบส่งของ ' + doNo + ' หรือไม่ ?\n(มีผลเมื่อกดบันทึก)')) return;
+
+    $('#id_unlink_do').val('1');
+    $('#id_do_doc_no').val('');
+    $('#btUnlinkDO').prop('disabled', true);
+
+    // กรณีหน้างานของ DO ไม่มีในระบบ ช่องชื่อหน้างานถูกเปลี่ยนเป็น text readonly → กลับมาใช้ dropdown
+    // ถ้าไม่เลือกหน้างานใหม่ จะเก็บชื่อหน้างานเดิมไว้ (ดู submit)
+    $('#id_site_name').attr('type', 'hidden');
+    $('#select_site').show().prop('disabled', false);
+    $('#id_stone_type').prop('disabled', false);
+  }
 
   var stateP1 = false;
   function radiostateP1(element) {

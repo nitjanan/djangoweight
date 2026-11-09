@@ -1793,14 +1793,19 @@ def editWeight(request, mode, weight_id):
                 original_weight_site = original_weight.site.base_site_id if original_weight.site else None
                 original_weight_cus = original_weight.customer.customer_id if original_weight.customer else None
                 original_weight_stone = original_weight.stone_type.base_stone_type_id if original_weight.stone_type else None
+                original_do_doc_no = original_weight.do_doc_no
             except Weight.DoesNotExist:
                 original_weight_total = None
                 original_weight_site = None
                 original_weight_cus = None
                 original_weight_stone = None
                 original_transport = None
-        
-            do_doc_no = form.cleaned_data.get('do_doc_no')
+                original_do_doc_no = None
+
+            #ยกเลิกการอ้างใบส่งของ (ปุ่ม X หน้า editWeightSell / editWeightPort)
+            unlink_do = request.POST.get('unlink_do') == '1' and bool(original_do_doc_no)
+
+            do_doc_no = None if unlink_do else form.cleaned_data.get('do_doc_no')
             new_transport = form.cleaned_data.get('transport')
             new_transport_name = new_transport.base_transport_name if new_transport else None
 
@@ -1840,12 +1845,19 @@ def editWeight(request, mode, weight_id):
                 if new_transport and new_transport.base_carry_type:
                     form.instance.carry_type_name = new_transport.base_carry_type.base_carry_type_name
 
+                if unlink_do:
+                    form.instance.do_doc_no = None
+
                 # log history เก็บข้อมูลก่อนแก้
                 weight_form = form.save()
 
                 weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
                 weight_history.user_update = request.user
                 weight_history.save()
+
+                #เอารายการนี้ออกจากใบส่งของเดิม: WeightDelivery เป็นยกเลิก แล้วคำนวณยอดคงเหลือของ DO ใหม่
+                if unlink_do:
+                    updateCancelDeliveryOrder(weight_form.weight_id)
 
                 #เครื่องขาย
                 if mode == 1 and company.biz.id == 1:
@@ -2012,7 +2024,7 @@ def updateCancelDeliveryOrder(weight_id):
         do.car_customer_tot = sum_do['car_customer'] or 0
         do.save()
 
-    except WeightDelivery.DoesNotExist:
+    except (WeightDelivery.DoesNotExist, DeliveryOrder.DoesNotExist):
         pass
 
 def updateSellStockStoneItem(weight_id):

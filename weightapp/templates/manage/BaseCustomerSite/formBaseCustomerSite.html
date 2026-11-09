@@ -1,209 +1,69 @@
-{% extends "base.html" %}
+{% extends "manage/formBaseLayout.html" %}
 {% load static %}
-{% load crispy_forms_tags %}
-{% load humanize %}
-{% load templatehelpers %}
-{% load widget_tweaks %}
+{# หน้าเพิ่ม / แก้ไข ลูกค้าและหน้างาน : ค้นหาลูกค้า / หน้างานด้วย autocomplete แล้วเก็บรหัสลงช่องซ่อน id_customer / id_site #}
 
-{% block css %}
-<link
-rel="stylesheet"
-href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css' %}"
-/>
-<link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
-{% endblock %}
+{% block heading_badge %}{% endblock %}
 
-{% block content %}
-<header class="mb-3">
-    <a href="#" class="burger-btn d-block d-xl-none">
-      <i class="bi bi-justify fs-3"></i>
-    </a>
-  </header>
-
-  <div class="page-heading">
-    <div class="page-title">
-      <div class="row">
-        <div class="col-12 col-md-6 order-md-1 order-last">
-          <h3>{{text_mode}} {{table_name}}</h3>
+{% block fields %}
+  <div class="col-12 bf-row">
+    <div class="row">
+      <label class="col-md-3 col-xxl-2 col-form-label bf-label-col" for="id-form-customer">{{ form.customer.label }}<span class="text-danger ms-1">*</span></label>
+      <div class="col-md-9 col-xxl-10">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" name="form-customer" id="id-form-customer" class="form-control" placeholder="พิมพ์รหัสหรือชื่อลูกค้า ..." autocomplete="off" onfocusout="setCustomer_FO()" required>
         </div>
-        <div class="col-12 col-md-6 order-md-2 order-first">
-          <nav
-            aria-label="breadcrumb"
-            class="breadcrumb-header float-start float-lg-end"
-          >
-            <ol class="breadcrumb">
-              <li class="breadcrumb-item">
-                <a href="{% url 'home' %}">Dashboard</a>
-              </li>
-              <li class="breadcrumb-item">
-                <a href="{% url 'viewProduction' %}">{{table_name}}</a>
-              </li>
-              <li class="breadcrumb-item active" aria-current="page">
-                {{text_mode}} {{table_name}}
-              </li>
-            </ol>
-          </nav>
-        </div>
+        {% for error in form.customer.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
       </div>
     </div>
-
-    <!-- Basic Tables start -->
-    <section class="section">
-      <div class="card">
-        <div class="card-content">
-          <div class="card-body">
-            <form class="form" method="post">
-              <div class="row">
-                {% csrf_token %}
-                {% if form.non_field_errors %}
-                <ul class="errorlist">
-                    {% for error in form.non_field_errors %}
-                        <li class="text-danger">{{ error }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-                <div class="mb-3">
-                  {{form.customer.label}} 
-                  <input type="text" name="form-customer" id="id-form-customer" class="form-control" Placeholder="ค้นหาลูกค้า ..." autocomplete="off" onfocusout="setCustomer_FO()" required>
-                  {{form.customer | add_class:"form-control"}}
-                </div>
-                <div class="mb-3">
-                  {{form.site.label}}
-                  <input type="text" name="form-site" id="id-form-site" class="form-control" Placeholder="ค้นหาหน้างาน ..." autocomplete="off" onfocusout="setSite_FO()" required>
-                  {{form.site | add_class:"form-control"}}
-                </div>
-                <div class="mb-3">
-                  {{form.user_created | add_class:"form-control"}}
-                </div>
-                <div class="col-12 d-flex justify-content-end">
-                  {% if text_mode == 'เปลี่ยน' %}
-                    <h6 class="text-warning me-3">* หากแก้ไขข้อมูล จะข้อมูลจะไปแก้ไขที่ตาชั่งด้วย</h6>
-                  {% endif %}
-                  <button type="submit" class="btn btn-primary me-1 mb-1">
-                    บันทึก
-                  </button>
-                  <!--button type="reset" class="btn btn-light-secondary me-1 mb-1">
-                    Reset
-                  </button-->
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </section>
-    <!-- Basic Tables end -->
   </div>
-
-  <footer>
-    <div class="footer clearfix mb-0 text-muted">
-      <div class="float-start">
-        <p>2023 &copy; Nitjanan</p>
-      </div>
-      <div class="float-end">
-        <!-- p>
-          Crafted with
-          <span class="text-danger"
-            ><i class="bi bi-heart-fill icon-mid"></i
-          ></span>
-          by <a href="https://saugi.me">Saugi</a>
-        </p -->
+  <div class="col-12 bf-row">
+    <div class="row">
+      <label class="col-md-3 col-xxl-2 col-form-label bf-label-col" for="id-form-site">{{ form.site.label }}<span class="text-danger ms-1">*</span></label>
+      <div class="col-md-9 col-xxl-10">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" name="form-site" id="id-form-site" class="form-control" placeholder="พิมพ์รหัสหรือชื่อหน้างาน ..." autocomplete="off" onfocusout="setSite_FO()" required>
+        </div>
+        {% for error in form.site.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
       </div>
     </div>
-  </footer>
+  </div>
 {% endblock %}
 
-{% block script %}
-<script src="{% static 'js/components/dark.js' %}"></script>
-<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
-<script src="{% static 'compiled/js/app.js' %}"></script>
-
+{% block page_script %}
 <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+<script>
+  $(function () {
+    $("#id-form-customer").autocomplete({ source: '{% url "autocompalteCustomer" %}', minLength: 1 });
+    $("#id-form-site").autocomplete({ source: '{% url "autocompalteSite" %}', minLength: 1 });
+  });
 
-<script type="text/javascript">
- setDataCustomer();
- setDataSite();
-
- $( function() {
-      $( "#id-form-customer" ).autocomplete({
-        source: '{% url "autocompalteCustomer" %}',
-        minLength: 1,
-      });
-  } );
-
-  $( function() {
-      $( "#id-form-site" ).autocomplete({
-        source: '{% url "autocompalteSite" %}',
-        minLength: 1,
-      });
-  } );
-
-  function setCustomer_FO(){
-        if($('#id-form-customer').val() != ""){
-          var str = $('#id-form-customer').val();
-          var items = str.split( ":" );
-          var idInput = items[0];
-          $('#id_customer').val(idInput);
-        }else{
-          $('#id_customer').val("");
-        }
+  // ค่าที่เลือกเป็น "รหัส:ชื่อ" เก็บเฉพาะรหัสลงช่องซ่อน
+  function setCustomer_FO() {
+    var val = $('#id-form-customer').val();
+    $('#id_customer').val(val ? val.split(":")[0] : "");
   }
 
-  function setSite_FO(){
-        if($('#id-form-site').val() != ""){
-          var str = $('#id-form-site').val();
-          var items = str.split( ":" );
-          var idInput = items[0];
-          $('#id_site').val(idInput);
-        }else{
-          $('#id_site').val("");
-        }
+  function setSite_FO() {
+    var val = $('#id-form-site').val();
+    $('#id_site').val(val ? val.split(":")[0] : "");
   }
 
-  function setDataCustomer(){
-    if($('#id_customer').val() != ""){
-        var idInput = $('#id_customer').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "setDataCustomer" %}',
-                data: {
-                    'customer_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                        $('#id-form-customer').val(data.val);
-                    }
-                }
-            });
-        }
-        return false;
-    }
+  // หน้าแก้ไข : แปลงรหัสในช่องซ่อน กลับเป็นข้อความ "รหัส:ชื่อ" ให้เห็นในช่องค้นหา
+  function fillText(hiddenId, textId, url, param) {
+    var id = $(hiddenId).val();
+    if (!id) return;
+    var data = {};
+    data[param] = id;
+    $.ajax({
+      url: url, data: data, dataType: 'json',
+      success: function (res) { if (res.val) $(textId).val(res.val); }
+    });
   }
-
-  function setDataSite(){
-    if($('#id_site').val() != ""){
-        var idInput = $('#id_site').val();
-        // Create Ajax Call
-        if(idInput){
-            $.ajax({
-                url: '{% url "setDataSite" %}',
-                data: {
-                    'site_id': idInput,
-                },
-                dataType: 'json',
-                success: function (data) {
-                    if (data.val) {
-                        $('#id-form-site').val(data.val);
-                    }
-                }
-            });
-        }
-        return false;
-    }
-  }
+  fillText('#id_customer', '#id-form-customer', '{% url "setDataCustomer" %}', 'customer_id');
+  fillText('#id_site', '#id-form-site', '{% url "setDataSite" %}', 'site_id');
 </script>
 {% endblock %}

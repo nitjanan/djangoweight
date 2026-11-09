@@ -1,0 +1,10 @@
+{% load widget_tweaks %}
+{# ช่องค้นหาหนึ่งช่องในหน้ารายการข้อมูลพื้นฐาน  ใช้: include with field=filter.form.xxx #}
+<div class="bl-filter">
+  <label class="bl-filter-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+  {% if field.field.widget.input_type == 'select' %}
+    {% render_field field class="form-select form-select-sm" %}
+  {% else %}
+    {% render_field field class="form-control form-control-sm" autocomplete="off" placeholder="ทั้งหมด" %}
+  {% endif %}
+</div>

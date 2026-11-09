@@ -1,0 +1,394 @@
+/* หน้ารายการข้อมูลพื้นฐาน (settingBase*)  ดู weightapp/templates/manage/listBaseLayout.html
+ * ใช้ตัวแปรสีของ Bootstrap 5.3 จึงสลับ light / dark ตาม data-bs-theme ได้เอง */
+
+/* หัวหน้า */
+.base-list-page .page-title { margin-bottom: 1.25rem; }
+.bl-breadcrumb .breadcrumb { font-size: .85rem; }
+.bl-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.bl-title { display: flex; align-items: center; gap: .85rem; }
+.bl-title-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: .75rem;
+  background: rgba(var(--bs-primary-rgb), .12);
+  color: rgb(var(--bs-primary-rgb));
+  font-size: 1.35rem;
+}
+.bl-title-icon i,
+.bl-title-icon i::before { display: block; line-height: 1; vertical-align: 0; }
+.bl-subtitle { color: var(--bs-secondary-color); font-size: .9rem; }
+
+/* แถบค้นหา + ปุ่ม */
+.bl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+.bl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .75rem;
+  flex: 1 1 auto;
+}
+.bl-filter { width: 11.5rem; }
+.bl-filter-label {
+  display: block;
+  margin-bottom: .3rem;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+}
+.bl-filter .form-control-sm,
+.bl-filter .form-select-sm { min-height: 2.25rem; }
+.bl-filter-buttons { display: flex; gap: .5rem; }
+.bl-filter-buttons .btn,
+.bl-actions .btn { min-height: 2.25rem; display: inline-flex; align-items: center; gap: .35rem; }
+.bl-actions .btn { min-height: 2.5rem; padding-left: 1rem; padding-right: 1rem; }
+.bl-filter-buttons .btn i,
+.bl-actions .btn i,
+.bl-edit-btn i,
+.bl-pager .page-link i { line-height: 1; }
+.bl-filter-buttons .btn i::before,
+.bl-actions .btn i::before,
+.bl-edit-btn i::before,
+.bl-pager .page-link i::before { vertical-align: 0; }
+.bl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+
+/* ปุ่มค้นหา : สีเทาเข้ม (slate) แยกจากปุ่มเพิ่มสีน้ำเงิน */
+.bl-filter-buttons .btn.bl-search-btn {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #475569;
+  --bs-btn-border-color: #475569;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #334155;
+  --bs-btn-hover-border-color: #334155;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #1e293b;
+  --bs-btn-active-border-color: #1e293b;
+  --bs-btn-focus-shadow-rgb: 71, 85, 105;
+  font-weight: 600;
+}
+[data-bs-theme="dark"] .bl-filter-buttons .btn.bl-search-btn {
+  --bs-btn-bg: #64748b;
+  --bs-btn-border-color: #64748b;
+  --bs-btn-hover-bg: #7c8ba1;
+  --bs-btn-hover-border-color: #7c8ba1;
+  --bs-btn-active-bg: #94a3b8;
+  --bs-btn-active-border-color: #94a3b8;
+}
+
+/* ปุ่ม "เพิ่ม..." ให้เด่นเป็นปุ่มหลักของหน้า : ใหญ่ขึ้น ไล่สี มีเงา ยกตัวเมื่อชี้ */
+.bl-actions .btn.bl-add-btn {
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-color: #fff;
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-active-border-color: transparent;
+  min-height: 2.85rem;
+  padding: .4rem 1.35rem .4rem .45rem;
+  gap: .6rem;
+  border: 0;
+  border-radius: 2rem;
+  background: linear-gradient(135deg, #5b6cff 0%, #435ebe 55%, #3346a8 100%);
+  box-shadow: 0 .4rem 1rem rgba(67, 94, 190, .38);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.bl-actions .btn.bl-add-btn:hover,
+.bl-actions .btn.bl-add-btn:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow: 0 .6rem 1.4rem rgba(67, 94, 190, .48);
+}
+.bl-actions .btn.bl-add-btn:active { transform: translateY(0); box-shadow: 0 .25rem .6rem rgba(67, 94, 190, .35); }
+.bl-add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22);
+  font-size: 1.1rem;
+}
+.bl-add-icon i, .bl-add-icon i::before { line-height: 1; vertical-align: 0; }
+/* ไม่มีสิทธิ์เพิ่ม : เทาจาง ไม่มีเงา */
+.bl-actions .btn.bl-add-btn:disabled {
+  --bs-btn-disabled-color: var(--bs-secondary-color);
+  --bs-btn-disabled-bg: rgba(var(--bs-secondary-rgb), .16);
+  --bs-btn-disabled-border-color: transparent;
+  background: rgba(var(--bs-secondary-rgb), .16);
+  color: var(--bs-secondary-color);
+  box-shadow: none;
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+.bl-actions .btn.bl-add-btn:disabled .bl-add-icon { background: rgba(var(--bs-secondary-rgb), .18); }
+[data-bs-theme="dark"] .bl-actions .btn.bl-add-btn:not(:disabled) { box-shadow: 0 .4rem 1.1rem rgba(91, 108, 255, .35); }
+
+/* ตาราง */
+.bl-table-wrap {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: .5rem;
+}
+.bl-table thead th {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-secondary-color);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--bs-table-border-color, var(--bs-border-color));
+  padding-top: .7rem;
+  padding-bottom: .7rem;
+}
+/* Mazer บังคับเส้นใต้หัวตารางเป็นสีเทาอ่อนด้วย !important (สว่างจ้าในโหมดมืด) */
+html .bl-table-wrap .table.bl-table:not(.table-borderless) thead th {
+  border-bottom: 1px solid var(--bs-table-border-color, var(--bs-border-color)) !important;
+}
+.bl-table td { padding-top: .65rem; padding-bottom: .65rem; color: var(--bs-body-color); }
+.bl-table tbody tr:last-child td { border-bottom: 0; }
+
+.bl-col-code { width: 1%; white-space: nowrap; }
+.bl-code {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: .35rem;
+  background: rgba(var(--bs-primary-rgb), .08);
+  color: rgb(var(--bs-primary-rgb));
+  font-family: var(--bs-font-monospace);
+  font-size: .85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.bl-code:hover { background: rgba(var(--bs-primary-rgb), .18); }
+span.bl-code { background: var(--bs-secondary-bg); color: var(--bs-emphasis-color); }
+
+.bl-muted { color: var(--bs-secondary-color); }
+.bl-tag {
+  display: inline-block;
+  padding: .1rem .5rem;
+  border-radius: 1rem;
+  background: rgba(var(--bs-secondary-rgb), .14);
+  color: var(--bs-emphasis-color);
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.bl-col-action { width: 1%; text-align: right; white-space: nowrap; }
+/* Mazer (โดยเฉพาะโหมดมืด) คุมปุ่มผ่านตัวแปร --bs-btn-* จึงต้องตั้งที่ตัวแปร */
+.bl-table .btn.bl-edit-btn {
+  --bs-btn-color: var(--bs-secondary-color);
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: rgba(var(--bs-secondary-rgb), .4);
+  --bs-btn-hover-color: rgb(var(--bs-primary-rgb));
+  --bs-btn-hover-bg: rgba(var(--bs-primary-rgb), .08);
+  --bs-btn-hover-border-color: rgb(var(--bs-primary-rgb));
+}
+
+
+/* ไม่พบข้อมูล */
+.bl-empty { padding: 2.5rem 1rem; text-align: center; color: var(--bs-secondary-color); }
+.bl-empty > i { font-size: 2.2rem; opacity: .6; }
+.bl-empty-title { margin-top: .4rem; font-weight: 600; color: var(--bs-emphasis-color); }
+.bl-empty-sub { font-size: .85rem; margin-top: .2rem; }
+.bl-table tr.bl-empty-row:hover > td { --bs-table-hover-bg: transparent; background: transparent; }
+
+/* แบ่งหน้า */
+.bl-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-top: 1rem;
+}
+.bl-pager-info { font-size: .85rem; color: var(--bs-secondary-color); }
+
+@media (max-width: 767.98px) {
+  .bl-filter { width: calc(50% - .375rem); }
+  .bl-filter-buttons { width: 100%; }
+  .bl-filter-buttons .btn { flex: 1; justify-content: center; }
+  .bl-actions { width: 100%; }
+  .bl-actions > * { flex: 1; }
+  .bl-actions .btn { width: 100%; justify-content: center; }
+  .bl-edit-text { display: none; }
+  /* ไม่ตัดคำกลางชื่อ ให้ตารางเลื่อนซ้าย-ขวาแทน */
+  .bl-table td, .bl-table th { white-space: nowrap; }
+}
+
+/* =====================================================================
+ * สีสันประจำหน้า : ชุดสีอยู่ที่ static/css/base-accent.css (ใช้ร่วมกับหน้าเพิ่มข้อมูล)
+ * listBaseLayout ใส่ class bl-accent-<url name> ให้ .base-list-page
+ * ส่วนประกอบด้านล่างทั้งหมดใช้ --bl-a (สีสด), --bl-a2 (สีเข้ม), --bl-ink (สีตัวอักษร)
+ * ===================================================================== */
+/* หัวหน้าเป็นแถบไล่สี */
+.base-list-page .bl-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.1rem 1.5rem 1.35rem;
+  border: 1px solid rgba(var(--bl-a), .2);
+  border-radius: 1rem;
+  background: linear-gradient(115deg, rgba(var(--bl-a), .18) 0%, rgba(var(--bl-a), .06) 55%, rgba(var(--bl-a), .02) 100%);
+}
+.base-list-page .bl-hero::after {           /* วงกลมตกแต่งมุมขวา */
+  content: "";
+  position: absolute;
+  right: -3rem;
+  top: -4rem;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--bl-a), .22) 0%, rgba(var(--bl-a), 0) 70%);
+  pointer-events: none;
+}
+.base-list-page .bl-hero > * { position: relative; z-index: 1; }
+.base-list-page .bl-breadcrumb a { color: var(--bl-ink); }
+.base-list-page .bl-title-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: .9rem;
+  background: linear-gradient(135deg, rgb(var(--bl-a)) 0%, rgb(var(--bl-a2)) 100%);
+  color: #fff;
+  box-shadow: 0 .45rem 1rem rgba(var(--bl-a), .35);
+}
+.base-list-page .bl-count {
+  display: inline-block;
+  min-width: 1.6rem;
+  padding: 0 .5rem;
+  margin-right: .15rem;
+  border-radius: 1rem;
+  background: rgba(var(--bl-a), .16);
+  color: var(--bl-ink);
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ปุ่มเพิ่ม ใช้สีประจำหน้า */
+.base-list-page .bl-actions .btn.bl-add-btn:not(:disabled) {
+  background: linear-gradient(135deg, rgb(var(--bl-a)) 0%, rgb(var(--bl-a2)) 100%);
+  box-shadow: 0 .4rem 1rem rgba(var(--bl-a), .4);
+}
+.base-list-page .bl-actions .btn.bl-add-btn:not(:disabled):hover { box-shadow: 0 .6rem 1.4rem rgba(var(--bl-a), .5); }
+.base-list-page .bl-actions .btn-outline-success { background: var(--bs-body-bg); }
+
+/* การ์ด : แถบสีด้านบน */
+.base-list-page .bl-card {
+  /* แถบสีด้านบนวาดเป็นพื้นหลัง เพราะ Mazer โหมดมืดลบ border ของ .card */
+  background-image: linear-gradient(90deg, rgb(var(--bl-a)), rgb(var(--bl-a2)));
+  background-size: 100% 4px;
+  background-repeat: no-repeat;
+  border-radius: 1rem;
+  box-shadow: 0 .5rem 1.5rem rgba(var(--bl-a), .08);
+}
+
+/* แถบค้นหา : พื้นอมสี */
+.base-list-page .bl-toolbar {
+  padding: .9rem 1rem 1rem;
+  border: 1px dashed rgba(var(--bl-a), .3);
+  border-radius: .75rem;
+  background: rgba(var(--bl-a), .05);
+}
+.base-list-page .bl-filter-label { color: var(--bl-ink); }
+.base-list-page .bl-filter-label::before {
+  content: "";
+  display: inline-block;
+  width: .4rem;
+  height: .4rem;
+  margin-right: .35rem;
+  border-radius: 50%;
+  background: rgb(var(--bl-a));
+  vertical-align: middle;
+}
+.base-list-page .bl-filter .form-control:focus,
+.base-list-page .bl-filter .form-select:focus {
+  border-color: rgb(var(--bl-a));
+  box-shadow: 0 0 0 .2rem rgba(var(--bl-a), .2);
+}
+
+/* ตาราง : หัวตารางสีอ่อน, แถวชี้แล้วมีแถบสี */
+.base-list-page .bl-table-wrap { border-color: rgba(var(--bl-a), .22); }
+.base-list-page .bl-table thead th {
+  background: rgba(var(--bl-a), .1);
+  color: var(--bl-ink);
+}
+html .base-list-page .bl-table-wrap .table.bl-table:not(.table-borderless) thead th {
+  border-bottom: 2px solid rgba(var(--bl-a), .35) !important;
+}
+.base-list-page .bl-table tbody tr:not(.bl-empty-row) { --bs-table-hover-bg: rgba(var(--bl-a), .06); }
+.base-list-page .bl-table tbody tr:not(.bl-empty-row):nth-child(even) > td { background: rgba(var(--bl-a), .025); }
+.base-list-page .bl-table tbody tr:not(.bl-empty-row):hover > td:first-child { box-shadow: inset 3px 0 0 rgb(var(--bl-a)); }
+.base-list-page .bl-code { background: rgba(var(--bl-a), .12); color: var(--bl-ink); }
+.base-list-page a.bl-code:hover { background: rgba(var(--bl-a), .24); }
+.base-list-page span.bl-code { background: rgba(var(--bl-a), .08); color: var(--bl-ink); }
+.base-list-page .bl-table .btn.bl-edit-btn {
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: rgb(var(--bl-a));
+  --bs-btn-hover-border-color: rgb(var(--bl-a));
+}
+.base-list-page .bl-empty > i { color: rgb(var(--bl-a)); opacity: .7; }
+
+/* ป้าย : บริษัท และ ประเภทเครื่องชั่ง (สีตาม id ประเภท) */
+.bl-tag.bl-co {
+  background: rgba(100, 116, 139, .14);
+  font-family: var(--bs-font-monospace);
+  font-weight: 700;
+}
+.bl-tag.bl-wt { --bl-t: 100, 116, 139; background: rgba(var(--bl-t), .14); color: rgb(var(--bl-t)); font-weight: 600; }
+.bl-tag.bl-wt::before {
+  content: "";
+  display: inline-block;
+  width: .45rem;
+  height: .45rem;
+  margin-right: .3rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+.bl-tag.bl-wt-1 { --bl-t: 37, 99, 235; }  /* น้ำเงิน */
+.bl-tag.bl-wt-2 { --bl-t: 8, 145, 178; }  /* ฟ้าน้ำทะเล */
+.bl-tag.bl-wt-3 { --bl-t: 79, 70, 229; }  /* คราม */
+.bl-tag.bl-wt-4 { --bl-t: 2, 132, 199; }  /* ฟ้า */
+.bl-tag.bl-wt-5 { --bl-t: 30, 64, 175; }  /* กรมท่า */
+.bl-tag.bl-wt-6 { --bl-t: 14, 116, 144; }  /* ฟ้าอมเขียวเข้ม */
+[data-bs-theme="dark"] .bl-tag.bl-wt { background: rgba(var(--bl-t), .22); color: rgb(var(--bl-t)); filter: brightness(1.35); }
+/* ป้ายอื่น (ทีม, ประเภทรถ) ใช้สีประจำหน้า */
+.base-list-page .bl-tag:not(.bl-co):not(.bl-wt) { background: rgba(var(--bl-a), .13); color: var(--bl-ink); font-weight: 600; }
+
+/* แบ่งหน้า : หน้าปัจจุบันเป็นสีประจำหน้า */
+.base-list-page .bl-pager .pagination .page-item.active .page-link {
+  background: rgb(var(--bl-a));
+  border-color: rgb(var(--bl-a));
+  color: #fff;
+  box-shadow: 0 .25rem .6rem rgba(var(--bl-a), .35);
+}
+.base-list-page .bl-pager .pagination .page-link { color: var(--bl-ink); }
+
+@media (max-width: 767.98px) {
+  .base-list-page .bl-hero { padding: 1rem; }
+  .base-list-page .bl-toolbar { padding: .75rem; }
+  /* มือถือ : ปุ่ม Excel แคบ ปุ่มเพิ่มกินที่เหลือ ข้อความไม่ตัดบรรทัด */
+  .bl-actions { flex-wrap: nowrap; }
+  .bl-actions > .btn-outline-success { flex: 0 0 auto; width: auto; }
+  .bl-actions .btn.bl-add-btn { white-space: nowrap; }
+}

@@ -1,0 +1,8 @@
+{# รหัสในคอลัมน์แรก : คนที่มีสิทธิ์กดเข้าไปแก้ไขได้  ใช้: include with url_name='editBaseX' pk=i.pk code=i.xxx_id #}
+<td class="bl-col-code">
+  {% if is_edit_setting %}
+    <a class="bl-code" href="{% url url_name pk %}">{{ code|default:pk }}</a>
+  {% else %}
+    <span class="bl-code">{{ code|default:pk }}</span>
+  {% endif %}
+</td>

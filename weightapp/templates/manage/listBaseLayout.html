@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+  โครงหน้ารายการข้อมูลพื้นฐาน (settingBase*) ใช้ร่วมกันทุกหน้า
+  template ลูกกำหนด:
+    block icon        class ไอคอน bootstrap-icons เช่น bi-person-badge
+    block actions      ปุ่มด้านขวาบน (ปกติ include manage/_listActions.html)
+    block filters      ช่องค้นหา (ปกติ include manage/_filterField.html ทีละช่อง)
+    block thead        หัวตาราง <th>...</th> (ไม่ต้องใส่คอลัมน์ปุ่มแก้ไข layout เติมให้)
+    block rows         แถวข้อมูล <tr>... ปิดท้ายด้วย {% empty %}{% include "manage/_listEmpty.html" %}
+  context จาก view: table_name, page_obj (หน้าปัจจุบันของ Paginator), filter, is_edit_setting
+{% endcomment %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/base-accent.css' %}" />
+<link rel="stylesheet" href="{% static 'css/base-list.css' %}" />
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading base-list-page bl-accent-{{ request.resolver_match.url_name|default:'default' }}">
+  <div class="page-title bl-hero">
+    <nav aria-label="breadcrumb" class="bl-breadcrumb">
+      <ol class="breadcrumb mb-2">
+        <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">ข้อมูล{{ table_name }}</li>
+      </ol>
+    </nav>
+    <div class="bl-heading">
+      <div class="bl-title">
+        <span class="bl-title-icon"><i class="bi {% block icon %}bi-database{% endblock %}"></i></span>
+        <div>
+          <h3 class="mb-0">ข้อมูล{{ table_name }}</h3>
+          <p class="bl-subtitle mb-0"><span class="bl-count">{{ page_obj.paginator.count|default:0 }}</span> รายการทั้งหมด</p>
+        </div>
+      </div>
+      <div class="bl-actions">
+        {% block actions %}{% endblock %}
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="alert alert-light-warning d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>กรณีที่แก้ไขข้อมูลการตั้งค่า โปรดติดต่อตาชั่งศิลาชัย</span>
+    </div>
+    <div class="card bl-card">
+      <div class="card-body">
+
+        <div class="bl-toolbar">
+          <form method="get" class="bl-filters" id="form_filter">
+            {% block filters %}{% endblock %}
+            <div class="bl-filter-buttons">
+              <button type="submit" class="btn bl-search-btn">
+                <i class="bi bi-search"></i> ค้นหา
+              </button>
+              {% if request.GET %}
+              <a href="{{ request.path }}" class="btn btn-light-secondary" title="ล้างตัวกรอง">
+                <i class="bi bi-x-circle"></i> ล้าง
+              </a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+
+        <div class="table-responsive bl-table-wrap">
+          <table class="table table-hover align-middle mb-0 bl-table">
+            <thead>
+              <tr>
+                {% block thead %}{% endblock %}
+                {% if is_edit_setting %}<th class="bl-col-action"><span class="visually-hidden">แก้ไข</span></th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% block rows %}{% endblock %}
+            </tbody>
+          </table>
+        </div>
+
+        {% include "manage/_pagination.html" with page=page_obj %}
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer clearfix mb-0 text-muted">
+    <div class="float-start">
+      <p>2023 &copy; Nitjanan</p>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% block script %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+{% block page_script %}{% endblock %}
+{% endblock %}

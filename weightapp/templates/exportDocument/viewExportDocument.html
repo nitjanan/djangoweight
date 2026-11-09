@@ -81,14 +81,24 @@
   .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
   .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
   .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
+  /* ข้อมูลประกอบ ไม่ได้ทำให้เงินในไฟล์ผิด (เช่นเที่ยวที่ไม่นับเพราะเส้นทางไม่มีในหน้าค่าขนส่ง) */
+  .ifr-issue-info { border-left-color: #6c757d; background-color: rgba(108,117,125,.05); }
+  .ifr-issue-info .ifr-issue-num { color: #6c757d; }
   .ifr-health-detail > summary { cursor: pointer; }
+  /* หัวกล่องแจ้งเตือน : กดทั้งแถบเพื่อพับ/กาง */
+  .ifr-health-head { cursor: pointer; user-select: none; }
+  .ifr-health-head:focus-visible { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .ifr-health-chevron { transition: transform .15s ease; }
+  .ifr-health.is-collapsed .ifr-health-chevron { transform: rotate(180deg); }
+  .ifr-health.is-collapsed .ifr-health-head { border-bottom: 0; }
   @media (max-width: 575px) {
     /* จอแคบวางตัวเลขไว้บนคำอธิบาย ไม่งั้นคำอธิบายเหลือความกว้างนิดเดียว */
     .ifr-issue { flex-direction: column; gap: .15rem; }
   }
 
   /* ทีมที่เราเติม "ไม่ระบุทีม" ให้ : แดงเฉพาะตัวอักษรในคอลัมน์ทีม ไม่ทาพื้น ไม่ทาทั้งแถว */
-  .trip-table > tbody > tr > td.trip-no-team {
+  .trip-table > tbody > tr > td.trip-no-team,
+  .trip-table > tbody > tr > td.trip-out-of-range {
     color: #d32f2f;
     font-weight: 700;
     opacity: 1;
@@ -220,29 +230,38 @@
           </div>
 
           <div class="form-group col-md-3">
-            <label for="origin">ต้นทาง (นาม)</label>
+            <label for="bws">ชั่งที่ (ตาชั่ง)</label>
             {% comment %}
-            รายการมาจากแท็บบริษัทด้านบนเท่านั้น
-            (base_company_map_base_customer.base_company_id == base_comp.id)
-            มีตัวเลือก "ทั้งหมด" เฉพาะแท็บร้อยเกาะ ซึ่งเป็นบริษัทรถที่วิ่งให้ทุกเหมือง
+            แท็บบริษัทด้านบนกำหนดขอบเขต (แท็บเหมือง = ทุกต้นทางของบริษัทนั้น · แท็บท่าเรือเรา = ที่ชั่งที่ท่าเรือนั้น)
+            ช่องนี้กรองต่อด้วยตาชั่งที่ชั่ง (bws_id)
+            ตัวเลือก = ตาชั่งที่มีเที่ยวของแท็บนี้ในเดือนที่เลือก · ไม่เลือก = ทุกตาชั่ง
             {% endcomment %}
-            <select class="form-select" id="origin" name="origin"
-                    {% if origin_unmapped %}disabled{% endif %}>
-              {% if origin_sees_all %}
-              <option value="">ทั้งหมด</option>
+            <select class="form-select" id="bws" name="bws" {% if tab_no_origin %}disabled{% endif %}>
+              {% if bws_options %}
+              <option value="">ทุกตาชั่ง</option>
               {% endif %}
-              {% for o in origin_options %}
-                <option value="{{ o }}" {% if o == selected_origin %}selected{% endif %}>{{ o }}</option>
+              {% for b in bws_options %}
+                <option value="{{ b.id }}" {% if b.id == selected_bws %}selected{% endif %}>{{ b.label }}</option>
               {% empty %}
-                <option value="">— ยังไม่มีต้นทางของแท็บนี้ —</option>
+                <option value="">— ไม่มีเที่ยวในเดือนนี้ —</option>
               {% endfor %}
             </select>
           </div>
 
-          {% comment %}
-            เอาตัวกรอง เคส / ตาชั่ง ออกจากหน้าแล้ว
-            ฝั่ง view ยังรับพารามิเตอร์ bws กับ case อยู่ ลิงก์เก่าที่ bookmark ไว้จึงยังใช้ได้
-          {% endcomment %}
+          <div class="form-group col-md-3">
+            <label for="case">ส่งออกลงท่าเรือ</label>
+            {% comment %}
+            เคสของเที่ยว ดูจากปลายทาง (ตัวเดียวกับป้ายในคอลัมน์ "เคส" ของตาราง)
+              ลงท่าเรือของบริษัท = ปลายทางเป็นท่าเรือเรา (ชั่งที่ท่าเรือ หรือใบเหมืองก่อนท่าเรือเปิดใช้ตาชั่ง)
+              ลงท่าเรือบริษัทอื่น = ปลายทางเป็นท่าเรือของบริษัทอื่น
+            {% endcomment %}
+            <select class="form-select" id="case" name="case" {% if tab_no_origin %}disabled{% endif %}>
+              <option value="">ทั้งหมด</option>
+              {% for value, label in case_options %}
+                <option value="{{ value }}" {% if value == selected_case %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <div class="form-group col-md-3">
             <label for="team">ทีมรถร่วม</label>
             <select class="form-select" id="team" name="team">
@@ -277,11 +296,6 @@
                        value="1" {% if include_cancel %}checked{% endif %}>
                 <label class="form-check-label" for="include_cancel">รวมรายการที่ยกเลิก</label>
               </div>
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="checkbox" id="carry_empty" name="carry_empty"
-                       value="1" {% if carry_empty_only %}checked{% endif %}>
-                <label class="form-check-label" for="carry_empty">เฉพาะเที่ยวที่ประเภทการบรรทุกว่าง</label>
-              </div>
             </div>
           </div>
 
@@ -301,15 +315,15 @@
     </div>
 
     {% comment %}
-    แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง base_company_map_base_customer จะเลือกต้นทางไม่ได้
-    หน้านี้จึงไม่มีข้อมูลให้ดู ต้องบอกเหตุผลกับทางแก้ ไม่งั้นจะดูเหมือนระบบพัง
+    แท็บที่ยังไม่ได้ผูกต้นทางไว้ในตาราง base_company_map_base_customer หน้านี้จึงไม่มีข้อมูลให้ดู
+    ต้องบอกเหตุผลกับทางแก้ ไม่งั้นจะดูเหมือนระบบพัง
     {% endcomment %}
-    {% if origin_unmapped %}
+    {% if tab_no_origin %}
     <div class="alert alert-warning">
-      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง (นาม)" ไว้ในระบบ หน้านี้จึงยังไม่มีข้อมูลให้ดู<br />
+      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง" ไว้ในระบบ หน้านี้จึงยังไม่มีข้อมูลให้ดู<br />
       <small>
-        ต้องไปเพิ่มบริษัทลูกค้าที่ตรงกับบริษัทนี้ในตารางบริษัทลูกค้าก่อน
-        แล้วหน้านี้จะแสดงเที่ยวของต้นทางนั้นให้เอง
+        ต้องไปผูกบริษัทนี้ให้แถวต้นทางในหน้าจัดการต้นทาง / ปลายทางก่อน
+        แล้วหน้านี้จะแสดงเที่ยวของต้นทางนั้นให้เอง (หรือดูที่แท็บร้อยเกาะซึ่งเห็นทุกต้นทาง)
       </small>
     </div>
     {% endif %}
@@ -438,8 +452,20 @@
     จึงตอบเป็นประโยคก่อน แล้วค่อยแจกแจงทีละข้อว่า เกิดอะไร -> ผลคืออะไร -> ต้องทำอะไร
     เลี่ยงศัพท์ระบบทุกคำ (เรท / สัญญา / ช่วง / คีย์) เพราะคนกรอกไม่ได้เป็นคนตั้งค่าระบบ
     {% endcomment %}
-    <div class="card ifr-health mb-3">
-      <div class="card-body py-3">
+    {% comment %}
+      พับเก็บได้ (กดที่หัวกล่อง) จำสถานะไว้ในเบราว์เซอร์ เปลี่ยนตัวกรอง/รีเฟรชแล้วยังพับอยู่
+      ตอนพับ หัวกล่องยังโชว์จำนวนเรื่องที่เตือน จะได้ไม่พับไว้แล้วพลาดปัญหาใหม่ของเดือนที่เลือก
+    {% endcomment %}
+    {# เริ่มแบบหุบไว้ตั้งแต่ HTML ไม่ให้กล่องกางวูบก่อน js มาพับ (js กางให้ถ้าผู้ใช้เคยกางไว้) #}
+    <div class="card ifr-health is-collapsed mb-3" id="ifr_health">
+      <div class="card-header ifr-health-head d-flex align-items-center gap-2 py-2"
+           role="button" tabindex="0" aria-expanded="false" aria-controls="ifr_health_body">
+        <h6 class="mb-0">แจ้งเตือนก่อนโหลดไฟล์</h6>
+        <span class="badge d-none" id="ifr_health_count"></span>
+        <span class="ms-auto small text-muted" id="ifr_health_hint">กดเพื่อดูรายละเอียด</span>
+        <i class="bi bi-chevron-up ifr-health-chevron"></i>
+      </div>
+      <div class="card-body py-3 d-none" id="ifr_health_body">
 
         {% comment %}
         สถานะการอ่านบิลเติมน้ำมันจาก Express (Postgres คนละเครื่อง ต่อไม่ติดเมื่อไหร่ก็ได้)
@@ -454,7 +480,7 @@
             <div class="ifr-issue-body">
               <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ ใช้สำเนาบิลที่ดึงไว้เมื่อ {{ rate_stats.fuel_bill.snapshot_at_th }}</div>
               <div class="ifr-issue-text">
-                ราคาน้ำมันเฉลี่ยและยอดหักค่าน้ำมันของทีมรถร่วม (sheet oil) คิดจากสำเนานี้
+                ยอดหักค่าน้ำมันของทีมรถร่วม (sheet oil) คิดจากสำเนานี้
                 บิลที่เพิ่มในระบบ Express หลังเวลานั้นจะไม่อยู่ในไฟล์<br />
                 <strong>ถ้าต้องการข้อมูลล่าสุด:</strong> รอให้ต่อ Express ได้ แล้วโหลดไฟล์ใหม่<br />
                 <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
@@ -467,7 +493,7 @@
             <div class="ifr-issue-body">
               <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ และยังไม่เคยมีสำเนาบิลของเดือนนี้</div>
               <div class="ifr-issue-text">
-                ราคาน้ำมันเฉลี่ยใช้ราคารายวันที่กรอกในระบบ เฉลี่ยจากวันที่รถวิ่งแทน<br />
+                ค่าขนส่งไม่กระทบ (คิดจากราคาน้ำมันรายวันที่กรอกในระบบ)<br />
                 <strong>sheet oil จะว่าง ยอดหักค่าน้ำมันของทีมรถร่วมจะเป็น 0</strong>
                 — อย่าใช้ไฟล์นี้จ่ายเงินจนกว่าจะต่อ Express ได้<br />
                 <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
@@ -478,19 +504,49 @@
         {% endif %}
 
         {% comment %}
-          ประเภทการบรรทุกว่าง : ตาชั่งไม่ได้บันทึก (เช่นโมบาย E1V) ระบบนับเข้ารายงานให้แล้ว
-          แต่ใบชั่งบอกไม่ได้ว่าเป็นส่งให้หรือรับเอง ต้องให้คนตรวจก่อนจ่าย
-          แยกจากแถบ "ข้อมูลครบ / ไม่ครบ" ด้านล่าง เพราะเที่ยวพวกนี้คิดเงินได้ ไม่ได้ขึ้น 0
+          ราคาน้ำมันรายเที่ยว : สัญญาปรับตามน้ำมัน แต่วันที่วิ่งไม่มีราคาทั้งบริษัทต้นทางและปลายทาง
+          อัตราของเที่ยวในไฟล์จะว่าง = ค่าขนส่ง 0 จนกว่าจะกรอกราคา (ในระบบ หรือช่อง N ในไฟล์ก็ได้)
+          อยู่นอกแถบ "คิดเงินได้ครบ / ไม่ครบ" เพราะแถบนั้นดูแค่สัญญากับช่วงน้ำหนัก
+        {% endcomment %}
+        {% if rate_stats.fuel_missing.trips %}
+        <div class="ifr-issue ifr-issue-bad mb-3">
+          <div class="ifr-issue-num">{{ rate_stats.fuel_missing.trips|intcomma }} เที่ยว</div>
+          <div class="ifr-issue-body">
+            <div class="ifr-issue-title">ยังไม่มีราคาน้ำมันของวันที่วิ่ง — เที่ยวเหล่านี้ยังคิดค่าขนส่งไม่ได้</div>
+            <div class="ifr-issue-text">
+              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่วันนั้นไม่มีราคาของบริษัทต้นทาง และของบริษัทปลายทางก็ไม่มี
+              ในไฟล์ช่องราคาน้ำมัน (N) จะว่างเป็นสีเหลือง อัตราว่าง ค่าขนส่งเป็น 0<br />
+              <strong>ต้องทำ:</strong>
+              <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">ไปกรอกราคาน้ำมันของวันที่ขาด</a>
+              แล้วโหลดไฟล์ใหม่ (หรือพิมพ์ราคาลงช่อง N ในไฟล์ อัตราจะคิดให้ทันที)
+              <ul class="ifr-missing-list">
+                {% for r in rate_stats.fuel_missing.routes %}
+                <li>
+                  <span class="fw-semibold">{{ r.route }}</span>
+                  <span class="text-muted small">— ขาดราคาวันที่ {{ r.days }} ({{ r.trips|intcomma }} เที่ยว)</span>
+                </li>
+                {% endfor %}
+              </ul>
+              <a class="btn btn-sm btn-outline-danger mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=no_fuel#trips">ดูเที่ยวเหล่านี้</a>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% comment %}
+          ประเภทการบรรทุกว่าง : ตาชั่งไม่ได้บันทึก (เช่นโมบาย E1V) ใบชั่งบอกไม่ได้ว่าเป็นส่งให้หรือรับเอง
+          รายงานนับเฉพาะ "ส่งให้" เที่ยวพวกนี้จึงไม่อยู่ในไฟล์ ต้องเตือนไว้ด้านบน ไม่ให้หายเงียบ
+          นับเฉพาะใบที่เส้นทางมีราคาแล้ว แก้ใบชั่งเป็น "ส่งให้" เมื่อไหร่ เที่ยวกลับเข้ารายงานทันที
         {% endcomment %}
         {% if summary.carry_empty_count %}
         <div class="ifr-issue ifr-issue-warn mb-3">
           <div class="ifr-issue-num">{{ summary.carry_empty_count|intcomma }} เที่ยว</div>
           <div class="ifr-issue-body">
-            <div class="ifr-issue-title">ประเภทการบรรทุกว่าง — นับรวมในรายงานแล้ว ต้องตรวจก่อนจ่าย</div>
+            <div class="ifr-issue-title">ประเภทการบรรทุกว่าง — ไม่นับในรายงาน</div>
             <div class="ifr-issue-text">
-              ตาชั่งไม่ได้บันทึกว่าเป็น "ส่งให้" หรือ "รับเอง" ระบบนับเข้ามาให้ (แถวพื้นเหลืองในตารางรายเที่ยว)<br />
-              <strong>ถ้าเที่ยวไหนเป็นรับเอง:</strong> แก้ใบชั่งนั้น เลือกการขนส่งเป็น "รับเอง"
-              แล้วเที่ยวจะหลุดออกจากรายงานเอง
+              ตาชั่งไม่ได้บันทึกว่าเป็น "ส่งให้" หรือ "รับเอง" เที่ยวเหล่านี้จึงไม่อยู่ในไฟล์ และไม่ได้คิดเงิน<br />
+              <strong>ถ้าเป็นเที่ยวรถร่วมส่งจริง:</strong> แก้ใบชั่งนั้น เลือกการขนส่งเป็น "ส่งให้"
+              แล้วเที่ยวจะกลับเข้ารายงานเอง
               <ul class="ifr-missing-list">
                 {% for b in carry_empty_by_bws %}
                 <li>
@@ -499,17 +555,13 @@
                 </li>
                 {% endfor %}
               </ul>
-              {% if not carry_empty_only %}
-              <a class="btn btn-sm btn-outline-warning mt-1" href="{% my_url 1 'carry_empty' request.GET.urlencode %}">
-                ดูเฉพาะเที่ยวที่ว่าง
-              </a>
-              {% endif %}
+              <a class="btn btn-sm btn-outline-warning mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=carry_empty#trips">ดูเที่ยวเหล่านี้</a>
             </div>
           </div>
         </div>
         {% endif %}
 
-        {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count %}
+        {% if rate_stats.wc_filled == rate_stats.wc_total and not summary.no_team_count and not rate_stats.fuel_missing.trips %}
         <div class="d-flex align-items-center gap-2">
           <span class="ifr-health-icon text-success"><i class="bi bi-check-circle-fill"></i></span>
           <div>
@@ -527,6 +579,9 @@
               จากทั้งหมด <strong class="text-body">{{ rate_stats.wc_total|intcomma }}</strong> เที่ยว
               ({{ rate_stats.wc_filled_pct }}%) — ที่เหลือจะขึ้นเป็นเงิน 0 ในไฟล์
             </div>
+            {% if rate_stats.wc_no_contract or rate_stats.wc_out_of_range %}
+            <a class="btn btn-sm btn-outline-danger mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=unpaid#trips">ดูเฉพาะเที่ยวที่คิดเงินไม่ได้ ({{ rate_stats.wc_no_contract|add:rate_stats.wc_out_of_range|intcomma }})</a>
+            {% endif %}
           </div>
         </div>
 
@@ -560,26 +615,26 @@
           <div class="ifr-issue ifr-issue-bad">
             <div class="ifr-issue-num">{{ rate_stats.wc_no_contract|intcomma }} เที่ยว</div>
             <div class="ifr-issue-body">
-              <div class="ifr-issue-title">ยังไม่ได้ตั้งราคาค่าขนส่งของปลายทางเหล่านี้</div>
+              <div class="ifr-issue-title">มีเส้นทางแล้ว แต่ทีมรถนี้ยังไม่อยู่ในสัญญา</div>
               <div class="ifr-issue-text">
                 เที่ยวพวกนี้จะขึ้นเงิน 0 ในไฟล์<br />
                 <strong>ต้องทำ:</strong> ไปหน้า
                 <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a>
-                แล้วเพิ่มเส้นทางที่ยังขาด
+                แล้วเพิ่มทีมเหล่านี้ในเส้นทางนั้น<br />
+                <a class="btn btn-sm btn-outline-danger mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=no_contract#trips">ดูเที่ยวเหล่านี้</a>
 
                 {% comment %}
-                ราคาตั้งเป็นคู่ ต้นทาง-ปลายทาง ปลายทางเดียวกันจึงมีทั้งเส้นที่ตั้งแล้ว
-                และยังไม่ได้ตั้ง ถ้าโชว์แต่ชื่อท่า คนอ่านจะไปเปิดดูแล้วงงว่าก็ตั้งไว้แล้วนี่
-                จึงต้องแจกแจงต้นทางกำกับไว้ใต้ปลายทางเสมอ
+                เที่ยวที่เส้นทางไม่มีในหน้าค่าขนส่งถูกตัดออกจากรายงานไปแล้ว (กล่องสีเทาด้านล่าง)
+                ที่เหลือในกล่องนี้จึงเป็นเส้นทางที่ตั้งไว้แล้ว ขาดแค่ทีม แจกแจงทีมให้เลย
                 {% endcomment %}
                 <ul class="ifr-missing-list">
                   {% for d in rate_stats.wc_missing_routes %}
                   <li>
-                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="fw-semibold">{{ d.route }}</span>
                     <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
                     <div class="small mt-1">
-                      ต้นทางที่ยังไม่มีราคา:
-                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                      ทีมที่ยังไม่อยู่ในสัญญา:
+                      {% for t in d.teams %}<span class="badge bg-light text-dark border">{{ t.name }} ({{ t.trips|intcomma }})</span> {% endfor %}
                     </div>
                   </li>
                   {% endfor %}
@@ -597,6 +652,8 @@
               <div class="ifr-issue-text">
                 เช่น ตั้งราคาไว้เฉพาะรถ 0–35 ตัน แต่เที่ยวนี้บรรทุก 42 ตัน ระบบจึงเลือกราคาให้ไม่ได้<br />
                 <strong>ต้องทำ:</strong> เพิ่มช่วงน้ำหนักให้ครอบคลุม หรือตรวจว่าน้ำหนักที่ชั่งถูกต้องไหม
+                (ในตารางและในไฟล์ทำสีแดงไว้ให้)<br />
+                <a class="btn btn-sm btn-outline-warning mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=out_of_range#trips">ดูเที่ยวเหล่านี้</a>
               </div>
             </div>
           </div>
@@ -609,7 +666,8 @@
               <div class="ifr-issue-title">ตอนชั่งไม่ได้เลือกทีมรถ</div>
               <div class="ifr-issue-text">
                 ในไฟล์จะขึ้นเป็นตัวแดงว่า "ไม่ระบุทีม" ถ้าปล่อยไว้ หน้าสรุปจ่ายรถร่วมจะว่างทั้งหน้า<br />
-                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง
+                <strong>ต้องทำ:</strong> เปิดไฟล์ ไล่หาตัวแดงในช่องทีม แล้วเติมชื่อทีมเอง<br />
+                <a class="btn btn-sm btn-outline-warning mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=no_team#trips">ดูเที่ยวเหล่านี้</a>
               </div>
             </div>
           </div>
@@ -626,86 +684,42 @@
           {% endif %}
 
 
-          {% comment %}
-          ไม่มีราคาน้ำมัน = ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันเลยเป็น 0
-          ค่าขนส่งยังคิดได้ตามอัตราสัญญา แต่ได้ไม่ครบ จึงเป็นคำเตือน ไม่ใช่ความผิดพลาดร้ายแรง
-          แยก 2 กล่องเพราะแก้คนละที่ อันแรกแก้ที่ข้อมูลบริษัท อันหลังแค่ไปกรอกราคา
-          {% endcomment %}
-          {% if rate_stats.fuel_no_company %}
-          <div class="ifr-issue ifr-issue-warn">
-            <div class="ifr-issue-num">{{ rate_stats.fuel_no_company|length }} เส้นทาง</div>
-            <div class="ifr-issue-body">
-              <div class="ifr-issue-title">ไม่มีราคาน้ำมัน เพราะต้นทางยังไม่ได้ผูกกับบริษัท</div>
-              <div class="ifr-issue-text">
-                ราคาน้ำมันเก็บเป็นของบริษัท ถ้าต้นทางไม่รู้ว่าเป็นของบริษัทไหน ก็หาราคาไม่เจอ
-                ช่องราคาน้ำมันในไฟล์จะว่างและมีหมายเหตุกำกับไว้ ส่วนปรับน้ำมันจะเป็น 0<br />
-                <strong>ต้องทำ:</strong> ไปผูกบริษัทให้ต้นทางเหล่านี้ในหน้าตั้งค่าบริษัทลูกค้า<br />
-                {% for r in rate_stats.fuel_no_company %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
-              </div>
-            </div>
-          </div>
-          {% endif %}
+        </div>
+        {% endif %}
 
-          {% comment %}
-          กรอกราคาไม่ครบทุกวันที่วิ่ง : ยังคิดเงินได้ แต่ค่าเฉลี่ยมาจากวันที่มีราคาเท่านั้น
-          ต้องบอกไว้ ไม่งั้นทีหลังมาเถียงกันว่าเลขนี้มาจากไหน
-          {% endcomment %}
-          {% if rate_stats.fuel_partial %}
-          <div class="ifr-issue ifr-issue-warn">
-            <div class="ifr-issue-num">{{ rate_stats.fuel_partial|length }} เส้นทาง</div>
+        {% comment %}
+        เที่ยวที่เส้นทาง (ต้นทาง - ปลายทาง) ไม่มีในหน้าค่าขนส่งส่งออก ไม่นับในรายงานและไม่อยู่ในไฟล์
+        ส่วนใหญ่ไม่ใช่เที่ยวส่งออก (ขายออกจากกองสต๊อก / เหมืองชั่งให้ตัวเอง / ลูกค้าภายนอก)
+        แต่ต้องโชว์ไว้ เผื่อเป็นเส้นทางที่ต้องจ่ายจริงแต่ยังไม่ได้ตั้ง จะได้ไม่หายไปเงียบ ๆ
+        สีเทา ไม่ใช่สีแดง เพราะไม่ได้ทำให้เงินในไฟล์ผิด
+        {% endcomment %}
+        {% if rate_stats.off_route_trips %}
+        <div class="ifr-issues mt-3">
+          <div class="ifr-issue ifr-issue-info">
+            <div class="ifr-issue-num">{{ rate_stats.off_route_trips|intcomma }} เที่ยว</div>
             <div class="ifr-issue-body">
-              <div class="ifr-issue-title">กรอกราคาน้ำมันไม่ครบทุกวันที่ต้องใช้</div>
+              <div class="ifr-issue-title">เส้นทางยังไม่มีในหน้าค่าขนส่ง — ไม่นับในรายงานและไม่อยู่ในไฟล์</div>
               <div class="ifr-issue-text">
-                ยังคิดค่าขนส่งได้ แต่ราคาเฉลี่ยมาจากเฉพาะวันที่กรอกไว้ ไม่ใช่ทุกวันที่เติม/วิ่ง<br />
-                <strong>ต้องทำ:</strong>
-                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
-                  ไปกรอกราคาน้ำมันของวันที่ขาด
-                </a><br />
-                {% for r in rate_stats.fuel_partial %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
+                ส่วนใหญ่ไม่ใช่เที่ยวส่งออก เช่น ลูกค้าซื้อหินออกจากกองสต๊อกท่าเรือ หรือเหมืองชั่งให้ตัวเอง<br />
+                ถ้าเส้นไหนต้องจ่ายค่าขนส่งจริง ให้ไปหน้า
+                <a href="{% url 'viewInternationalFreightRate' %}">ค่าขนส่ง ส่งออก</a>
+                แล้วเพิ่มเส้นทาง เที่ยวจะเข้ารายงานเอง<br />
+                <a class="btn btn-sm btn-outline-secondary mt-1" href="?{% if problem_query %}{{ problem_query }}&amp;{% endif %}problem=off_route#trips">ดูเที่ยวเหล่านี้</a>
+                <ul class="ifr-missing-list">
+                  {% for d in rate_stats.off_route %}
+                  <li>
+                    <span class="fw-semibold">{{ d.destination }}</span>
+                    <span class="text-muted small">— {{ d.trips|intcomma }} เที่ยว</span>
+                    <div class="small mt-1">
+                      ต้นทาง:
+                      {% for o in d.origins %}<span class="badge bg-light text-dark border">{{ o.name }} ({{ o.trips|intcomma }})</span> {% endfor %}
+                    </div>
+                  </li>
+                  {% endfor %}
+                </ul>
               </div>
             </div>
           </div>
-          {% endif %}
-
-          {% comment %}
-          ทีมที่เดือนนั้นไม่มีบิลเติมน้ำมันเลย ยังได้ราคาจากวิธีสำรอง (เฉลี่ยวันที่วิ่ง)
-          ไม่ใช่ error แต่ต้องรู้ เพราะสองวิธีให้ตัวเลขไม่เท่ากัน
-          สาเหตุที่เจอบ่อยคือรหัสลูกค้าน้ำมันของทีมยังไม่ได้กรอก หรือทีมเติมปั๊มนอก
-          {% endcomment %}
-          {% if rate_stats.fuel_no_bill %}
-          <div class="ifr-issue ifr-issue-warn">
-            <div class="ifr-issue-num">{{ rate_stats.fuel_no_bill|length }} ทีม</div>
-            <div class="ifr-issue-body">
-              <div class="ifr-issue-title">ไม่มีบิลเติมน้ำมันในระบบ Express เดือนนี้</div>
-              <div class="ifr-issue-text">
-                ทีมเหล่านี้ใช้วิธีสำรองแทน คือเฉลี่ยราคารายวันของวันที่รถวิ่ง
-                ไม่ได้ถ่วงตามจำนวนครั้งที่เติมจริงเหมือนทีมอื่น (ดูหมายเหตุท้ายแถวในไฟล์)<br />
-                <strong>ตรวจดู:</strong> ทีมนั้นกรอก "รหัสลูกค้าน้ำมัน" ไว้ในข้อมูลทีมหรือยัง
-                ถ้ากรอกแล้วแปลว่าเดือนนี้เขาไม่ได้เติมน้ำมันกับเรา<br />
-                {% for t in rate_stats.fuel_no_bill %}<span class="badge bg-light text-dark border">{{ t }}</span> {% endfor %}
-              </div>
-            </div>
-          </div>
-          {% endif %}
-
-          {% if rate_stats.fuel_no_price %}
-          <div class="ifr-issue ifr-issue-warn">
-            <div class="ifr-issue-num">{{ rate_stats.fuel_no_price|length }} เส้นทาง</div>
-            <div class="ifr-issue-body">
-              <div class="ifr-issue-title">วันที่รถวิ่ง ยังไม่ได้กรอกราคาน้ำมันของบริษัทต้นทางเลยสักวัน</div>
-              <div class="ifr-issue-text">
-                ระบบเฉลี่ยราคาจาก "วันที่มีเที่ยววิ่งจริง" เท่านั้น ถ้าวันเหล่านั้นไม่มีราคาเลย
-                ช่องราคาน้ำมันในไฟล์จะว่าง ส่วนปรับน้ำมันจะเป็น 0 (ไม่ใส่ 0 ในช่องราคา
-                และไม่หยิบวันอื่นมาแทน เพราะจะทำให้ยอดเงินเพี้ยนโดยไม่มีใครทันสังเกต)<br />
-                <strong>ต้องทำ:</strong>
-                <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">
-                  ไปกรอกราคาน้ำมันของเดือนนี้
-                </a><br />
-                {% for r in rate_stats.fuel_no_price %}<span class="badge bg-light text-dark border">{{ r }}</span> {% endfor %}
-              </div>
-            </div>
-          </div>
-          {% endif %}
         </div>
         {% endif %}
 
@@ -778,9 +792,18 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="trips">
       <div class="card-header">
         <h5 class="card-title mb-0">รายเที่ยว</h5>
+        {% if problem %}
+        <div class="alert alert-secondary d-flex flex-wrap align-items-center gap-2 py-2 mt-2 mb-0">
+          <span>
+            กำลังดูเฉพาะ: <strong>{{ problem_label }}</strong> ({{ problem_count|intcomma }} เที่ยว)
+            <span class="small text-muted d-block">ตัวเลขสรุปด้านบนและไฟล์ที่กด Export ยังเป็นข้อมูลทั้งชุดตามตัวกรอง</span>
+          </span>
+          <a class="btn btn-sm btn-outline-dark ms-auto" href="?{{ problem_query }}#trips">ดูทั้งหมด</a>
+        </div>
+        {% endif %}
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
           หัวตารางเรียงตามคอลัมน์ A-M ของ sheet "บันทึกรายเที่ยว" ในไฟล์ รายเที่ยว_template_v11.xlsx |
           ช่องพื้นเหลืองคือช่องที่ยังไม่มีข้อมูลใน db
@@ -792,6 +815,7 @@
             <thead>
               <tr>
                 <th>เคส</th>
+                <th>ชั่งที่</th>
                 <th>วันที่</th>
                 <th>ต้นทาง</th>
                 <th>ปลายทาง</th>
@@ -804,14 +828,15 @@
                 <th class="trip-num">นน.ปลายทาง</th>
                 <th class="trip-num">นน.ส่วนต่าง</th>
                 <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
+                <th class="trip-num">ราคาน้ำมันวันที่วิ่ง</th>
                 <th>weight_id</th>
                 <th>ประเภทการบรรทุก</th>
               </tr>
               <tr class="col-letter">
                 {# ข้าม G (นามที่จ่าย) เพราะไม่มีที่เก็บใน db เว้นว่างทุกแถว แต่ในไฟล์ยังมีคอลัมน์อยู่ #}
-                <th>-</th>
+                <th>-</th><th>-</th>
                 <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
-                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
+                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th><th>N</th>
                 <th colspan="2">นอกไฟล์ template</th>
               </tr>
             </thead>
@@ -822,12 +847,19 @@
                   <span class="badge {% if r.case == '1' %}bg-primary{% else %}bg-secondary{% endif %}"
                         title="{{ r.case_label }}">{{ r.case_label }}</span>
                 </td>
+                {# ใครเป็นคนชั่งเที่ยวนี้ : รหัสตาชั่ง + บริษัทเจ้าของตาชั่ง (ตัวเดียวกับที่ใช้กรองแท็บ) #}
+                <td class="text-nowrap"><span class="fw-semibold">{{ r.bws_id|default:"-" }}</span>
+                  {% if r.bws_company %}<span class="text-muted small">{{ r.bws_company }}</span>{% endif %}</td>
                 <td>{{ r.date|date:"d/m/Y" }}</td>
                 <td title="{{ r.origin_raw }} ({{ r.customer_id }})">{{ r.origin|default:"-" }}</td>
                 <td title="{{ r.bws_id }}">{{ r.destination|default:"-" }}</td>
                 <td>{{ r.stone|default:"-" }}</td>
                 {# แบก นน. คิดสดจาก นน.ต้นทาง เทียบช่วงในตารางอัตรา ไม่ได้เก็บลง db #}
+                {% if r.wc_status == 'out_of_range' %}
+                <td class="trip-out-of-range" title="มีสัญญาแล้ว แต่ นน.จ่ายค่าบรรทุกไม่เข้าช่วงไหนของทีมนี้">ไม่เข้าช่วง</td>
+                {% else %}
                 <td>{{ r.weight_carried|default:"-" }}</td>
+                {% endif %}
                 <td class="{% if r.team_missing %}trip-no-team{% endif %}">{{ r.team }}</td>
                 <td>{{ r.car_registration|default:"-" }}</td>
                 <td>{{ r.doc_id|default:"-" }}</td>
@@ -835,6 +867,12 @@
                 <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
+                {# ราคาของบริษัทต้นทาง ณ วันที่วิ่ง ไม่มีใช้ของปลายทาง · ว่างแดง = สัญญาปรับตามน้ำมันแต่ไม่มีราคา #}
+                {% if r.fuel_missing %}
+                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่วันนี้ไม่มีราคาทั้งบริษัทต้นทางและปลายทาง">ไม่มีราคา</td>
+                {% else %}
+                <td class="trip-num">{{ r.fuel_price|floatformat:2|default:"" }}</td>
+                {% endif %}
                 <td>{{ r.weight_id }}</td>
                 <td>
                   {% if r.carry_empty %}<span class="badge bg-warning text-dark">{{ r.carry_type }}</span>{% else %}{{ r.carry_type }}{% endif %}
@@ -842,7 +880,7 @@
               </tr>
               {% empty %}
               <tr>
-                <td colspan="15" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
+                <td colspan="17" class="text-center text-muted py-4">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -1026,6 +1064,8 @@
 
         var progress = startButtonProgress(link);
         if (!progress) return;   // กดซ้ำระหว่างที่ยังทำอยู่
+        // ล้าง cookie ของรอบก่อน cookie กลับมาเมื่อไหร่ = ไฟล์ของรอบนี้ถูกส่งออกมาแล้ว
+        document.cookie = 'exportDownloadDone=; Max-Age=0; path=/';
 
         var stopPoll = pollServerProgress(token, function (d) {
           // percent = null แปลว่ายังไม่รู้ (ยังไม่เริ่มเขียน หรืออยู่คนละ server)
@@ -1037,11 +1077,11 @@
         var deadline = Date.now() + 600000;   // ไฟล์ใหญ่สุดใช้เวลาไม่ถึงนาที เผื่อไว้ 10 นาที
         var watcher = setInterval(function () {
           // cookie กลับมา = ไฟล์ถูกส่งออกมาแล้ว จบงานไม่ว่า % จะค้างอยู่ตรงไหน
-          if (document.cookie.indexOf('exportDownloadToken=' + token) !== -1) {
+          if (document.cookie.indexOf('exportDownloadDone=1') !== -1) {
             clearInterval(watcher);
             stopPoll();
             progress.finish('ไฟล์พร้อมแล้ว');
-            document.cookie = 'exportDownloadToken=; Max-Age=0; path=/';
+            document.cookie = 'exportDownloadDone=; Max-Age=0; path=/';
           } else if (Date.now() > deadline) {
             clearInterval(watcher);
             stopPoll();
@@ -1165,6 +1205,55 @@
         }
       });
     }
+  })();
+
+  // ---------- กล่องแจ้งเตือน : พับ/กาง ----------
+  (function () {
+    const card = document.getElementById('ifr_health');
+    if (!card) return;
+    const head = card.querySelector('.ifr-health-head');
+    const body = document.getElementById('ifr_health_body');
+    const hint = document.getElementById('ifr_health_hint');
+    const badge = document.getElementById('ifr_health_count');
+    // ค่าเริ่มต้น = หุบไว้ หัวกล่องยังโชว์จำนวนเรื่องที่เตือน กางเมื่อผู้ใช้กดเอง แล้วจำไว้
+    // เปลี่ยนชื่อ key จากเดิม (exportdoc_health_collapsed) ไม่ให้ค่า "กางไว้" ที่จำมาตอนค่าเริ่มต้นยังเป็นกาง ทับค่าใหม่
+    const KEY = 'exportdoc_health_expanded';
+
+    // นับจากกล่องเตือนที่ขึ้นจริงบนหน้า ไม่ต้องนับซ้ำฝั่ง server
+    const issues = body.querySelectorAll('.ifr-issue').length;
+    if (issues) {
+      const bad = body.querySelector('.ifr-issue-bad');
+      badge.textContent = issues + ' เรื่อง';
+      badge.classList.add(bad ? 'bg-danger' : 'bg-warning');
+      if (!bad) badge.classList.add('text-dark');
+    } else {
+      badge.textContent = 'ข้อมูลครบ';
+      badge.classList.add('bg-success');
+    }
+    badge.classList.remove('d-none');
+
+    function setCollapsed(collapsed, remember) {
+      body.classList.toggle('d-none', collapsed);
+      card.classList.toggle('is-collapsed', collapsed);
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      hint.textContent = collapsed ? 'กดเพื่อดูรายละเอียด' : 'พับเก็บ';
+      if (remember) {
+        try { localStorage.setItem(KEY, collapsed ? '0' : '1'); } catch (e) { /* โหมดส่วนตัว / ปิด storage */ }
+      }
+    }
+
+    let expanded = false;
+    try { expanded = localStorage.getItem(KEY) === '1'; } catch (e) { expanded = false; }
+    setCollapsed(!expanded, false);
+
+    function toggle() { setCollapsed(!card.classList.contains('is-collapsed'), true); }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
   })();
 </script>
 {% endblock %}

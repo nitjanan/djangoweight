@@ -110,7 +110,8 @@ jobs:
 
   django-deploy:
     name: django check --deploy
-    runs-on: ubuntu-latest
+    # ใช้ Python 3.9 เหมือนเครื่องจริง : ubuntu-latest (26.04) ไม่มี 3.9 แล้ว จึงระบุรุ่นตรง ๆ
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       mysql:

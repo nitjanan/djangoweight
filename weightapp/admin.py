@@ -339,7 +339,8 @@ class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 PASSWORD_PLACEHOLDER = '●' * 8  # ●●●●●●●● shown when a password is already set
 
 class UserScaleForm(forms.ModelForm):
-    password = forms.CharField(label="รหัสผ่าน", required=False, widget=forms.PasswordInput(render_value=True))
+    # autocomplete=new-password: กัน browser เติมรหัสผ่านของคนที่ login admin ลงในช่องนี้เอง
+    password = forms.CharField(label="รหัสผ่าน", required=False, widget=forms.PasswordInput(render_value=True, attrs={'autocomplete': 'new-password'}))
     permission = forms.ChoiceField(label="สิทธิ์การใช้งาน", choices=UserScale.PERMISSION_CHOICES, required=False, initial=UserScale.PERMISSION_WEIGHT)
 
     class Meta:
@@ -357,6 +358,29 @@ class UserScaleForm(forms.ModelForm):
                     self.initial['permission'] = value
                     break
 
+    def clean_scale_id(self):
+        # ตาชั่งเก็บผู้ชั่งโดยใช้ scale_id เป็น username (unique) ถ้า scale_id ซ้ำ รายการที่แก้ทีหลังจะทับ
+        # ชื่อ/รหัสผ่านของอีกคนในตาชั่ง ทำให้อีกคน login ไม่ได้
+        scale_id = (self.cleaned_data.get('scale_id') or '').strip()
+        if not scale_id:
+            raise forms.ValidationError('กรุณาระบุรหัสผู้ชั่ง')
+        dup = UserScale.objects.filter(scale_id=scale_id)
+        if self.instance and self.instance.pk:
+            dup = dup.exclude(pk=self.instance.pk)
+        if dup.exists():
+            raise forms.ValidationError('รหัสผู้ชั่ง %s มีอยู่แล้ว' % scale_id)
+        return scale_id
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password') or ''
+        if password and password != PASSWORD_PLACEHOLDER:
+            try:
+                password.encode('ascii')
+            except UnicodeEncodeError:
+                # ตาชั่ง hash ด้วย Encoding.ASCII ตัวอักษรไทยจะกลายเป็น '?' รหัสผ่านจะไม่ตรงกัน
+                raise forms.ValidationError('รหัสผ่านต้องเป็นตัวอักษรภาษาอังกฤษ ตัวเลข หรือสัญลักษณ์เท่านั้น')
+        return password
+
 class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     form = UserScaleForm
     autocomplete_fields = ['user']
@@ -370,6 +394,8 @@ class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             obj.password = hash_password_sha1(new_password)
         elif change:
             obj.password = UserScale.objects.get(pk=obj.pk).password
+        else:
+            obj.password = None
 
         new_permission = form.cleaned_data.get('permission')
         if new_permission:

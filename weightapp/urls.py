@@ -320,7 +320,9 @@ urlpatterns = [
       path('internationalFreightRate/fuelPrice/api/delete/<int:id>/', views.internationalFreightRateFuelPriceDelete, name="internationalFreightRateFuelPriceDelete"),
       path('internationalFreightRate/fuelPrice/', views.viewInternationalFreightRateFuelPrice, name="viewInternationalFreightRateFuelPrice"),
       path('internationalFreightRate/', views.viewInternationalFreightRate, name="viewInternationalFreightRate"),
+      path('internationalFreightRate/alert/', views.internationalFreightRateAlert, name="internationalFreightRateAlert"),
       path('internationalFreightRate/excel/', views.exportExcelInternationalFreightRate, name="exportExcelInternationalFreightRate"),
+      path('internationalFreightRate/averageReport/', views.exportFreightAverageReport, name="exportFreightAverageReport"),
       # จัดการต้นทาง / ปลายทาง (ตาราง map + รหัสลูกค้าสำรอง) ดู views_company_map.py
       path('internationalFreightRate/destinations/', views_company_map.settingCompanyMap, name="settingCompanyMap"),
       path('internationalFreightRate/destinations/create/', views_company_map.createCompanyMap, name="createCompanyMap"),

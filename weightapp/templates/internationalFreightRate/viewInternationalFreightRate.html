@@ -78,6 +78,43 @@
     table-layout: fixed;
     min-width: 960px;
   }
+
+  /* แผงเตือนสัญญาค่าขนส่ง (โหลดทีหลังผ่าน fetch ดู _contractAlert.html)
+     สีและรูปกล่องเหมือนกล่องเตือนหน้า /exportDocument/ คนเห็นแล้วรู้ว่าเป็นเรื่องเดียวกัน */
+  .ifr-alert-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+  .ifr-alert-toggle {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+    flex: 1 1 auto; padding: 0; border: 0; background: none; color: inherit; text-align: left;
+  }
+  .ifr-alert-chevron { transition: transform .15s ease; }
+  .ifr-contract-alert.is-collapsed .ifr-alert-chevron { transform: rotate(-90deg); }
+  .ifr-contract-alert.is-collapsed .ifr-alert-body { display: none; }
+  .ifr-alert-body { margin-top: .75rem; }
+  .ifr-issue {
+    display: flex; gap: 1rem; padding: .75rem 1rem;
+    border-left: 4px solid; border-radius: .375rem;
+  }
+  .ifr-issue + .ifr-issue { margin-top: .5rem; }
+  .ifr-issue-num { flex: 0 0 auto; min-width: 6rem; font-weight: 700; font-size: 1.1rem; }
+  .ifr-issue-title { font-weight: 600; font-size: .9rem; }
+  .ifr-issue-text { font-size: .8rem; color: #6c757d; line-height: 1.55; }
+  .ifr-issue-bad  { border-left-color: #dc3545; background-color: rgba(220,53,69,.05); }
+  .ifr-issue-bad  .ifr-issue-num { color: #dc3545; }
+  .ifr-issue-warn { border-left-color: #fd7e14; background-color: rgba(253,126,20,.05); }
+  .ifr-issue-warn .ifr-issue-num { color: #fd7e14; }
+  .ifr-missing-list { margin: .4rem 0; padding-left: 1.1rem; }
+  .ifr-missing-list li + li { margin-top: .35rem; }
+  /* กลุ่มเส้นทางในแผงเตือน : พับไว้ก่อน กดหัวกลุ่มเพื่อกางดูรายทีม */
+  .ifr-groups { margin: .4rem 0; }
+  .ifr-group { border: 1px solid rgba(0,0,0,.08); border-radius: .375rem; background: rgba(255,255,255,.6); }
+  .ifr-group + .ifr-group { margin-top: .3rem; }
+  .ifr-group > summary { padding: .35rem .6rem; cursor: pointer; color: inherit; }
+  .ifr-group > summary:hover { background: rgba(0,0,0,.03); }
+  .ifr-group[open] > summary { border-bottom: 1px solid rgba(0,0,0,.06); }
+  .ifr-group-body { padding: .45rem .75rem .55rem; }
+  @media (max-width: 575.98px) {
+    .ifr-issue { flex-direction: column; gap: .15rem; }
+  }
 </style>
 {% endblock %}
 
@@ -113,6 +150,17 @@
 
     <div id="ifr_alert" class="alert d-none" role="alert"></div>
 
+    {% comment %}
+    แผงเตือนสัญญาค่าขนส่ง : คำนวณทั้งเดือน ~4 วินาที จึงโหลดแยกทีหลัง ไม่ให้หน้านี้ช้าตาม
+    {% endcomment %}
+    <div class="card ifr-contract-alert" id="ifr_contract_alert"
+         data-url="{% url 'internationalFreightRateAlert' %}" aria-live="polite">
+      <div class="card-body py-3" data-ifr-alert-content>
+        <span class="spinner-border spinner-border-sm" role="status"></span>
+        <span class="text-muted">กำลังตรวจเที่ยวที่ทีมไม่อยู่ในสัญญา / น้ำหนักไม่เข้าช่วง…</span>
+      </div>
+    </div>
+
     <div class="card">
 
       <div class="card-header">
@@ -121,6 +169,20 @@
         <a href="{% url 'exportExcelInternationalFreightRate' %}" class="btn btn-success rounded-pill">
           Export Excel <i class="fa-solid fa-file-excel"></i>
         </a>
+        {% comment %}
+          รายงานค่าขนส่งเฉลี่ยรายเดือน แยกบริษัท / ชนิดหิน / ช่วงน้ำหนัก (แทนไฟล์ "เฉลี่ยเปอร์เซ็นต์การขนสินค้า")
+          ต้องอ่านทั้งเดือน 2 เดือน (เดือนที่เลือก + เดือนก่อนไว้เทียบ) ใช้เวลาหลายวินาที
+        {% endcomment %}
+        <form method="get" action="{% url 'exportFreightAverageReport' %}" class="d-inline-flex gap-1 align-items-center ms-1">
+          <select name="month" class="form-select form-select-sm" style="width: auto;" aria-label="เดือนของรายงาน">
+            {% for value, label in ifr_report_months %}
+            <option value="{{ value }}" {% if forloop.counter == 2 %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-outline-success rounded-pill text-nowrap">
+            รายงานค่าขนส่งเฉลี่ย <i class="fa-solid fa-chart-column"></i>
+          </button>
+        </form>
         {% comment %}
           ต้นทาง/ปลายทางในใบราคามาจากตาราง map ตารางนี้ยังกำหนดด้วยว่าเที่ยวไหนเข้าหน้า /exportDocument/
           โชว์ปุ่มเฉพาะคนที่มีสิทธิ์แก้ตาราง map (ตั้งในหน้า admin) ตรงกับที่ view เช็ค
@@ -182,7 +244,6 @@
                   <th>ปลายทาง</th>
                   <th style="width: 100px;">ทีม</th>
                   <th class="ifr-col-num" style="width: 90px;">ระยะทาง</th>
-                  <th class="ifr-col-num" style="width: 130px;">ราคาน้ำมันฐาน<br />(บาท/ลิตร)</th>
                   <th class="ifr-col-num" style="width: 100px;">ใช้น้ำมัน<br />(ลิตร/เที่ยว)</th>
                   <th style="width: 150px;">วันที่เริ่มใช้</th>
                   <th style="width: 95px;">แก้ไข</th>
@@ -210,7 +271,6 @@
                     </button>
                   </td>
                   <td class="ifr-col-num">{{ i.distance|default_if_none:"-" }}</td>
-                  <td class="ifr-col-num">{{ i.baseFuelPriceLabel|default_if_none:"-" }}</td>
                   <td class="ifr-col-num">{{ i.fuel_used_per_trip|default_if_none:"-" }}</td>
                   <td>{{ i.effective_th }}</td>
                   <td>
@@ -237,7 +297,6 @@
                           <th>ค่าขนส่ง<br /><small class="fw-normal">ตามสัญญา</small></th>
                           <th>น้ำมันฐาน<br /><small class="fw-normal">วันทำสัญญา</small></th>
                           <th>วันทำสัญญา</th>
-                          <th>ค่าขนส่ง</th>
                           <th>ปรับตามน้ำมัน<br /><small class="fw-normal">ลิตรละ 1 บาท</small></th>
                           <th>ลดบาท/ตัน</th>
                           <th>บาท/ตัน/กม.</th>
@@ -270,9 +329,8 @@
                             {% endif %}
                             <td>{{ t.weight_carried.description|default_if_none:"-" }}</td>
                             <td>{{ t.contract_freight_rate|default_if_none:"-" }}</td>
-                            <td>{{ t.contract_base_fuel_price|default_if_none:"-" }}</td>
+                            <td>{{ t.contractFuelLabel|default_if_none:"-" }}</td>
                             <td>{{ t.contract_date_th|default_if_none:"-" }}</td>
-                            <td>{{ t.freight_rate|default_if_none:"-" }}</td>
                             <td>{{ t.fuel_freight_adjustment|default_if_none:"-" }}</td>
                             <td>{{ t.discount_per_ton|default_if_none:"-" }}</td>
                             <td>{{ t.freight_rate_per_ton_km|default_if_none:"-" }}</td>
@@ -402,5 +460,49 @@
       originHeads.forEach(function (head) { setGroupOpen(head, true); });
     });
   }
+</script>
+<script>
+  // แผงเตือนสัญญาค่าขนส่ง : โหลด fragment มาแทรก / เปลี่ยนเดือน / พับเก็บ (จำไว้ในเครื่อง)
+  (function () {
+    const box = document.getElementById('ifr_contract_alert');
+    if (!box) return;
+    const content = box.querySelector('[data-ifr-alert-content]');
+    const KEY = 'ifr_contract_alert_collapsed';
+
+    function readCollapsed() {
+      try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+    }
+    function applyCollapsed(collapsed) {
+      box.classList.toggle('is-collapsed', collapsed);
+      const btn = box.querySelector('.ifr-alert-toggle');
+      if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    function load(month) {
+      const url = box.dataset.url + (month ? '?month=' + encodeURIComponent(month) : '');
+      content.style.opacity = '.5';
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (res) { if (!res.ok) throw new Error(res.status); return res.text(); })
+        .then(function (html) {
+          content.innerHTML = html;
+          content.style.opacity = '';
+          applyCollapsed(readCollapsed());
+        })
+        .catch(function () {
+          content.style.opacity = '';
+          content.innerHTML = '<span class="text-danger small">โหลดแผงเตือนไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง</span>';
+        });
+    }
+
+    box.addEventListener('click', function (e) {
+      if (!e.target.closest('.ifr-alert-toggle')) return;
+      const collapsed = !box.classList.contains('is-collapsed');
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (err) {}
+      applyCollapsed(collapsed);
+    });
+    box.addEventListener('change', function (e) {
+      if (e.target.matches('[data-ifr-alert-month]')) load(e.target.value);
+    });
+    load('');
+  })();
 </script>
 {% endblock %}

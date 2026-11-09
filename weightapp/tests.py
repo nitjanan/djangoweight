@@ -967,3 +967,71 @@ class BaseSettingExcelExportTests(TestCase):
     def test_unknown_base_returns_404(self):
         response = self.client.get(reverse('exportExcelBaseSetting', args=['notABase']))
         self.assertEqual(response.status_code, 404)
+
+
+class UserScalePasswordTests(TestCase):
+    # ตาชั่ง (C#) login ด้วย Utils.hashPassword = base64(SHA1(ascii)) ต้องตรงกับที่ web app เก็บไว้
+    def test_save_hashes_plain_password_and_permission(self):
+        from weightapp.models import UserScale, hash_password_sha1
+        us = UserScale.objects.create(scale_id=' 777 ', scale_name='ทดสอบ', password='1234', permission='weight')
+        us.refresh_from_db()
+        self.assertEqual(us.scale_id, '777')
+        self.assertEqual(us.password, hash_password_sha1('1234'))
+        self.assertEqual(us.permission, hash_password_sha1('weight'))
+
+    def test_save_does_not_double_hash(self):
+        from weightapp.models import UserScale, hash_password_sha1
+        hashed = hash_password_sha1('1234')
+        us = UserScale.objects.create(scale_id='778', password=hashed)
+        us.save()
+        us.refresh_from_db()
+        self.assertEqual(us.password, hashed)
+
+    def test_import_excel_hashes_password(self):
+        # Import ในหน้า admin ไม่ผ่าน save_model เดิมจึงเก็บรหัสผ่านเป็นข้อความธรรมดา
+        import tablib
+        from import_export import resources
+        from weightapp.models import UserScale, hash_password_sha1
+        resource = resources.modelresource_factory(model=UserScale)()
+        data = tablib.Dataset(headers=['id', 'scale_id', 'scale_name', 'password', 'permission'])
+        data.append(['', '779', 'นำเข้า', 'abcd', 'admin'])
+        result = resource.import_data(data, dry_run=False)
+        self.assertFalse(result.has_errors())
+        us = UserScale.objects.get(scale_id='779')
+        self.assertEqual(us.password, hash_password_sha1('abcd'))
+        self.assertEqual(us.permission, hash_password_sha1('admin'))
+
+    def test_form_rejects_duplicate_scale_id(self):
+        from weightapp.admin import UserScaleForm
+        from weightapp.models import UserScale
+        UserScale.objects.create(scale_id='780', scale_name='เดิม', password='1111')
+        form = UserScaleForm(data={'scale_id': '780 ', 'scale_name': 'ใหม่', 'password': '2222', 'permission': 'weight'})
+        self.assertFalse(form.is_valid())
+        self.assertIn('scale_id', form.errors)
+
+    def test_form_allows_editing_same_row(self):
+        from weightapp.admin import UserScaleForm, PASSWORD_PLACEHOLDER
+        from weightapp.models import UserScale
+        us = UserScale.objects.create(scale_id='781', scale_name='เดิม', password='1111')
+        form = UserScaleForm(instance=us, data={'scale_id': '781', 'scale_name': 'แก้ชื่อ', 'password': PASSWORD_PLACEHOLDER, 'permission': 'weight'})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_rejects_non_ascii_password(self):
+        from weightapp.admin import UserScaleForm
+        form = UserScaleForm(data={'scale_id': '782', 'scale_name': 'x', 'password': 'รหัส', 'permission': 'weight'})
+        self.assertFalse(form.is_valid())
+        self.assertIn('password', form.errors)
+
+    def test_admin_edit_with_placeholder_keeps_password(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+        from weightapp.admin import UserScaleAdmin, UserScaleForm, PASSWORD_PLACEHOLDER
+        from weightapp.models import UserScale, hash_password_sha1
+        us = UserScale.objects.create(scale_id='783', scale_name='เดิม', password='1111')
+        form = UserScaleForm(instance=us, data={'scale_id': '783', 'scale_name': 'แก้ชื่อ', 'password': PASSWORD_PLACEHOLDER, 'permission': 'weight'})
+        self.assertTrue(form.is_valid(), form.errors)
+        obj = form.save(commit=False)
+        UserScaleAdmin(UserScale, AdminSite()).save_model(RequestFactory().post('/'), obj, form, True)
+        us.refresh_from_db()
+        self.assertEqual(us.password, hash_password_sha1('1111'))
+        self.assertEqual(us.scale_name, 'แก้ชื่อ')

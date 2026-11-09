@@ -14993,6 +14993,15 @@ BASE_SETTING_EXPORTS = OrderedDict([
     ('carRegistration', (BaseCarRegistration,'ข้อมูลทะเบียนรถ')),
 ])
 
+#คอลัมน์รหัสที่ต้องแทรกไว้หน้าคอลัมน์ FK (FK แสดงเป็นชื่อจาก __str__ อย่างเดียว ทำให้ไม่เห็นรหัส)
+#slug -> {ชื่อ FK field: หัวคอลัมน์รหัส}
+BASE_SETTING_EXPORT_CODE_COLUMNS = {
+    'customerSite': OrderedDict([
+        ('customer', 'รหัสลูกค้า'),
+        ('site',     'รหัสปลายทาง'),
+    ]),
+}
+
 #ชื่อ sheet ของ excel ห้ามเกิน 31 ตัวอักษร และห้ามมีอักขระเหล่านี้
 BASE_SETTING_EXPORT_INVALID_SHEET_CHARS = '[]:*?/\\'
 
@@ -15066,10 +15075,20 @@ def exportExcelBaseSetting(request, base):
     #write_only ต้องตั้ง freeze_panes ก่อน append แถวแรก ไม่งั้นค่าจะไม่ถูกเขียนลงไฟล์
     worksheet.freeze_panes = 'A2'
 
+    #แต่ละคอลัมน์ = (หัวคอลัมน์, ฟังก์ชันอ่านค่าจาก obj)
+    #คอลัมน์รหัสอ่านจาก attname ของ FK (เช่น customer_id) ตรง ๆ ไม่ต้อง query เพิ่ม
+    code_columns = BASE_SETTING_EXPORT_CODE_COLUMNS.get(base, {})
+    columns = []
+    for field in fields:
+        if field.name in code_columns:
+            columns.append((code_columns[field.name],
+                            lambda obj, f=field: getattr(obj, f.attname, None)))
+        title = str(field.verbose_name) if getattr(field, 'verbose_name', None) else field.name
+        columns.append((title, lambda obj, f=field: _baseSettingExportValue(obj, f)))
+
     header_row = []
     widths = []
-    for field in fields:
-        title = str(field.verbose_name) if getattr(field, 'verbose_name', None) else field.name
+    for title, _ in columns:
         cell = WriteOnlyCell(worksheet, value=title)
         cell.font = head_font
         cell.fill = head_fill
@@ -15080,8 +15099,8 @@ def exportExcelBaseSetting(request, base):
 
     for obj in data.iterator(chunk_size=2000):
         out_row = []
-        for col, field in enumerate(fields):
-            value = _baseSettingExportValue(obj, field)
+        for col, (_, get_value) in enumerate(columns):
+            value = get_value(obj)
             if isinstance(value, datetime):
                 cell = WriteOnlyCell(worksheet, value=value)
                 cell.number_format = 'dd/mm/yyyy hh:mm'

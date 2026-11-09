@@ -1,0 +1,38 @@
+{% load static %}
+{% comment %}
+  แถบหัวหน้า dashboard ใช้ร่วมกันทั้ง index / ndIndex / thIndex
+  ตัวแปร : title (หัวข้อ)
+{% endcomment %}
+<header class="mb-2">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="db-toolbar">
+  <div class="db-toolbar__title">
+    <h3>{{ title|default:"Weight Statistics" }}</h3>
+    {% if request.session.company_code %}<small>{{ request.session.company_code }} · {{ request.session.company|default:"" }}</small>{% endif %}
+  </div>
+  <div class="db-toolbar__actions">
+    <div class="db-range" title="เลือกช่วงวันที่">
+      <div id="reportrange">
+        <i class="fa fa-calendar"></i>
+        <span></span>
+        <i class="fa fa-caret-down"></i>
+      </div>
+      <button type="button" class="btn btn-light" onclick="setDateInDashbord()" aria-label="ค้นหา">
+        <i class="fa-solid fa-magnifying-glass"></i>
+      </button>
+    </div>
+    <input type="text" id="db_start_date" name="db_start_date" class="d-none">
+    <input type="text" id="db_end_date" name="db_end_date" class="d-none">
+    {% if request.user.is_authenticated %}
+    <div class="db-user">
+      <img src="{% static 'compiled/jpg/user3.jpg' %}" alt="" />
+      <span class="fw-semibold">{{ request.user }}</span>
+      <a href="{% url 'logout' %}" title="ออกจากระบบ"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,256 @@
+{% load static %}
+{% comment %}
+  script ที่ใช้ร่วมกันของหน้า dashboard
+  - jQuery โหลดไว้แล้วใน base.html (ห้ามโหลดซ้ำ ไม่งั้น plugin ที่ผูกกับ jQuery ตัวแรกจะหาย)
+  - dbResponsive : ตั้งค่า ApexCharts สำหรับจอเล็ก
+  - bindDownload : ผูกปุ่มดาวน์โหลดรายงานแบบมีแถบ progress
+{% endcomment %}
+<script src="{% static 'js/components/dark.js' %}"></script>
+<script src="{% static 'extensions/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
+<script src="{% static 'compiled/js/app.js' %}"></script>
+
+<!-- Apexcharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="{% static 'js/pages/dashboard.js' %}"></script>
+
+<!-- DataTable -->
+<script src="{% static 'extensions/simple-datatables/umd/simple-datatables.js' %}"></script>
+<script src="{% static 'js/pages/simple-datatables.js' %}"></script>
+
+<!-- Predefined Date Ranges -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+
+<script type="text/javascript">
+  // ตั้งค่ากราฟสำหรับจอเล็ก ใช้ร่วมกันทุกกราฟ
+  var dbResponsive = [
+    {
+      breakpoint: 768,
+      options: {
+        chart: { height: 300 },
+        legend: { position: 'bottom', horizontalAlign: 'center', offsetX: 0 },
+        title: { style: { fontSize: '12px' } },
+      }
+    },
+    {
+      breakpoint: 480,
+      options: {
+        chart: { height: 280 },
+        dataLabels: { style: { fontSize: '10px' } },
+        xaxis: { labels: { style: { fontSize: '10px' } } },
+        yaxis: { labels: { style: { fontSize: '10px' } } },
+      }
+    }
+  ];
+
+  /* ===== ธีมกราฟ ใช้ร่วมกันทุกกราฟ =====
+   * สีของชุดข้อมูลใช้สีเดิม (ค่าเริ่มต้น ApexCharts / สีที่แต่ละกราฟกำหนดเอง)
+   * ธีมนี้คุมแค่ตัวอักษร เส้น grid tooltip และสลับตามโหมดมืด/สว่าง */
+  var DB_THEME = {
+    light: {
+      colors: ['#008FFB', '#00E396', '#FEB019', '#FF4560', '#775DD0'],
+      text: '#52514e', muted: '#8a8a86', grid: '#ebebe8', surface: '#ffffff', mode: 'light'
+    },
+    dark: {
+      colors: ['#008FFB', '#00E396', '#FEB019', '#FF4560', '#775DD0'],
+      text: '#c3c2b7', muted: '#8f8e86', grid: '#2e2e3d', surface: '#1e1e2d', mode: 'dark'
+    }
+  };
+  function dbTheme() {
+    return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? DB_THEME.dark : DB_THEME.light;
+  }
+  function dbThemeOptions(t) {
+    return {
+      chart: { foreColor: t.text },
+      grid: { borderColor: t.grid },
+      tooltip: { theme: t.mode },
+      theme: { mode: t.mode },
+      plotOptions: {
+        bar: { dataLabels: { total: { style: { color: t.text } } } },
+        radialBar: { track: { background: t.grid } },
+      },
+    };
+  }
+
+  // ค่าเริ่มต้นของ ApexCharts ทุกกราฟในหน้า
+  (function () {
+    var t = dbTheme();
+    window.Apex = {
+      colors: t.colors,
+      chart: {
+        fontFamily: 'inherit',
+        foreColor: t.text,
+        background: 'transparent',
+        // เมนู ≡ มุมขวาบน : ดาวน์โหลดเป็นรูป (SVG/PNG) หรือ CSV (เปิดใน Excel ได้)
+        toolbar: {
+          show: true,
+          offsetY: -4,
+          tools: { download: true, selection: false, zoom: false, zoomin: false, zoomout: false, pan: false, reset: false },
+          export: { csv: { headerCategory: 'หมวด', dateFormatter: (t) => new Date(t).toLocaleDateString('en-GB') } },
+        },
+        animations: { enabled: true, speed: 450, animateGradually: { enabled: false } },
+      },
+      grid: {
+        borderColor: t.grid,
+        strokeDashArray: 4,
+        xaxis: { lines: { show: false } },
+        padding: { top: 12, left: 8, right: 8 },
+      },
+      xaxis: {
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        labels: { style: { fontSize: '12px' } },
+      },
+      yaxis: { labels: { style: { fontSize: '12px' } } },
+      legend: {
+        fontSize: '13px',
+        markers: { size: 6, shape: 'circle', strokeWidth: 0 },
+        itemMargin: { horizontal: 10, vertical: 4 },
+      },
+      plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: 'end' } },
+      dataLabels: { style: { fontSize: '11px', fontWeight: 600 } },
+      tooltip: { theme: t.mode, shared: false },
+      theme: { mode: t.mode },
+      states: { hover: { filter: { type: 'darken', value: 0.9 } } },
+    };
+  })();
+
+  var dbCharts = [];
+  function dbRender(selector, options) {
+    var el = document.querySelector(selector);
+    if (!el) return null;
+    var chart = new ApexCharts(el, options);
+    chart.render();
+    dbCharts.push(chart);
+    return chart;
+  }
+
+  // สลับโหมดมืด/สว่างแล้วเปลี่ยนสีกราฟตาม (ไม่ต้อง reload)
+  new MutationObserver(function () {
+    var t = dbTheme();
+    dbCharts.forEach(function (c) {
+      var o = dbThemeOptions(t);
+      // กราฟที่ป้ายตัวเลขใช้สีตัวอักษร (อยู่นอกแท่ง) ต้องเปลี่ยนสีป้ายตามด้วย
+      if (c.opts && c.opts.dbTextLabels) o.dataLabels = { style: { colors: [t.text] } };
+      if (c.opts && c.opts.dbBarGap) o.stroke = { colors: [t.surface] };
+      c.updateOptions(o, false, false);
+    });
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+  // Predefined Date Ranges
+  $(function () {
+    var start = moment('{{ request.session.db_start_date }}');
+    var end = moment('{{ request.session.db_end_date }}');
+
+    function cb(start, end) {
+      $('#reportrange span').html(start.format('DD/MM/YYYY') + ' - ' + end.format('DD/MM/YYYY'));
+      $('#db_start_date').val(start.format('YYYY-MM-DD'));
+      $('#db_end_date').val(end.format('YYYY-MM-DD'));
+    }
+
+    $('#reportrange').daterangepicker({
+      startDate: start,
+      endDate: end,
+      opens: 'left',
+      ranges: {
+        'Today': [moment(), moment()],
+        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+        'This Month': [moment().startOf('month'), moment().endOf('month')],
+        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+      }
+    }, cb);
+
+    // กด Apply (หรือเลือกช่วงสำเร็จรูป) แล้วค้นหาทันที ไม่ต้องกดปุ่มแว่นขยาย
+    $('#reportrange').on('apply.daterangepicker', function (ev, picker) {
+      cb(picker.startDate, picker.endDate);
+      setDateInDashbord();
+    });
+
+    cb(start, end);
+  });
+
+  function setDateInDashbord() {
+    $.ajax({
+      url: '{% url "setDateInDashbord" %}',
+      type: 'GET',
+      data: {
+        'db_start_date': $('#db_start_date').val(),
+        'db_end_date': $('#db_end_date').val(),
+      },
+      dataType: 'json',
+      success: function (data) {
+        if (data) location.reload();
+      },
+      error: function (xhr, status, error) {
+        alert('error = ' + error);
+      }
+    });
+    return false;
+  }
+
+  function progress_bar(btn, btnText, btnProgress, btnPercent, py_url, file_name, delay_time) {
+    btn.disabled = true;
+    btnText.style.visibility = "hidden";
+    btnPercent.style.display = "block";
+    btnProgress.style.width = "0%";
+    btnPercent.innerText = "0%";
+
+    function reset() {
+      btn.disabled = false;
+      btnText.style.visibility = "visible";
+      btnPercent.style.display = "none";
+      btnProgress.style.width = "0%";
+    }
+
+    let fakeProgress = 0;
+    let timer = setInterval(() => {
+      if (fakeProgress < 95) {  // หยุดที่ 95% รอโหลดเสร็จ
+        fakeProgress++;
+        btnProgress.style.width = fakeProgress + "%";
+        btnPercent.innerText = fakeProgress + "%";
+      }
+    }, delay_time);
+
+    fetch(py_url)
+      .then(response => response.blob())
+      .then(blob => {
+        clearInterval(timer);
+        btnProgress.style.width = "100%";
+        btnPercent.innerText = "100%";
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file_name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(reset, 1000);
+      })
+      .catch(err => {
+        clearInterval(timer);
+        console.error(err);
+        alert("Download failed!");
+        reset();
+      });
+  }
+
+  // prefix = ตัวหน้า id ของปุ่ม เช่น 'sd' -> sd_download-btn, sd_btn-text, ...
+  function bindDownload(prefix, py_url, file_name) {
+    const btn = document.getElementById(prefix + '_download-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      progress_bar(
+        btn,
+        document.getElementById(prefix + '_btn-text'),
+        document.getElementById(prefix + '_btn-progress'),
+        document.getElementById(prefix + '_btn-percent'),
+        py_url, file_name, 50
+      );
+    });
+  }
+</script>

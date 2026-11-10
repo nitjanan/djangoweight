@@ -329,7 +329,7 @@ urlpatterns = [
       path('internationalFreightRate/destinations/edit/<int:id>/', views_company_map.editCompanyMap, name="editCompanyMap"),
       path('internationalFreightRate/destinations/delete/<int:id>/', views_company_map.deleteCompanyMap, name="deleteCompanyMap"),
       path('internationalFreightRate/destinations/api/customers/', views_company_map.companyMapCustomerSearch, name="companyMapCustomerSearch"),
-      # ค่าขนส่งในประเทศ (issue #118) ตารางแยกจากส่งออก ดู views_domestic_freight_rate.py · ยังไม่ผูกเมนู
+      # ค่าขนส่งในประเทศ (issue #118) ตารางแยกจากส่งออก ดู views_domestic_freight_rate.py
       path('domesticFreightRate/', views_domestic_freight_rate.viewDomesticFreightRate, name="viewDomesticFreightRate"),
       path('domesticFreightRate/create', views_domestic_freight_rate.createDomesticFreightRate, name="createDomesticFreightRate"),
       path('domesticFreightRate/excel/', views_domestic_freight_rate.exportExcelDomesticFreightRate, name="exportExcelDomesticFreightRate"),

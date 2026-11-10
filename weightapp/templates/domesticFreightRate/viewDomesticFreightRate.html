@@ -88,8 +88,6 @@
                   <th>ปลายทาง</th>
                   <th style="width: 100px;">ทีม</th>
                   <th class="dfr-col-num" style="width: 90px;">ระยะทาง</th>
-                  <th class="dfr-col-num" style="width: 130px;">น้ำมันฐาน<br />(บาท/ลิตร)</th>
-                  <th style="width: 220px;">ขั้นปรับน้ำมัน</th>
                   <th style="width: 120px;">วันที่เริ่มใช้</th>
                   <th style="width: 80px;">ลบ</th>
                 </tr>
@@ -104,8 +102,6 @@
                     </button>
                   </td>
                   <td class="dfr-col-num">{{ i.distance|default_if_none:"-" }}</td>
-                  <td class="dfr-col-num">{{ i.baseFuelPriceLabel|default_if_none:"-" }}</td>
-                  <td>{{ i.fuelStepLabel|default_if_none:"ไม่ปรับตามน้ำมัน" }}</td>
                   <td>{{ i.effective_date|date:"d/m/Y" }}</td>
                   <td>
                     <button type="button" class="btn btn-danger btn-sm dfr-delete-btn" data-id="{{ i.id }}"
@@ -115,9 +111,9 @@
                   </td>
                 </tr>
                 <tr id="dfr-teams-{{ i.id }}" class="d-none">
-                  <td colspan="7" class="bg-light">
+                  <td colspan="5" class="bg-light">
                     <table class="table table-sm table-bordered mb-0">
-                      <thead><tr><th>ทีม</th><th>ช่วงน้ำหนัก</th><th class="dfr-col-num">อัตราค่าขนส่ง (บาท/ตัน)</th><th class="dfr-col-num">หักค่าสูญเสีย (%)</th><th>หมายเหตุ</th></tr></thead>
+                      <thead><tr><th>ทีม</th><th>ช่วงน้ำหนัก</th><th class="dfr-col-num">อัตราค่าขนส่ง (บาท/ตัน)</th><th class="dfr-col-num">น้ำมันฐาน (บาท/ลิตร)</th><th class="dfr-col-num">ปรับต่อน้ำมัน 1 บาท (บาท/ตัน)</th><th class="dfr-col-num">หักค่าสูญเสีย (%)</th><th>หมายเหตุ</th></tr></thead>
                       <tbody>
                         {% for t in i.sorted_teams %}
                         <tr>
@@ -128,6 +124,8 @@
                           </td>
                           <td>{{ t.get_weight_band_display }}</td>
                           <td class="dfr-col-num">{{ t.freight_rate }}</td>
+                          <td class="dfr-col-num">{{ t.contractFuelLabel|default_if_none:"-" }}</td>
+                          <td class="dfr-col-num">{{ t.fuel_freight_adjustment|default_if_none:"ไม่ปรับตามน้ำมัน" }}</td>
                           <td class="dfr-col-num">{{ t.loss_percent }}</td>
                           <td>{{ t.note|default_if_none:"-" }}</td>
                         </tr>

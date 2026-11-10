@@ -2,7 +2,7 @@
 """ตารางราคา ค่าขนส่งในประเทศ (issue #118) : หน้ารายการ / เพิ่ม / ลบ เส้นทาง + export Excel
 
 ตาราง DomesticFreightRate / DomesticFreightRateTeam แยกจากส่งออก แต่ใช้หลักเดียวกัน
-ยังไม่ผูกเมนู navbar เข้าด้วย URL ตรง ๆ (/domesticFreightRate/)
+เมนูอยู่ใต้ Freight Rate ใน base.html (เห็นเมื่อผู้ใช้มีแท็บ Transport)
 ยังไม่มีหน้าแก้ไข/ประวัติเวอร์ชัน และหน้ารายงานคิดเงินรายเดือน
 """
 from datetime import date
@@ -173,7 +173,7 @@ def exportExcelDomesticFreightRate(request):
     """ตารางราคาที่ใช้อยู่ปัจจุบัน หน้าตาคล้ายชีต "อัตราค่าขนส่ง ใช้งาน" ของไฟล์เดิม
 
     คอลัมน์ราคาแตกตาม (ทีม, ช่วงน้ำหนัก) ที่มีจริง เช่น ROI | ทุกทีม 0-30.99 | ทุกทีม 31 ขึ้นไป
-    ชีตที่ 2 เป็นรายการทีมแบบแถวเรียบ มี % สูญเสียและหมายเหตุของแต่ละแถว
+    ชีตที่ 2 เป็นรายการทีมแบบแถวเรียบ มีเงื่อนไขน้ำมัน % สูญเสีย และหมายเหตุของแต่ละแถว
     """
     if not request.session.get('company_code'):
         return redirect('logout')
@@ -197,7 +197,7 @@ def exportExcelDomesticFreightRate(request):
     ws.append(['อัตราค่าขนส่ง ในประเทศ (ไม่รวมภาษีมูลค่าเพิ่ม) ณ วันที่ %s' % date.today().strftime('%d/%m/%Y')])
     ws.append([])
     header = ['ที่', 'ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ระยะทาง (กม.)'] + [_excelText(columns[k]) for k in column_keys] + [
-        'ราคาน้ำมันฐาน (บาท/ลิตร)', 'ขั้นปรับน้ำมัน', 'วันที่เริ่มใช้', 'หมายเหตุ']
+        'วันที่เริ่มใช้', 'หมายเหตุ']
     ws.append(header)
     header_row = ws.max_row
     for no, rate in enumerate(rates, start=1):
@@ -206,13 +206,12 @@ def exportExcelDomesticFreightRate(request):
         ws.append([no, _excelText(map_names.get(rate.origin_id)), _excelText(map_names.get(rate.destination_id)),
                    float(rate.distance) if rate.distance is not None else None]
                   + [float(price[k]) if price.get(k) is not None else None for k in column_keys]
-                  + [rate.baseFuelPriceLabel(), rate.fuelStepLabel(),
-                     rate.effective_date, _excelText(rate.note)])
+                  + [rate.effective_date, _excelText(rate.note)])
     for cell in ws[header_row]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
     ws['A1'].font = Font(bold=True, size=13)
-    widths = [6, 22, 34, 12] + [14] * len(column_keys) + [18, 30, 14, 30]
+    widths = [6, 22, 34, 12] + [14] * len(column_keys) + [14, 30]
     for i, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
     for row in ws.iter_rows(min_row=header_row + 1, min_col=len(widths) - 1, max_col=len(widths) - 1):
@@ -221,16 +220,18 @@ def exportExcelDomesticFreightRate(request):
 
     detail = wb.create_sheet('รายละเอียดทีม')
     detail.append(['ต้นทาง', 'ลูกค้า (ปลายทาง)', 'ทีม', 'ช่วงน้ำหนัก', 'อัตราค่าขนส่ง (บาท/ตัน)',
+                   'ราคาน้ำมันฐาน (บาท/ลิตร)', 'ปรับต่อน้ำมัน 1 บาท (บาท/ตัน)',
                    'หักค่าสูญเสีย (%)', 'หมายเหตุ'])
     for rate in rates:
         for t in _sortedTeams(rate.teams.all()):
             detail.append([_excelText(map_names.get(rate.origin_id)), _excelText(map_names.get(rate.destination_id)),
                            _excelText((t.team.car_team_name or t.team_id) if t.team_id else 'ทุกทีม'),
-                           t.get_weight_band_display(), float(t.freight_rate), float(t.loss_percent),
-                           _excelText(t.note)])
+                           t.get_weight_band_display(), float(t.freight_rate), t.contractFuelLabel(),
+                           float(t.fuel_freight_adjustment) if t.fuel_freight_adjustment is not None else None,
+                           float(t.loss_percent), _excelText(t.note)])
     for cell in detail[1]:
         cell.font = Font(bold=True)
-    for i, width in enumerate([22, 34, 22, 22, 18, 16, 30], start=1):
+    for i, width in enumerate([22, 34, 22, 22, 18, 18, 18, 16, 30], start=1):
         detail.column_dimensions[get_column_letter(i)].width = width
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

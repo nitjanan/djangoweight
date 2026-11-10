@@ -192,7 +192,7 @@
 
                   <!-- ค่าขนส่ง ส่งออก : ผูกไว้กับ tab Transport ถ้าจะย้ายให้ย้ายทั้ง <li> ก้อนนี้
                        เมนูแม่ติด active ถ้าอยู่หน้าไหนก็ได้ในกลุ่มนี้ (ตัวแปรใดตัวหนึ่งเป็น 'active') -->
-                  <li class="sidebar-item has-sub {{ifr_page}}{{ifr_fuel_page}}{{export_document_page}}">
+                  <li class="sidebar-item has-sub {{ifr_page}}{{dfr_page}}{{ifr_fuel_page}}{{export_document_page}}">
                     <a href="#" class="sidebar-link">
                       <i class="fa-solid fa-ship"></i>
                       <span>Freight Rate</span>
@@ -201,6 +201,11 @@
                       <li class="submenu-item {{ifr_page}}">
                         <a href="{% url 'viewInternationalFreightRate' %}" class="submenu-link"
                           >ค่าขนส่ง ส่งออก</a
+                        >
+                      </li>
+                      <li class="submenu-item {{dfr_page}}">
+                        <a href="{% url 'viewDomesticFreightRate' %}" class="submenu-link"
+                          >ค่าขนส่ง ในประเทศ</a
                         >
                       </li>
                       <li class="submenu-item {{ifr_fuel_page}}">

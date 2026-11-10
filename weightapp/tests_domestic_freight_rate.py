@@ -12,12 +12,16 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from weightapp.models import (INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, BaseCarTeam, BaseCompany,
+from weightapp.models import (INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, BaseCarTeam, BaseCompany, BaseVisible,
                               BaseCompanyMapBaseCustomer, BaseCustomer, DomesticFreightRate,
                               DomesticFreightRateTeam, InternationalFreightRate, UserProfile)
 
 
 # ปิด whitenoise manifest ใน test เพราะไม่ได้รัน collectstatic
+FUEL = {'contract_base_fuel_price': '32.00', 'contract_base_fuel_price_max': '32.99',
+        'fuel_freight_adjustment': '1.04'}
+
+
 @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class DomesticFreightRateTests(TestCase):
 
@@ -44,12 +48,10 @@ class DomesticFreightRateTests(TestCase):
     def payload(self, **over):
         data = {
             'origin': self.origin.pk, 'destination': self.dest.pk, 'distance': '36',
-            'base_fuel_price': '32.00', 'base_fuel_price_max': '32.99',
-            'fuel_step_price': '0.50', 'fuel_step_amount': '0.52',
-            'note': 'น้ำมัน + 0.50 บาท ปรับ + 0.52',
+            'note': 'หมายเหตุเส้นทาง',
             'teams': [
-                {'team_id': 'ROI', 'weight_band': 'all', 'freight_rate': '81.48', 'loss_percent': '0'},
-                {'team_id': None, 'weight_band': 'under_31', 'freight_rate': '76.48', 'loss_percent': '1.5'},
+                {'team_id': 'ROI', 'weight_band': 'all', 'freight_rate': '81.48', 'loss_percent': '0', **FUEL},
+                {'team_id': None, 'weight_band': 'under_31', 'freight_rate': '76.48', 'loss_percent': '1.5', **FUEL},
                 {'team_id': None, 'weight_band': 'from_31', 'freight_rate': '71.48', 'loss_percent': '1.5'},
             ],
         }
@@ -70,12 +72,21 @@ class DomesticFreightRateTests(TestCase):
         # ปลายทางเลือกได้เฉพาะแถวที่ติ๊กในประเทศ
         self.assertNotContains(res, 'ท่าเรือส่งออก')
 
+    def test_sidebar_menu_needs_transport_tab(self):
+        url = reverse('viewDomesticFreightRate')
+        menu = 'href="%s" class="submenu-link"' % url
+        self.assertNotContains(self.client.get(url), menu)
+        UserProfile.objects.get(user=self.user).visible.add(BaseVisible.objects.create(name='Transport', step=1))
+        self.assertContains(self.client.get(url), menu)
+
     def test_list_shows_route_and_teams(self):
         self.assertEqual(self.create().status_code, 201)
         res = self.client.get(reverse('viewDomesticFreightRate'))
         self.assertContains(res, 'ปูนซิเมนต์ไทย/พุนพิน')
         self.assertContains(res, '81.48')
-        self.assertContains(res, 'ทุก 0.50 บาท/ลิตร ปรับ 0.52 บาท/ตัน')
+        self.assertContains(res, '32.00 - 32.99')
+        self.assertContains(res, '1.04')
+        self.assertContains(res, 'ไม่ปรับตามน้ำมัน')     # แถว 31 ตันขึ้นไปไม่ได้กรอกน้ำมัน
 
     # ---------- สร้าง ----------
 
@@ -89,6 +100,8 @@ class DomesticFreightRateTests(TestCase):
         self.assertEqual(rate.teams.count(), 3)
         team = rate.teams.get(team=None, weight_band='under_31')
         self.assertEqual((team.freight_rate, team.loss_percent), (D('76.48'), D('1.5')))
+        self.assertEqual((team.contract_base_fuel_price, team.contract_base_fuel_price_max,
+                          team.fuel_freight_adjustment), (D('32.00'), D('32.99'), D('1.04')))
         # ตารางของส่งออกไม่ถูกแตะ
         self.assertFalse(InternationalFreightRate.objects.exists())
 
@@ -123,13 +136,47 @@ class DomesticFreightRateTests(TestCase):
         ])
         self.assertEqual(res.status_code, 400)
 
-    def test_fuel_step_needs_both_values(self):
-        self.assertEqual(self.create(fuel_step_amount=None).status_code, 400)
-        res = self.create(fuel_step_price=None, fuel_step_amount=None)
+    def create_one_team(self, **fuel):
+        return self.create(teams=[{'team_id': None, 'weight_band': 'all', 'freight_rate': '70', **fuel}])
+
+    def test_fuel_base_and_adjustment_go_together(self):
+        res = self.create_one_team(fuel_freight_adjustment='1.04')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('fuel_freight_adjustment', res.json()['teams'][0])
+        self.assertEqual(self.create_one_team(contract_base_fuel_price='32').status_code, 400)
+        self.assertEqual(self.create_one_team().status_code, 201)
+
+    def test_fuel_base_single_price_allowed(self):
+        res = self.create_one_team(contract_base_fuel_price='32', fuel_freight_adjustment='0')
         self.assertEqual(res.status_code, 201, res.content)
+        team = DomesticFreightRateTeam.objects.get()
+        self.assertEqual(team.contractFuelLabel(), '32.00')
 
     def test_fuel_base_upper_below_lower_rejected(self):
-        self.assertEqual(self.create(base_fuel_price_max='31.00').status_code, 400)
+        res = self.create_one_team(contract_base_fuel_price='32', contract_base_fuel_price_max='31',
+                                   fuel_freight_adjustment='1')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('contract_base_fuel_price_max', res.json()['teams'][0])
+
+    def test_fuel_upper_without_lower_rejected(self):
+        res = self.create_one_team(contract_base_fuel_price_max='33', fuel_freight_adjustment='1')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('contract_base_fuel_price', res.json()['teams'][0])
+
+    def test_fuel_adjustment_cannot_be_negative(self):
+        res = self.create_one_team(contract_base_fuel_price='32', fuel_freight_adjustment='-1')
+        self.assertEqual(res.status_code, 400)
+
+    def test_fuel_rule_can_differ_between_teams(self):
+        res = self.create(teams=[
+            {'team_id': 'ROI', 'weight_band': 'all', 'freight_rate': '70',
+             'contract_base_fuel_price': '30', 'fuel_freight_adjustment': '1.50'},
+            {'team_id': None, 'weight_band': 'all', 'freight_rate': '65',
+             'contract_base_fuel_price': '32', 'fuel_freight_adjustment': '1.72'},
+        ])
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(DomesticFreightRateTeam.objects.get(team_id='ROI').fuel_freight_adjustment, D('1.50'))
+        self.assertEqual(DomesticFreightRateTeam.objects.get(team=None).fuel_freight_adjustment, D('1.72'))
 
     def test_loss_percent_out_of_range_rejected(self):
         res = self.create(teams=[{'team_id': None, 'weight_band': 'all', 'freight_rate': '70',
@@ -174,7 +221,11 @@ class DomesticFreightRateTests(TestCase):
         self.assertEqual(header[4:7], ['ร้อยเกาะ', 'ทุกทีม\nน้ำหนัก 0 - 30.99 ตัน', 'ทุกทีม\nน้ำหนัก 31 ตันขึ้นไป'])
         row = [c.value for c in ws[4]]
         self.assertEqual(row[1:7], ['ศิลาชัย', 'ปูนซิเมนต์ไทย/พุนพิน', 36.0, 81.48, 76.48, 71.48])
-        self.assertEqual(wb['รายละเอียดทีม'].max_row, 4)      # หัว + 3 แถวทีม
+        self.assertNotIn('ขั้นปรับน้ำมัน', header)
+        detail = wb['รายละเอียดทีม']
+        self.assertEqual(detail.max_row, 4)      # หัว + 3 แถวทีม
+        self.assertEqual([c.value for c in detail[2]][4:8], [81.48, '32.00 - 32.99', 1.04, 0])
+        self.assertEqual([c.value for c in detail[4]][4:7], [71.48, None, None])  # แถวที่ไม่ปรับตามน้ำมัน
 
     def test_excel_export_neutralises_formula_text(self):
         # หมายเหตุที่ขึ้นต้นด้วย = ต้องลงไฟล์เป็นข้อความ ไม่ใช่สูตรที่ Excel จะรันตอนเปิดไฟล์
@@ -185,4 +236,4 @@ class DomesticFreightRateTests(TestCase):
         note = wb['อัตราค่าขนส่ง'].cell(row=4, column=wb['อัตราค่าขนส่ง'].max_column)
         self.assertEqual(note.data_type, 's')
         self.assertTrue(note.value.startswith("'="))
-        self.assertEqual(wb['รายละเอียดทีม'].cell(row=2, column=7).value, "'+1+1")
+        self.assertEqual(wb['รายละเอียดทีม'].cell(row=2, column=9).value, "'+1+1")

@@ -2006,7 +2006,7 @@ class ExpressFuelBillSync(models.Model):
 # ======================== ค่าขนส่งในประเทศ (issue #118) ========================
 # ตารางแยกจากส่งออก แต่ใช้หลักเดียวกับ InternationalFreightRate / InternationalFreightRateTeam
 # (1 แถว = 1 ใบ = 1 เวอร์ชันของเส้นทาง · ทีมเก็บในตารางลูก · ต้นทาง/ปลายทางชี้ตาราง map)
-# แยกตารางเพราะฟิลด์ต่างกันมาก (ช่วงน้ำหนัก 2 ช่วง, % สูญเสีย, ขั้นปรับน้ำมัน)
+# แยกตารางเพราะฟิลด์ต่างกัน (ช่วงน้ำหนัก 2 ช่วง, % สูญเสีย)
 # และไม่อยากให้ใบในประเทศมีโอกาสหลุดเข้ายอดของหน้าส่งออก
 
 
@@ -2037,18 +2037,6 @@ class DomesticFreightRate(models.Model):
                                     related_name='domestic_rate_destinations', verbose_name="ปลายทาง")
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
                                    verbose_name="ระยะทาง (กม.)")
-    # ราคาน้ำมันฐานเป็นช่วง เช่น 32.00 - 32.99 น้ำมันอยู่ในช่วงนี้ = ไม่ปรับค่าขนส่ง
-    base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
-                                          verbose_name="ราคาน้ำมันฐาน (ขอบล่าง)")
-    base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
-                                              verbose_name="ราคาน้ำมันฐาน (ขอบบน)")
-    # ขั้นปรับน้ำมันของเส้นทาง เช่น "น้ำมันขึ้นลงทุก 0.50 บาท/ลิตร ปรับ 0.86 บาท/ตัน"
-    # ต่างจากส่งออกที่คิด "ต่อน้ำมัน 1 บาท" และเก็บรายทีม ในไฟล์ในประเทศเป็นค่าเดียวทั้งเส้นทาง
-    # ว่างทั้งคู่ = เส้นทางนี้ไม่ปรับตามน้ำมัน
-    fuel_step_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
-                                          verbose_name="ขั้นน้ำมัน (ทุกกี่บาท/ลิตร)")
-    fuel_step_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
-                                           verbose_name="ปรับต่อ 1 ขั้น (บาท/ตัน)")
     note = models.CharField(max_length=255, null=True, blank=True, verbose_name="หมายเหตุ")
 
     # --- การทำเวอร์ชัน (หลักเดียวกับ InternationalFreightRate) ---
@@ -2089,18 +2077,6 @@ class DomesticFreightRate(models.Model):
             by_root[rate.root_id] = rate
         return list(by_root.values())
 
-    def baseFuelPriceLabel(self):
-        if self.base_fuel_price is None:
-            return None
-        if self.base_fuel_price_max is None:
-            return '%s' % self.base_fuel_price
-        return '%s - %s' % (self.base_fuel_price, self.base_fuel_price_max)
-
-    def fuelStepLabel(self):
-        if self.fuel_step_price is None or self.fuel_step_amount is None:
-            return None
-        return 'ทุก %s บาท/ลิตร ปรับ %s บาท/ตัน' % (self.fuel_step_price, self.fuel_step_amount)
-
     def __str__(self):
         return '%s - %s (v%s)' % (self.origin.name if self.origin_id else '-',
                                   self.destination.name if self.destination_id else '-', self.version)
@@ -2122,6 +2098,16 @@ class DomesticFreightRateTeam(models.Model):
     weight_band = models.CharField(max_length=10, choices=DomesticFreightWeightBand.choices,
                                    default=DomesticFreightWeightBand.ALL, verbose_name="ช่วงน้ำหนัก")
     freight_rate = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="อัตราค่าขนส่ง (บาท/ตัน)")
+    # เงื่อนไขน้ำมันรายแถว ชื่อและความหมายเดียวกับ InternationalFreightRateTeam
+    # สูตรเดียวกับส่งออก (views._exportDocumentTripRate) :
+    #   ราคาน้ำมันอยู่ในช่วง = ไม่ปรับ / หลุดขอบไหน = อัตรา + (ราคา - ขอบนั้น) x ปรับต่อน้ำมัน 1 บาท
+    # ขอบบนว่าง = ราคาฐานค่าเดียว · ฐานและค่าปรับว่างทั้งคู่ = แถวนี้ไม่ปรับตามน้ำมัน
+    contract_base_fuel_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                   verbose_name="ราคาน้ำมันฐาน ขอบล่าง (บาท/ลิตร)")
+    contract_base_fuel_price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                       verbose_name="ราคาน้ำมันฐาน ขอบบน (บาท/ลิตร)")
+    fuel_freight_adjustment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                  verbose_name="ปรับค่าขนส่งตามน้ำมัน (บาท/ตัน ต่อน้ำมัน 1 บาท/ลิตร)")
     # ค่าตั้งต้น ตอนทำรายงานรายเดือนจะให้แก้ทับได้ (ยังไม่ได้ทำหน้ารายงาน)
     loss_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
                                        verbose_name="หักค่าสูญเสีย (%)")
@@ -2136,3 +2122,11 @@ class DomesticFreightRateTeam(models.Model):
     def __str__(self):
         team_name = self.team.car_team_name if self.team else 'ทุกทีม'
         return '%s - %s' % (team_name, self.get_weight_band_display())
+
+    def contractFuelLabel(self):
+        """น้ำมันฐานสำหรับแสดงผล เช่น "32.00 - 32.99" หรือ "32.00" ถ้าเป็นราคาเดียว"""
+        if self.contract_base_fuel_price is None:
+            return None
+        if self.contract_base_fuel_price_max in (None, self.contract_base_fuel_price):
+            return '%s' % self.contract_base_fuel_price
+        return '%s - %s' % (self.contract_base_fuel_price, self.contract_base_fuel_price_max)

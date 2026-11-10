@@ -3,7 +3,7 @@
 
 {% block css %}
 <style>
-  .dfr-team-table { min-width: 860px; }
+  .dfr-team-table { min-width: 1260px; }
 </style>
 {% endblock %}
 
@@ -65,26 +65,6 @@
               <input type="text" inputmode="decimal" class="form-control" id="dfr_distance" placeholder="เช่น 36" />
             </div>
             <div class="form-group col-md-4">
-              <label for="dfr_base_fuel_price">ราคาน้ำมันฐาน (บาท/ลิตร)</label>
-              <div class="input-group">
-                <input type="text" inputmode="decimal" class="form-control" id="dfr_base_fuel_price" placeholder="32.00" />
-                <span class="input-group-text">ถึง</span>
-                <input type="text" inputmode="decimal" class="form-control" id="dfr_base_fuel_price_max" placeholder="32.99" />
-              </div>
-              <small class="text-muted">น้ำมันอยู่ในช่วงนี้ = ไม่ปรับค่าขนส่ง</small>
-            </div>
-            <div class="form-group col-md-4">
-              <label for="dfr_fuel_step_price">ขั้นปรับน้ำมัน</label>
-              <div class="input-group">
-                <span class="input-group-text">ทุก</span>
-                <input type="text" inputmode="decimal" class="form-control" id="dfr_fuel_step_price" placeholder="0.50" />
-                <span class="input-group-text">บาท/ลิตร ปรับ</span>
-                <input type="text" inputmode="decimal" class="form-control" id="dfr_fuel_step_amount" placeholder="0.86" />
-                <span class="input-group-text">บาท/ตัน</span>
-              </div>
-              <small class="text-muted">เว้นว่างทั้งคู่ = เส้นทางนี้ไม่ปรับตามน้ำมัน</small>
-            </div>
-            <div class="form-group col-md-4">
               <label for="dfr_effective_date">วันที่เริ่มใช้</label>
               <input type="date" class="form-control" id="dfr_effective_date" />
               <small class="text-muted">เว้นว่าง = ใช้ได้ตั้งแต่เดือนแรกสุดที่มีข้อมูล</small>
@@ -110,6 +90,8 @@
                   <th style="min-width: 220px;">ทีม <span class="text-danger">*</span></th>
                   <th style="min-width: 190px;">ช่วงน้ำหนัก <span class="text-danger">*</span></th>
                   <th style="min-width: 140px;">อัตราค่าขนส่ง<br /><small class="fw-normal">บาท/ตัน</small> <span class="text-danger">*</span></th>
+                  <th style="min-width: 260px;">ราคาน้ำมันฐาน<br /><small class="fw-normal">บาท/ลิตร</small></th>
+                  <th style="min-width: 140px;">ปรับต่อน้ำมัน 1 บาท<br /><small class="fw-normal">บาท/ตัน</small></th>
                   <th style="min-width: 120px;">หักค่าสูญเสีย<br /><small class="fw-normal">%</small></th>
                   <th style="min-width: 160px;">หมายเหตุ</th>
                   <th style="width: 70px;">ลบ</th>
@@ -120,7 +102,9 @@
           </div>
           <p class="text-muted small mb-0">
             ทีม "ทุกทีม" = ราคากลางของรถร่วม ทีมที่คิดต่างให้เพิ่มแถวที่ระบุทีมแยก ·
-            ทีมเดียวกันเลือก "ทุกน้ำหนัก" แถวเดียว หรือแยก 2 แถว (0 - 30.99 / 31 ขึ้นไป)
+            ทีมเดียวกันเลือก "ทุกน้ำหนัก" แถวเดียว หรือแยก 2 แถว (0 - 30.99 / 31 ขึ้นไป)<br />
+            น้ำมันอยู่ในช่วงฐาน = ไม่ปรับ หลุดขอบไหนคิดส่วนต่างจากขอบนั้น ·
+            เว้นว่างทั้งราคาฐานและค่าปรับ = แถวนี้ไม่ปรับตามน้ำมัน
           </p>
         </div>
       </div>
@@ -148,8 +132,8 @@
   const ALL_TEAMS = '__all__';
   const LABELS = {
     origin: 'ต้นทาง', destination: 'ปลายทาง', distance: 'ระยะทาง',
-    base_fuel_price: 'ราคาน้ำมันฐาน (ขอบล่าง)', base_fuel_price_max: 'ราคาน้ำมันฐาน (ขอบบน)',
-    fuel_step_price: 'ขั้นน้ำมัน', fuel_step_amount: 'ปรับต่อขั้น', effective_date: 'วันที่เริ่มใช้',
+    contract_base_fuel_price: 'ราคาน้ำมันฐาน (ขอบล่าง)', contract_base_fuel_price_max: 'ราคาน้ำมันฐาน (ขอบบน)',
+    fuel_freight_adjustment: 'ปรับต่อน้ำมัน 1 บาท', effective_date: 'วันที่เริ่มใช้',
     note: 'หมายเหตุ', teams: 'ทีม', team_id: 'ทีม', weight_band: 'ช่วงน้ำหนัก',
     freight_rate: 'อัตราค่าขนส่ง', loss_percent: 'หักค่าสูญเสีย', errors: '',
   };
@@ -189,6 +173,12 @@
       '<td><select class="form-select dfr-team">' + teamOptionsHtml() + '</select></td>' +
       '<td><select class="form-select dfr-band">' + bandOptionsHtml() + '</select></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control dfr-rate" /></td>' +
+      '<td><div class="input-group">' +
+        '<input type="text" inputmode="decimal" class="form-control dfr-fuel-low" placeholder="32.00" />' +
+        '<span class="input-group-text">ถึง</span>' +
+        '<input type="text" inputmode="decimal" class="form-control dfr-fuel-high" placeholder="32.99" />' +
+      '</div></td>' +
+      '<td><input type="text" inputmode="decimal" class="form-control dfr-fuel-adjust" placeholder="1.72" /></td>' +
       '<td><input type="text" inputmode="decimal" class="form-control dfr-loss" value="0" /></td>' +
       '<td><input type="text" class="form-control dfr-team-note" maxlength="255" /></td>' +
       '<td class="text-center"><button type="button" class="btn btn-danger btn-sm dfr-remove" title="ลบแถวนี้">' +
@@ -204,6 +194,9 @@
         team_id: team === ALL_TEAMS ? null : team,
         weight_band: tr.querySelector('.dfr-band').value,
         freight_rate: orNull(tr.querySelector('.dfr-rate').value),
+        contract_base_fuel_price: orNull(tr.querySelector('.dfr-fuel-low').value),
+        contract_base_fuel_price_max: orNull(tr.querySelector('.dfr-fuel-high').value),
+        fuel_freight_adjustment: orNull(tr.querySelector('.dfr-fuel-adjust').value),
         loss_percent: orNull(tr.querySelector('.dfr-loss').value) || '0',
         note: orNull(tr.querySelector('.dfr-team-note').value),
       };
@@ -256,10 +249,6 @@
       origin: orNull(document.getElementById('dfr_origin').value),
       destination: orNull(document.getElementById('dfr_destination').value),
       distance: orNull(document.getElementById('dfr_distance').value),
-      base_fuel_price: orNull(document.getElementById('dfr_base_fuel_price').value),
-      base_fuel_price_max: orNull(document.getElementById('dfr_base_fuel_price_max').value),
-      fuel_step_price: orNull(document.getElementById('dfr_fuel_step_price').value),
-      fuel_step_amount: orNull(document.getElementById('dfr_fuel_step_amount').value),
       effective_date: orNull(document.getElementById('dfr_effective_date').value),
       note: orNull(document.getElementById('dfr_note').value),
       teams: collectTeams(),

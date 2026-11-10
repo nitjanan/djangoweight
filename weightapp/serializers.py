@@ -704,8 +704,27 @@ class DomesticFreightRateTeamSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'freight_rate': {'required': True, 'allow_null': False, 'min_value': 0},
             'loss_percent': {'required': False, 'min_value': 0, 'max_value': Decimal('99.99')},
+            'contract_base_fuel_price': {'min_value': 0},
+            'contract_base_fuel_price_max': {'min_value': 0},
+            'fuel_freight_adjustment': {'min_value': 0},
             'note': {'required': False, 'allow_null': True, 'allow_blank': True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        low = attrs.get('contract_base_fuel_price')
+        high = attrs.get('contract_base_fuel_price_max')
+        adjust = attrs.get('fuel_freight_adjustment')
+        if high is not None and low is None:
+            raise serializers.ValidationError({'contract_base_fuel_price': 'กรอกขอบบนแล้ว ต้องกรอกขอบล่างด้วย'})
+        if low is not None and high is not None and high < low:
+            raise serializers.ValidationError({
+                'contract_base_fuel_price_max': 'ขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s)' % (high, low)})
+        # กรอกครบหรือเว้นทั้งคู่ ถ้าขาดข้างเดียวสูตรจะไม่ปรับให้เงียบ ๆ แล้วยอดเงินผิดโดยไม่มีใครรู้
+        if (low is None) != (adjust is None):
+            raise serializers.ValidationError({
+                'fuel_freight_adjustment': 'ราคาน้ำมันฐานกับค่าปรับต่อน้ำมัน 1 บาท ต้องกรอกทั้งคู่ หรือเว้นว่างทั้งคู่'})
+        return attrs
 
 
 class DomesticFreightRateSerializer(serializers.ModelSerializer):
@@ -761,20 +780,6 @@ class DomesticFreightRateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        low, high = attrs.get('base_fuel_price'), attrs.get('base_fuel_price_max')
-        if low is not None and high is not None and high < low:
-            raise serializers.ValidationError({
-                'base_fuel_price_max': 'ราคาน้ำมันฐานขอบบน (%s) ต้องไม่ต่ำกว่าขอบล่าง (%s)' % (high, low)})
-        if high is not None and low is None:
-            raise serializers.ValidationError({'base_fuel_price': 'กรอกขอบบนแล้ว ต้องกรอกขอบล่างด้วย'})
-        step_price, step_amount = attrs.get('fuel_step_price'), attrs.get('fuel_step_amount')
-        if (step_price is None) != (step_amount is None):
-            raise serializers.ValidationError({
-                'fuel_step_price': 'ขั้นปรับน้ำมันต้องกรอกทั้ง "ทุกกี่บาท/ลิตร" และ "ปรับกี่บาท/ตัน" หรือเว้นว่างทั้งคู่'})
-        if step_price is not None and step_price <= 0:
-            raise serializers.ValidationError({'fuel_step_price': 'ขั้นน้ำมันต้องมากกว่า 0'})
-        if step_price is not None and low is None:
-            raise serializers.ValidationError({'base_fuel_price': 'มีขั้นปรับน้ำมันแล้ว ต้องกรอกราคาน้ำมันฐานด้วย'})
         # ต้นทาง + ปลายทางเดียวกันมีได้เส้นทางเดียว ปรับราคาให้ออกเวอร์ชันใหม่ (หน้าแก้ไขรอบหน้า)
         if self.instance is None:
             origin, destination = attrs.get('origin'), attrs.get('destination')

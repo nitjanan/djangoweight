@@ -203,3 +203,52 @@ class NoExactDuplicateNameTests(TestCase):
             form_class = getattr(base_forms, model_key + 'Form')
             self.assertTrue(issubclass(form_class, base_forms.NoExactDuplicateNameMixin), model_key)
             self.assertEqual(form_class.similar_model_key, model_key)
+
+
+class SoundAlikeThaiTests(TestCase):
+    """สะกดต่างแต่เสียงเดียวกัน (ส/ศ/ษ, ท/ธ ...) ต้องถูกเสนอ แต่ไม่นับเป็นชื่อตรงกัน (ไม่กันบันทึก)"""
+
+    def setUp(self):
+        self.company = BaseCompany.objects.create(code='SLC', name='ศิลาชัย', step=1)
+        BaseDriver.objects.create(driver_id='D1', driver_name='บริษัท ศิลาชัย จำกัด', company=self.company)
+        BaseDriver.objects.create(driver_id='D2', driver_name='ธนพล', company=self.company)
+
+    def test_s_variants_are_suggested_but_not_exact(self):
+        for query in ('สิลาชัย', 'ษิลาชัย', 'บจก. ซิลาชัย'):
+            results = findSimilarBase('BaseDriver', query)
+            self.assertEqual([r['id'] for r in results][:1], ['D1'], query)
+            self.assertFalse(results[0]['exact'], query)
+            self.assertTrue(results[0]['sound_alike'], query)
+            self.assertGreaterEqual(results[0]['score'], 0.9, query)
+
+    def test_th_variant(self):
+        results = findSimilarBase('BaseDriver', 'ทนพล')
+        self.assertEqual(results[0]['id'], 'D2')
+        self.assertTrue(results[0]['sound_alike'])
+
+    def test_exact_spelling_stays_exact(self):
+        results = findSimilarBase('BaseDriver', 'ศิลาชัย')
+        self.assertTrue(results[0]['exact'])
+        self.assertFalse(results[0]['sound_alike'])
+
+    def test_sound_alike_does_not_block_save(self):
+        SetPatternCode.objects.create(m_name='BaseDriver', pattern='D', end=1)
+        form = base_forms.BaseDriverForm({'driver_id': '9D', 'driver_name': 'สิลาชัย', 'company': self.company.pk})
+        form.is_valid()
+        self.assertNotIn('driver_name', form.errors)
+
+    def test_final_consonant_by_sound(self):
+        """ตัวสะกดท้ายคำออกเสียงตามมาตรา : สต็อก / สต็อค (แม่กก), ก๊าซ / ก๊าส (แม่กด)"""
+        BaseDriver.objects.create(driver_id='D3', driver_name='กองสต็อก', company=self.company)
+        BaseDriver.objects.create(driver_id='D4', driver_name='หจก. ก๊าซไทย', company=self.company)
+        for query, expected in (('กองสต็อค', 'D3'), ('กองสตอค', 'D3'), ('ก๊าส ไทย', 'D4')):
+            results = findSimilarBase('BaseDriver', query)
+            self.assertEqual(results[0]['id'], expected, query)
+            self.assertTrue(results[0]['sound_alike'], query)
+            self.assertFalse(results[0]['exact'], query)
+
+    def test_initial_k_kh_are_still_different(self):
+        """ต้นคำ ก / ค เป็นคนละเสียง (กาง / คาง) ไม่นับว่าเสียงเดียวกัน"""
+        BaseDriver.objects.create(driver_id='D5', driver_name='กาง', company=self.company)
+        results = findSimilarBase('BaseDriver', 'คาง')
+        self.assertFalse(any(r['sound_alike'] and r['id'] == 'D5' and r['score'] >= 0.95 for r in results))

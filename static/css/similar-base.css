@@ -100,6 +100,8 @@
   white-space: nowrap;
 }
 .sb-tag-exact { background: rgba(var(--bs-danger-rgb), .15); color: rgb(var(--bs-danger-rgb)); }
+.sb-tag-alike { background: rgba(var(--bs-warning-rgb), .18); color: rgb(161, 98, 7); }
+[data-bs-theme="dark"] .sb-tag-alike { color: rgb(253, 224, 71); }
 .sb-tag-off { background: var(--bs-secondary-bg); color: var(--bs-secondary-color); }
 
 .sb-score {

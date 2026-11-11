@@ -307,7 +307,7 @@
                  ส่งต่อทั้ง query string ไม่ไล่ระบุทีละตัว เพิ่มตัวกรองใหม่ทีหลังจะได้ไม่ลืมแก้ตรงนี้ -->
             <a class="btn btn-success {% if over_limit %}disabled{% endif %}" data-busy-download="กำลังสร้างไฟล์รายงาน..."
                href="{% url 'exportExcelExportDocument' %}?{{ request.GET.urlencode }}">
-              <i class="fa-solid fa-file-excel"></i> Export Excel
+              <i class="fa-solid fa-file-excel"></i> ไฟล์บัญชี (สรุปจ่าย / ปะหน้า)
             </a>
           </div>
         </form>
@@ -335,24 +335,97 @@
     </div>
     {% endif %}
 
-    <!-- แก้ไขข้อมูลผ่าน Excel : แยกจากปุ่ม Export รายงานด้านบนคนละไฟล์คนละเรื่อง -->
+    {% comment %}
+    issue #136 : ขั้นตอนของหน้าเหมือง เรียงตามงานจริง
+      ① โหลดไฟล์กรอก นน.ปลายทาง (เลือกเฉพาะเที่ยวที่ขาดได้)  ② อัปโหลด แล้วยืนยัน  ③ ออกใบสรุปหน้าเหมืองส่งบัญชี
+    ตารางเส้นทางด้านบนนับสดจากฐานข้อมูล ยืนยันการอัปโหลดแล้วตัวเลข "ขาด" ลดลงเอง
+    ไฟล์บัญชี (สรุปจ่าย / ปะหน้า) คือปุ่มเขียวข้างตัวกรอง เป็นขั้นต่อจากนี้ของฝ่ายบัญชี
+    {% endcomment %}
     <div class="card">
       <div class="card-header">
-        <h5 class="card-title mb-0">แก้ไขข้อมูลผ่าน Excel</h5>
+        <h5 class="card-title mb-0">หน้าเหมือง : กรอกน้ำหนักปลายทาง แล้วออกใบสรุป</h5>
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
-          โหลดไฟล์ไปแก้ → อัปกลับ → ระบบให้ดูก่อนว่าจะเปลี่ยนอะไร → กดยืนยันถึงจะบันทึกลงฐานข้อมูล |
-          แก้ได้ช่องเดียว <strong>นน.ปลายทาง</strong> | คนละไฟล์กับปุ่ม Export รายงานด้านบน
+          ① โหลดไฟล์กรอก นน.ปลายทาง → ② อัปโหลด แล้วกดยืนยัน → ③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี
         </p>
       </div>
       <div class="card-body">
+        {% if route_summary %}
+        <div class="trip-scroll mb-3" style="max-height: 45vh;">
+          <table class="table table-sm table-hover trip-table mb-0">
+            <thead>
+              <tr>
+                <th>ต้นทาง</th>
+                <th>ปลายทาง</th>
+                <th class="trip-num">เที่ยว</th>
+                <th class="trip-num">ขาด นน.ปลายทาง</th>
+                <th class="trip-num">ขาด นน.ต้นทาง</th>
+                <th class="trip-num">ไม่ระบุทีม</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in route_summary %}
+              <tr class="{% if e.key == selected_route %}table-primary{% endif %}">
+                <td>{{ e.origin }}</td>
+                <td>{{ e.destination }}</td>
+                <td class="trip-num"><a href="?{{ route_query }}&amp;route={{ e.key }}#trips">{{ e.trips|intcomma }}</a></td>
+                <td class="trip-num">
+                  {% if e.no_dest_weight %}
+                  <a class="text-danger fw-bold" href="?{{ route_query }}&amp;route={{ e.key }}&amp;problem=no_dest_weight#trips">{{ e.no_dest_weight|intcomma }}</a>
+                  {% else %}<span class="text-success">ครบ</span>{% endif %}
+                </td>
+                <td class="trip-num">
+                  {% if e.no_origin_weight %}
+                  <a class="text-danger" href="?{{ route_query }}&amp;route={{ e.key }}&amp;problem=no_origin_weight#trips">{{ e.no_origin_weight|intcomma }}</a>
+                  {% else %}-{% endif %}
+                </td>
+                <td class="trip-num">
+                  {% if e.no_team %}
+                  <a class="text-danger" href="?{{ route_query }}&amp;route={{ e.key }}&amp;problem=no_team#trips">{{ e.no_team|intcomma }}</a>
+                  {% else %}-{% endif %}
+                </td>
+                <td class="text-nowrap">
+                  {% if e.no_dest_weight %}
+                  <a class="btn btn-sm btn-outline-primary py-0" data-busy-download="กำลังสร้างไฟล์..."
+                     title="โหลดไฟล์กรอก นน.ปลายทาง เฉพาะเที่ยวที่ขาดของเส้นทางนี้"
+                     href="{% url 'exportExcelTripEdit' %}?{{ route_query }}&amp;route={{ e.key }}&amp;missing_only=1">
+                    <i class="fa-solid fa-download"></i> ไฟล์กรอก
+                  </a>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="fw-bold">
+                <td colspan="2">รวม</td>
+                <td class="trip-num">{{ route_totals.trips|intcomma }}</td>
+                <td class="trip-num {% if route_totals.no_dest_weight %}text-danger{% endif %}">{{ route_totals.no_dest_weight|intcomma }}</td>
+                <td class="trip-num">{{ route_totals.no_origin_weight|intcomma }}</td>
+                <td class="trip-num">{{ route_totals.no_team|intcomma }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {% endif %}
+
         <div class="row gy-2 align-items-end">
           <div class="col-md-5">
-            <a class="btn btn-outline-primary" data-busy-download="กำลังสร้างไฟล์..."
-               href="{% url 'exportExcelTripEdit' %}?{{ request.GET.urlencode }}">
-              <i class="fa-solid fa-download"></i> Export ข้อมูลจากตาชั่ง
-            </a>
+            <div class="small text-muted mb-1">① โหลดไฟล์กรอก นน.ปลายทาง</div>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-primary {% if not route_totals.no_dest_weight %}disabled{% endif %}" data-busy-download="กำลังสร้างไฟล์..."
+                 href="{% url 'exportExcelTripEdit' %}?{{ route_query }}&amp;missing_only=1">
+                <i class="fa-solid fa-download"></i> เฉพาะเที่ยวที่ขาด ({{ route_totals.no_dest_weight|default:0|intcomma }})
+              </a>
+              <a class="btn btn-outline-primary" data-busy-download="กำลังสร้างไฟล์..."
+                 href="{% url 'exportExcelTripEdit' %}?{{ route_query }}">
+                ทุกเที่ยว
+              </a>
+            </div>
           </div>
           <div class="col-md-7">
+            <div class="small text-muted mb-1">② อัปโหลดไฟล์ที่กรอกแล้ว (ระบบให้ดูก่อน กดยืนยันถึงจะบันทึก)</div>
             {% comment %}
             data-upload-progress : ให้ js ยิงด้วย XMLHttpRequest แทนการ submit ตรง ๆ
             จะได้อ่าน % ของการอัปโหลดจริงจาก xhr.upload ซึ่งฟอร์มธรรมดาทำไม่ได้
@@ -434,6 +507,18 @@
         </div>
         {% endif %}
         {% endif %}
+
+        <hr>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="small text-muted w-100">③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี (ต่อเหมือง : หนังสือสรุปยอด · ต่อเส้นทาง : รายเที่ยว + ใบปะหน้า)</div>
+          <a class="btn btn-success" data-busy-download="กำลังทำใบสรุปหน้าเหมือง..."
+             href="{% url 'exportExcelMineSummary' %}?{{ route_query }}">
+            <i class="fa-solid fa-file-excel"></i> ใบสรุปหน้าเหมือง
+          </a>
+          {% if route_totals.no_dest_weight %}
+          <span class="text-danger small">ยังขาด นน.ปลายทาง {{ route_totals.no_dest_weight|intcomma }} เที่ยว — ใบสรุปจะเตือนไว้ ยังไม่ควรส่งบัญชี</span>
+          {% endif %}
+        </div>
       </div>
     </div>
 
@@ -480,7 +565,7 @@
             <div class="ifr-issue-body">
               <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ ใช้สำเนาบิลที่ดึงไว้เมื่อ {{ rate_stats.fuel_bill.snapshot_at_th }}</div>
               <div class="ifr-issue-text">
-                ยอดหักค่าน้ำมันของทีมรถร่วม (sheet oil) คิดจากสำเนานี้
+                ราคาน้ำมันเฉลี่ยของทีมที่ใช้คิดค่าขนส่ง และยอดหักค่าน้ำมัน (sheet oil) คิดจากสำเนานี้
                 บิลที่เพิ่มในระบบ Express หลังเวลานั้นจะไม่อยู่ในไฟล์<br />
                 <strong>ถ้าต้องการข้อมูลล่าสุด:</strong> รอให้ต่อ Express ได้ แล้วโหลดไฟล์ใหม่<br />
                 <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
@@ -493,8 +578,8 @@
             <div class="ifr-issue-body">
               <div class="ifr-issue-title">ต่อระบบ Express ไม่ได้ และยังไม่เคยมีสำเนาบิลของเดือนนี้</div>
               <div class="ifr-issue-text">
-                ค่าขนส่งไม่กระทบ (คิดจากราคาน้ำมันรายวันที่กรอกในระบบ)<br />
-                <strong>sheet oil จะว่าง ยอดหักค่าน้ำมันของทีมรถร่วมจะเป็น 0</strong>
+                <strong>ไม่มีราคาน้ำมันเฉลี่ย : เที่ยวที่สัญญาปรับตามน้ำมันจะคิดค่าขนส่งไม่ได้ (อัตราว่าง)
+                และ sheet oil จะว่าง ยอดหักค่าน้ำมันของทีมรถร่วมจะเป็น 0</strong>
                 — อย่าใช้ไฟล์นี้จ่ายเงินจนกว่าจะต่อ Express ได้<br />
                 <span class="badge bg-light text-dark border">{{ rate_stats.fuel_bill.error }}</span>
               </div>
@@ -504,26 +589,26 @@
         {% endif %}
 
         {% comment %}
-          ราคาน้ำมันรายเที่ยว : สัญญาปรับตามน้ำมัน แต่วันที่วิ่งไม่มีราคาทั้งบริษัทต้นทางและปลายทาง
-          อัตราของเที่ยวในไฟล์จะว่าง = ค่าขนส่ง 0 จนกว่าจะกรอกราคา (ในระบบ หรือช่อง N ในไฟล์ก็ได้)
+          ราคาน้ำมันเฉลี่ยของทีม (เงินรวม ÷ ลิตรรวม จากบิล Express ทั้งเดือน) : สัญญาปรับตามน้ำมัน
+          แต่ทีมไม่มีบิลเติมน้ำมันเลยในเดือนนี้ อัตราของเที่ยวในไฟล์จะว่าง
+          จนกว่าจะกรอกลิตร/เงินของทีมนั้นในตารางน้ำมัน (ชีตคำนวณค่าขนส่ง Q-T) หรือพิมพ์สาขาในช่อง M
           อยู่นอกแถบ "คิดเงินได้ครบ / ไม่ครบ" เพราะแถบนั้นดูแค่สัญญากับช่วงน้ำหนัก
         {% endcomment %}
         {% if rate_stats.fuel_missing.trips %}
         <div class="ifr-issue ifr-issue-bad mb-3">
           <div class="ifr-issue-num">{{ rate_stats.fuel_missing.trips|intcomma }} เที่ยว</div>
           <div class="ifr-issue-body">
-            <div class="ifr-issue-title">ยังไม่มีราคาน้ำมันของวันที่วิ่ง — เที่ยวเหล่านี้ยังคิดค่าขนส่งไม่ได้</div>
+            <div class="ifr-issue-title">ทีมไม่มีบิลเติมน้ำมันใน Express เดือนนี้ — เที่ยวเหล่านี้ยังคิดค่าขนส่งไม่ได้</div>
             <div class="ifr-issue-text">
-              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่วันนั้นไม่มีราคาของบริษัทต้นทาง และของบริษัทปลายทางก็ไม่มี
-              ในไฟล์ช่องราคาน้ำมัน (N) จะว่างเป็นสีเหลือง อัตราว่าง ค่าขนส่งเป็น 0<br />
-              <strong>ต้องทำ:</strong>
-              <a href="{% url 'viewInternationalFreightRateFuelPrice' %}?month={{ selected_month }}">ไปกรอกราคาน้ำมันของวันที่ขาด</a>
-              แล้วโหลดไฟล์ใหม่ (หรือพิมพ์ราคาลงช่อง N ในไฟล์ อัตราจะคิดให้ทันที)
+              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่ทีมไม่มีบิลเติมน้ำมันเลย จึงไม่มีราคาน้ำมันเฉลี่ย
+              ในไฟล์ช่องอัตรา (O) จะว่างเป็นสีเหลือง<br />
+              <strong>ต้องทำ:</strong> เช็กรหัสลูกค้าน้ำมันของทีม (oil_customer_id) ว่าตรงกับใน Express
+              หรือกรอกลิตร/เงินของทีมนั้นเองในชีตคำนวณค่าขนส่ง (ตาราง Q-T)
               <ul class="ifr-missing-list">
-                {% for r in rate_stats.fuel_missing.routes %}
+                {% for t in rate_stats.fuel_missing.teams %}
                 <li>
-                  <span class="fw-semibold">{{ r.route }}</span>
-                  <span class="text-muted small">— ขาดราคาวันที่ {{ r.days }} ({{ r.trips|intcomma }} เที่ยว)</span>
+                  <span class="fw-semibold">{{ t.team }}</span>
+                  <span class="text-muted small">— {{ t.trips|intcomma }} เที่ยว</span>
                 </li>
                 {% endfor %}
               </ul>
@@ -795,13 +880,16 @@
     <div class="card" id="trips">
       <div class="card-header">
         <h5 class="card-title mb-0">รายเที่ยว</h5>
-        {% if problem %}
+        {% if problem or selected_route %}
         <div class="alert alert-secondary d-flex flex-wrap align-items-center gap-2 py-2 mt-2 mb-0">
           <span>
-            กำลังดูเฉพาะ: <strong>{{ problem_label }}</strong> ({{ problem_count|intcomma }} เที่ยว)
+            กำลังดูเฉพาะ:
+            {% if route_label %}<strong>{{ route_label }}</strong>{% if problem %} · {% endif %}{% endif %}
+            {% if problem %}<strong>{{ problem_label }}</strong>{% endif %}
+            ({{ problem_count|intcomma }} เที่ยว)
             <span class="small text-muted d-block">ตัวเลขสรุปด้านบนและไฟล์ที่กด Export ยังเป็นข้อมูลทั้งชุดตามตัวกรอง</span>
           </span>
-          <a class="btn btn-sm btn-outline-dark ms-auto" href="?{{ problem_query }}#trips">ดูทั้งหมด</a>
+          <a class="btn btn-sm btn-outline-dark ms-auto" href="?{{ route_query }}#trips">ดูทั้งหมด</a>
         </div>
         {% endif %}
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
@@ -820,7 +908,7 @@
                 <th>ต้นทาง</th>
                 <th>ปลายทาง</th>
                 <th>ชนิดแร่/หิน</th>
-                <th>แบก นน.</th>
+                <th>ช่วงน้ำหนักที่แบก</th>
                 <th>ทีมรถร่วม</th>
                 <th>ทะเบียนรถ</th>
                 <th>เลขที่ชั่ง</th>
@@ -828,7 +916,7 @@
                 <th class="trip-num">นน.ปลายทาง</th>
                 <th class="trip-num">นน.ส่วนต่าง</th>
                 <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
-                <th class="trip-num">ราคาน้ำมันวันที่วิ่ง</th>
+                <th class="trip-num">ราคาน้ำมันเฉลี่ยของทีม</th>
                 <th>weight_id</th>
                 <th>ประเภทการบรรทุก</th>
               </tr>
@@ -836,7 +924,7 @@
                 {# ข้าม G (นามที่จ่าย) เพราะไม่มีที่เก็บใน db เว้นว่างทุกแถว แต่ในไฟล์ยังมีคอลัมน์อยู่ #}
                 <th>-</th><th>-</th>
                 <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
-                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th><th>N</th>
+                <th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th><th>คำนวณ N</th>
                 <th colspan="2">นอกไฟล์ template</th>
               </tr>
             </thead>
@@ -867,11 +955,11 @@
                 <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
-                {# ราคาของบริษัทต้นทาง ณ วันที่วิ่ง ไม่มีใช้ของปลายทาง · ว่างแดง = สัญญาปรับตามน้ำมันแต่ไม่มีราคา #}
+                {# ราคาเฉลี่ยทั้งเดือนของทีม ที่สาขาของบริษัทต้นทาง (ไม่ได้เติมที่นั่น = รวมทุกสาขา) · แดง = สัญญาปรับตามน้ำมันแต่ทีมไม่มีบิล #}
                 {% if r.fuel_missing %}
-                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่วันนี้ไม่มีราคาทั้งบริษัทต้นทางและปลายทาง">ไม่มีราคา</td>
+                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่ทีมนี้ไม่มีบิลเติมน้ำมันใน Express เดือนนี้">ไม่มีราคา</td>
                 {% else %}
-                <td class="trip-num">{{ r.fuel_price|floatformat:2|default:"" }}</td>
+                <td class="trip-num" title="{{ r.fuel_branch }}">{{ r.fuel_price|floatformat:2|default:"" }}</td>
                 {% endif %}
                 <td>{{ r.weight_id }}</td>
                 <td>

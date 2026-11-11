@@ -828,6 +828,230 @@ class ExportDocumentFuelPricePerTripTests(TestCase):
         self.assertEqual(summary['trips'], 0)
 
 
+class ExportDocumentMonthlyFuelPriceTests(TestCase):
+    """ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม = เงินรวม ÷ ลิตรรวม ของบิล Express
+    ใช้ของสาขาที่ตรงกับบริษัทต้นทาง ไม่ได้เติมที่นั่น = รวมทุกสาขาของทีม ไม่มีบิลเลย = ว่าง"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.mine = BaseCompany.objects.create(name='เหมืองทดสอบ', code='TMIN')
+        cls.other = BaseCompany.objects.create(name='สาขาอื่นทดสอบ', code='TOTH')
+        cls.origin = BaseCompanyMapBaseCustomer.objects.create(name='เหมือง', base_company=cls.mine)
+        cls.origin_no_branch = BaseCompanyMapBaseCustomer.objects.create(name='เหมืองไม่มีปั๊ม')
+
+    def lines(self):
+        return [
+            {'team': 'ทีม A', 'branch': 'ปั๊มเหมือง', 'company_id': self.mine.id,
+             'litre': Decimal('100'), 'amount': Decimal('4000')},
+            {'team': 'ทีม A', 'branch': 'ปั๊มเหมือง', 'company_id': self.mine.id,
+             'litre': Decimal('50'), 'amount': Decimal('2100')},
+            {'team': 'ทีม A', 'branch': 'ปั๊มอื่น', 'company_id': self.other.id,
+             'litre': Decimal('100'), 'amount': Decimal('3900')},
+        ]
+
+    def trip(self, origin, team='ทีม A'):
+        return {'origin_map_id': origin.id, 'origin': origin.name, 'destination': 'ท่าเรือ',
+                'team': team, 'stone': 'หิน', 'weight_carried': '0-35'}
+
+    def rateRow(self, origin, team='ทีม A', **extra):
+        row = {'team': team, 'origin': origin.name, 'destination': 'ท่าเรือ', 'weight_carried': '0-35',
+               'stone': 'หิน', 'origin_map_id': origin.id, 'contract_freight_rate': Decimal('100'),
+               'contract_base_fuel_price': Decimal('30'), 'fuel_freight_adjustment': Decimal('1')}
+        row.update(extra)
+        return row
+
+    def test_branch_of_origin_company_first(self):
+        trips = [self.trip(self.origin)]
+        rates = [self.rateRow(self.origin)]
+        views._exportDocumentAssignMonthlyFuelPrice(trips, rates, self.lines())
+        # 6,100 ÷ 150 = 40.666.. ปัดเป็น 40.67 (ไม่รวมบิลของสาขาอื่น)
+        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']), ('ปั๊มเหมือง', Decimal('40.67')))
+        self.assertEqual((rates[0]['fuel_branch'], rates[0]['fuel_price']), ('ปั๊มเหมือง', Decimal('40.67')))
+        self.assertFalse(trips[0]['fuel_missing'])
+
+    def test_other_origin_uses_all_branches_of_the_team(self):
+        trips = [self.trip(self.origin_no_branch)]
+        views._exportDocumentAssignMonthlyFuelPrice(trips, [self.rateRow(self.origin_no_branch)], self.lines())
+        # 10,000 ÷ 250 = 40.00
+        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']),
+                         (views.EXPORT_DOC_FUEL_ALL_BRANCHES, Decimal('40.00')))
+
+    def test_team_without_bills_is_flagged_only_when_contract_needs_fuel(self):
+        trips = [self.trip(self.origin, team='ทีม B'), self.trip(self.origin, team='ทีม B'),
+                 self.trip(self.origin, team='ทีม C')]
+        rates = [self.rateRow(self.origin, team='ทีม B'),
+                 self.rateRow(self.origin, team='ทีม C', contract_base_fuel_price=None)]
+        summary = views._exportDocumentAssignMonthlyFuelPrice(trips, rates, self.lines())
+        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']), ('', None))
+        self.assertTrue(trips[0]['fuel_missing'])
+        self.assertFalse(trips[2]['fuel_missing'])          # สัญญาไม่ปรับตามน้ำมัน
+        self.assertEqual(summary, {'trips': 2, 'teams': [{'team': 'ทีม B', 'trips': 2}]})
+
+    def test_rate_matches_contract_formula(self):
+        """ราคาเฉลี่ย 40.67 เทียบน้ำมันฐาน 30 ปรับ 1 บาท/ตัน = 100 + 10.67"""
+        trips = [self.trip(self.origin)]
+        rates = [self.rateRow(self.origin)]
+        views._exportDocumentAssignMonthlyFuelPrice(trips, rates, self.lines())
+        self.assertEqual(views._exportDocumentTripRate(trips[0], rates[0]), Decimal('110.67'))
+
+
+class MineSummaryTests(SimpleTestCase):
+    """issue #136 : ขั้นตอนหน้าเหมือง (ตารางเส้นทาง / ไฟล์กรอกเฉพาะที่ขาด / ใบสรุปหน้าเหมือง)"""
+
+    def row(self, wid, origin='เหมือง ก', destination='ท่า X', origin_weight='30', dest_weight='29.5',
+            team='ทีม 1', origin_map_id=1, destination_map_id=10, day=1):
+        ow = Decimal(origin_weight) if origin_weight is not None else None
+        dw = Decimal(dest_weight) if dest_weight is not None else None
+        pay = min(ow, dw) if ow is not None and dw is not None else (ow if ow is not None else dw)
+        return {'weight_id': wid, 'date': date(2026, 10, day), 'origin': origin, 'destination': destination,
+                'origin_map_id': origin_map_id, 'destination_map_id': destination_map_id,
+                'stone': 'หิน', 'team': team or views.EXPORT_DOC_NO_TEAM, 'team_missing': not team,
+                'team_id': 1 if team else None,
+                'car_registration': 'กข-%d' % wid, 'doc_id': '%05d' % wid,
+                'origin_weight': ow, 'dest_weight': dw, 'pay_weight': pay}
+
+    def rows(self):
+        return [
+            self.row(1),
+            self.row(2, dest_weight=None, day=2),
+            self.row(3, destination='ท่า Y', destination_map_id=11, team=None),
+            self.row(4, origin='เหมือง ข', origin_map_id=2, dest_weight=None),
+        ]
+
+    def test_route_summary_counts_missing_weights(self):
+        routes, totals = views._exportDocumentRouteSummary(self.rows())
+        by_key = {r['key']: r for r in routes}
+        self.assertEqual([r['key'] for r in routes], ['1-10', '1-11', '2-10'])
+        self.assertEqual((by_key['1-10']['trips'], by_key['1-10']['no_dest_weight']), (2, 1))
+        self.assertEqual(by_key['1-11']['no_team'], 1)
+        self.assertEqual(totals, {'trips': 4, 'no_dest_weight': 2, 'no_origin_weight': 0, 'no_team': 1})
+
+    def test_pair_sheet_titles_fit_and_keep_the_distinguishing_tail(self):
+        used = set()
+        krabi = views._mineSummaryPairTitle('บจก.ศิลาชัยสุราษฎร์', 'ท่าเรือเซาท์เทิร์นพอร์ท กระบี่', used)
+        surat = views._mineSummaryPairTitle('บจก.ศิลาชัยสุราษฎร์', 'ท่าเรือเซาท์เทิร์นพอร์ท สุราษฎร์', used)
+        branch = views._mineSummaryPairTitle('บจก.ศิลาชัยสุราษฎร์ (สาขา 3)', 'ท่าเรือเซาท์เทิร์นพอร์ท สุราษฎร์', used)
+        cover = views._mineSummaryPairTitle('บจก.โชคพนาไมนิ่ง (กงตาก 3)', 'ท่าเรือเซาท์เทิร์นพอร์ท สุราษฎร์',
+                                            used, prefix='ปะหน้า ')
+        for title in (krabi, surat, branch, cover):
+            self.assertLessEqual(len(title), 31)
+            self.assertFalse(set('[]:*?/\\') & set(title))
+        self.assertTrue(krabi.endswith('กระบี่'))
+        self.assertTrue(surat.endswith('สุราษฎร์'))
+        self.assertIn('(สาขา 3)', branch)
+        self.assertTrue(cover.startswith('ปะหน้า (กงตาก 3)-'))
+        self.assertEqual(len({krabi, surat, branch, cover}), 4)
+
+    def rated(self, rows):
+        for r in rows:
+            r['weight_carried'] = '0-35'
+        return rows
+
+    def test_product_and_group_order_follow_the_field_pivot(self):
+        rows = self.rated([self.row(1), self.row(2, team='ทีม 2'), self.row(3)])
+        rows.append(dict(self.row(4), weight_carried='', stone='หินใหญ่'))
+        self.assertEqual(views._mineSummaryGroups(rows),
+                         [('หิน(0-35)', ['ทีม 1', 'ทีม 2']), ('หินใหญ่', ['ทีม 1'])])
+        self.assertEqual(views._mineSummaryCriteria('a*b?c~"d"'), '"a~*b~?c~~""d"""')
+
+    def test_workbook_follows_the_field_files(self):
+        wb = views._mineSummaryWorkbook(self.rated(self.rows()), 'ตุลาคม 2569')
+        self.assertEqual(wb.sheetnames, [
+            'สารบัญ', 'สรุป เหมือง ก', 'เหมือง ก-ท่า X', 'ปะหน้า เหมือง ก-ท่า X',
+            'เหมือง ก-ท่า Y', 'ปะหน้า เหมือง ก-ท่า Y', 'สรุป เหมือง ข', 'เหมือง ข-ท่า X', 'ปะหน้า เหมือง ข-ท่า X'])
+
+        # รายเที่ยวด้านซ้าย (ตาราง Excel) + ตารางสรุปด้านขวา เป็นสูตรนับจากรายเที่ยว
+        trips = wb['เหมือง ก-ท่า X']
+        self.assertEqual([trips.cell(1, c).value for c in (1, 5, 6, 7, 8, 10)],
+                         ['ลำดับที่ใบชั่ง', 'ชื่อเหมือง', 'ชื่อสินค้า', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.จ่ายค่าบรรทุก'])
+        self.assertEqual([trips.cell(2, c).value for c in (1, 5, 6, 7, 8)],
+                         ['00001', 'เหมือง ก-ท่า X', 'หิน(0-35)', 30.0, 29.5])
+        self.assertEqual(trips['I2'].value, '=IF(OR(G2="",H2=""),"",G2-H2)')
+        self.assertEqual(trips['J3'].value, '=IF(AND(G3="",H3=""),"",MIN(G3,H3))')
+        self.assertIsNone(trips['H3'].value)
+        self.assertEqual(trips['A3'].fill.start_color.rgb[-6:], views.MINE_SUMMARY_MISSING_FILL)
+        self.assertEqual(trips.tables['Trips1'].ref, 'A1:K3')
+        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', trips['M1'].value)
+        self.assertEqual([trips['M%d' % r].value for r in range(3, 8)],
+                         ['เหมือง ก-ท่า X', 'เหมือง ก-ท่า X', 'หิน(0-35)', 'ทีม 1', 'ผลรวมทั้งหมด'])
+        self.assertEqual(trips['N4'].value, '=COUNTA($F$2:$F$3)')
+        self.assertEqual(trips['N6'].value, '=COUNTIFS($F$2:$F$3,"หิน(0-35)",$D$2:$D$3,"ทีม 1")')
+        self.assertEqual(trips['O5'].value, '=SUMIFS($G$2:$G$3,$F$2:$F$3,"หิน(0-35)")')
+
+        # ใบปะหน้า : หนังสือถึง ผอ.ฝ่ายผลิต ตารางสรุปอ้าง sheet รายเที่ยว
+        cover = wb['ปะหน้า เหมือง ก-ท่า X']
+        self.assertTrue(cover['A7'].value.startswith('เรื่อง'))
+        self.assertIn('ประจำเดือน ตุลาคม 2569', cover['A7'].value)
+        self.assertEqual(cover['A8'].value, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ')
+        self.assertEqual(cover['A11'].value, 'เหมือง ก-ท่า X')
+        self.assertEqual(cover['B12'].value, "=COUNTA('เหมือง ก-ท่า X'!$F$2:$F$3)")
+        self.assertEqual(cover['A15'].value, 'ผลรวมทั้งหมด')
+        self.assertIn('จึงเรียนมาเพื่อโปรดทราบ', cover['A16'].value)
+        self.assertEqual(cover['D17'].value, 'ขอแสดงความนับถือ')
+        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', cover['H5'].value)     # นอกพื้นที่พิมพ์ A:F
+
+        # หนังสือสรุปยอดของเหมือง : 1 แถว = ท่าเรือ + สินค้า
+        summary = wb['สรุป เหมือง ก']
+        self.assertEqual(summary['A7'].value, 'ประจำเดือน ตุลาคม 2569')
+        self.assertEqual(summary['A8'].value, 'เหมือง ก')
+        self.assertEqual((summary['A12'].value, summary['A13'].value, summary['A14'].value),
+                         ('ท่า X หิน(0-35)', 'ท่า Y หิน(0-35)', 'รวมขนส่งทั้งหมด'))
+        self.assertEqual(summary['E12'].value,
+                         "=COUNTIFS('เหมือง ก-ท่า X'!$F$2:$F$3,\"หิน(0-35)\",'เหมือง ก-ท่า X'!$H$2:$H$3,\"<>\")")
+        self.assertEqual(summary['G12'].value, '=D12-F12')
+        self.assertEqual(summary['C14'].value, '=SUM(C12:C13)')
+
+        index = wb['สารบัญ']
+        self.assertIn('ยังขาด นน.ปลายทางรวม 2 เที่ยว', index['A2'].value)
+        self.assertEqual(index['G7'].hyperlink.location, "'ปะหน้า เหมือง ข-ท่า X'!A1")
+
+    def request(self, path, params):
+        rq = RequestFactory().get(path, params)
+        rq.session = {'company_code': 'ROI'}
+        rq.user = User(username='u')
+        return rq
+
+    def fake_scope(self, rows):
+        filters = {'own_port_bws': set(), 'own_port_customers': {}, 'selected_month': '2026-10'}
+        return (mock.patch.object(views, '_exportDocumentQuerySet', return_value=(None, filters, [])),
+                mock.patch.object(views, '_exportDocumentRows', return_value=rows))
+
+    def test_trip_edit_file_can_hold_only_missing_trips_of_a_route(self):
+        import openpyxl
+        from io import BytesIO
+        scope, rows = self.fake_scope(self.rows())
+        with scope, rows:
+            response = views.exportExcelTripEdit(
+                self.request('/exportDocument/edit/excel/', {'route': '1-10', 'missing_only': '1'}))
+        ws = openpyxl.load_workbook(BytesIO(response.content)).active
+        ids = [ws.cell(r, 1).value for r in range(views.EXPORT_DOC_EDIT_FIRST_ROW, ws.max_row + 1)]
+        self.assertEqual(ids, [2])
+        self.assertIn('_missing', response['Content-Disposition'])
+
+    def test_trip_edit_file_says_when_nothing_is_missing(self):
+        scope, rows = self.fake_scope([self.row(1)])
+        with scope, rows:
+            response = views.exportExcelTripEdit(
+                self.request('/exportDocument/edit/excel/', {'missing_only': '1'}))
+        self.assertIn('กรอกครบแล้ว', response.content.decode('utf-8'))
+
+    def test_mine_summary_download(self):
+        import openpyxl
+        from io import BytesIO
+        scope, rows = self.fake_scope(self.rows())
+        # อัตราคิดจากฐานข้อมูล (ใบราคา / บิลน้ำมัน) ตัดออกในเทสต์นี้ ดูแค่ว่าไฟล์ออกได้
+        plan = mock.patch.object(views, '_exportDocumentRatePlan', return_value=([], {}, {}))
+        fuel = mock.patch.object(views, '_exportDocumentFuelRefills', return_value=([], {}))
+        price = mock.patch.object(views, '_exportDocumentAssignMonthlyFuelPrice', return_value={})
+        with scope, rows, plan, fuel, price:
+            response = views.exportExcelMineSummary(self.request('/exportDocument/mineSummary/', {}))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('mine_summary_ROI_2026-10.xlsx', response['Content-Disposition'])
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertEqual(len(wb.sheetnames), 9)
+        self.assertIn('ตุลาคม 2569', wb['สารบัญ']['A1'].value)
+
+
 class ExportDocumentDayRangesTests(TestCase):
     """ย่อวันที่ที่ขาดราคาน้ำมันในคำเตือน ให้คนเอาไปกรอกต่อได้ทันที"""
 

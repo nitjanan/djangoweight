@@ -11034,28 +11034,14 @@ def _ifrExportBands(rates):
     return columns or used
 
 
-@login_required(login_url='login')
-def exportExcelInternationalFreightRate(request):
-    try:
-        active = request.session['company_code']
-    except KeyError:
-        return redirect('logout')
+def _ifrExportLayout(rates):
+    """ตำแหน่งคอลัมน์ของตารางอัตราแบบเอกสาร : ช่วงน้ำหนักเรียงไปทางขวา กลุ่มละ IFR_EXPORT_BAND_WIDTH ช่อง
 
-    # เอกสารนี้เป็นตารางอัตราที่ใช้อยู่ปัจจุบัน จึงเอาใบที่มีผล ณ ตอนนี้ เส้นทางละใบ
-    rates = InternationalFreightRate.effectiveOn(
-        date.today(),
-        InternationalFreightRate.objects
-        .select_related('origin', 'destination', 'root')
-        .prefetch_related('teams__team', 'teams__weight_carried'))
-    if not rates:
-        return HttpResponse("ยังไม่มีข้อมูลอัตราค่าขนส่งให้ export")
+    ใช้ร่วมกันสองที่ : ไฟล์ export ของหน้า /internationalFreightRate/ (บันทึกขออนุมัติ)
+    กับชีต อัตราค่าขนส่ง ในไฟล์รายงานรายเที่ยวของหน้า /exportDocument/
 
-    # ชื่อต้นทาง/ปลายทางใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
-    map_names = _baseCompanyMapDisplayNameById()
-
-    # อัตราของฉบับก่อนหน้า เอาไว้เติมช่อง "เดิม" ให้เห็นว่าปรับจากเท่าไรเป็นเท่าไร
-    previous_rates, previous_labels, previous_versions = _ifrExportPreviousRates(rates)
-
+    คืน (bands, band_col, payment_col, note_col, last_col)
+    """
     bands = _ifrExportBands(rates)
     band_col = {}   # CarryingweightRate -> คอลัมน์เริ่มต้นของกลุ่ม (เดิม/ใหม่/น้ำมัน/บาทต่อตันต่อกม.)
     col = IFR_EXPORT_FIXED_COLS + 1
@@ -11072,42 +11058,20 @@ def exportExcelInternationalFreightRate(request):
     payment_col = col
     note_col = col + 1
     last_col = note_col
+    return bands, band_col, payment_col, note_col, last_col
 
-    workbook = openpyxl.Workbook()
-    worksheet = workbook.active
-    worksheet.title = IFR_EXPORT_SHEET
 
+def _ifrExportWriteTable(worksheet, rates, map_names, layout, previous_rates, previous_labels):
+    """เขียนตารางอัตรา (หัว 2 ชั้นที่แถว IFR_EXPORT_HEAD_ROW + แถวเส้นทาง/ทีม + เส้นกรอบ + ความกว้างคอลัมน์)
+
+    ไม่แตะแถวก่อน IFR_EXPORT_HEAD_ROW ผู้เรียกใส่หัวเอกสารของตัวเอง
+    คืนแถวถัดจากแถวสุดท้ายของตาราง
+    """
+    bands, band_col, payment_col, note_col, last_col = layout
     thin = Side(style='thin')
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
     center = Alignment(horizontal='center', vertical='center', wrap_text=True)
     head_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
-
-    # ---- หัวบันทึก ----
-    worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
-    title = worksheet.cell(row=1, column=1)
-    title.value = 'บันทึก'
-    title.font = Font(bold=True, size=16)
-    title.alignment = Alignment(horizontal='center')
-
-    today = date.today()
-    worksheet.cell(row=2, column=1).value = 'ที่ LT. ........./%s' % (today.year + 543)
-    worksheet.cell(row=2, column=max(1, last_col - 5)).value = 'วันที่ %s %s %s' % (
-        today.day, EXPORT_DOC_THAI_MONTHS[today.month - 1], today.year + 543)
-    worksheet.cell(row=3, column=1).value = 'เรื่อง       %s' % IFR_EXPORT_SUBJECT
-    worksheet.cell(row=4, column=1).value = 'เรียน      %s' % IFR_EXPORT_TO
-    worksheet.cell(row=5, column=2).value = IFR_EXPORT_INTRO
-
-    # ราคาน้ำมันอ้างอิง ถ้าทุกบริษัทต้นทางใช้ราคาเดียวกันก็เขียนตัวเลขให้เลย
-    # ราคาน้ำมันผูกกับบริษัท ไม่ได้ผูกกับเส้นทาง จึงหยิบราคาล่าสุดของบริษัทต้นทางแต่ละราย
-    # หน้านี้เป็นตารางอัตราปัจจุบัน ไม่ได้ผูกกับเดือนใดเดือนหนึ่ง จึงใช้ "ล่าสุด" ไม่ใช่ค่าเฉลี่ยรายเดือน
-    company_ids = {r.origin.base_company_id for r in rates
-                   if r.origin_id and r.origin.base_company_id}
-    fuel_prices = set(_ifrLatestFuelPriceByCompany(company_ids).values())
-    worksheet.cell(row=6, column=2).value = 'ราคานี้มีผลตั้งแต่วันที่ ................'
-    if len(fuel_prices) == 1:
-        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ %.2f บาท' % fuel_prices.pop()
-    else:
-        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ ............ บาท'
 
     # ---- หัวตาราง 2 ชั้น ----
     for band in bands:
@@ -11189,15 +11153,6 @@ def exportExcelInternationalFreightRate(request):
         for c in range(1, last_col + 1):
             worksheet.cell(row=r, column=c).border = box
 
-    # ---- ท้ายบันทึก ----
-    row += 1
-    worksheet.cell(row=row, column=2).value = 'จึงเรียนมาเพื่อโปรดพิจารณา'
-    sign_col = max(1, last_col - 5)
-    worksheet.cell(row=row + 1, column=sign_col).value = 'ขอแสดงความนับถือ'
-    worksheet.cell(row=row + 3, column=sign_col).value = IFR_EXPORT_SIGNER
-    worksheet.cell(row=row + 4, column=sign_col).value = IFR_EXPORT_SIGNER_TITLE
-    worksheet.cell(row=row + 6, column=1).value = IFR_EXPORT_FOOTNOTE
-
     worksheet.column_dimensions['A'].width = 5
     worksheet.column_dimensions['B'].width = 38
     worksheet.column_dimensions['C'].width = 22
@@ -11217,6 +11172,76 @@ def exportExcelInternationalFreightRate(request):
     worksheet.page_setup.orientation = 'landscape'
     worksheet.page_setup.fitToWidth = 1
     worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+    return row
+
+
+@login_required(login_url='login')
+def exportExcelInternationalFreightRate(request):
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    # เอกสารนี้เป็นตารางอัตราที่ใช้อยู่ปัจจุบัน จึงเอาใบที่มีผล ณ ตอนนี้ เส้นทางละใบ
+    rates = InternationalFreightRate.effectiveOn(
+        date.today(),
+        InternationalFreightRate.objects
+        .select_related('origin', 'destination', 'root')
+        .prefetch_related('teams__team', 'teams__weight_carried'))
+    if not rates:
+        return HttpResponse("ยังไม่มีข้อมูลอัตราค่าขนส่งให้ export")
+
+    # ชื่อต้นทาง/ปลายทางใช้กติกาเดียวกับหน้ารายงาน : base_customer -> base_comp -> name ในตาราง map
+    map_names = _baseCompanyMapDisplayNameById()
+
+    # อัตราของฉบับก่อนหน้า เอาไว้เติมช่อง "เดิม" ให้เห็นว่าปรับจากเท่าไรเป็นเท่าไร
+    previous_rates, previous_labels, previous_versions = _ifrExportPreviousRates(rates)
+
+    bands, band_col, payment_col, note_col, last_col = _ifrExportLayout(rates)
+
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = IFR_EXPORT_SHEET
+
+    # ---- หัวบันทึก ----
+    worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+    title = worksheet.cell(row=1, column=1)
+    title.value = 'บันทึก'
+    title.font = Font(bold=True, size=16)
+    title.alignment = Alignment(horizontal='center')
+
+    today = date.today()
+    worksheet.cell(row=2, column=1).value = 'ที่ LT. ........./%s' % (today.year + 543)
+    worksheet.cell(row=2, column=max(1, last_col - 5)).value = 'วันที่ %s %s %s' % (
+        today.day, EXPORT_DOC_THAI_MONTHS[today.month - 1], today.year + 543)
+    worksheet.cell(row=3, column=1).value = 'เรื่อง       %s' % IFR_EXPORT_SUBJECT
+    worksheet.cell(row=4, column=1).value = 'เรียน      %s' % IFR_EXPORT_TO
+    worksheet.cell(row=5, column=2).value = IFR_EXPORT_INTRO
+
+    # ราคาน้ำมันอ้างอิง ถ้าทุกบริษัทต้นทางใช้ราคาเดียวกันก็เขียนตัวเลขให้เลย
+    # ราคาน้ำมันผูกกับบริษัท ไม่ได้ผูกกับเส้นทาง จึงหยิบราคาล่าสุดของบริษัทต้นทางแต่ละราย
+    # หน้านี้เป็นตารางอัตราปัจจุบัน ไม่ได้ผูกกับเดือนใดเดือนหนึ่ง จึงใช้ "ล่าสุด" ไม่ใช่ค่าเฉลี่ยรายเดือน
+    company_ids = {r.origin.base_company_id for r in rates
+                   if r.origin_id and r.origin.base_company_id}
+    fuel_prices = set(_ifrLatestFuelPriceByCompany(company_ids).values())
+    worksheet.cell(row=6, column=2).value = 'ราคานี้มีผลตั้งแต่วันที่ ................'
+    if len(fuel_prices) == 1:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ %.2f บาท' % fuel_prices.pop()
+    else:
+        worksheet.cell(row=6, column=4).value = 'ราคาน้ำมันลิตรละ ............ บาท'
+
+    row = _ifrExportWriteTable(worksheet, rates, map_names,
+                               (bands, band_col, payment_col, note_col, last_col),
+                               previous_rates, previous_labels)
+
+    # ---- ท้ายบันทึก ----
+    row += 1
+    worksheet.cell(row=row, column=2).value = 'จึงเรียนมาเพื่อโปรดพิจารณา'
+    sign_col = max(1, last_col - 5)
+    worksheet.cell(row=row + 1, column=sign_col).value = 'ขอแสดงความนับถือ'
+    worksheet.cell(row=row + 3, column=sign_col).value = IFR_EXPORT_SIGNER
+    worksheet.cell(row=row + 4, column=sign_col).value = IFR_EXPORT_SIGNER_TITLE
+    worksheet.cell(row=row + 6, column=1).value = IFR_EXPORT_FOOTNOTE
 
     stream = BytesIO()
     workbook.save(stream)
@@ -11530,7 +11555,10 @@ EXPORT_DOC_STD_LAST_ROW = 302
 # sheet อัตราค่าขนส่ง : ข้อมูลแถว 5-204 (200 ชุดราคา)
 # เขียนแค่ A-J ส่วน K (ส่วนปรับน้ำมัน) L (อัตราสุทธิ) M (คีย์ค้นหา) เป็นสูตรที่มีอยู่แล้ว
 # คีย์ที่ sheet สรุปจ่ายรถร่วมใช้จับคู่คือ M = ทีม|ต้นทาง - ปลายทาง(แบก นน.)|ชนิดหิน
-EXPORT_DOC_RATE_SHEET = 'อัตราค่าขนส่ง'
+# v20 : ชีตอัตราเดิม (1 แถว = 1 ชุดราคา สูตรทุกชีตอ้างถึง) เปลี่ยนชื่อเป็น คำนวณค่าขนส่ง
+# ส่วนชื่อ อัตราค่าขนส่ง ใช้กับชีตตารางอัตราแบบเอกสารที่สร้างตอน export (ไว้อ่าน ไม่มีสูตรอ้างถึง)
+EXPORT_DOC_RATE_SHEET = 'คำนวณค่าขนส่ง'
+EXPORT_DOC_RATE_VIEW_SHEET = 'อัตราค่าขนส่ง'
 EXPORT_DOC_RATE_FIRST_ROW = 5
 EXPORT_DOC_RATE_MAX_ROWS = 200
 
@@ -11668,8 +11696,100 @@ def _exportDocumentAssignFuelPrice(trip_rows, rate_rows):
     return {'trips': sum(x['trips'] for x in routes), 'routes': routes}
 
 
+# ---------- ราคาน้ำมันเฉลี่ยรายเดือนของทีม (หน้า /exportDocument/ และไฟล์ export) ----------
+# ราคา = เงินรวม ÷ ลิตรรวม ของบิลเติมน้ำมันจริงใน Express (ชุดเดียวกับ sheet oil / express)
+# แยกตามทีม และสาขาที่ไปเติม เที่ยวใช้ราคาของสาขาที่ตรงกับบริษัทต้นทางของเที่ยว
+# ทีมไม่ได้เติมที่สาขานั้นแต่มีบิลที่สาขาอื่น = ใช้ราคาเฉลี่ยรวมทุกสาขาของทีมนั้น
+# ไม่มีบิลเลย = ไม่มีราคา (สัญญาที่ปรับตามน้ำมัน อัตราจะว่าง)
+# หน้ารายงานค่าขนส่ง (_freightReportTrips) ยังใช้ราคารายวัน _exportDocumentAssignFuelPrice อยู่
+EXPORT_DOC_FUEL_ALL_BRANCHES = 'รวมทุกสาขา'
+
+
+def _exportDocumentFuelAverage(litre, amount):
+    """เงินรวม ÷ ลิตรรวม ปัด 2 ตำแหน่งแบบ Excel (ปัดครึ่งขึ้น) ให้ตรงกับสูตร N ในชีตคำนวณค่าขนส่ง"""
+    if not litre:
+        return None
+    return (Decimal(amount) / Decimal(litre)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def _exportDocumentTeamFuel(lines, teams=None):
+    """ยุบบิลเติมน้ำมันรายบรรทัดเป็นยอดของ ทีม x บริษัทของสาขาที่ไปเติม
+
+    จับคู่กับต้นทางของเที่ยวด้วย id บริษัท ไม่ใช่ชื่อ เพราะชื่อสาขา (ชื่อแถว map) ไม่ตรงกับชื่อต้นทาง
+    บริษัทเดียวมีหลายแถว map ที่กรอกโค้ดขายเชื่อไว้ ชื่อจะต่อกันด้วย ' / '
+
+    teams = ชุดชื่อทีมที่ต้องการ (None = ทุกทีม)
+    คืน {ทีม: {'by_company': {id บริษัท: [ชื่อสาขา, ลิตร, เงิน]}, 'litre': ลิตรรวม, 'amount': เงินรวม}}
+    """
+    names = defaultdict(set)
+    team_fuel = {}
+    for ln in lines or []:
+        if teams is not None and ln['team'] not in teams:
+            continue
+        fuel = team_fuel.setdefault(ln['team'], {'by_company': {}, 'litre': Decimal(0), 'amount': Decimal(0)})
+        branch = fuel['by_company'].setdefault(ln['company_id'], [None, Decimal(0), Decimal(0)])
+        branch[1] += ln['litre']
+        branch[2] += ln['amount']
+        fuel['litre'] += ln['litre']
+        fuel['amount'] += ln['amount']
+        names[ln['company_id']].add(ln['branch'])
+    for fuel in team_fuel.values():
+        for company_id, branch in fuel['by_company'].items():
+            branch[0] = ' / '.join(sorted(names[company_id]))
+    return team_fuel
+
+
+def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
+    """ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม ใส่ให้ทั้งแถวเที่ยวและแถวอัตรา (fuel_price, fuel_branch)
+
+    fuel_branch = ชื่อสาขาที่ใช้ราคา / 'รวมทุกสาขา' / '' (ทีมไม่มีบิลเดือนนี้)
+    ชีตคำนวณค่าขนส่งใช้ fuel_branch ของแถวอัตราเป็นช่อง M แล้วสูตร N หาราคาจากตารางน้ำมันในชีตเดียวกัน
+
+    เที่ยวที่ "ต้องใช้" ราคา คือเที่ยวที่มีแถวอัตรา และสัญญามีเงื่อนไขน้ำมันครบ (ค่าสัญญา + น้ำมันฐาน + ปรับ)
+    เที่ยวแบบนี้ที่ไม่มีราคา ติดธง fuel_missing (อัตราในไฟล์จะว่าง)
+
+    คืน {'trips': จำนวนเที่ยวที่ขาดราคา, 'teams': [{team, trips}]} เรียงตามจำนวนเที่ยว
+    """
+    team_fuel = _exportDocumentTeamFuel(lines)
+    map_ids = {r.get('origin_map_id') for r in list(trip_rows) + list(rate_rows) if r.get('origin_map_id')}
+    company_by_map = dict(BaseCompanyMapBaseCustomer.objects
+                          .filter(id__in=map_ids)
+                          .values_list('id', 'base_company_id')) if map_ids else {}
+
+    def pick(team, origin_map_id):
+        fuel = team_fuel.get(team)
+        if not fuel or not fuel['litre']:
+            return '', None
+        company_id = company_by_map.get(origin_map_id)
+        branch = fuel['by_company'].get(company_id) if company_id else None
+        if branch and branch[1]:
+            return branch[0], _exportDocumentFuelAverage(branch[1], branch[2])
+        return EXPORT_DOC_FUEL_ALL_BRANCHES, _exportDocumentFuelAverage(fuel['litre'], fuel['amount'])
+
+    needs_fuel = {
+        (r['team'], r['origin'], r['destination'], r['weight_carried'], r['stone']):
+            all(r.get(k) is not None for k in ('contract_freight_rate', 'contract_base_fuel_price',
+                                               'fuel_freight_adjustment'))
+        for r in rate_rows}
+
+    for r in rate_rows:
+        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+
+    missing = defaultdict(int)
+    for r in trip_rows:
+        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+        key = (r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
+        r['fuel_missing'] = r['fuel_price'] is None and needs_fuel.get(key, False)
+        if r['fuel_missing']:
+            missing[r['team']] += 1
+
+    teams = [{'team': team, 'trips': n}
+             for team, n in sorted(missing.items(), key=lambda x: (-x[1], x[0]))]
+    return {'trips': sum(missing.values()), 'teams': teams}
+
+
 def _exportDocumentTripRate(trip, rate_row):
-    """อัตราค่าขนส่งของเที่ยวหนึ่ง (บาท/ตัน) กติกาเดียวกับสูตร O ในชีตบันทึกรายเที่ยวของไฟล์ export
+    """อัตราค่าขนส่งของเที่ยวหนึ่ง (บาท/ตัน) กติกาเดียวกับสูตรอัตรา (O ของชุดราคา / AD ของตารางรายเที่ยว) ในชีตคำนวณค่าขนส่งของไฟล์ export
 
     ไม่มีแถวอัตรา / ไม่มีค่าสัญญา = 0 · สัญญาไม่ปรับตามน้ำมัน = ตามสัญญา
     ต้องปรับแต่ไม่มีราคาน้ำมันวันนั้น = None (ในไฟล์อัตราว่าง)
@@ -12107,8 +12227,8 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
              'rate_as_of': rate_as_of,
              'rate_as_of_th': _thaiDate(rate_as_of),
              'rate_versions': [],
-             # สรุปการอ่านบิลจาก Express ใช้กับ sheet oil (ยอดหักค่าน้ำมัน) อย่างเดียว
-             # ราคาน้ำมันที่ใช้คิดอัตราเป็นราคารายวันของวันที่วิ่ง ดู _exportDocumentAssignFuelPrice
+             # สรุปการอ่านบิลจาก Express : ใช้ทั้งราคาน้ำมันเฉลี่ยของทีม (ชีตคำนวณค่าขนส่ง)
+             # และ sheet oil (ยอดหักค่าน้ำมัน) ดู _exportDocumentAssignMonthlyFuelPrice
              'fuel_bill': {}}
 
     for rate in rates:
@@ -12158,13 +12278,15 @@ def _exportDocumentRatePlan(trip_rows, selected_month=None):
                         'weight_carried': team_rate.weight_carried.name,  # D
                         'stone': stone,                             # E
                         'distance': rate.distance,                  # F
-                        # เงื่อนไขในสัญญาเท่านั้น ราคาน้ำมันไม่อยู่ในชีตนี้แล้ว
-                        # อัตราคิดรายเที่ยวในหน้าบันทึกรายเที่ยว (สูตร O ในไฟล์) จากราคาน้ำมันวันที่วิ่ง (N)
-                        #   ตามสัญญา G + (ราคาวันนั้น − ขอบที่หลุด H/I) × ปรับ J , อยู่ในช่วง = ตามสัญญา
+                        # เงื่อนไขในสัญญา : อัตราคิดที่ช่อง O ของชีตคำนวณค่าขนส่ง จากราคาน้ำมันเฉลี่ยของทีม (N)
+                        #   ตามสัญญา G + (ราคาเฉลี่ย − ขอบที่หลุด H/I) × ปรับ J , อยู่ในช่วง = ตามสัญญา
                         'contract_freight_rate': team_rate.contract_freight_rate,              # G
                         'contract_base_fuel_price': team_rate.contract_base_fuel_price,        # H
                         'contract_base_fuel_price_max': team_rate.contract_base_fuel_price_max,  # I
                         'fuel_freight_adjustment': team_rate.fuel_freight_adjustment,    # J
+                        # ไม่ลงไฟล์ : ใช้หาราคาน้ำมันเฉลี่ยของทีมที่สาขาของบริษัทต้นทาง
+                        'origin_map_id': origin_id,
+                        'team_id': team_id,
                     })
 
     # เลือกแถวที่จะลงไฟล์ + จำกัดจำนวน + เรียงตามตัวอักษร ทำในฟังก์ชันเดียวกัน
@@ -12363,26 +12485,36 @@ def _exportDocumentAssignWeightCarried(trip_rows, weight_carried_by_key):
 # กับ J ค่าขนส่ง ณ ราคาน้ำมันฐาน ออก แล้วแทรก I (ขอบบนของน้ำมันฐานวันทำสัญญา) ด้วย Excel จริง
 # สูตรข้ามชีตจึงเลื่อนตามให้เอง ถ้าจะแทรก/ลบอีก ต้องทำใน Excel แบบเดียวกัน ห้ามใช้ openpyxl
 #   A-F คีย์ + ระยะทาง   G ค่าขนส่งตามสัญญา   H/I น้ำมันฐานวันทำสัญญา ขอบล่าง/ขอบบน
-#   J ปรับค่าขนส่ง   K คีย์ (สูตร)   L หมายเหตุ   M-Q ตารางกลุ่มจ่าย
+#   J ปรับค่าขนส่ง   K คีย์ (สูตร)   L หมายเหตุ
+#   (ตารางกลุ่มจ่าย M-N / ข้อความแถวรวม P-Q ของ v19 ถูกเอาออกใน v20 ย้ายไปเป็นค่าตายตัวในสูตรของสรุปจ่ายรถร่วม)
 # v19 ลบ J ราคาน้ำมันเฉลี่ย / L ส่วนปรับ / M อัตราสุทธิ ออก : อัตราคิดรายเที่ยวในหน้าบันทึกรายเที่ยว
 #   (N ราคาน้ำมันวันที่วิ่ง / O อัตรา / P ค่าขนส่ง) ชีตนี้เหลือแค่เงื่อนไขในสัญญา
 EXPORT_DOC_RATE_CONTRACT_RATE_COL = 7       # G ค่าขนส่งตามสัญญา
 EXPORT_DOC_RATE_CONTRACT_FUEL_COL = 8       # H น้ำมันฐานวันทำสัญญา ขอบล่าง
 EXPORT_DOC_RATE_CONTRACT_FUEL_MAX_COL = 9   # I น้ำมันฐานวันทำสัญญา ขอบบน (ว่าง = ราคาเดียว)
 EXPORT_DOC_RATE_ADJUST_COL = 10             # J ปรับค่าขนส่ง ต่อน้ำมัน 1 บาท/ลิตร
-# คอลัมน์ L : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (K เป็นคีย์ M/N เป็นตารางกลุ่มจ่าย)
+# คอลัมน์ L : ว่างอยู่ ไม่มีสูตรไหนอ้างถึง (K เป็นคีย์)
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีค่าสัญญา / ไม่ปรับตามน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่องว่าง
 EXPORT_DOC_RATE_NOTE_COL = 12
 
-# sheet บันทึกรายเที่ยว : N = ราคาน้ำมันวันที่วิ่ง (ระบบเติม) / O อัตรา / P ค่าขนส่ง เป็นสูตรในไฟล์
-EXPORT_DOC_TRIP_FUEL_COL = 14
+# v20 ชีตคำนวณค่าขนส่ง (ทำด้วย Excel จริง : ลบคอลัมน์ M-R ของตารางกลุ่มจ่ายเดิม แล้วส่วนนี้ขยับมาแทน)
+#   M สาขาที่ใช้ราคาน้ำมัน (ระบบเติม) / N ราคาน้ำมันเฉลี่ย (สูตร) / O อัตรา บาท/ตัน (สูตร)
+#   Q-T ตารางน้ำมันของเดือน ทีม / สาขาที่ไปเติม / ลิตรรวม / เงินรวม (ระบบเติม) / U เฉลี่ย (สูตร)
+#   W-AE ตารางค่าขนส่งรายเที่ยว (สูตรล้วน แถว 5 = แถว 6 ของบันทึกรายเที่ยว) AD อัตรา / AE ค่าขนส่ง
+#   (ย้ายมาจาก O/P ของบันทึกรายเที่ยวด้วย Cut ของ Excel · บันทึกรายเที่ยวเหลือ A-M + ช่องตรวจ N-O)
+EXPORT_DOC_RATE_FUEL_BRANCH_COL = 13   # M
+EXPORT_DOC_FUEL_TABLE_FIRST_COL = 17   # Q ทีม / R สาขา / S ลิตร / T เงิน
+EXPORT_DOC_FUEL_TABLE_MAX_ROWS = 200   # แถว 5-204 ตามช่วงที่สูตร N อ้างถึง
 
 
-def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
-    """เขียน sheet อัตราค่าขนส่ง เฉพาะคอลัมน์ A-J กับ L (K เป็นสูตรคีย์ในไฟล์ ห้ามทับ)
+def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lines=None, trip_teams=None):
+    """เขียนชีตคำนวณค่าขนส่ง : A-J, L, M ของแถวอัตรา + ตารางน้ำมันเฉลี่ย Q-T
+    (K / N / O / U เป็นสูตรในไฟล์ ห้ามทับ)
+
+    ตารางน้ำมันเขียนเฉพาะทีมที่มีเที่ยวในไฟล์ (trip_teams) แบบเดียวกับ sheet oil
 
     G1/G2 ใช้ประทับว่าอัตราชุดนี้เป็นข้อมูล ณ วันไหน และไฟล์ออกเมื่อไหร่
-    เลือก G เพราะแถว 1-2 มีแค่ A1/A2 ส่วนคอลัมน์ M-Q เป็นตารางกลุ่มจ่ายของ template ห้ามแตะ
+    เลือก G เพราะแถว 1-2 มีแค่ A1/A2
     """
     worksheet = workbook[EXPORT_DOC_RATE_SHEET]
 
@@ -12395,12 +12527,15 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
     worksheet.cell(row=EXPORT_DOC_RATE_FIRST_ROW - 1,
                    column=EXPORT_DOC_RATE_NOTE_COL).value = 'หมายเหตุ'
 
-    # แถว 5 ในไฟล์ template เป็นแถวตัวอย่างสีเหลือง ต้องล้างก่อนตามที่หน้า "วิธีกรอก" บอก
+    # แถว 5 ในไฟล์ template เป็นแถวตัวอย่างสีเหลือง ต้องล้างก่อน
     for row in range(EXPORT_DOC_RATE_FIRST_ROW,
                      EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
         for col in range(1, EXPORT_DOC_RATE_ADJUST_COL + 1):
             worksheet.cell(row=row, column=col).value = None
         worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = None
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL).value = None
+        for col in range(EXPORT_DOC_FUEL_TABLE_FIRST_COL, EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4):
+            worksheet.cell(row=row, column=col).value = None
 
     for i, r in enumerate(rate_rows):
         row = EXPORT_DOC_RATE_FIRST_ROW + i
@@ -12416,9 +12551,56 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None):
                          (EXPORT_DOC_RATE_ADJUST_COL, 'fuel_freight_adjustment')):
             value = r.get(key)
             worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
-        # ใบเก่าที่ไม่มีค่าสัญญา : G ว่าง = อัตรา 0 ทุกเที่ยว / H ว่าง = ไม่ปรับตามน้ำมัน (สูตร O ในบันทึกรายเที่ยว)
+        # ใบเก่าที่ไม่มีค่าสัญญา : G ว่าง = อัตรา 0 ทุกเที่ยว / H ว่าง = ไม่ปรับตามน้ำมัน (สูตร O ในชีตคำนวณค่าขนส่ง)
         # ห้ามเขียนข้อความลงช่องตัวเลข สูตรรายเที่ยวอ่านช่องพวกนี้ จะพังทั้งคอลัมน์
         worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = _exportDocumentContractNote(r)
+        # สาขาที่ใช้ราคาน้ำมัน : สูตร N หาเงิน/ลิตรของ (ทีม, สาขานี้) จากตาราง Q-T
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL).value = r.get('fuel_branch') or None
+
+    # ตารางน้ำมันเฉลี่ยของเดือน : 1 แถว = ทีม x สาขาที่ไปเติม ตัวเลขชุดเดียวกับ sheet oil
+    team_fuel = _exportDocumentTeamFuel(fuel_lines, trip_teams)
+    table = sorted((team, branch[0], branch[1], branch[2])
+                   for team, fuel in team_fuel.items()
+                   for branch in fuel['by_company'].values())
+    if rate_stats is not None:
+        rate_stats['fuel_table_truncated'] = max(0, len(table) - EXPORT_DOC_FUEL_TABLE_MAX_ROWS)
+    col = EXPORT_DOC_FUEL_TABLE_FIRST_COL
+    for i, (team, branch, litre, amount) in enumerate(table[:EXPORT_DOC_FUEL_TABLE_MAX_ROWS]):
+        row = EXPORT_DOC_RATE_FIRST_ROW + i
+        worksheet.cell(row=row, column=col).value = team
+        worksheet.cell(row=row, column=col + 1).value = branch
+        worksheet.cell(row=row, column=col + 2).value = float(litre)
+        worksheet.cell(row=row, column=col + 3).value = float(amount)
+
+
+def _exportDocumentWriteRateViewSheet(workbook, trip_rows, selected_month):
+    """ชีต อัตราค่าขนส่ง : ตารางอัตราแบบเดียวกับไฟล์ export ของหน้า /internationalFreightRate/ ไว้ให้คนอ่าน
+
+    ไม่มีสูตรไหนอ้างถึงชีตนี้ ตัวเลขที่ใช้คิดเงินจริงอยู่ในชีต คำนวณค่าขนส่ง (1 แถว = 1 ชุดราคา)
+    ใช้ใบราคาที่มีผล ณ วันเดียวกับชีตคำนวณ (_exportDocumentRateAsOf) เฉพาะเส้นทางที่มีเที่ยวในไฟล์นี้
+    """
+    rate_as_of = _exportDocumentRateAsOf(selected_month)
+    routes = {(r['origin_map_id'], r['destination_map_id']) for r in trip_rows}
+    rates = [rate for rate in InternationalFreightRate.effectiveOn(
+                 rate_as_of,
+                 InternationalFreightRate.objects
+                 .select_related('origin', 'destination', 'root')
+                 .prefetch_related('teams__team', 'teams__weight_carried'))
+             if (rate.origin_id, rate.destination_id) in routes]
+
+    index = (workbook.sheetnames.index(EXPORT_DOC_RATE_SHEET)
+             if EXPORT_DOC_RATE_SHEET in workbook.sheetnames else None)
+    worksheet = workbook.create_sheet(EXPORT_DOC_RATE_VIEW_SHEET, index)
+    worksheet['A1'] = 'อัตราค่าขนส่ง : ใบราคาที่มีผล ณ วันที่ %s' % _thaiDate(rate_as_of)
+    worksheet['A1'].font = Font(bold=True, size=14)
+    worksheet['A2'] = ('ชีตนี้ไว้อ่านอย่างเดียว ไม่มีสูตรไหนอ้างถึง '
+                       '| ตัวเลขที่ใช้คิดเงินอยู่ในชีต %s ถ้าจะแก้อัตราให้แก้ที่นั่น' % EXPORT_DOC_RATE_SHEET)
+    if not rates:
+        worksheet['A4'] = 'ไม่มีใบราคาของเส้นทางที่มีเที่ยวในไฟล์นี้'
+        return
+    previous_rates, previous_labels, _ = _ifrExportPreviousRates(rates)
+    _ifrExportWriteTable(worksheet, rates, _baseCompanyMapDisplayNameById(),
+                         _ifrExportLayout(rates), previous_rates, previous_labels)
 
 
 def _exportDocumentContractNote(rate_row):
@@ -12453,7 +12635,8 @@ def _exportDocumentWriteExpressSheet(workbook, lines, stats):
     worksheet['A1'].font = Font(bold=True, size=14)
     worksheet['A2'] = ('sheet นี้เป็นข้อมูลดิบไว้ตรวจสอบอย่างเดียว ไม่มีสูตรไหนอ้างถึง '
                        '| คัดบิลด้วยคำนำหน้าเลขที่เอกสาร ซึ่งบอกว่าเติมที่สาขาไหน '
-                       '| "ราคาอ้างอิง" คือราคาน้ำมันรายวันที่กรอกในระบบ ไม่ใช่ราคาบนบิล')
+                       '| ราคาน้ำมันเฉลี่ยที่ใช้คิดค่าขนส่ง = เงินรวม ÷ ลิตรรวม ต่อทีม x สาขา '
+                       '(ตาราง Q-U ในชีต %s)' % EXPORT_DOC_RATE_SHEET)
     counts = ('บิลทั้งหมด %s ใบ | เป็นของทีมรถร่วม %s รายการ | ไม่ใช่ทีมรถร่วม %s ใบ '
               '| บิลซ้ำที่ตัดออก %s' % (
                   stats.get('bills', 0), len(lines),
@@ -12473,22 +12656,11 @@ def _exportDocumentWriteExpressSheet(workbook, lines, stats):
         worksheet['A3'] = counts
 
     headers = ['วันที่', 'เลขที่บิล', 'สาขาที่เติม', 'comcod', 'ทีมรถร่วม',
-               'ชนิดน้ำมัน', 'ลิตร', 'ราคา/ลิตร', 'จำนวนเงิน', 'ราคาอ้างอิงของวันนั้น']
+               'ชนิดน้ำมัน', 'ลิตร', 'ราคา/ลิตร', 'จำนวนเงิน']
     for col, name in enumerate(headers, start=1):
         cell = worksheet.cell(row=4, column=col)
         cell.value = name
         cell.font = Font(bold=True)
-
-    price_of = {}
-    if lines:
-        days = {ln['date'] for ln in lines}
-        price_of = {
-            (comp_id, day): price
-            for comp_id, day, price in (
-                InternationalFreightRateFuelPrice.objects
-                .filter(base_comp_id__in={ln['company_id'] for ln in lines},
-                        date__in=list(days))
-                .values_list('base_comp_id', 'date', 'average_fuel_price'))}
 
     for i, ln in enumerate(lines):
         row = 5 + i
@@ -12501,14 +12673,12 @@ def _exportDocumentWriteExpressSheet(workbook, lines, stats):
         worksheet.cell(row=row, column=7).value = float(ln['litre'])
         worksheet.cell(row=row, column=8).value = float(ln['unit_price'])
         worksheet.cell(row=row, column=9).value = float(ln['amount'])
-        ref = price_of.get((ln['company_id'], ln['date']))
-        worksheet.cell(row=row, column=10).value = float(ref) if ref is not None else None
         worksheet.cell(row=row, column=1).number_format = 'DD/MM/YYYY'
-        for col in (7, 8, 10):
+        for col in (7, 8):
             worksheet.cell(row=row, column=col).number_format = '0.00'
         worksheet.cell(row=row, column=9).number_format = '#,##0.00'
 
-    for col, width in zip('ABCDEFGHIJ', (11, 14, 30, 9, 30, 26, 10, 10, 13, 13)):
+    for col, width in zip('ABCDEFGHI', (11, 14, 30, 9, 30, 26, 10, 10, 13)):
         worksheet.column_dimensions[col].width = width
     worksheet.freeze_panes = 'A5'
 
@@ -13607,7 +13777,9 @@ EXPORT_DOC_PROBLEM_FILTERS = {
     'out_of_range': ('ตั้งราคาไว้แล้ว แต่น้ำหนักรถไม่เข้าช่วง',
                      lambda r: r.get('wc_status') == 'out_of_range'),
     'no_team': ('ตอนชั่งไม่ได้เลือกทีมรถ', lambda r: r.get('team_missing')),
-    'no_fuel': ('ยังไม่มีราคาน้ำมันของวันที่วิ่ง (อัตราว่าง)', lambda r: r.get('fuel_missing')),
+    'no_dest_weight': ('ยังไม่ได้กรอก นน.ปลายทาง', lambda r: r.get('dest_weight') is None),
+    'no_origin_weight': ('ยังไม่มี นน.ต้นทาง', lambda r: r.get('origin_weight') is None),
+    'no_fuel': ('ทีมไม่มีบิลเติมน้ำมันเดือนนี้ (อัตราว่าง)', lambda r: r.get('fuel_missing')),
     'off_route': ('เส้นทางยังไม่มีในหน้าค่าขนส่ง (ไม่นับในรายงาน)', None),
     'carry_empty': ('ประเภทการบรรทุกว่าง (ไม่นับในรายงาน)', None),
 }
@@ -13670,6 +13842,9 @@ def viewExportDocument(request):
     # ยอดรวม 3 กลุ่มนี้ = ทุกเที่ยวของเดือน ใช้ทำสัดส่วนให้เห็นว่าคิดเงินได้กี่ %
     # ไม่มีสัดส่วนแล้วเลข 429 กับ 2,253 ลอย ๆ ตีความไม่ได้ว่าดีหรือแย่
     wc_total = wc_filled + wc_no_contract + wc_out_of_range
+    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม จากบิลเติมน้ำมันใน Express (cache ตัวเดียวกับตอน export)
+    fuel_lines, fuel_stats = (_exportDocumentFuelRefills(selected_month)
+                              if selected_month else ([], {}))
     rate_stats.update({
         'sheet_rows': len(rate_rows),
         'wc_filled': wc_filled,
@@ -13683,10 +13858,10 @@ def viewExportDocument(request):
         # ลูกค้าที่ผูก map ไว้แล้วแต่ยังไม่ได้ติ๊กว่าเป็นปลายทางส่งออก (เที่ยวจึงยังไม่เข้ารายงาน)
         'unflagged_destinations': _exportDocumentUnflaggedDestinations(
             _exportDocumentOtherBwsIds(), filters['export_customers'], selected_month),
-        # ราคาน้ำมันรายเที่ยว : เที่ยวที่สัญญาปรับตามน้ำมันแต่ไม่มีราคาของวันนั้น (อัตราในไฟล์จะว่าง)
-        'fuel_missing': _exportDocumentAssignFuelPrice(all_rows, rate_rows),
-        # บิล Express ใช้กับ sheet oil เท่านั้น : สถานะการอ่านโชว์บนหน้าเว็บ (cache ตัวเดียวกับตอน export)
-        'fuel_bill': dict(_exportDocumentFuelRefills(selected_month)[1]) if selected_month else {},
+        # เที่ยวที่สัญญาปรับตามน้ำมัน แต่ทีมไม่มีบิลเติมน้ำมันเดือนนี้ (อัตราในไฟล์จะว่าง)
+        'fuel_missing': _exportDocumentAssignMonthlyFuelPrice(all_rows, rate_rows, fuel_lines),
+        # สถานะการอ่านบิลจาก Express : ราคาน้ำมันเฉลี่ย + sheet oil ขึ้นกับตัวนี้ทั้งคู่
+        'fuel_bill': dict(fuel_stats),
     })
     # เที่ยวที่เส้นทางไม่มีในหน้าค่าขนส่ง : ไม่นับในรายงาน แต่ต้องโชว์ไว้ ไม่ให้หายเงียบ
     off_route_rows = _exportDocumentRows(filters['off_route_qs'], own_port_bws, own_port_customers)
@@ -13706,10 +13881,28 @@ def viewExportDocument(request):
     elif problem:
         match = EXPORT_DOC_PROBLEM_FILTERS[problem][1]
         table_qs = qs.filter(weight_id__in=[r['weight_id'] for r in all_rows if match(r)])
+    # ?route= : กรองตารางรายเที่ยวเหลือคู่ต้นทาง -> ปลายทางเดียว (กดจากตารางสรุปของหน้าเหมือง)
+    # ใช้กับเที่ยวในรายงานเท่านั้น กล่องเทา / ประเภทการบรรทุกว่าง ไม่มีคีย์เส้นทางให้เทียบ
+    route_summary, route_totals = _exportDocumentRouteSummary(all_rows)
+    selected_route = request.GET.get('route') or ''
+    route_label = ''
+    if selected_route and problem not in ('off_route', 'carry_empty'):
+        picked = next((e for e in route_summary if e['key'] == selected_route), None)
+        if picked is None:
+            selected_route = ''
+        else:
+            route_label = '%s → %s' % (picked['origin'], picked['destination'])
+            table_qs = table_qs.filter(weight_id__in=[
+                r['weight_id'] for r in all_rows if _exportDocumentRouteKey(r) == selected_route])
+    else:
+        selected_route = ''
     # ลิงก์ของปุ่มต้องกลับไปหน้า 1 เสมอ ไม่งั้นกดจากหน้า 5 ของทั้งเดือนจะไปตกหน้าที่ไม่มีอยู่
     problem_query = request.GET.copy()
     problem_query.pop('page', None)
     problem_query.pop('problem', None)
+    # ลิงก์ของตารางเส้นทาง / ปุ่มของหน้าเหมือง : ตัวกรองหลักชุดเดียวกับหน้าจอ ไม่ติด route / problem ค้าง
+    route_query = problem_query.copy()
+    route_query.pop('route', None)
 
     p = Paginator(table_qs, 100)
     page = request.GET.get('page')
@@ -13717,7 +13910,7 @@ def viewExportDocument(request):
     rows = _exportDocumentRows(trips, own_port_bws, own_port_customers)
     # เติมให้ rows ที่โชว์บนหน้าเว็บด้วย จะได้ตรงกับไฟล์
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
-    _exportDocumentAssignFuelPrice(rows, rate_rows)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
 
     # ไฟล์ template รับได้ EXPORT_DOC_MAX_TRIPS เที่ยว ถ้าเดือนนั้นเกิน ต้องเตือนก่อนกดปุ่ม
     over_limit = (summary['trip_count'] or 0) > EXPORT_DOC_MAX_TRIPS
@@ -13768,6 +13961,11 @@ def viewExportDocument(request):
         'problem_label': EXPORT_DOC_PROBLEM_FILTERS[problem][0] if problem else '',
         'problem_count': p.count,
         'problem_query': problem_query.urlencode(),
+        'route_query': route_query.urlencode(),
+        'route_summary': route_summary,
+        'route_totals': route_totals,
+        'selected_route': selected_route,
+        'route_label': route_label,
         # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
         'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
     }
@@ -14492,7 +14690,16 @@ def exportExcelTripEdit(request):
     _exportProgressSet(request, 2, 'กำลังดึงข้อมูลรายเที่ยว')
     qs, filters, _ = _exportDocumentQuerySet(request)
     rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+    # issue #136 : หน้าเหมืองโหลดเฉพาะเที่ยวที่ยังขาด นน.ปลายทาง และ/หรือ เฉพาะคู่ต้นทาง -> ปลายทาง
+    route = request.GET.get('route') or ''
+    if route:
+        rows = [r for r in rows if _exportDocumentRouteKey(r) == route]
+    missing_only = request.GET.get('missing_only') == '1'
+    if missing_only:
+        rows = [r for r in rows if r['dest_weight'] is None]
     if not rows:
+        if missing_only:
+            return HttpResponse("ไม่มีเที่ยวที่ขาด นน.ปลายทาง ตามเงื่อนไขที่เลือก กรอกครบแล้ว")
         return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้แก้ไข")
     if len(rows) > EXPORT_DOC_EDIT_MAX_ROWS:
         return HttpResponse("มี %s เที่ยว เกิน %s ที่ไฟล์แก้ไขรองรับ กรุณากรองให้แคบลงก่อน"
@@ -14556,8 +14763,8 @@ def exportExcelTripEdit(request):
     response = HttpResponse(
         stream.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="trip_edit_%s_%s.xlsx"' % (
-        active, filters['selected_month'] or 'all')
+    response['Content-Disposition'] = 'attachment; filename="trip_edit_%s_%s%s.xlsx"' % (
+        active, filters['selected_month'] or 'all', '_missing' if missing_only else '')
     return _exportDocumentMarkDownloadDone(request, response)
 
 
@@ -14759,12 +14966,525 @@ def cancelTripEdit(request):
     return redirect('viewExportDocument')
 
 
+# ---------- issue #136 : ขั้นตอนของหน้าเหมือง (กรอก นน.ปลายทาง -> ใบสรุปหน้าเหมือง) ----------
+# งานจริงแบ่ง 2 ช่วง : หน้าเหมืองกรอกน้ำหนักปลายทางแล้วทำใบสรุปแยกตามต้นทางส่งบัญชี
+# จากนั้นบัญชีถึงทำสรุปจ่าย / ปะหน้า (ไฟล์ Export Excel เดิม) ส่วนนี้เป็นของหน้าเหมืองล้วน ไม่มีตัวเงิน
+
+def _exportDocumentRouteKey(row):
+    """คีย์ของคู่ ต้นทาง -> ปลายทาง ใช้ใน ?route= (id แถว map ทั้งสองฝั่ง เพราะชื่อในตาราง map ไม่ unique)"""
+    return '%s-%s' % (row.get('origin_map_id') or 0, row.get('destination_map_id') or 0)
+
+
+def _exportDocumentRouteSummary(trip_rows):
+    """ตารางสรุปบนหน้าเว็บ : 1 แถว = 1 คู่ต้นทาง -> ปลายทาง พร้อมจำนวนเที่ยวที่ยังขาดข้อมูล
+    เรียงตามต้นทาง แล้วปลายทาง (เหมืองไล่งานทีละต้นทาง)"""
+    routes = OrderedDict()
+    for r in trip_rows:
+        key = _exportDocumentRouteKey(r)
+        entry = routes.get(key)
+        if entry is None:
+            entry = routes[key] = {'key': key, 'origin': r['origin'] or '-',
+                                   'destination': r['destination'] or '-', 'trips': 0,
+                                   'no_dest_weight': 0, 'no_origin_weight': 0, 'no_team': 0}
+        entry['trips'] += 1
+        if r['dest_weight'] is None:
+            entry['no_dest_weight'] += 1
+        if r['origin_weight'] is None:
+            entry['no_origin_weight'] += 1
+        if r['team_missing']:
+            entry['no_team'] += 1
+    result = sorted(routes.values(), key=lambda e: (str(e['origin']), str(e['destination'])))
+    totals = {k: sum(e[k] for e in result)
+              for k in ('trips', 'no_dest_weight', 'no_origin_weight', 'no_team')}
+    return result, totals
+
+
+# ใบสรุปหน้าเหมือง : ทำตามไฟล์ที่หน้างานทำจริง (ตัวอย่าง "กงตาก3-ปัญจะใหม่ ต.ค69 แร่ยิปซั่ม6นิ้ว.xlsx")
+#   สรุป <เหมือง>           : หนังสือสรุปยอดของเหมืองนั้นทุกท่าเรือ (แบบ Sheet1 ของตัวอย่าง)
+#   <เหมือง>-<ท่า>          : รายเที่ยวด้านซ้าย + ตารางสรุป เส้นทาง -> สินค้า -> ทีม ด้านขวา (แบบ sheet สินค้าของตัวอย่าง)
+#   ปะหน้า <เหมือง>-<ท่า>   : บันทึกถึงผู้อำนวยการฝ่ายผลิต พร้อมตารางสรุปชุดเดียวกัน (แบบ ใบปะหน้า ของตัวอย่าง)
+# ตัวเลขในตารางสรุปทุกที่เป็นสูตรที่นับ / รวมจากรายเที่ยว หน้างานแก้ น้ำหนักในไฟล์แล้วยอดตามเอง
+# ไม่มีอัตราค่าขนส่ง (เป็นงานของบัญชี)
+MINE_SUMMARY_INDEX_SHEET = 'สารบัญ'
+MINE_SUMMARY_FONT = 'Angsana New'
+MINE_SUMMARY_MISSING_FILL = 'FFF2CC'
+MINE_SUMMARY_NUM = '_-* #,##0.00_-;\-* #,##0.00_-;_-* "-"??_-;_-@_-'
+MINE_SUMMARY_TRIP_COLUMNS = [   # (หัว, ความกว้าง) แถว 1 = หัว ข้อมูลเริ่มแถว 2 เหมือนตัวอย่าง
+    ('ลำดับที่ใบชั่ง', 13), ('ทะเบียนรถ', 12), ('วันที่', 11), ('ทีม', 26), ('ชื่อเหมือง', 30),
+    ('ชื่อสินค้า', 26), ('นน.ต้นทาง', 12), ('นน.ปลายทาง', 12), ('นน.ส่วนต่าง', 12),
+    ('นน.จ่ายค่าบรรทุก', 14), ('หมายเหตุ', 22),
+]
+MINE_SUMMARY_PIVOT_COL = 13      # M : ตารางสรุปด้านขวาของรายเที่ยว (ตัวอย่างอยู่ S ถัดจากคอลัมน์ที่ซ่อน)
+MINE_SUMMARY_PIVOT_ROW = 3       # หัวตารางสรุปแถว 3 เหมือนตัวอย่าง
+MINE_SUMMARY_COVER_ROW = 11      # ใบปะหน้า : หัวตารางสรุปแถว 11 เหมือนตัวอย่าง
+# คำที่ตัดออกตอนตั้งชื่อ sheet (ชื่อ sheet ยาวได้ 31 ตัว ชื่อเต็มอยู่ในตัว sheet แล้ว)
+MINE_SUMMARY_NAME_NOISE = ('บริษัท', 'จำกัด', 'บจก.', 'หจก.', 'บจก', 'หจก', 'ท่าเรือ')
+
+
+def _mineSummarySheetTitle(name, used):
+    """ชื่อ sheet ห้ามเกิน 31 ตัว ห้ามมีอักขระบางตัว และห้ามซ้ำ (ไม่สนตัวพิมพ์เล็กใหญ่)"""
+    clean = ''.join(' ' if ch in '[]:*?/\\' else ch for ch in str(name or '-'))
+    clean = ' '.join(clean.split()).strip("' ") or '-'
+    base = clean[:31]
+    title, n = base, 2
+    while title.lower() in used:
+        suffix = ' (%d)' % n
+        title = base[:31 - len(suffix)] + suffix
+        n += 1
+    used.add(title.lower())
+    return title
+
+
+def _mineSummaryShortName(name):
+    short = str(name or '-')
+    for word in MINE_SUMMARY_NAME_NOISE:
+        short = short.replace(word, ' ')
+    return ' '.join(short.split()) or str(name or '-')
+
+
+def _mineSummaryFit(name, budget):
+    """ย่อชื่อให้ไม่เกิน budget ตัว โดยเก็บท้ายชื่อไว้ (วงเล็บ หรือคำสุดท้าย) เพราะเป็นส่วนที่แยกชื่อออกจากกัน
+    เช่น 'ศิลาชัยสุราษฎร์ (สาขา 3)' / 'เซาท์เทิร์นพอร์ท กระบี่' กับ 'เซาท์เทิร์นพอร์ท สุราษฎร์'"""
+    if len(name) <= budget:
+        return name
+    match = re.match(r'^(.*?)(\s*\([^()]*\)|\s+\S+)$', name)
+    if match:
+        head, tail = match.group(1), match.group(2)
+        if budget - len(tail) >= 3:
+            return head[:budget - len(tail)].rstrip() + tail
+        # ที่เหลือไม่พอให้หัวชื่อ : ถ้าท้ายเป็นวงเล็บ เอาวงเล็บอย่างเดียว เช่น '(กงตาก 3)' ยังแยกเหมืองออกจากกันได้
+        if tail.strip().startswith('(') and len(tail.strip()) <= budget:
+            return tail.strip()
+    return name[:budget]
+
+
+def _mineSummaryPairTitle(origin, destination, used, prefix=''):
+    """ชื่อ sheet ของคู่ ต้นทาง-ปลายทาง ให้พอดี 31 ตัว แบ่งความยาวให้สองฝั่ง ฝั่งที่สั้นยกที่เหลือให้อีกฝั่ง"""
+    o, d = _mineSummaryShortName(origin), _mineSummaryShortName(destination)
+    room = 31 - len(prefix) - 1   # ขีดคั่นกลาง
+    if len(o) + len(d) > room:
+        o_budget = max(room // 2, room - len(d))
+        o = _mineSummaryFit(o, o_budget)
+        d = _mineSummaryFit(d, room - len(o))
+    return _mineSummarySheetTitle('%s%s-%s' % (prefix, o, d), used)
+
+
+def _mineSummaryStatus(row):
+    problems = []
+    if row['dest_weight'] is None:
+        problems.append('ขาด นน.ปลายทาง')
+    if row['origin_weight'] is None:
+        problems.append('ขาด นน.ต้นทาง')
+    if row['team_missing']:
+        problems.append('ไม่ระบุทีม')
+    return ' / '.join(problems)
+
+
+def _mineSummaryProduct(row):
+    """ชื่อสินค้า = ชนิดหิน(ช่วงน้ำหนักที่แบก) แบบ 'แร่ยิปซั่ม 6 นิ้ว(แบก นน.)' ของตัวอย่าง ไม่มีช่วง = ชื่อหินเฉย ๆ"""
+    band = row.get('weight_carried') or ''
+    return '%s(%s)' % (row['stone'] or '', band) if band else (row['stone'] or '-')
+
+
+def _mineSummaryRouteLabel(origin, destination):
+    return '%s-%s' % (origin, destination)
+
+
+def _mineSummaryGroups(trips):
+    """ลำดับแถวของตารางสรุป : สินค้า -> ทีม ตามลำดับที่โผล่ครั้งแรกในรายเที่ยว (เหมือน pivot ของหน้างาน)
+    คืน [(สินค้า, [ทีม, ...]), ...]"""
+    groups = OrderedDict()
+    for r in trips:
+        teams = groups.setdefault(_mineSummaryProduct(r), [])
+        if r['team'] not in teams:
+            teams.append(r['team'])
+    return list(groups.items())
+
+
+def _mineSummaryCriteria(text):
+    """ข้อความเงื่อนไขของ COUNTIFS / SUMIFS : กันอักขระ wildcard (* ? ~) และเครื่องหมายคำพูด"""
+    text = str(text).replace('~', '~~').replace('*', '~*').replace('?', '~?')
+    return '"%s"' % text.replace('"', '""')
+
+
+def _mineSummaryFont(cell, size=14, bold=False, color=None, fmt=None, align=None, border=None, fill=None):
+    cell.font = Font(name=MINE_SUMMARY_FONT, size=size, bold=bold, color=color)
+    if fmt:
+        cell.number_format = fmt
+    if align:
+        cell.alignment = align
+    if border:
+        cell.border = border
+    if fill:
+        cell.fill = PatternFill(start_color=fill, end_color=fill, fill_type='solid')
+
+
+def _mineSummaryPivotFormulas(sheet_ref, last_row, product=None, team=None):
+    """สูตร [เที่ยว, นน.ต้นทาง, นน.ปลายทาง, นน.ส่วนต่าง, นน.จ่าย] ของแถวสรุปหนึ่งแถว
+    อ้างรายเที่ยวในช่วงแถว 2..last_row : F สินค้า / D ทีม / G-J น้ำหนัก
+    sheet_ref = '' (sheet เดียวกัน) หรือ "'ชื่อ sheet'!" (อ้างข้าม sheet)"""
+    def rng(col):
+        return '%s$%s$2:$%s$%d' % (sheet_ref, col, col, last_row)
+    conditions = []
+    if product is not None:
+        conditions.append('%s,%s' % (rng('F'), _mineSummaryCriteria(product)))
+    if team is not None:
+        conditions.append('%s,%s' % (rng('D'), _mineSummaryCriteria(team)))
+    if not conditions:
+        return (['=COUNTA(%s)' % rng('F')] +
+                ['=SUM(%s)' % rng(col) for col in 'GHIJ'])
+    cond = ','.join(conditions)
+    return (['=COUNTIFS(%s)' % cond] +
+            ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in 'GHIJ'])
+
+
+# สีของตารางสรุป แยกระดับให้อ่านง่าย (ทำ PivotTable จริงจากโค้ดไม่ได้ Excel ตัดทิ้งตอนเปิดไฟล์)
+#   หัวตาราง น้ำเงินเข้ม ตัวขาว · เส้นทาง ฟ้า · สินค้า เขียว · ทีม ขาว (ย่อหน้าเข้าไป) · ผลรวมทั้งหมด เหลือง
+MINE_SUMMARY_LEVEL_STYLE = {
+    'head': {'fill': '1F4E78', 'color': 'FFFFFF', 'bold': True, 'indent': 0},
+    'route': {'fill': 'BDD7EE', 'color': None, 'bold': True, 'indent': 0},
+    'product': {'fill': 'E2EFDA', 'color': None, 'bold': True, 'indent': 1},
+    'team': {'fill': None, 'color': None, 'bold': False, 'indent': 3},
+    'total': {'fill': 'FFE699', 'color': None, 'bold': True, 'indent': 0},
+}
+
+
+def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, source_ref, last_row, size=14):
+    """ตารางสรุป เส้นทาง -> สินค้า -> ทีม + ผลรวมทั้งหมด (ลำดับเดียวกับ pivot ของหน้างาน)
+    แต่ละระดับคนละสี ทีมย่อหน้าเข้าไป จะได้ดูออกว่าแถวไหนเป็นหัวข้อ แถวไหนเป็นรายละเอียด
+    คืนแถวสุดท้ายของตาราง"""
+    thin = Side(style='thin')
+    hair = Side(style='hair')
+    medium = Side(style='medium')
+    route = _mineSummaryRouteLabel(origin, destination)
+
+    def paint(row, labels, level, border):
+        style = MINE_SUMMARY_LEVEL_STYLE[level]
+        for i, value in enumerate(labels):
+            cell = worksheet.cell(row, left + i)
+            cell.value = value
+            if i == 0:
+                align = Alignment(horizontal='left', indent=style['indent'], vertical='center')
+                fmt = None
+            else:
+                align = Alignment(horizontal='center', vertical='center', wrap_text=True) if level == 'head' else None
+                fmt = None if level == 'head' else ('#,##0' if i == 1 else '#,##0.00')
+            _mineSummaryFont(cell, size=size, bold=style['bold'], color=style['color'], fill=style['fill'],
+                             fmt=fmt, align=align, border=border)
+
+    paint(top, [route, 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง', 'นน.จ่ายค่าบรรทุก'], 'head',
+          Border(left=thin, right=thin, top=thin, bottom=thin))
+    worksheet.row_dimensions[top].height = 24
+
+    rows = [('route', route, _mineSummaryPivotFormulas(source_ref, last_row))]
+    for product, teams in _mineSummaryGroups(trips):
+        rows.append(('product', product, _mineSummaryPivotFormulas(source_ref, last_row, product=product)))
+        for team in teams:
+            rows.append(('team', team, _mineSummaryPivotFormulas(source_ref, last_row, product=product, team=team)))
+    rows.append(('total', 'ผลรวมทั้งหมด', _mineSummaryPivotFormulas(source_ref, last_row)))
+
+    row = top
+    for level, label, formulas in rows:
+        row += 1
+        if level == 'team':
+            border = Border(left=thin, right=thin, top=hair, bottom=hair)
+        elif level == 'total':
+            border = Border(left=thin, right=thin, top=medium, bottom=medium)
+        else:
+            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        paint(row, [label] + formulas, level, border)
+    return row
+
+
+def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name):
+    """sheet รายเที่ยวของคู่หนึ่ง : รายเที่ยวด้านซ้าย (ตาราง Excel sort / filter ได้) + ตารางสรุปด้านขวา
+    คืนแถวสุดท้ายของรายเที่ยว (ใบปะหน้า / สรุปรวมอ้างช่วงนี้)"""
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    thin = Side(style='thin')
+    hair = Side(style='hair')
+    cell_border = Border(left=thin, right=thin, bottom=hair)
+    center = Alignment(horizontal='center')
+    route = _mineSummaryRouteLabel(origin, destination)
+
+    for col, (text, width) in enumerate(MINE_SUMMARY_TRIP_COLUMNS, start=1):
+        cell = worksheet.cell(1, col)
+        cell.value = text
+        _mineSummaryFont(cell, align=center, bold=True,
+                         border=Border(left=thin, right=thin, top=Side(style='medium'), bottom=Side(style='medium')))
+        worksheet.column_dimensions[get_column_letter(col)].width = width
+
+    ordered = sorted(trips, key=lambda r: (r['date'] or date.min, str(r['doc_id'] or ''), r['weight_id']))
+    for i, r in enumerate(ordered):
+        row = 2 + i
+        fill = MINE_SUMMARY_MISSING_FILL if r['dest_weight'] is None else None
+        values = [r['doc_id'], r['car_registration'], r['date'], r['team'], route, _mineSummaryProduct(r),
+                  float(r['origin_weight']) if r['origin_weight'] is not None else None,
+                  float(r['dest_weight']) if r['dest_weight'] is not None else None,
+                  # ส่วนต่าง / จ่ายค่าบรรทุก เป็นสูตรเหมือนตัวอย่าง กรอก นน.ปลายทางในไฟล์แล้วคิดใหม่เอง
+                  '=IF(OR(G{0}="",H{0}=""),"",G{0}-H{0})'.format(row),
+                  '=IF(AND(G{0}="",H{0}=""),"",MIN(G{0},H{0}))'.format(row),
+                  _mineSummaryStatus(r) or None]
+        for col, value in enumerate(values, start=1):
+            cell = worksheet.cell(row, col)
+            cell.value = value
+            fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 7 <= col <= 10 else '@' if col in (1, 2) else None)
+            _mineSummaryFont(cell, fmt=fmt, border=cell_border, fill=fill,
+                             align=center if col in (1, 2, 3, 5, 6) else None)
+    last_row = 1 + len(ordered)
+    if ordered:
+        table = Table(displayName=table_name,
+                      ref='A1:%s%d' % (get_column_letter(len(MINE_SUMMARY_TRIP_COLUMNS)), last_row))
+        table.tableStyleInfo = TableStyleInfo(name='TableStyleLight1', showRowStripes=False)
+        worksheet.add_table(table)
+
+    left = MINE_SUMMARY_PIVOT_COL
+    missing = sum(1 for r in trips if r['dest_weight'] is None)
+    if missing:
+        note = worksheet.cell(1, left)
+        note.value = 'ยังขาด นน.ปลายทาง %s เที่ยว (แถวสีเหลือง) กรอกให้ครบก่อนส่งบัญชี' % missing
+        _mineSummaryFont(note, bold=True, color='C00000')
+    _mineSummaryWritePivot(worksheet, MINE_SUMMARY_PIVOT_ROW, left, origin, destination, trips, '', last_row)
+    for i, width in enumerate((30, 8, 13, 13, 13, 15)):
+        worksheet.column_dimensions[get_column_letter(left + i)].width = width
+    worksheet.column_dimensions[get_column_letter(left - 1)].width = 3
+    worksheet.freeze_panes = 'A2'
+    return last_row
+
+
+def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, trip_sheet, last_row):
+    """ใบปะหน้าของคู่หนึ่ง : บันทึกถึงผู้อำนวยการฝ่ายผลิต (ตามใบปะหน้าของตัวอย่าง)
+    เลขที่หนังสือ / วันที่ / ผู้ลงนาม / สำเนาเรียน เว้นให้หน้างานกรอกเอง"""
+    for col, width in enumerate((28.3, 13.3, 15.3, 18.9, 20.9, 15.7), start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = width
+    products = ', '.join(OrderedDict((r['stone'] or '-', None) for r in trips))
+    lines = [
+        (5, 1, 'ที่ ........................................'),
+        (6, 4, 'วันที่ ........................................'),
+        (7, 1, 'เรื่อง        รายงานผลการขนส่ง%s %s ไป%s ประจำเดือน %s' % (products, origin, destination, month_label)),
+        (8, 1, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ'),
+        (9, 1, '               ด้วย ทางหน่วยงาน%s ขอส่งรายงานขนส่ง%s จาก %s ไป%s' % (origin, products, origin, destination)),
+        (10, 1, 'ประจำเดือน %s ตามรายละเอียดดังนี้' % month_label),
+    ]
+    for row, col, text in lines:
+        worksheet.cell(row, col).value = text
+        _mineSummaryFont(worksheet.cell(row, col), size=16)
+    worksheet.merge_cells('D6:F6')
+    end = _mineSummaryWritePivot(worksheet, MINE_SUMMARY_COVER_ROW, 1, origin, destination, trips,
+                                 "'%s'!" % trip_sheet, last_row, size=16)
+    tail = [
+        (end + 1, 1, '             จึงเรียนมาเพื่อโปรดทราบ', None),
+        (end + 2, 4, 'ขอแสดงความนับถือ', 'center'),
+        (end + 4, 4, '(                                        )', 'center'),
+        (end + 5, 4, 'เจ้าหน้าที่ธุรการฝ่ายผลิต', 'center'),
+        (end + 6, 1, 'สำเนาเรียน', None),
+    ]
+    for row, col, text, align in tail:
+        cell = worksheet.cell(row, col)
+        cell.value = text
+        _mineSummaryFont(cell, size=16, align=Alignment(horizontal=align) if align else None)
+        if col == 4:
+            worksheet.merge_cells(start_row=row, start_column=4, end_row=row, end_column=5)
+    missing = sum(1 for r in trips if r['dest_weight'] is None)
+    if missing:
+        # นอกพื้นที่พิมพ์ (A:F) : เตือนคนทำ ไม่ติดไปในหนังสือ
+        note = worksheet.cell(5, 8)
+        note.value = 'ยังขาด นน.ปลายทาง %s เที่ยว ยอดในหนังสือยังไม่ครบ' % missing
+        _mineSummaryFont(note, bold=True, color='C00000')
+    for row in range(5, end + 14):
+        worksheet.row_dimensions[row].height = 23.25
+    worksheet.print_area = 'A1:F%d' % (end + 13)
+    worksheet.page_setup.orientation = 'portrait'
+    worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
+    """หนังสือสรุปยอดของเหมืองหนึ่ง ทุกท่าเรือ (ตาม Sheet1 ของตัวอย่าง)
+    pairs = [(ปลายทาง, trips, ชื่อ sheet รายเที่ยว, แถวสุดท้าย)] · 1 แถว = 1 ท่าเรือ + สินค้า
+    ต้นทาง = เที่ยว / ตัน ที่มี นน.ต้นทาง · ปลายทาง = เที่ยว / ตัน ที่มี นน.ปลายทาง (ขาดเห็นได้จากเที่ยวไม่เท่ากัน)"""
+    medium = Side(style='medium')
+    box = Border(left=medium, right=medium, top=medium, bottom=medium)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    for col, width in enumerate((9.1, 34, 13, 17, 12.7, 17, 14.6), start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = width
+    for row, text in ((7, 'ประจำเดือน %s' % month_label), (8, origin), (9, 'สรุปยอดการขนส่งไปท่าเรือ')):
+        worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        worksheet.cell(row, 1).value = text
+        _mineSummaryFont(worksheet.cell(row, 1), size=16, bold=True, align=center)
+    heads = [('A10:B11', 'ท่าเรือ'), ('C10:D10', 'ต้นทาง (%s)' % _mineSummaryShortName(origin)),
+             ('E10:F10', 'ปลายทาง (ท่าเรือ)'), ('G10', 'ส่วนต่าง'),
+             ('C11', 'เที่ยว'), ('D11', 'ตัน'), ('E11', 'เที่ยว'), ('F11', 'ตัน'), ('G11', 'ตัน')]
+    for ref, text in heads:
+        if ':' in ref:
+            worksheet.merge_cells(ref)
+        first = ref.split(':')[0]
+        worksheet[first] = text
+    for row in (10, 11):
+        for col in range(1, 8):
+            _mineSummaryFont(worksheet.cell(row, col), size=16, bold=True, align=center, border=box,
+                             fill='1F4E78', color='FFFFFF')
+
+    row = 11
+    for destination, trips, sheet, last_row in pairs:
+        for product, _ in _mineSummaryGroups(trips):
+            row += 1
+            ref = "'%s'!" % sheet
+
+            def rng(col):
+                return '%s$%s$2:$%s$%d' % (ref, col, col, last_row)
+            crit = '%s,%s' % (rng('F'), _mineSummaryCriteria(product))
+            worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+            worksheet.cell(row, 1).value = '%s %s' % (destination, product)
+            worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('G'))
+            worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (rng('G'), crit)
+            worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('H'))
+            worksheet.cell(row, 6).value = '=SUMIFS(%s,%s)' % (rng('H'), crit)
+            worksheet.cell(row, 7).value = '=D%d-F%d' % (row, row)
+            for col in range(1, 8):
+                _mineSummaryFont(worksheet.cell(row, col), size=16, border=box,
+                                 fmt=MINE_SUMMARY_NUM if col >= 3 else None,
+                                 align=Alignment(horizontal='left', vertical='center', wrap_text=True)
+                                 if col == 1 else None)
+    first, last = 12, row
+    row += 1
+    worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+    worksheet.cell(row, 1).value = 'รวมขนส่งทั้งหมด'
+    for col in range(3, 7):
+        letter = get_column_letter(col)
+        worksheet.cell(row, col).value = '=SUM(%s%d:%s%d)' % (letter, first, letter, last)
+    worksheet.cell(row, 7).value = '=D%d-F%d' % (row, row)
+    for col in range(1, 8):
+        _mineSummaryFont(worksheet.cell(row, col), size=16, bold=True, border=box, fill='FFE699',
+                         fmt=MINE_SUMMARY_NUM if col >= 3 else None, align=center if col == 1 else None)
+    total_row = row
+    for offset, text in ((2, 'ขอแสดงความนับถือ'), (4, '(                                        )'),
+                         (5, 'ธุรการฝ่ายผลิต')):
+        r = total_row + offset
+        worksheet.merge_cells(start_row=r, start_column=4, end_row=r, end_column=7)
+        worksheet.cell(r, 4).value = text
+        _mineSummaryFont(worksheet.cell(r, 4), size=16, align=Alignment(horizontal='center'))
+    worksheet.cell(total_row + 7, 1).value = 'สำเนาเรียน'
+    _mineSummaryFont(worksheet.cell(total_row + 7, 1), size=14)
+    worksheet.print_area = 'A1:G%d' % (total_row + 14)
+    worksheet.page_setup.orientation = 'portrait'
+    worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _mineSummaryWorkbook(trip_rows, month_label):
+    """ใบสรุปหน้าเหมือง ตามรูปแบบไฟล์ที่หน้างานทำ : สารบัญ -> ต่อเหมือง (สรุป -> ต่อท่า : รายเที่ยว + ใบปะหน้า)
+
+    trip_rows มาจาก _exportDocumentRows ที่เติม weight_carried แล้ว (ดู exportExcelMineSummary)
+    """
+    from openpyxl.worksheet.hyperlink import Hyperlink
+
+    by_origin = OrderedDict()
+    for r in trip_rows:
+        by_origin.setdefault(r['origin'] or '-', OrderedDict()).setdefault(r['destination'] or '-', []).append(r)
+
+    workbook = openpyxl.Workbook()
+    index = workbook.active
+    index.title = MINE_SUMMARY_INDEX_SHEET
+    used = {MINE_SUMMARY_INDEX_SHEET.lower()}
+    listing = []
+    table_no = 0
+    for origin in sorted(by_origin, key=str):
+        summary_title = _mineSummarySheetTitle('สรุป %s' % _mineSummaryShortName(origin), used)
+        summary_ws = workbook.create_sheet(summary_title)
+        pairs = []
+        for destination in sorted(by_origin[origin], key=str):
+            trips = by_origin[origin][destination]
+            table_no += 1
+            trip_title = _mineSummaryPairTitle(origin, destination, used)
+            cover_title = _mineSummaryPairTitle(origin, destination, used, prefix='ปะหน้า ')
+            trip_ws = workbook.create_sheet(trip_title)
+            cover_ws = workbook.create_sheet(cover_title)
+            last_row = _mineSummaryWriteTripSheet(trip_ws, origin, destination, trips, 'Trips%d' % table_no)
+            _mineSummaryWriteCover(cover_ws, origin, destination, trips, month_label, trip_title, last_row)
+            pairs.append((destination, trips, trip_title, last_row))
+            listing.append((origin, destination, trips, summary_title, trip_title, cover_title))
+        _mineSummaryWriteOriginSummary(summary_ws, origin, pairs, month_label)
+
+    # ---- สารบัญ : ทุกคู่ พร้อมลิงก์ไปแต่ละ sheet ----
+    index['A1'] = 'ใบสรุปหน้าเหมือง ประจำเดือน %s' % month_label
+    _mineSummaryFont(index['A1'], size=18, bold=True)
+    total_missing = sum(1 for r in trip_rows if r['dest_weight'] is None)
+    index['A2'] = ('ยังขาด นน.ปลายทางรวม %s เที่ยว — ยังไม่ควรส่งบัญชี' % total_missing
+                   if total_missing else 'น้ำหนักปลายทางครบทุกเที่ยว')
+    _mineSummaryFont(index['A2'], bold=True, color='C00000' if total_missing else '2E7D32')
+    heads = ['ต้นทาง', 'ปลายทาง', 'เที่ยว', 'ขาด นน.ปลายทาง', 'สรุปเหมือง', 'รายเที่ยว', 'ใบปะหน้า']
+    for col, text in enumerate(heads, start=1):
+        _mineSummaryFont(index.cell(4, col), bold=True, fill='1F4E78', color='FFFFFF')
+        index.cell(4, col).value = text
+    for i, (origin, destination, trips, summary_title, trip_title, cover_title) in enumerate(listing):
+        row = 5 + i
+        missing = sum(1 for r in trips if r['dest_weight'] is None)
+        for col, value in enumerate((origin, destination, len(trips), missing), start=1):
+            index.cell(row, col).value = value
+            _mineSummaryFont(index.cell(row, col), bold=col == 4 and bool(missing),
+                             color='C00000' if (col == 4 and missing) else None)
+        for col, title in ((5, summary_title), (6, trip_title), (7, cover_title)):
+            link = index.cell(row, col)
+            link.value = title
+            link.hyperlink = Hyperlink(ref=link.coordinate, location="'%s'!A1" % title)
+            link.font = Font(name=MINE_SUMMARY_FONT, size=14, color='0563C1', underline='single')
+    for col, width in enumerate((34, 34, 8, 14, 30, 32, 36), start=1):
+        index.column_dimensions[get_column_letter(col)].width = width
+    index.freeze_panes = 'A5'
+    return workbook
+
+
+@login_required(login_url='login')
+def exportExcelMineSummary(request):
+    """ใบสรุปหน้าเหมือง (issue #136) : ตัวกรองชุดเดียวกับหน้า /exportDocument/ (เดือน แท็บ ตาชั่ง ช่วงวันที่ ...)
+    ไม่สน ?problem= / ?route= ที่ใช้กรองตารางบนหน้าเว็บ ใบสรุปต้องครบทุกเที่ยวของขอบเขตนั้น
+
+    ชื่อสินค้าใช้ ชนิดหิน(ช่วงน้ำหนักที่แบก) ช่วงน้ำหนักคิดจากสัญญาแบบเดียวกับไฟล์บัญชี
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    _exportProgressSet(request, 2, 'กำลังดึงข้อมูลรายเที่ยว')
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+    if not rows:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้สรุป")
+    selected_month = filters['selected_month']
+
+    _exportProgressSet(request, 30, 'กำลังหาช่วงน้ำหนักที่แบก')
+    _, weight_carried_by_key, _ = _exportDocumentRatePlan(rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+
+    _exportProgressSet(request, 60, 'กำลังทำใบสรุป %s เที่ยว' % len(rows))
+    workbook = _mineSummaryWorkbook(
+        rows, _exportDocumentThaiMonth(selected_month) if selected_month else 'ทุกเดือน')
+
+    _exportProgressSet(request, 85, 'กำลังบันทึกไฟล์')
+    stream = BytesIO()
+    workbook.save(stream)
+    _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = 'mine_summary_%s_%s.xlsx' % (active, selected_month or 'all')
+    response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
 @login_required(login_url='login')
 def exportExcelExportDocument(request):
     """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
 
     เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
-    ถ้าเขียนทับจะเสียสูตรถาวร เหมือนที่หน้า "วิธีกรอก" ในไฟล์เตือนไว้
+    ถ้าเขียนทับจะเสียสูตรถาวร
     """
     try:
         active = request.session['company_code']
@@ -14800,8 +15520,10 @@ def exportExcelExportDocument(request):
     rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
         rows, selected_month)
     _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
-    # ราคาน้ำมันของวันที่วิ่ง ลงคอลัมน์ N ต่อเที่ยว (อัตรา O / ค่าขนส่ง P เป็นสูตรในไฟล์)
-    _exportDocumentAssignFuelPrice(rows, rate_rows)
+    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) ลงชีตคำนวณค่าขนส่ง ช่อง M + ตาราง Q-T
+    # อัตรา / ค่าขนส่งรายเที่ยวเป็นสูตรในตาราง W-AE ของชีตเดียวกัน
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
 
     _exportProgressSet(request, 33, 'กำลังเปิดไฟล์ต้นแบบ')
     workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
@@ -14826,7 +15548,7 @@ def exportExcelExportDocument(request):
         worksheet.cell(row=excel_row, column=2).value = r['origin'] or None           # B เหมืองต้นทาง
         worksheet.cell(row=excel_row, column=3).value = r['destination'] or None      # C ท่าปลายทาง
         worksheet.cell(row=excel_row, column=4).value = r['stone'] or None            # D ชนิดแร่/หิน
-        worksheet.cell(row=excel_row, column=5).value = r['weight_carried'] or None   # E แบก นน. (ยังว่าง)
+        worksheet.cell(row=excel_row, column=5).value = r['weight_carried'] or None   # E ช่วงน้ำหนักที่แบก
         team_cell = worksheet.cell(row=excel_row, column=6)                           # F ทีมรถร่วม
         team_cell.value = r['team']
         if r['team_missing']:
@@ -14849,17 +15571,13 @@ def exportExcelExportDocument(request):
             float(r['origin_weight']) if r['origin_weight'] is not None else None)   # J นน.ต้นทาง
         worksheet.cell(row=excel_row, column=11).value = (
             float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
-        # N ราคาน้ำมันวันที่วิ่ง : ว่าง = ไม่มีราคาทั้งต้นทางและปลายทาง (ไฟล์ทาเหลืองให้ถ้าเที่ยวนั้นต้องใช้)
-        worksheet.cell(row=excel_row, column=EXPORT_DOC_TRIP_FUEL_COL).value = (
-            float(r['fuel_price']) if r.get('fuel_price') is not None else None)
 
-    _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats)
+    trip_teams = {r['team'] for r in rows}
+    _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats, fuel_lines, trip_teams)
+    _exportDocumentWriteRateViewSheet(workbook, rows, selected_month)
 
-    # บิลน้ำมันจาก Express : ใช้ทั้งกรอก sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)
-    # อ่านจาก cache ตัวเดียวกับที่ราคาน้ำมันเฉลี่ยใช้ ไม่ได้ยิงซ้ำ
-    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
-    _exportDocumentWriteOilSheet(workbook, fuel_lines,
-                                 {r['team'] for r in rows}, rate_stats)
+    # บิลน้ำมันจาก Express ชุดเดียวกับราคาเฉลี่ย : sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)
+    _exportDocumentWriteOilSheet(workbook, fuel_lines, trip_teams, rate_stats)
     _exportDocumentWriteExpressSheet(workbook, fuel_lines, fuel_stats)
 
     # "ไม่ระบุทีม" เป็นชื่อที่เราตั้งขึ้นเอง ต้องไปลงทะเบียนใน sheet รายการมาตรฐาน

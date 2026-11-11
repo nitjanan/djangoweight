@@ -144,6 +144,7 @@
     highlightName(nameText, r.name || '-', query);
     name.appendChild(nameText);
     if (r.exact) name.appendChild(el('span', 'sb-tag sb-tag-exact', 'ชื่อตรงกัน'));
+    else if (r.sound_alike) name.appendChild(el('span', 'sb-tag sb-tag-alike', 'สะกดต่าง'));
     if (r.disabled) name.appendChild(el('span', 'sb-tag sb-tag-off', 'ปิดการใช้งาน'));
     // ค่าช่องบังคับกรอก (ประเภทเครื่องชั่ง / บริษัท / ทีม ...) ช่วยแยกว่าชื่อซ้ำแต่คนละประเภทหรือไม่
     if (r.details && r.details.length) {

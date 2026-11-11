@@ -71,6 +71,50 @@ def normalizeBaseName(text):
     return stripped or text
 
 
+# พยัญชนะไทยที่ออกเสียงเหมือนกัน มักสะกดสลับกัน (ศิลาชัย / สิลาชัย / ษิลาชัย) -> ยุบเป็นตัวแทนตัวเดียว
+# รวมถึงวรรณยุกต์ / การันต์ / ไม้ไต่คู้ ที่มักใส่ผิดหรือตกหล่น (ศิลป / ศิลป์)
+_THAI_SOUND_GROUPS = [
+    'สศษซ', 'ทธถฐฑฒ', 'ดฎ', 'ตฏ', 'คขฃฅฆ', 'พภผ', 'ฟฝ', 'ชฌฉ', 'นณ', 'ลฬ', 'ยญ', 'หฮ',
+]
+_THAI_SOUND_MAP = {ord(ch): group[0] for group in _THAI_SOUND_GROUPS for ch in group[1:]}
+_THAI_SOUND_MAP.update({ord(ch): None for ch in '่้๊๋์็'})  # ่ ้ ๊ ๋ ์ ็
+SOUND_ALIKE_MAX_SCORE = 0.95  # สะกดต่างแต่เสียงเดียวกัน = คล้ายมาก แต่ไม่ใช่ "ชื่อตรงกัน" (ไม่กันบันทึก)
+
+
+# ตัวสะกดท้ายคำ : ออกเสียงตามมาตรา จึงสะกดสลับกันบ่อย (สต็อก / สต็อค, ก๊าซ / ก๊าส)
+# หาตัวสะกดกลางคำไม่ได้แม่น (ภาษาไทยไม่เว้นวรรคพยางค์) จึงยุบเฉพาะพยัญชนะตัวท้ายของแต่ละคำ
+_THAI_FINAL_GROUPS = {
+    'ก': 'กขคฆ',                      # แม่กก
+    'ด': 'ดตทธถศษสจชซฎฏฐฑฒ',          # แม่กด
+    'บ': 'บปพภฟ',                     # แม่กบ
+    'น': 'นณญรลฬ',                    # แม่กน
+}
+_THAI_FINAL_MAP = {ch: rep for rep, group in _THAI_FINAL_GROUPS.items() for ch in group}
+_THAI_MARKS = '่้๊๋์็'
+
+
+def _foldFinal(word):
+    word = word.translate({ord(ch): None for ch in _THAI_MARKS})
+    if len(word) >= 2 and word[-1] in _THAI_FINAL_MAP:
+        word = word[:-1] + _THAI_FINAL_MAP[word[-1]]
+    return word
+
+
+def soundAlikeThai(text, finals=True):
+    """กุญแจเทียบเสียง : ตัดคำนำหน้านิติบุคคล ยุบตัวสะกดท้ายคำตามมาตรา แล้วยุบพยัญชนะที่เสียงเหมือนกัน
+    รับชื่อดิบ (ยังมีช่องว่าง) เพราะต้องรู้ว่าคำไหนจบตรงไหน
+    finals=False : ไม่ยุบตัวสะกด (ใช้คู่กัน เพราะชื่อที่เขียนติดกัน ตัวสะกดอยู่กลางคำ เช่น ก๊าซไทย / ก๊าส ไทย)"""
+    words = []
+    for token in _PUNCT_RE.split((text or '').lower()):
+        for noise in _NAME_NOISE:
+            token = token.replace(noise, '')
+        if token:
+            words.append(_foldFinal(token) if finals else token.translate({ord(ch): None for ch in _THAI_MARKS}))
+    if not words:  # มีแต่คำนำหน้า
+        words = [_foldFinal(normalizeBaseName(text)) if finals else normalizeBaseName(text)]
+    return ''.join(words).translate(_THAI_SOUND_MAP)
+
+
 def similarScore(query_norm, name_norm):
     if not query_norm or not name_norm:
         return 0.0
@@ -90,11 +134,21 @@ def findSimilarBase(model_key, query, limit=SIMILAR_LIMIT, exclude=None):
 
     fields = [id_field, name_field] + ([disable_field] if disable_field else [])
     results = []
+    query_sounds = (soundAlikeThai(query), soundAlikeThai(query, finals=False))
     for row in model.objects.values(*fields):
         if exclude is not None and str(row[id_field]) == str(exclude):
             continue
         name = row[name_field] or ''
-        score = similarScore(query_norm, normalizeBaseName(name))
+        name_norm = normalizeBaseName(name)
+        score = similarScore(query_norm, name_norm)
+        sound_alike = False
+        if score < 1.0:
+            # เทียบอีกรอบแบบไม่สนตัวสะกดที่เสียงเหมือนกัน (ส/ศ/ษ, ท/ธ/ถ ...)
+            alike = min(max(similarScore(query_sounds[0], soundAlikeThai(name)),
+                            similarScore(query_sounds[1], soundAlikeThai(name, finals=False))),
+                        SOUND_ALIKE_MAX_SCORE)
+            if alike > score:
+                score, sound_alike = alike, True
         if score < SIMILAR_MIN_SCORE:
             continue
         results.append({
@@ -102,6 +156,7 @@ def findSimilarBase(model_key, query, limit=SIMILAR_LIMIT, exclude=None):
             'name': name,
             'score': round(score, 2),
             'exact': score == 1.0,
+            'sound_alike': sound_alike,  # ชื่อเสียงเหมือนกันแต่สะกดต่าง (เช่น ศ / ส)
             'disabled': bool(row[disable_field]) if disable_field else False,
             # ปุ่ม "ดูข้อมูล" เปิด popup (similarBaseDetail) ลิงก์ "เปิดหน้าเต็ม" ใน popup = หน้าแก้ไขโหมดดูอย่างเดียว
         })

@@ -15069,6 +15069,15 @@ def _mineSummaryPairTitle(origin, destination, used, prefix=''):
     return _mineSummarySheetTitle('%s%s-%s' % (prefix, o, d), used)
 
 
+def _mineSummaryText(cell, value):
+    """ใส่ข้อความจากข้อมูลชั่ง (ทีม / ทะเบียน / ชื่อเหมือง ฯลฯ) ลงช่องเป็นข้อความเสมอ
+    openpyxl ถือว่าข้อความที่ขึ้นต้นด้วย '=' เป็นสูตร ถ้าใครพิมพ์ชื่อแบบนั้นไว้ในระบบชั่ง
+    Excel จะรันเป็นสูตรตอนเปิดไฟล์ (formula injection) จึงบังคับชนิดเป็นข้อความ"""
+    cell.value = value
+    if isinstance(value, str) and value.startswith('='):
+        cell.data_type = 's'
+
+
 def _mineSummaryStatus(row):
     problems = []
     if row['dest_weight'] is None:
@@ -15162,7 +15171,10 @@ def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, sou
         style = MINE_SUMMARY_LEVEL_STYLE[level]
         for i, value in enumerate(labels):
             cell = worksheet.cell(row, left + i)
-            cell.value = value
+            if i == 0 or level == 'head':
+                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / สินค้า / ทีม มาจากข้อมูลชั่ง
+            else:
+                cell.value = value                   # สูตรนับ / รวมที่เราสร้างเอง
             if i == 0:
                 align = Alignment(horizontal='left', indent=style['indent'], vertical='center')
                 fmt = None
@@ -15227,7 +15239,10 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
                   _mineSummaryStatus(r) or None]
         for col, value in enumerate(values, start=1):
             cell = worksheet.cell(row, col)
-            cell.value = value
+            if col in (9, 10):
+                cell.value = value                   # สูตรส่วนต่าง / จ่ายค่าบรรทุก ที่เราสร้างเอง
+            else:
+                _mineSummaryText(cell, value)
             fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 7 <= col <= 10 else '@' if col in (1, 2) else None)
             _mineSummaryFont(cell, fmt=fmt, border=cell_border, fill=fill,
                              align=center if col in (1, 2, 3, 5, 6) else None)
@@ -15337,7 +15352,7 @@ def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
                 return '%s$%s$2:$%s$%d' % (ref, col, col, last_row)
             crit = '%s,%s' % (rng('F'), _mineSummaryCriteria(product))
             worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-            worksheet.cell(row, 1).value = '%s %s' % (destination, product)
+            _mineSummaryText(worksheet.cell(row, 1), '%s %s' % (destination, product))
             worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('G'))
             worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (rng('G'), crit)
             worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('H'))
@@ -15425,12 +15440,12 @@ def _mineSummaryWorkbook(trip_rows, month_label):
         row = 5 + i
         missing = sum(1 for r in trips if r['dest_weight'] is None)
         for col, value in enumerate((origin, destination, len(trips), missing), start=1):
-            index.cell(row, col).value = value
+            _mineSummaryText(index.cell(row, col), value)
             _mineSummaryFont(index.cell(row, col), bold=col == 4 and bool(missing),
                              color='C00000' if (col == 4 and missing) else None)
         for col, title in ((5, summary_title), (6, trip_title), (7, cover_title)):
             link = index.cell(row, col)
-            link.value = title
+            _mineSummaryText(link, title)
             link.hyperlink = Hyperlink(ref=link.coordinate, location="'%s'!A1" % title)
             link.font = Font(name=MINE_SUMMARY_FONT, size=14, color='0563C1', underline='single')
     for col, width in enumerate((34, 34, 8, 14, 30, 32, 36), start=1):

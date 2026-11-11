@@ -1005,6 +1005,16 @@ class MineSummaryTests(SimpleTestCase):
         self.assertIn('ยังขาด นน.ปลายทางรวม 2 เที่ยว', index['A2'].value)
         self.assertEqual(index['G7'].hyperlink.location, "'ปะหน้า เหมือง ข-ท่า X'!A1")
 
+    def test_names_that_look_like_formulas_stay_text(self):
+        """ชื่อทีมที่ขึ้นต้นด้วย = ต้องลงไฟล์เป็นข้อความ ไม่ใช่สูตร (กัน formula injection)"""
+        evil = '=HYPERLINK("http://x","y")'
+        wb = views._mineSummaryWorkbook(self.rated([self.row(1, team=evil)]), 'ตุลาคม 2569')
+        trips = wb['เหมือง ก-ท่า X']
+        self.assertEqual((trips['D2'].value, trips['D2'].data_type), (evil, 's'))
+        self.assertEqual(trips['M6'].data_type, 's')            # แถวทีมในตารางสรุป
+        self.assertEqual(trips['N6'].data_type, 'f')            # ตัวเลขยังเป็นสูตรของเรา
+        self.assertEqual(trips['I2'].data_type, 'f')
+
     def request(self, path, params):
         rq = RequestFactory().get(path, params)
         rq.session = {'company_code': 'ROI'}

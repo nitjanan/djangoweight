@@ -241,6 +241,29 @@ def get_api_delivery_order_3_30am(request):
     result = insertDeliveryFromApiK2M(previous_day)
     return HttpResponse(result)
 
+# ======================================================================================================
+# ความสัมพันธ์ของ column ใบ DO ระหว่าง k2m / Django / โปรแกรมตาชั่ง Windows (Blue, Pink)  (do_database.xlsx)
+# ------------------------------------------------------------------------------------------------------
+#  ความหมาย                 | k2m API (quo01)          | Django                                   | Windows (local DB ตาชั่ง)
+# --------------------------|--------------------------|------------------------------------------|------------------------------------------
+#  บริษัทที่ออกใบสั่งขาย (สังกัด) | company (query + field)  | BaseCompany.aff_so -> BaseAffiliatedCompany.name | ไม่เก็บ: ถาม Django GET /company/aff/api/by/comp/?comp_code=<เหมือง> -> "aff"
+#  เหมือง                    | mine_code                | DeliveryOrder.comp_code (= BaseCompany.code)  | delivery_order.comp_code
+#                           |                          | WeightDelivery.comp_code                 | base_api id=2 comp_code = เหมืองของตาชั่งนี้ (กรอง TableDeliveryOrder)
+#                           |                          |                                          | base_api id=1 comp_code = เหมืองเดียวกัน (sync กับ Django)
+#  เลขที่ DO                  | docNo                    | DeliveryOrder.doc_no                     | delivery_order.doc_no
+#  วันที่ส่ง                  | deliveryDate             | DeliveryOrder.delivery_date              | delivery_order.delivery_date
+#  หน้างาน                   | deliveryCode (หลัง "___") | DeliveryOrder.site_id                    | delivery_order.site_id
+#                           | deliveryLocation         | DeliveryOrder.site_name                  | delivery_order.site_name
+#  จำนวนรถ                   | carCompany / carCustomer | DeliveryOrder.car_company / car_customer | delivery_order.car_company / car_customer
+#  ลูกค้า                     | customerCode/Name/Address| DeliveryOrder.customer_code/_name/_address | delivery_order.customer_code/_name/_address
+#  สินค้า                     | productCode / productName| DeliveryOrder.product_code / product_name | delivery_order.product_code / product_name
+#  ปริมาณ                    | qty / unitName           | DeliveryOrder.qty / unit_name            | delivery_order.qty / unit_name
+#  อื่น ๆ                     | saleName / note / status | DeliveryOrder.sale_name / note / status  | delivery_order.sale_name / note / status
+#  ประเภทการส่ง               | deliveryType             | (ไม่เก็บ)                                 | delivery_order.delivery_type
+# ------------------------------------------------------------------------------------------------------
+# k2m ส่ง DO ของทุกเหมืองที่ใช้ "บริษัทที่ออกใบสั่งขาย" เดียวกันมาพร้อมกัน จึงต้องเรียกตาม aff_so แล้วแยกด้วย mine_code
+# ฝั่ง Windows ดู DeliveryOrderMine.cs (โค้ดเดียวกันทั้ง Blue และ Pink)
+# ======================================================================================================
 def insertDeliveryFromApiK2M(delivery_date):
     headers = {
         "Authorization": f"Bearer {get_base_api(4)}",
@@ -250,10 +273,22 @@ def insertDeliveryFromApiK2M(delivery_date):
     insert_count = 0
     update_count = 0
     error_count = 0
+    skip_count = 0
 
-    companies = BaseCompany.objects.values_list('code', flat=True)
+    # k2m company = BaseCompany.aff_so.name (บริษัทที่ออกใบสั่งขาย), k2m mine_code = BaseCompany.code -> DeliveryOrder.comp_code
+    # mines_by_aff: { aff_so.name: [BaseCompany.code, ...] } ใช้เดาเหมืองตอน mine_code ว่าง
+    mines_by_aff = defaultdict(list)
+    for code, aff_name in (
+        BaseCompany.objects
+        .filter(aff_so__isnull=False)
+        .exclude(aff_so__name='ALL')
+        .order_by('aff_so__id', 'id')
+        .values_list('code', 'aff_so__name')
+    ):
+        if code:
+            mines_by_aff[aff_name].append(code)
 
-    for company in companies:
+    for company, aff_mines in mines_by_aff.items():
 
         page = 1
 
@@ -285,9 +320,16 @@ def insertDeliveryFromApiK2M(delivery_date):
                 for row in rows:
                     status = row.get("status")
 
+                    mine_code = resolve_k2m_mine_code(row.get("mine_code"), aff_mines)
+                    if not mine_code:
+                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน ข้ามไป
+                        skip_count += 1
+                        print(f"SKIP Company={company} DocNo={row.get('docNo')} : no mine_code")
+                        continue
+
                     existing_do = DeliveryOrder.objects.filter(
                         doc_no=row.get("docNo"),
-                        comp_code=company,
+                        comp_code=mine_code,
                         delivery_date=delivery_date
                     ).first()
 
@@ -321,7 +363,7 @@ def insertDeliveryFromApiK2M(delivery_date):
 
                         DeliveryOrder.objects.create(
                             doc_no=row.get("docNo"),
-                            comp_code=company,
+                            comp_code=mine_code,
                             delivery_date=delivery_date,
                             qty=row.get("qty"),
                             car_company=row.get("carCompany"),
@@ -365,8 +407,18 @@ def insertDeliveryFromApiK2M(delivery_date):
     return (
         f"Insert={insert_count}, "
         f"Update={update_count}, "
+        f"Skip={skip_count}, "
         f"Error={error_count}"
     )
+
+def resolve_k2m_mine_code(mine_code, aff_mines):
+    """เหมืองของแถว DO จาก k2m: ใช้ mine_code ถ้ามี ถ้าว่างและสังกัดมีเหมืองเดียวให้ใช้เหมืองนั้น ไม่งั้นคืน None"""
+    mine_code = (mine_code or '').strip()
+    if mine_code:
+        return mine_code
+    if len(aff_mines) == 1:
+        return aff_mines[0]
+    return None
     
 '''
 # Schedule the tasks
@@ -10459,6 +10511,31 @@ def weightDeliverySummaryByComp(request):
 
     serializer = WeightDeliverySerializer(result_page, many = True)
     return paginator.get_paginated_response(serializer.data)
+
+############ api สังกัดของเหมือง ให้ตาชั่ง local ใช้เป็น company ตอนดึง DO จาก k2m ########
+# request : comp_code = เหมือง (Windows base_api id=2 comp_code = BaseCompany.code)
+# response: aff   = BaseCompany.aff_so.name  -> Windows ส่งเป็น k2m company
+#           mines = BaseCompany.code ทุกเหมืองที่ aff_so เดียวกัน -> Windows ใช้เดาเหมืองตอน k2m mine_code ว่าง
+# key "aff" และ URL นี้ Blue/Pink อ่านอยู่ (DeliveryOrderMine.AffInfo) ถ้าเปลี่ยนต้องแก้ทั้งสองฝั่ง
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def companyAffByComp(request):
+    comp_code = (request.query_params.get('comp_code') or '').strip()
+    if not comp_code:
+        return Response({'detail': 'comp_code is required'}, status=400)
+
+    company = BaseCompany.objects.select_related('aff_so').filter(code=comp_code).first()
+    if not company or not company.aff_so:
+        return Response({'detail': f'ไม่พบสังกัดของเหมือง {comp_code}'}, status=404)
+
+    mines = list(
+        BaseCompany.objects.filter(aff_so=company.aff_so).order_by('id').values_list('code', flat=True)
+    )
+    return Response({
+        'comp_code': company.code,
+        'aff': company.aff_so.name,
+        'mines': mines,
+    })
 
 ########################################################################################
 ###########################     คุณกิตติ รายการ DO จากตาชั่ง   #############################

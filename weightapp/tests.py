@@ -355,7 +355,12 @@ class UCWeightDeliveryTests(TestCase):
     @patch('weightapp.views.get_base_api')
     def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_get_base_api, mock_requests_get):
         from weightapp.views import insertDeliveryFromApiK2M
+        from weightapp.models import BaseAffiliatedCompany
         from datetime import date
+
+        # k2m ดึงตามสังกัด: ผูก TEST_COMP กับสังกัดที่มีเหมืองเดียว แถวที่ไม่มี mine_code จึงลง TEST_COMP
+        self.company.aff_so = BaseAffiliatedCompany.objects.create(name="TEST_AFF")
+        self.company.save()
 
         # Setup mock responses for the first run (Insert)
         mock_response_insert_1 = MagicMock()
@@ -1141,3 +1146,80 @@ class UserScalePasswordTests(TestCase):
         us.refresh_from_db()
         self.assertEqual(us.password, hash_password_sha1('1111'))
         self.assertEqual(us.scale_name, 'แก้ชื่อ')
+
+
+class K2MDeliveryOrderByAffTests(TestCase):
+    """k2m: company = สังกัด (BaseCompany.aff_so.name), mine_code = เหมือง (DeliveryOrder.comp_code)"""
+
+    def setUp(self):
+        from weightapp.models import BaseAffiliatedCompany
+        self.aff_multi = BaseAffiliatedCompany.objects.create(name="AFF_M")
+        self.aff_single = BaseAffiliatedCompany.objects.create(name="AFF_S")
+        BaseCompany.objects.create(name="Mine A", code="MINE_A", aff_so=self.aff_multi)
+        BaseCompany.objects.create(name="Mine B", code="MINE_B", aff_so=self.aff_multi)
+        BaseCompany.objects.create(name="Mine S", code="MINE_S", aff_so=self.aff_single)
+        BaseCompany.objects.create(name="No Aff", code="NO_AFF")
+
+    @staticmethod
+    def _resp(rows):
+        r = MagicMock()
+        r.json.return_value = {"data": rows}
+        r.raise_for_status = MagicMock()
+        return r
+
+    @staticmethod
+    def _row(doc_no, mine_code):
+        return {"docNo": doc_no, "mine_code": mine_code, "qty": 10, "carCompany": 1, "carCustomer": 0,
+                "deliveryCode": "X___SITE", "status": "open", "unitName": "ตัน"}
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_base_api')
+    def test_calls_k2m_per_aff_and_stores_mine_code(self, mock_get_base_api, mock_requests_get):
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] > 1:
+                return self._resp([])
+            if params["company"] == "AFF_M":
+                return self._resp([
+                    self._row("DO_A", "MINE_A"),
+                    self._row("DO_B", "MINE_B"),
+                    self._row("DO_NULL_M", None),  # หลายเหมือง + ไม่มี mine_code → ข้าม
+                ])
+            if params["company"] == "AFF_S":
+                return self._resp([self._row("DO_NULL_S", None)])  # เหมืองเดียว → MINE_S
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+
+        result = insertDeliveryFromApiK2M(date(2026, 11, 16))
+
+        called_companies = {c.kwargs["params"]["company"] for c in mock_requests_get.call_args_list}
+        self.assertEqual(called_companies, {"AFF_M", "AFF_S"})  # ส่งสังกัด ไม่ใช่โค้ดเหมือง
+
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_A").comp_code, "MINE_A")
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_B").comp_code, "MINE_B")
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_NULL_S").comp_code, "MINE_S")
+        self.assertFalse(DeliveryOrder.objects.filter(doc_no="DO_NULL_M").exists())
+        self.assertIn("Insert=3", result)
+        self.assertIn("Skip=1", result)
+        self.assertIn("Error=0", result)
+
+    def test_company_aff_api(self):
+        from rest_framework.test import APIClient
+        user = User.objects.create_user(username="api_user", password="x")
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        res = client.get('/company/aff/api/by/comp/', {'comp_code': 'MINE_B'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {'comp_code': 'MINE_B', 'aff': 'AFF_M', 'mines': ['MINE_A', 'MINE_B']})
+
+        self.assertEqual(client.get('/company/aff/api/by/comp/', {'comp_code': 'NO_AFF'}).status_code, 404)
+        self.assertEqual(client.get('/company/aff/api/by/comp/').status_code, 400)
+
+    def test_company_aff_api_requires_auth(self):
+        from rest_framework.test import APIClient
+        res = APIClient().get('/company/aff/api/by/comp/', {'comp_code': 'MINE_B'})
+        self.assertIn(res.status_code, (401, 403))

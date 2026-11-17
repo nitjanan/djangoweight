@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, BaseAffiliatedCompany,UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
 from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
@@ -329,8 +329,14 @@ class BaseCustomerSiteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id','customer', 'site',)
     search_fields = ('id', 'customer__customer_name', 'site__base_site_name',)
 
+class BaseAffiliatedCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ['id', 'name', 'name_sh', 'name_th', 'name_eng']
+    search_fields = ('name', 'name_sh', 'name_th', 'name_eng')
+    list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
+
 class BaseCompanyAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ['name', 'code', 'biz', 'step'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['name', 'code', 'biz', 'step', 'aff_so'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_filter = ('aff_so',)
     # จำเป็นต้องมี เพราะ BaseCompanyMapBaseCustomerAdmin ใช้ autocomplete_fields ชี้มาที่ BaseCompany
     # ถ้าไม่มี Django จะขึ้น admin.E040 ตั้งแต่ตอน system check แล้วรันคำสั่งอะไรไม่ได้เลยทั้งโปรเจกต์
     search_fields = ('name', 'code')
@@ -630,6 +636,7 @@ admin.site.register(BaseTransport, BaseTransportTypeAdmin)
 admin.site.register(BaseCarTeam, BaseCarTeamAdmin)
 admin.site.register(BaseCar, BaseCarAdmin)
 admin.site.register(BaseFertilizer, BaseFertilizerAdmin)
+admin.site.register(BaseAffiliatedCompany, BaseAffiliatedCompanyAdmin)
 admin.site.register(BaseCompany, BaseCompanyAdmin)
 admin.site.register(UserScale, UserScaleAdmin)
 admin.site.register(UserProfile, UserProfileAdmin)

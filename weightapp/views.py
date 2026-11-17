@@ -224,16 +224,14 @@ def send_line_1pm(request):
     return HttpResponse("1PM summary sent (or skipped).")
 
 
-def get_base_api(mode):
-    b_api = BaseAPI.objects.get(apiname = "k2m_deliver_order")  # query เมื่อเรียกใช้งานจริง
-    if mode == 1:
-        return b_api.url
-    if mode == 2:
-        return b_api.username
-    if mode == 3:
-        return b_api.password
-    if mode == 4:
-        return b_api.token
+# แยกฟังก์ชันอ่าน url กับ token ออกจากกัน (query เมื่อเรียกใช้งานจริง)
+# อย่ารวมเป็นฟังก์ชันเดียวที่คืน password/token ได้ เพราะ CodeQL จะมองว่าข้อมูลที่ได้จาก url เป็นข้อมูลลับไปด้วย
+# แล้วแจ้ง py/clear-text-logging-sensitive-data ตอน print ข้อมูล DO
+def get_k2m_api_url():
+    return BaseAPI.objects.values_list('url', flat=True).get(apiname="k2m_deliver_order")
+
+def get_k2m_api_token():
+    return BaseAPI.objects.values_list('token', flat=True).get(apiname="k2m_deliver_order")
 
 # api delivery order from k2m 3:30am
 def get_api_delivery_order_3_30am(request):
@@ -266,7 +264,7 @@ def get_api_delivery_order_3_30am(request):
 # ======================================================================================================
 def insertDeliveryFromApiK2M(delivery_date):
     headers = {
-        "Authorization": f"Bearer {get_base_api(4)}",
+        "Authorization": f"Bearer {get_k2m_api_token()}",
         "Accept": "application/json"
     }
 
@@ -297,7 +295,7 @@ def insertDeliveryFromApiK2M(delivery_date):
             try:
 
                 response = requests.get(
-                    get_base_api(1),
+                    get_k2m_api_url(),
                     headers=headers,
                     params={
                         "company": company,

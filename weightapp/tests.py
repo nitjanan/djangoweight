@@ -352,8 +352,9 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do3.status, 'cancelled')
 
     @patch('weightapp.views.requests.get')
-    @patch('weightapp.views.get_base_api')
-    def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_get_base_api, mock_requests_get):
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_token, mock_url, mock_requests_get):
         from weightapp.views import insertDeliveryFromApiK2M
         from weightapp.models import BaseAffiliatedCompany
         from datetime import date
@@ -1173,8 +1174,9 @@ class K2MDeliveryOrderByAffTests(TestCase):
                 "deliveryCode": "X___SITE", "status": "open", "unitName": "ตัน"}
 
     @patch('weightapp.views.requests.get')
-    @patch('weightapp.views.get_base_api')
-    def test_calls_k2m_per_aff_and_stores_mine_code(self, mock_get_base_api, mock_requests_get):
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_calls_k2m_per_aff_and_stores_mine_code(self, mock_token, mock_url, mock_requests_get):
         from weightapp.views import insertDeliveryFromApiK2M
         from datetime import date
 

@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY, ExportDocumentDayApproval
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY, ExportDocumentDayApproval, ExportDocumentPayerAllocation, ExportDocumentPayerRowAllocation
 from django.db.models import Sum, Q, Max, Min, Value
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.views.decorators.cache import cache_control
@@ -16219,6 +16219,568 @@ def exportExcelExportDocument(request):
         date_part = ' %sถึง%s' % (filters['selected_date_from'] or 'ต้นเดือน',
                                   filters['selected_date_to'] or 'สิ้นเดือน')
     filename = 'trip_report_%s_%s%s%s.xlsx' % (active, selected_month or 'all', date_part, origin_part)
+    response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+# ---------- issue #137 : บัญชีแบ่งนามที่จ่าย แล้วออกไฟล์บัญชีทีละนาม ----------
+# นามไม่ได้ติดมากับเที่ยว บัญชีตัดสินเองทุกเดือน โดยดูจากใบปะหน้าเหมือง (ไม่ได้ดูรายเที่ยว) :
+#   1. เป้า : แต่ละนามจ่ายหินชนิดไหนกี่ตัน (ได้มาก่อน · ExportDocumentPayerAllocation)
+#   2. แบ่งหินจากกองกลาง = หยิบ "แถวทีม" ของใบปะหน้า (เส้นทาง × หิน + ช่วงน้ำหนัก × ทีม) ให้นามจนครบเป้าพอดี
+#      (ExportDocumentPayerRowAllocation) ปกติหยิบทั้งแถว · แถวสุดท้ายตัดเอาเท่าที่ขาด (แบ่งแถวให้หลายนาม)
+#      แถว / ส่วนที่ไม่มีใครรับ = ค้าง stock · ห้ามเกินเป้า ห้ามเลือกหินที่ไม่มีเป้า · นามที่ยังไม่ครบเป้าออกไฟล์ไม่ได้
+#   เช่น 40-80 แบกนน. 8,044 ตัน : ร้อยเกาะขนส่ง + ฟ้าหลังฝน (3,033 ตัน) ให้ยูนิ ทีมที่เหลือ (5,011 ตัน) ให้โชคพนา
+# ทำได้จากแท็บร้อยเกาะ / ทั้งหมดเท่านั้น (ต้องเห็นเที่ยวทุกต้นทาง)
+#
+# ไฟล์ของนาม = เที่ยวของแถวที่นามนี้รับ น้ำหนักจริง · แถวที่แบ่งหลายนาม เขียนสัดส่วน (ตันที่รับ ÷ ตันของแถว)
+# ลงคอลัมน์ AD ของบันทึกรายเที่ยว แล้วชีตสรุปของ template v22 คูณสัดส่วนเอง : ค่าขนส่ง = อัตรา × ตันที่รับ
+# oil : ยังไม่แบ่งตามนาม (บัญชีหักเองตอนจ่าย) ไฟล์ของนามติดชีต oil ไว้ดู แต่สรุปจ่ายรถร่วมไม่หัก
+
+# ไม่ใช่นามที่จ่าย : แท็บรวมทุกบริษัท กับร้อยเกาะ (ผู้รับเงิน)
+EXPORT_DOC_PAYER_EXCLUDED_COMPANIES = ('ALL', 'ROI')
+EXPORT_DOC_PAYER_NO_STONE = '(ไม่ระบุชนิดหิน)'
+EXPORT_DOC_PAYER_TON = Decimal('0.001')
+# สรุปจ่ายรถร่วม คอลัมน์ AJ = ยอดหัก oil ของทีม (สูตร SUMIF จากชีต oil) แถว 5-704
+EXPORT_DOC_PAY_OIL_COL = 36
+EXPORT_DOC_PAY_FIRST_ROW = 5
+EXPORT_DOC_PAY_LAST_ROW = 704
+# บันทึกรายเที่ยว คอลัมน์ AD = สัดส่วนที่นามนี้จ่าย (template v22 · ว่าง = ทั้งเที่ยว)
+EXPORT_DOC_PAYER_SHARE_COL = 30
+# กันฟอร์มที่ส่งมาผิดรูปไม่ให้วนไม่จบ (หินในเดือนหนึ่งมีไม่กี่สิบชนิด แถวทีมไม่กี่ร้อย)
+EXPORT_DOC_PAYER_MAX_STONES = 500
+EXPORT_DOC_PAYER_MAX_ROWS = 5000
+# ค่าในช่องเลือกนามของแถวทีม : '' = ค้าง stock · id บริษัท = ทั้งแถว · split = แบ่งหลายนาม (กรอกตัน)
+EXPORT_DOC_PAYER_SPLIT = 'split'
+
+
+def _exportDocumentPayerCompanies():
+    """บริษัทที่เลือกเป็นนามที่จ่ายได้ = ทุกบริษัท ยกเว้นแท็บรวม กับร้อยเกาะ"""
+    return list(BaseCompany.objects.exclude(code__in=EXPORT_DOC_PAYER_EXCLUDED_COMPANIES).order_by('id'))
+
+
+def _exportDocumentMonthStart(selected_month):
+    year, month = selected_month.split('-')
+    return date(int(year), int(month), 1)
+
+
+def _exportDocumentPayerScope(request, selected_month):
+    """เที่ยวทั้งเดือนทุกต้นทาง คืน (rows, filters, month_list)
+    rows = None ถ้าแท็บนี้ไม่ได้เห็นทุกต้นทาง (ยอดที่แบ่งต้องเป็นยอดของทั้งเดือน ไม่ใช่ของเหมืองเดียว)
+    rows เติมช่วงน้ำหนักที่แบกแล้ว เพราะช่วงเป็นส่วนหนึ่งของแถวทีม (สินค้า = หิน(ช่วง) แบบใบปะหน้า)"""
+    qs, filters, month_list = _exportDocumentQuerySet(request, params={'month': selected_month})
+    if not filters['tab_sees_all'] or not filters['selected_month']:
+        return None, filters, month_list
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, filters['selected_month'])
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    credits = _exportDocumentTeamCredits(filters['selected_month'])
+    for r in rows:
+        r['credit'] = _exportDocumentTripCredit(r, credits)
+    return rows, filters, month_list
+
+
+def _exportDocumentTeamCredits(selected_month):
+    """เครดิตของทีมจากเงื่อนไขการชำระเงินในสัญญาค่าขนส่งที่มีผลเดือนนั้น
+    คืน {(map id ต้นทาง, map id ปลายทาง, id ทีม หรือ None = ทุกทีม/ทีมที่เหลือ): วัน | None}
+    0 = เงินสด · None = ยังไม่ระบุ · ทีมเดียวกันในสัญญาเดียวกันเป็นค่าเดียวเสมอ (serializer บังคับ)"""
+    rates = InternationalFreightRate.effectiveOn(
+        _exportDocumentRateAsOf(selected_month),
+        InternationalFreightRate.objects.prefetch_related('teams'))
+    credits = {}
+    for rate in rates:
+        for team_rate in rate.teams.all():
+            key = (rate.origin_id, rate.destination_id, team_rate.team_id)
+            if credits.get(key) is None:
+                credits[key] = team_rate.credit_days
+    return credits
+
+
+def _exportDocumentTripCredit(r, credits):
+    """เครดิตของเที่ยว : แถวของทีมนั้นในสัญญาเส้นทางนั้น ไม่มีแถวของทีม = แถวทุกทีม/ทีมที่เหลือ"""
+    route = (r['origin_map_id'], r['destination_map_id'])
+    key = route + (r['team_id'],)
+    if key in credits:
+        return credits[key]
+    return credits.get(route + (None,))
+
+
+def _exportDocumentCreditSort(credit):
+    """เครดิตน้อยมาก่อน (เงินสด 0 วัน ก่อนสุด) · ยังไม่ระบุไว้ล่างสุด"""
+    return (credit is None, credit or 0)
+
+
+def _exportDocumentCreditLabel(credit):
+    if credit is None:
+        return 'ไม่ระบุเครดิต'
+    if credit == 0:
+        return 'เงินสด'
+    return 'เครดิต %d วัน' % credit
+
+
+def _exportDocumentCreditParam(credit):
+    """ค่าใน URL ของปุ่มออกไฟล์ : none = ไม่ระบุ / ตัวเลข = วัน"""
+    return 'none' if credit is None else str(credit)
+
+
+def _exportDocumentPayerRowFields(r):
+    """แถวทีม = (ต้นทาง, ปลายทาง, ชนิดหิน, ช่วงน้ำหนักที่แบก, ทีม) ตรงกับแถวทีมของชีตสรุปหน้าเหมือง"""
+    return (r['origin'] or '', r['destination'] or '', r['stone'] or '', r['weight_carried'] or '', r['team'] or '')
+
+
+def _exportDocumentPayerRowKey(fields):
+    return hashlib.sha256('\x1f'.join(fields).encode('utf-8')).hexdigest()
+
+
+def _exportDocumentPayerTeamRows(rows):
+    """แถวทีมของเดือน เรียง เส้นทาง -> สินค้า ตามชื่อ (ลำดับเดียวกับชีตสรุปหน้าเหมือง) -> ทีมเครดิตน้อยก่อน
+    ตัน = นน.จ่ายค่าบรรทุก รวม (เที่ยวที่ไม่มีน้ำหนักนับเที่ยวแต่ไม่นับตัน)
+    เครดิตของแถว = ของเที่ยวแรก (rows ต้องผ่าน _exportDocumentPayerScope ที่เติม credit ไว้)"""
+    by_fields = {}
+    for r in rows:
+        fields = _exportDocumentPayerRowFields(r)
+        item = by_fields.get(fields)
+        if item is None:
+            item = by_fields[fields] = {
+                'key': _exportDocumentPayerRowKey(fields),
+                'origin': fields[0], 'destination': fields[1], 'stone': fields[2],
+                'weight_carried': fields[3], 'team': fields[4],
+                'route_label': _mineSummaryRouteLabel(fields[0] or '-', fields[1] or '-'),
+                'product_label': _mineSummaryProduct(r),
+                'credit': r.get('credit'), 'credit_label': _exportDocumentCreditLabel(r.get('credit')),
+                'credit_param': _exportDocumentCreditParam(r.get('credit')),
+                'trips': 0, 'tons': Decimal('0'),
+            }
+        item['trips'] += 1
+        if r.get('pay_weight') is not None:
+            item['tons'] += Decimal(r['pay_weight'])
+    # ในหินกลุ่มเดียวกัน ทีมเครดิตน้อยขึ้นก่อน (บัญชีจ่ายก่อน) ไม่ระบุไว้ล่างสุด แล้วค่อยเรียงชื่อทีม
+    return [by_fields[f] for f in sorted(
+        by_fields, key=lambda f: f[:4] + (_exportDocumentCreditSort(by_fields[f]['credit']), f[4]))]
+
+
+def _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies):
+    """เทียบนามที่บัญชีเลือกไว้กับแถวทีมจริงของเดือน (ไม่เขียน db)
+
+    คืน
+      groups    : เส้นทาง -> สินค้า -> แถวทีม แบบใบปะหน้า · แถวมี mode ('' ค้าง / id บริษัท ทั้งแถว / split)
+                  splits (ตันของแต่ละบริษัท เรียงตาม companies) assigned / stock / is_over
+      stones    : ต่อชนิดหิน + cells ต่อบริษัท (target เป้า / chosen ที่เลือกแล้ว / diff) + chosen / stock
+      companies : ต่อบริษัท + tons (ที่เลือกแล้วรวม) / target / selected
+      orphans   : นามที่เลือกไว้ แต่เดือนนี้ไม่มีแถวทีมนั้นแล้ว (ข้อมูลเปลี่ยนหลังเลือก) · เป้าของหินที่ไม่มีแล้ว
+      can_export: ไม่มีแถวไหนแบ่งตันเกินยอดของแถว (แบ่งไม่ครบได้ ส่วนที่เหลือ = ค้าง stock)
+    """
+    names = {c.id: c.name for c in companies}
+    allocs_by_key = {}
+    for a in row_allocs:
+        if a.company_id in names:
+            allocs_by_key.setdefault(a.row_key, []).append(a)
+    target_by = {(a.company_id, a.stone_type_name): Decimal(a.tons) for a in targets if a.company_id in names}
+    chosen = {}
+    credit_tons = {}   # (บริษัท, เครดิต) -> ตัน : ปุ่มออกไฟล์แยกตามเครดิต
+    groups = []
+    stone_totals = {}
+    over_rows = 0
+    product_count = 0
+    for index, item in enumerate(team_rows):
+        allocs = allocs_by_key.get(item['key'], [])
+        whole = next((a for a in allocs if a.tons is None), None)
+        if whole is not None:
+            mode = str(whole.company_id)
+            taken = {whole.company_id: item['tons']}
+        elif allocs:
+            mode = EXPORT_DOC_PAYER_SPLIT
+            taken = {a.company_id: Decimal(a.tons) for a in allocs}
+        else:
+            mode = ''
+            taken = {}
+        assigned = sum(taken.values(), Decimal('0'))
+        left = item['tons'] - assigned
+        is_over = left <= -EXPORT_DOC_PAYER_TON
+        over_rows += is_over
+        for cid, tons in taken.items():
+            chosen[(cid, item['stone'])] = chosen.get((cid, item['stone']), Decimal('0')) + tons
+            credit_tons[(cid, item.get('credit'))] = credit_tons.get((cid, item.get('credit')), Decimal('0')) + tons
+        # index = ลำดับช่องกรอกของแถว (row-<index> / mode-<index> / split-<บริษัท>-<index>)
+        row = dict(item, index=index, mode=mode, assigned=assigned, stock=max(left, Decimal('0')),
+                   over=-left if is_over else Decimal('0'), is_over=is_over,
+                   splits=[{'company_id': c.id, 'company_name': c.name,
+                            'tons': taken.get(c.id) if mode == EXPORT_DOC_PAYER_SPLIT else None}
+                           for c in companies])
+
+        route_id = (item['origin'], item['destination'])
+        if not groups or groups[-1]['id'] != route_id:
+            groups.append({'id': route_id, 'label': item['route_label'], 'products': []})
+        products = groups[-1]['products']
+        product_id = (item['stone'], item['weight_carried'])
+        if not products or products[-1]['id'] != product_id:
+            product_count += 1
+            products.append({'id': product_id, 'index': product_count, 'label': item['product_label'],
+                             'stone': item['stone'],
+                             'trips': 0, 'tons': Decimal('0'), 'stock': Decimal('0'), 'rows': []})
+        product = products[-1]
+        product['trips'] += item['trips']
+        product['tons'] += item['tons']
+        product['stock'] += row['stock']
+        product['rows'].append(row)
+
+        s = stone_totals.setdefault(item['stone'], {'trips': 0, 'tons': Decimal('0')})
+        s['trips'] += item['trips']
+        s['tons'] += item['tons']
+
+    stones = []
+    target_errors = 0
+    problems_by_company = {}
+    for stone in sorted(stone_totals):
+        cells = []
+        label = stone or EXPORT_DOC_PAYER_NO_STONE
+        for c in companies:
+            target = target_by.get((c.id, stone))
+            got = chosen.get((c.id, stone), Decimal('0'))
+            status = _exportDocumentPayerTargetStatus(target, got)
+            if status in ('no_target', 'over'):
+                target_errors += 1
+            if status in ('no_target', 'over', 'short'):
+                problems_by_company.setdefault(c.id, []).append(label)
+            cells.append({'company_id': c.id, 'company_name': c.name, 'target': target, 'chosen': got,
+                          'status': status, 'gap': abs(got - target) if target is not None else got})
+        chosen_total = sum((x['chosen'] for x in cells), Decimal('0'))
+        target_total = sum((x['target'] for x in cells if x['target']), Decimal('0'))
+        stones.append({'stone': stone, 'label': label,
+                       'trips': stone_totals[stone]['trips'], 'tons': stone_totals[stone]['tons'],
+                       'cells': cells, 'chosen': chosen_total, 'target': target_total,
+                       # เป้ารวมทุกนามมากกว่าหินในกองกลาง : แบ่งให้ครบเป้าทุกนามไม่ได้
+                       'target_over_pool': target_total - stone_totals[stone]['tons'] >= EXPORT_DOC_PAYER_TON,
+                       'stock': stone_totals[stone]['tons'] - chosen_total})
+
+    company_rows = []
+    for c in companies:
+        tons = sum((t for (cid, _stone), t in chosen.items() if cid == c.id), Decimal('0'))
+        target = sum((t for (cid, _stone), t in target_by.items() if cid == c.id), Decimal('0'))
+        problems = problems_by_company.get(c.id, [])
+        company_rows.append({'id': c.id, 'code': c.code, 'name': c.name, 'tons': tons, 'target': target,
+                             'selected': any(cid == c.id for (cid, _stone) in chosen)
+                             or any(cid == c.id for (cid, _stone) in target_by),
+                             # ออกไฟล์ได้เมื่อทุกหินที่มีเป้า แบ่งครบเป้าพอดี
+                             'complete': bool(target) and not problems,
+                             'problems': problems,
+                             # ไฟล์แยกตามเครดิตของทีม (เครดิตน้อยก่อน ไม่ระบุท้ายสุด) นอกจากไฟล์รวม
+                             'credit_groups': [
+                                 {'credit': credit, 'label': _exportDocumentCreditLabel(credit),
+                                  'param': _exportDocumentCreditParam(credit), 'tons': t}
+                                 for (cid, credit), t in sorted(
+                                     credit_tons.items(), key=lambda kv: _exportDocumentCreditSort(kv[0][1]))
+                                 if cid == c.id]})
+
+    keys = {item['key'] for item in team_rows}
+    orphans = []
+    for a in sorted(row_allocs, key=lambda a: (a.origin, a.destination, a.stone_type_name, a.team, a.company_id)):
+        if a.row_key not in keys and a.company_id in names:
+            orphans.append({'company': names[a.company_id], 'tons': a.tons,
+                            'label': '%s %s %s' % (_mineSummaryRouteLabel(a.origin or '-', a.destination or '-'),
+                                                   a.stone_type_name or EXPORT_DOC_PAYER_NO_STONE, a.team)})
+    for (cid, stone), tons in sorted(target_by.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        if stone not in stone_totals:
+            orphans.append({'company': names[cid], 'tons': tons,
+                            'label': 'เป้า %s' % (stone or EXPORT_DOC_PAYER_NO_STONE)})
+    return {
+        'groups': groups,
+        'stones': stones,
+        'companies': company_rows,
+        'orphans': orphans,
+        'over_rows': over_rows,
+        'target_errors': target_errors,
+        'row_count': len(team_rows),
+        # ตัวเลือกของแถบกรองข้อ ③
+        'filter_credits': [{'param': _exportDocumentCreditParam(c), 'label': _exportDocumentCreditLabel(c)}
+                           for c in sorted({item.get('credit') for item in team_rows},
+                                           key=_exportDocumentCreditSort)],
+        'filter_routes': [g['label'] for g in groups],
+        'filter_stones': sorted({item['stone'] for item in team_rows}),
+        # แบ่งเกินตันของแถวไม่ได้ (จ่ายค่าขนส่งให้ตันที่ไม่ได้วิ่งจริง) · เกินเป้า / ไม่มีเป้าไม่ได้
+        # นามที่ยังไม่ครบเป้าดูที่ companies[].complete
+        'can_export': bool(team_rows) and not over_rows and not target_errors,
+    }
+
+
+def _exportDocumentPayerTargetStatus(target, chosen):
+    """สถานะของนาม × ชนิดหิน : None (ไม่มีเป้า ไม่ได้เลือก) / no_target (เลือกแถวแต่ไม่ได้ตั้งเป้า)
+    over (เกินเป้า) / short (ยังไม่ครบเป้า) / ok (ครบเป้าพอดี)"""
+    if target is None:
+        return 'no_target' if chosen >= EXPORT_DOC_PAYER_TON else None
+    if chosen - target >= EXPORT_DOC_PAYER_TON:
+        return 'over'
+    if target - chosen >= EXPORT_DOC_PAYER_TON:
+        return 'short'
+    return 'ok'
+
+
+def _exportDocumentPayerShares(team_rows, row_allocs, company_id):
+    """คีย์แถวทีมที่นามนี้รับ -> สัดส่วน (None = ทั้งแถว · Decimal = ตันที่รับ ÷ ตันของแถว)"""
+    tons_by_key = {item['key']: item['tons'] for item in team_rows}
+    shares = {}
+    for a in row_allocs:
+        if a.company_id != company_id or a.row_key not in tons_by_key:
+            continue
+        if a.tons is None:
+            shares[a.row_key] = None
+        elif a.tons > 0 and tons_by_key[a.row_key] > 0:
+            share = Decimal(a.tons) / tons_by_key[a.row_key]
+            # กรอกเท่ายอดของแถวพอดี = ทั้งแถว (ไม่ต้องมีสัดส่วนในไฟล์)
+            shares[a.row_key] = None if share >= 1 else share
+    return shares
+
+
+def _exportDocumentPayerParseTons(raw):
+    """ช่องกรอกตัน คืน (ตัน หรือ None ถ้าว่าง / 0, ข้อความ error หรือ None)"""
+    raw = (raw or '').replace(',', '').strip()
+    if not raw:
+        return None, None
+    try:
+        tons = Decimal(raw).quantize(EXPORT_DOC_PAYER_TON)
+    except (InvalidOperation, ValueError):
+        return None, '"%s" ไม่ใช่ตัวเลข' % raw
+    if tons < 0:
+        return None, 'ติดลบ (%s)' % raw
+    return (tons if tons > 0 else None), None
+
+
+def _exportDocumentPayerSave(request, month_start, companies, team_rows):
+    """บันทึกเป้าตัน (target-<id บริษัท>-<ลำดับหิน> คู่กับ stone-<ลำดับ>) และนามของแถวทีม
+    (row-<ลำดับ> = คีย์แถว · mode-<ลำดับ> = '' / id บริษัท / split · split-<id บริษัท>-<ลำดับ> = ตัน)
+    เขียนทับของเดือนนั้นทั้งชุด · ช่องว่าง / 0 = ไม่มี · ช่องของบริษัทที่ไม่ได้เลือก (ไม่ได้ส่งมา) ก็เช่นกัน
+    ติดลบ / ไม่ใช่ตัวเลข / แบ่งรวมเกินยอดของแถว = แจ้ง error แล้วไม่บันทึกอะไรเลย คืน True ถ้าบันทึกแล้ว
+    """
+    company_ids = [c.id for c in companies]
+    rows_by_key = {item['key']: item for item in team_rows}
+    errors = []
+
+    targets = {}
+    for i in range(EXPORT_DOC_PAYER_MAX_STONES):
+        stone_field = 'stone-%d' % i
+        if stone_field not in request.POST:
+            break
+        stone = request.POST[stone_field]
+        for cid in company_ids:
+            tons, error = _exportDocumentPayerParseTons(request.POST.get('target-%d-%d' % (cid, i)))
+            if error:
+                errors.append('เป้า %s : %s' % (stone or EXPORT_DOC_PAYER_NO_STONE, error))
+            elif tons:
+                targets[(cid, stone)] = tons
+
+    wanted = {}
+    for i in range(EXPORT_DOC_PAYER_MAX_ROWS):
+        row_field = 'row-%d' % i
+        if row_field not in request.POST:
+            break
+        item = rows_by_key.get(request.POST[row_field])
+        if item is None:
+            continue   # แถวที่หายไประหว่างเปิดหน้า (ข้อมูลชั่งเปลี่ยน) : ไม่มีอะไรให้บันทึก
+        label = '%s %s %s' % (item['route_label'], item['product_label'], item['team'])
+        mode = request.POST.get('mode-%d' % i) or ''
+        if mode == EXPORT_DOC_PAYER_SPLIT:
+            total = Decimal('0')
+            for cid in company_ids:
+                tons, error = _exportDocumentPayerParseTons(request.POST.get('split-%d-%d' % (cid, i)))
+                if error:
+                    errors.append('%s : %s' % (label, error))
+                elif tons:
+                    wanted[(item['key'], cid)] = tons
+                    total += tons
+            if total - item['tons'] >= EXPORT_DOC_PAYER_TON:
+                errors.append('%s : แบ่งรวม %s ตัน เกินยอดของแถว %s ตัน' % (label, total, item['tons']))
+        elif mode:
+            cid = int(mode) if mode.isdigit() else None
+            if cid not in company_ids:
+                errors.append('%s : ไม่พบนามที่เลือก' % label)
+            else:
+                wanted[(item['key'], cid)] = None
+    # เป้าคุมการแบ่ง : หินที่เลือกให้นามต้องมีเป้าของนามนั้น และรวมแล้วไม่เกินเป้า (ยังไม่ครบบันทึกได้ ทำต่อทีหลัง)
+    names = {c.id: c.name for c in companies}
+    chosen = {}
+    for (key, cid), tons in wanted.items():
+        item = rows_by_key[key]
+        chosen[(cid, item['stone'])] = chosen.get((cid, item['stone']), Decimal('0')) + (
+            item['tons'] if tons is None else tons)
+    for (cid, stone), got in sorted(chosen.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        status = _exportDocumentPayerTargetStatus(targets.get((cid, stone)), got)
+        label = '%s %s' % (names[cid], stone or EXPORT_DOC_PAYER_NO_STONE)
+        if status == 'no_target':
+            errors.append('%s : ยังไม่ได้ตั้งเป้า (เลือกแถวไว้ %s ตัน)' % (label, got))
+        elif status == 'over':
+            errors.append('%s : เลือก %s ตัน เกินเป้า %s ตัน' % (label, got, targets[(cid, stone)]))
+    if errors:
+        messages.error(request, 'ยังไม่ได้บันทึก : ' + ' · '.join(errors))
+        return False
+
+    with transaction.atomic():
+        existing = {(a.company_id, a.stone_type_name): a
+                    for a in ExportDocumentPayerAllocation.objects.select_for_update().filter(month=month_start)}
+        for (cid, stone), tons in targets.items():
+            row = existing.get((cid, stone))
+            if row is None:
+                ExportDocumentPayerAllocation.objects.create(month=month_start, company_id=cid,
+                                                             stone_type_name=stone, tons=tons,
+                                                             updated_by=request.user)
+            elif row.tons != tons:
+                row.tons = tons
+                row.updated_by = request.user
+                row.save()
+        # ลบเฉพาะแถวของเดือนนี้ ทีละ pk
+        stale = [row.pk for key, row in existing.items() if key not in targets]
+        if stale:
+            ExportDocumentPayerAllocation.objects.filter(month=month_start, pk__in=stale).delete()
+
+        existing = {(a.row_key, a.company_id): a
+                    for a in ExportDocumentPayerRowAllocation.objects.select_for_update().filter(month=month_start)}
+        for (key, cid), tons in wanted.items():
+            row = existing.get((key, cid))
+            if row is None:
+                item = rows_by_key[key]
+                ExportDocumentPayerRowAllocation.objects.create(
+                    month=month_start, row_key=key, origin=item['origin'], destination=item['destination'],
+                    stone_type_name=item['stone'], weight_carried=item['weight_carried'], team=item['team'],
+                    company_id=cid, tons=tons, updated_by=request.user)
+            elif row.tons != tons:
+                row.tons = tons
+                row.updated_by = request.user
+                row.save()
+        stale = [row.pk for key, row in existing.items() if key not in wanted]
+        if stale:
+            ExportDocumentPayerRowAllocation.objects.filter(month=month_start, pk__in=stale).delete()
+    messages.success(request, 'บันทึกการแบ่งนามของเดือนนี้แล้ว')
+    return True
+
+
+def _exportDocumentPayerLoad(selected_month):
+    month_start = _exportDocumentMonthStart(selected_month)
+    return (list(ExportDocumentPayerAllocation.objects.filter(month=month_start)),
+            list(ExportDocumentPayerRowAllocation.objects.filter(month=month_start)))
+
+
+@login_required(login_url='login')
+def viewExportDocumentPayer(request):
+    """บัญชีแบ่งนามที่จ่าย (issue #137) : เป้าตันต่อชนิดหิน + เลือกนามให้แถวทีมแบบใบปะหน้า + ปุ่มออกไฟล์ทีละนาม"""
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    month_param = request.POST.get('month') or request.GET.get('month') or ''
+    rows, filters, month_list = _exportDocumentPayerScope(request, month_param)
+    selected_month = filters['selected_month']
+    companies = _exportDocumentPayerCompanies()
+    team_rows = _exportDocumentPayerTeamRows(rows) if rows is not None else []
+
+    if request.method == 'POST' and rows is not None:
+        _exportDocumentPayerSave(request, _exportDocumentMonthStart(selected_month), companies, team_rows)
+        return redirect('%s?month=%s' % (reverse('viewExportDocumentPayer'), selected_month))
+
+    plan = None
+    not_approved = 0
+    if rows is not None:
+        targets, row_allocs = _exportDocumentPayerLoad(selected_month)
+        plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
+        # ช่องวัน × ต้นทางที่หน้าเหมืองยังไม่อนุมัติ : เตือนว่ากำลังแบ่งจากข้อมูลที่อาจยังเปลี่ยน
+        carry_rows = _exportDocumentRows(filters['carry_empty_qs'], filters['own_port_bws'],
+                                         filters['own_port_customers'])
+        not_approved = sum(1 for i in _exportDocumentDayApprovals(rows, carry_rows)
+                           if i['status'] != EXPORT_DOC_APPROVAL_APPROVED)
+
+    context = {
+        'export_document_page': 'active',
+        active: 'active',
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'tab_sees_all': filters['tab_sees_all'],
+        'plan': plan,
+        'split_mode': EXPORT_DOC_PAYER_SPLIT,
+        'not_approved': not_approved,
+        'trip_count': len(rows) if rows is not None else 0,
+    }
+    return render(request, 'exportDocument/payerExportDocument.html', context)
+
+
+@login_required(login_url='login')
+def exportExcelPayerDocument(request):
+    """ไฟล์บัญชี (ปะหน้า / สรุปจ่ายรถร่วม) ของนามที่จ่ายหนึ่งนาม ตามแถวทีมที่บัญชีเลือกให้นามนี้
+
+    เที่ยว = ทุกเที่ยวของแถวทีมที่นามนี้รับ น้ำหนักจริง · แถวที่แบ่งหลายนามเขียนสัดส่วนลงคอลัมน์ AD
+    แบ่งไม่ครบก็ออกได้ (ส่วนที่เหลือ = ค้าง stock) แต่ถ้ามีแถวที่แบ่งเกินยอดจริง ไม่ให้ออก
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    _exportProgressSet(request, 2, 'กำลังอ่านการแบ่งนาม')
+    rows, filters, _months = _exportDocumentPayerScope(request, request.GET.get('month') or '')
+    if rows is None:
+        return HttpResponse('ต้องออกไฟล์ของนามจากแท็บร้อยเกาะ / ทั้งหมด (แท็บที่เห็นเที่ยวทุกต้นทาง)')
+    selected_month = filters['selected_month']
+    companies = _exportDocumentPayerCompanies()
+    company_param = request.GET.get('company') or ''
+    company = next((c for c in companies if str(c.id) == company_param), None)
+    if company is None:
+        return HttpResponse('ไม่พบนามที่จ่ายที่เลือก')
+
+    team_rows = _exportDocumentPayerTeamRows(rows)
+    targets, row_allocs = _exportDocumentPayerLoad(selected_month)
+    plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
+    if not plan['can_export']:
+        return HttpResponse('มีแถวทีมที่แบ่งตันเกินยอดจริง หรือนามที่เลือกเกินเป้า / ยังไม่ได้ตั้งเป้า '
+                            'กรุณากลับไปแก้ที่หน้าแบ่งนามที่จ่ายก่อนออกไฟล์')
+    payer = next(c for c in plan['companies'] if c['id'] == company.id)
+    if not payer['complete']:
+        return HttpResponse('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
+                            % (company.name, ', '.join(payer['problems']) or 'ยังไม่ได้ตั้งเป้า'))
+    # credit = ไฟล์เฉพาะทีมเครดิตนั้น (none = ไม่ระบุ / ตัวเลข = วัน) · ไม่ส่ง = รวมทุกเครดิต
+    credit_param = request.GET.get('credit') or ''
+    if credit_param and credit_param != 'none' and not credit_param.isdigit():
+        return HttpResponse('เครดิตที่เลือกไม่ถูกต้อง')
+    shares = _exportDocumentPayerShares(team_rows, row_allocs, company.id)
+    picked = []
+    for r in rows:
+        if credit_param and _exportDocumentCreditParam(r.get('credit')) != credit_param:
+            continue
+        key = _exportDocumentPayerRowKey(_exportDocumentPayerRowFields(r))
+        if key in shares:
+            r['payer_share'] = shares[key]
+            picked.append(r)
+    rows = picked
+    credit_part = ''
+    if credit_param:
+        credit_part = '_%s' % _exportDocumentCreditLabel(None if credit_param == 'none' else int(credit_param))
+    if not rows:
+        return HttpResponse('นาม %s ยังไม่ได้รับแถวทีมไหนในเดือนนี้%s'
+                            % (company.name, (' (%s)' % credit_part[1:]) if credit_part else ''))
+    if len(rows) > EXPORT_DOC_MAX_TRIPS:
+        return HttpResponse('มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว)'
+                            % (len(rows), EXPORT_DOC_MAX_TRIPS))
+
+    # ชุดราคาของไฟล์ = เฉพาะเที่ยวของนามนี้ (ช่วงน้ำหนักที่แบกเติมไว้แล้วตอนดึง ได้ค่าเดิม)
+    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
+
+    workbook = _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats,
+                                                 fuel_lines, fuel_stats, selected_month)
+    # หัวเอกสารทุกชีต (ปะหน้า / สรุปจ่าย) ดึงชื่อนามจากช่องนี้
+    workbook['บันทึกรายเที่ยว']['F3'] = company.name
+    # ยังไม่หัก oil ตามนาม : เขียน 0 ทับสูตรหัก oil ของสรุปจ่ายรถร่วม ชีต oil ยังติดไว้ให้ดู
+    pay_sheet = workbook['สรุปจ่ายรถร่วม']
+    for row in range(EXPORT_DOC_PAY_FIRST_ROW, EXPORT_DOC_PAY_LAST_ROW + 1):
+        pay_sheet.cell(row=row, column=EXPORT_DOC_PAY_OIL_COL).value = 0
+
+    _exportProgressSet(request, 77, 'กำลังบันทึกไฟล์')
+    content = xlsx_template.save_with_template_extensions(workbook, xlsx_template.TRIP_REPORT_TEMPLATE)
+    _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
+    response = HttpResponse(
+        content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = 'trip_report_%s_%s_นาม%s%s.xlsx' % (active, selected_month, company.name,
+                                                  credit_part.replace(' ', ''))
     response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
     return _exportDocumentMarkDownloadDone(request, response)
 

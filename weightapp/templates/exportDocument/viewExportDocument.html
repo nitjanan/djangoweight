@@ -309,6 +309,12 @@
                href="{% url 'exportExcelExportDocument' %}?{{ request.GET.urlencode }}">
               <i class="fa-solid fa-file-excel"></i> ไฟล์บัญชี (สรุปจ่าย / ปะหน้า)
             </a>
+            {# issue #137 : แบ่งตันหินให้นามที่จ่าย แล้วออกไฟล์ทีละนาม (ใช้ยอดทุกต้นทาง จึงมีเฉพาะแท็บที่เห็นทุกต้นทาง) #}
+            {% if tab_sees_all %}
+            <a class="btn btn-outline-success" href="{% url 'viewExportDocumentPayer' %}?month={{ selected_month }}">
+              <i class="fa-solid fa-scale-balanced"></i> แบ่งนามที่จ่าย
+            </a>
+            {% endif %}
           </div>
         </form>
       </div>

@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block css %}
+<style>
+  .trip-scroll { overflow-x: auto; max-height: 80vh; overflow-y: auto; }
+  .trip-table { white-space: nowrap; font-size: .95rem; }
+  .trip-table td, .trip-table th { padding: .4rem .5rem; vertical-align: middle; }
+  /* พื้นหัวตารางทึบตามธีม (ธีมมืดตั้งพื้นเซลล์ตารางเป็นโปร่งใส หัวที่ติดด้านบนจะซ้อนกับแถวข้างใต้) */
+  .trip-table thead th { position: sticky; top: 0; z-index: 2; vertical-align: middle;
+                         background-color: var(--bs-body-bg, #fff) !important; }
+  .trip-num { text-align: right; }
+  /* คอลัมน์ต่อนามให้แคบ : ช่องกรอก 6.5rem · ช่องเลือกนาม 10.5rem · ชื่อยาวตัดบรรทัด */
+  .payer-input { width: 6.5rem; text-align: right; }
+  .payer-mode { min-width: 10.5rem; max-width: 12rem; }
+  .payer-product-company { font-weight: 400; font-size: .85rem; white-space: normal; min-width: 7rem; }
+  .payer-route td, .payer-product td:first-child { white-space: normal; }
+  .payer-stone td:first-child, .trip-table thead th { white-space: normal; }
+  .payer-ok { color: #198754; font-weight: 600; }
+  .payer-short { color: #b58100; font-weight: 600; }
+  .payer-over { color: #dc3545; font-weight: 600; }
+  .payer-route td { background: #dbe5f1; font-weight: 700; }
+  .payer-product td { background: #f2f2f2; font-weight: 600; }
+  .payer-team td:first-child { padding-left: 1.5rem; white-space: normal; min-width: 11rem; }
+  .payer-team.is-stock td:first-child { color: #b58100; }
+  .payer-whole { color: #198754; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>แบ่งนามที่จ่าย</h3>
+        <p class="text-subtitle text-muted mb-0">ตั้งเป้าตันของแต่ละนาม แล้วแบ่งแถวทีมของใบปะหน้าเหมืองให้นามจนครบเป้า จากนั้นออกไฟล์บัญชีทีละนาม</p>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewExportDocument' %}?month={{ selected_month }}">Export เอกสาร</a></li>
+            <li class="breadcrumb-item active" aria-current="page">แบ่งนามที่จ่าย</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="card">
+      <div class="card-body">
+        <form method="get" class="row gx-3 gy-2 align-items-end">
+          <div class="form-group col-md-3 mb-0">
+            <label for="month">ประจำเดือน</label>
+            <select class="form-select" id="month" name="month">
+              {% for m in month_list %}
+                <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-md-9 mb-0 d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
+            </button>
+            <a class="btn btn-outline-secondary ms-md-auto" href="{% url 'viewExportDocument' %}?month={{ selected_month }}">
+              <i class="fa-solid fa-arrow-left"></i> กลับหน้า Export เอกสาร
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-light-danger color-danger{% else %}alert-light-success color-success{% endif %}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if not tab_sees_all %}
+    <div class="alert alert-warning">
+      การแบ่งนามใช้ยอดของทุกเหมือง ทุกท่า ของทั้งเดือน จึงต้องทำจากแท็บ <strong>ร้อยเกาะ</strong> หรือ <strong>บริษัททั้งหมด</strong>
+      (แท็บอื่นเห็นเที่ยวไม่ครบ)
+    </div>
+    {% elif plan %}
+
+    {% if not_approved %}
+    <div class="alert alert-light-warning">
+      หน้าเหมืองยังไม่อนุมัติ <strong>{{ not_approved }}</strong> ช่อง (วัน × ต้นทาง) ของเดือนนี้ ยอดตันอาจยังเปลี่ยนได้
+      (<a href="{% url 'viewExportDocumentApproval' %}?month={{ selected_month }}">ดูหน้าตรวจและอนุมัติ</a>)
+    </div>
+    {% endif %}
+
+    {% if plan.orphans %}
+    <div class="alert alert-light-danger color-danger">
+      มีนาม / เป้าที่เลือกไว้ แต่เดือนนี้ไม่มีแถวทีมหรือหินนั้นแล้ว (ข้อมูลชั่งเปลี่ยนหลังเลือก) กดบันทึกอีกครั้งเพื่อเอาออก :
+      {% for o in plan.orphans %}{{ o.company }} · {{ o.label }}{% if o.tons %} {{ o.tons|floatformat:3|intcomma }} ตัน{% endif %}{% if not forloop.last %} / {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" id="payer-form">
+      {% csrf_token %}
+      <input type="hidden" name="month" value="{{ selected_month }}">
+
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-1">① เลือกนามที่จ่ายของเดือนนี้</h5>
+          <div class="d-flex flex-wrap gap-3">
+            {% for c in plan.companies %}
+            <div class="form-check mb-0">
+              <input class="form-check-input payer-toggle" type="checkbox" id="payer-{{ c.id }}"
+                     data-company="{{ c.id }}" {% if c.selected %}checked{% endif %}>
+              <label class="form-check-label" for="payer-{{ c.id }}">{{ c.name }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="card-body">
+          <h5 class="card-title mb-1">② เป้าของแต่ละนาม : ต้องจ่ายหินชนิดไหนกี่ตัน</h5>
+          <p class="text-muted small mb-2">
+            กรอกเป้าก่อน แล้วแบ่งหินจากกองกลางในข้อ ③ ให้ครบเป้าพอดี ·
+            "เลือกแล้ว" = ตันของแถวทีมที่เลือกให้นามนั้น · ห้ามเกินเป้า · นามที่ยังไม่ครบเป้าออกไฟล์ไม่ได้ ·
+            กองกลาง = นน.จ่ายค่าบรรทุก รวมทุกเที่ยว ทุกต้นทาง ของเดือน ({{ trip_count|intcomma }} เที่ยว)
+          </p>
+          <div class="trip-scroll">
+            <table class="table table-sm table-bordered trip-table mb-0">
+              <thead>
+                <tr>
+                  <th>ชนิดหิน</th>
+                  <th class="trip-num">เที่ยว</th>
+                  <th class="trip-num">กองกลาง (ตัน)</th>
+                  {% for c in plan.companies %}
+                  <th class="trip-num payer-col" data-company="{{ c.id }}">{{ c.name }}</th>
+                  {% endfor %}
+                  <th class="trip-num">เลือกแล้วรวม</th>
+                  <th class="trip-num">ค้าง stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in plan.stones %}
+                <tr class="payer-stone" data-stone="{{ s.stone }}" data-total="{{ s.tons }}">
+                  <td>
+                    {{ s.label }}
+                    <input type="hidden" name="stone-{{ forloop.counter0 }}" value="{{ s.stone }}">
+                    <div class="small payer-over payer-pool-warn{% if not s.target_over_pool %} d-none{% endif %}">เป้ารวมเกินหินในกองกลาง</div>
+                  </td>
+                  <td class="trip-num">{{ s.trips|intcomma }}</td>
+                  <td class="trip-num">{{ s.tons|floatformat:3|intcomma }}</td>
+                  {% with i=forloop.counter0 %}
+                  {% for cell in s.cells %}
+                  <td class="trip-num payer-col" data-company="{{ cell.company_id }}">
+                    <input type="text" inputmode="decimal" class="form-control payer-input payer-target ms-auto"
+                           name="target-{{ cell.company_id }}-{{ i }}" placeholder="เป้า"
+                           aria-label="เป้า {{ cell.company_name }} {{ s.label }}"
+                           value="{% if cell.target %}{{ cell.target }}{% endif %}">
+                    <div class="text-muted mt-1">เลือกแล้ว <span class="payer-chosen">{{ cell.chosen|floatformat:3|intcomma }}</span></div>
+                    <div class="payer-diff"></div>
+                  </td>
+                  {% endfor %}
+                  {% endwith %}
+                  <td class="trip-num payer-chosen-total">{{ s.chosen|floatformat:3|intcomma }}</td>
+                  <td class="trip-num payer-stone-stock">{{ s.stock|floatformat:3|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-1">③ แบ่งหินจากกองกลางให้นาม จนครบเป้า (แถวทีมแบบใบปะหน้าเหมือง)</h5>
+          <p class="text-muted small mb-0">
+            เลือกนามให้แถวทีม = ได้ทั้งแถว (ทุกเที่ยว น้ำหนักจริงของทีมนั้น) ·
+            ถ้าแถวมีตันมากกว่าที่นามยังขาดจากเป้า ระบบตัดให้เท่าที่ขาดพอดี (แถวเปลี่ยนเป็น "แบ่งหลายนาม") ส่วนที่เหลือของแถวเลือกให้นามอื่นต่อได้ ·
+            แบ่งเองได้ด้วย <strong>"แบ่งหลายนาม"</strong> แล้วกรอกตัน ·
+            แถวที่ไม่ได้เลือก / ส่วนที่ไม่ได้กรอก = <span class="payer-short">ค้าง stock</span> · ห้ามเกินตันของแถว / เกินเป้า ·
+            แถวหัวหิน (สีเทา) แสดงเป้าของแต่ละนาม และยังขาดอีกเท่าไหร่ (เป้าของหินชนิดนั้น รวมทุกเส้นทาง)
+          </p>
+        </div>
+        <div class="card-body">
+          <!-- แถบกรอง : ซ่อนแถวบนจออย่างเดียว แถวที่ซ่อนยังถูกส่งตอนบันทึกเหมือนเดิม -->
+          <div class="row gx-2 gy-2 align-items-end mb-2" id="payer-filter">
+            <div class="col-auto">
+              <label class="small mb-0" for="filter-credit">เครดิตของทีม</label>
+              <select class="form-select form-select-sm" id="filter-credit">
+                <option value="">ทุกเครดิต</option>
+                {% for f in plan.filter_credits %}<option value="{{ f.param }}">{{ f.label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-auto">
+              <label class="small mb-0" for="filter-route">ต้นทาง - ปลายทาง</label>
+              <select class="form-select form-select-sm" id="filter-route" style="max-width: 22rem;">
+                <option value="">ทุกเส้นทาง</option>
+                {% for f in plan.filter_routes %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-auto">
+              <label class="small mb-0" for="filter-stone">ชนิดหิน</label>
+              <select class="form-select form-select-sm" id="filter-stone">
+                <option value="">ทุกชนิด</option>
+                {% for f in plan.filter_stones %}<option value="{{ f }}">{{ f|default:"(ไม่ระบุชนิดหิน)" }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-auto">
+              <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" id="filter-stock">
+                <label class="form-check-label small" for="filter-stock">เฉพาะแถวที่ยังค้าง stock</label>
+              </div>
+            </div>
+            <div class="col-auto small text-muted mb-1" id="filter-count"></div>
+          </div>
+          <div class="trip-scroll">
+            <table class="table table-sm table-bordered trip-table mb-0">
+              <thead>
+                <tr>
+                  <th>ต้นทาง - ปลายทาง / สินค้า / ทีม</th>
+                  <th class="trip-num">เที่ยว</th>
+                  <th class="trip-num">ตัน</th>
+                  <th>นามที่จ่าย</th>
+                  {% for c in plan.companies %}
+                  <th class="trip-num payer-col" data-company="{{ c.id }}">{{ c.name }}</th>
+                  {% endfor %}
+                  <th class="trip-num">ค้าง stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for g in plan.groups %}
+                <tr class="payer-route" data-route="{{ g.label }}">
+                  <td colspan="{{ plan.companies|length|add:5 }}">{{ g.label }}</td>
+                </tr>
+                {% for p in g.products %}
+                <tr class="payer-product" data-product="{{ p.index }}" data-stone="{{ p.stone }}" data-route="{{ g.label }}">
+                  <td>{{ p.label }}</td>
+                  <td class="trip-num">{{ p.trips|intcomma }}</td>
+                  <td class="trip-num">{{ p.tons|floatformat:3|intcomma }}</td>
+                  <td></td>
+                  {% for c in plan.companies %}
+                  <td class="trip-num payer-col payer-product-company" data-company="{{ c.id }}"></td>
+                  {% endfor %}
+                  <td class="trip-num payer-product-stock">{{ p.stock|floatformat:3|intcomma }}</td>
+                </tr>
+                {% for r in p.rows %}
+                <tr class="payer-team{% if not r.mode %} is-stock{% endif %}" data-product="{{ p.index }}"
+                    data-stone="{{ r.stone }}" data-tons="{{ r.tons }}" data-route="{{ g.label }}"
+                    data-credit="{{ r.credit_param }}">
+                  <td>
+                    {{ r.team }}
+                    <span class="badge {% if r.credit is None %}bg-light-secondary{% else %}bg-light-info{% endif %} ms-1 fw-normal">{{ r.credit_label }}</span>
+                    <input type="hidden" name="row-{{ r.index }}" value="{{ r.key }}">
+                  </td>
+                  <td class="trip-num">{{ r.trips|intcomma }}</td>
+                  <td class="trip-num">{{ r.tons|floatformat:3|intcomma }}</td>
+                  <td>
+                    <select class="form-select form-select-sm payer-mode" name="mode-{{ r.index }}"
+                            aria-label="นามที่จ่าย {{ r.team }} {{ p.label }}">
+                      <option value="" {% if not r.mode %}selected{% endif %}>— ค้าง stock —</option>
+                      {% for c in plan.companies %}
+                      <option value="{{ c.id }}" data-company="{{ c.id }}" {% if r.mode == c.id|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+                      {% endfor %}
+                      <option value="{{ split_mode }}" {% if r.mode == split_mode %}selected{% endif %}>แบ่งหลายนาม (กรอกตัน)</option>
+                    </select>
+                  </td>
+                  {% for sp in r.splits %}
+                  <td class="trip-num payer-col" data-company="{{ sp.company_id }}">
+                    <span class="payer-whole d-none">{{ r.tons|floatformat:3|intcomma }}</span>
+                    <input type="text" inputmode="decimal" class="form-control form-control-sm payer-input payer-split ms-auto d-none"
+                           name="split-{{ sp.company_id }}-{{ r.index }}" data-company="{{ sp.company_id }}"
+                           aria-label="ตันของ {{ sp.company_name }} {{ r.team }}"
+                           value="{% if sp.tons %}{{ sp.tons }}{% endif %}">
+                  </td>
+                  {% endfor %}
+                  <td class="trip-num payer-row-stock">
+                    {% if r.is_over %}<span class="payer-over">เกิน {{ r.over|floatformat:3|intcomma }}</span>
+                    {% else %}{{ r.stock|floatformat:3|intcomma }}{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-floppy-disk"></i> บันทึกการแบ่ง
+            </button>
+            <span class="small text-muted">แก้แล้วต้องกดบันทึกก่อน ปุ่มออกไฟล์ด้านล่างใช้ค่าที่บันทึกไว้</span>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-1">④ ออกไฟล์บัญชีทีละนาม (ปะหน้า + สรุปจ่ายรถร่วม)</h5>
+        <p class="text-muted small mb-0">
+          ไฟล์ของนาม = เที่ยวของแถวทีมที่นามนั้นรับ น้ำหนักจริงทุกเที่ยว ·
+          แถวที่แบ่งหลายนาม ชีตสรุปคิดตามตันที่กรอก (ค่าขนส่ง = อัตรา × ตันที่รับ) ·
+          ส่วนที่ค้าง stock ไม่อยู่ในไฟล์ของนามไหน ·
+          ชีต oil ติดไว้ให้ดู แต่สรุปจ่ายรถร่วมของไฟล์นาม<strong>ยังไม่หักค่าน้ำมัน</strong> (หักเองตอนจ่าย)
+        </p>
+      </div>
+      <div class="card-body">
+        {% if not plan.can_export %}
+        <div class="alert alert-light-danger color-danger mb-2">
+          {% if plan.over_rows %}มีแถวทีมที่แบ่งตันเกินยอดของแถว {{ plan.over_rows }} แถว (สีแดง) · {% endif %}
+          {% if plan.target_errors %}มีนามที่เลือกเกินเป้า / เลือกหินที่ยังไม่ได้ตั้งเป้า {{ plan.target_errors }} ช่อง (ข้อ ②) · {% endif %}
+          {% if not plan.row_count %}เดือนนี้ไม่มีเที่ยวให้แบ่ง{% else %}แก้ก่อนถึงจะออกไฟล์ได้{% endif %}
+        </div>
+        {% endif %}
+        <p class="small text-muted mb-2">
+          ปุ่มขึ้นเฉพาะนามที่บันทึกเป้า / แถวทีมไว้แล้ว · กดได้เมื่อแบ่งครบเป้าทุกหิน ·
+          แยกไฟล์ตามเครดิตของทีม (จากเงื่อนไขการชำระเงินในสัญญาค่าขนส่ง) เครดิตน้อยก่อน หรือกด "รวมทั้งหมด"
+        </p>
+        {% for c in plan.companies %}{% if c.target or c.tons %}
+        {% with ok=plan.can_export|yesno:"1," %}
+        <div class="border rounded p-2 mb-2">
+          <div class="fw-bold mb-1">
+            {{ c.name }}
+            <span class="fw-normal text-muted">({{ c.tons|floatformat:3|intcomma }} / เป้า {{ c.target|floatformat:3|intcomma }} ตัน)</span>
+            {% if not c.complete %}<span class="small payer-short ms-2">ยังไม่ครบเป้า : {{ c.problems|join:", "|default:"ยังไม่ได้ตั้งเป้า" }}</span>{% endif %}
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for g in c.credit_groups %}
+            <a class="btn btn-sm {% if ok and c.complete %}btn-outline-success{% else %}btn-outline-secondary disabled{% endif %}"
+               href="{% url 'exportExcelPayerDocument' %}?month={{ selected_month }}&amp;company={{ c.id }}&amp;credit={{ g.param }}">
+              <i class="fa-solid fa-file-excel"></i> {{ g.label }} ({{ g.tons|floatformat:3|intcomma }} ตัน)
+            </a>
+            {% endfor %}
+            <a class="btn btn-sm {% if ok and c.complete %}btn-success{% else %}btn-outline-secondary disabled{% endif %}"
+               href="{% url 'exportExcelPayerDocument' %}?month={{ selected_month }}&amp;company={{ c.id }}">
+              <i class="fa-solid fa-file-excel"></i> รวมทั้งหมด ({{ c.tons|floatformat:3|intcomma }} ตัน)
+            </a>
+          </div>
+        </div>
+        {% endwith %}
+        {% endif %}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  (function () {
+    const form = document.getElementById('payer-form');
+    if (!form) return;
+    const TON = 0.0005;
+    const SPLIT = '{{ split_mode }}';
+
+    function fmt(n) {
+      return n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    }
+    function num(v) {
+      const n = parseFloat((v || '').replace(/,/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+    function checked(id) {
+      const box = document.getElementById('payer-' + id);
+      return !!(box && box.checked);
+    }
+    function stoneRow(stone) {
+      return [...form.querySelectorAll('tr.payer-stone')].find(function (tr) { return tr.dataset.stone === stone; });
+    }
+
+    // คอลัมน์ / ตัวเลือกของนามที่ไม่ได้เลือก : ซ่อน และปิดช่องกรอก (ไม่ส่งไปตอนบันทึก = เอาออก)
+    // ตัวเลือกที่ถูกเลือกค้างอยู่ในแถวยังแสดงอยู่ จะได้เห็นว่ามีแถวที่ยังให้นามนั้น
+    function applyToggles() {
+      document.querySelectorAll('.payer-toggle').forEach(function (box) {
+        const id = box.getAttribute('data-company');
+        form.querySelectorAll('.payer-col[data-company="' + id + '"]').forEach(function (el) {
+          el.classList.toggle('d-none', !box.checked);
+          el.querySelectorAll('input.payer-target').forEach(function (inp) { inp.disabled = !box.checked; });
+        });
+        form.querySelectorAll('option[data-company="' + id + '"]').forEach(function (opt) {
+          opt.hidden = !box.checked && !opt.selected;
+        });
+      });
+    }
+
+    // ตันที่แต่ละนามได้จากแถวนี้ ตามที่เลือกบนจออยู่ตอนนี้ {id บริษัท: ตัน}
+    function takenOf(row) {
+      const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+      const mode = row.querySelector('.payer-mode').value;
+      const taken = {};
+      if (mode === SPLIT) {
+        row.querySelectorAll('.payer-split').forEach(function (inp) {
+          const id = inp.getAttribute('data-company');
+          if (checked(id) && num(inp.value) > 0) taken[id] = num(inp.value);
+        });
+      } else if (mode) {
+        taken[mode] = tons;
+      }
+      return taken;
+    }
+
+    // เลือกนามให้แถว : ต้องมีเป้า · ครบเป้าแล้วเลือกไม่ได้ · แถวมีตันมากกว่าที่ขาด = ตัดให้เท่าที่ขาด (แบ่งหลายนาม)
+    function onModeChange(sel) {
+      const row = sel.closest('tr.payer-team');
+      const id = sel.value;
+      const prev = sel.dataset.prev || '';
+      if (id === '' || id === SPLIT) { sel.dataset.prev = id; return; }
+      const name = sel.selectedOptions[0].text;
+      const target = stoneRow(row.dataset.stone).querySelector('td.payer-col[data-company="' + id + '"] .payer-target');
+      if (!target || target.value.trim() === '') {
+        alert('ยังไม่ได้ตั้งเป้าของ ' + name + ' สำหรับหินนี้ (ข้อ ②) : ตั้งเป้าก่อนแล้วค่อยเลือก');
+        sel.value = prev;
+        return;
+      }
+      let others = 0;
+      form.querySelectorAll('tr.payer-team').forEach(function (r) {
+        if (r !== row && r.dataset.stone === row.dataset.stone) others += takenOf(r)[id] || 0;
+      });
+      const remaining = num(target.value) - others;
+      if (remaining < TON) {
+        alert(name + ' ได้หินนี้ครบเป้าแล้ว (' + fmt(num(target.value)) + ' ตัน)');
+        sel.value = prev;
+        return;
+      }
+      const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+      if (tons - remaining >= TON) {
+        // ตัดแถวให้เท่าที่ขาด : ที่เคยแบ่งให้นามอื่นในแถวนี้ (ถ้าเดิมเป็นแบ่งหลายนาม) คงไว้
+        sel.value = SPLIT;
+        row.querySelectorAll('.payer-split').forEach(function (inp) {
+          if (inp.getAttribute('data-company') === id) inp.value = remaining.toFixed(3);
+          else if (prev !== SPLIT) inp.value = '';
+        });
+      }
+      sel.dataset.prev = sel.value;
+    }
+
+    // คิดยอดใหม่ทั้งหน้าทุกครั้งที่เปลี่ยน (ตัวจริงตรวจซ้ำที่ server ตอนบันทึก)
+    function recalc() {
+      const chosen = {};         // stone -> {company: tons}
+      const productStock = {};   // product -> ค้าง
+      const productCompany = {}; // product -> {company: tons}
+      form.querySelectorAll('tr.payer-team').forEach(function (row) {
+        const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+        const stone = row.getAttribute('data-stone');
+        const product = row.getAttribute('data-product');
+        const mode = row.querySelector('.payer-mode').value;
+        row.querySelectorAll('td.payer-col').forEach(function (td) {
+          const id = td.getAttribute('data-company');
+          const inp = td.querySelector('.payer-split');
+          td.querySelector('.payer-whole').classList.toggle('d-none', mode !== id);
+          inp.classList.toggle('d-none', mode !== SPLIT);
+          inp.disabled = mode !== SPLIT || !checked(id);
+        });
+        const taken = takenOf(row);
+        let assigned = 0;
+        Object.keys(taken).forEach(function (id) {
+          assigned += taken[id];
+          chosen[stone] = chosen[stone] || {};
+          chosen[stone][id] = (chosen[stone][id] || 0) + taken[id];
+          productCompany[product] = productCompany[product] || {};
+          productCompany[product][id] = (productCompany[product][id] || 0) + taken[id];
+        });
+        const left = tons - assigned;
+        row.classList.toggle('is-stock', mode === '');
+        const cell = row.querySelector('.payer-row-stock');
+        if (left <= -TON) cell.innerHTML = '<span class="payer-over">เกิน ' + fmt(-left) + '</span>';
+        else cell.textContent = fmt(Math.max(left, 0));
+        productStock[product] = (productStock[product] || 0) + Math.max(left, 0);
+      });
+
+      const goal = {};   // stone -> {company: {target, status html}} ของหินนั้นรวมทุกเส้นทาง (ใช้ซ้ำในหัวสินค้าข้อ ③)
+      form.querySelectorAll('tr.payer-stone').forEach(function (row) {
+        const total = parseFloat(row.getAttribute('data-total')) || 0;
+        const got = chosen[row.getAttribute('data-stone')] || {};
+        let sum = 0;
+        let targets = 0;
+        row.querySelectorAll('td.payer-col').forEach(function (td) {
+          const id = td.getAttribute('data-company');
+          const v = got[id] || 0;
+          sum += v;
+          td.querySelector('.payer-chosen').textContent = fmt(v);
+          const target = td.querySelector('.payer-target');
+          const diff = td.querySelector('.payer-diff');
+          const stone = row.getAttribute('data-stone');
+          goal[stone] = goal[stone] || {};
+          if (target.disabled || target.value.trim() === '') {
+            diff.innerHTML = v >= TON ? '<span class="payer-over">ยังไม่ตั้งเป้า</span>' : '';
+            goal[stone][id] = { target: null, html: diff.innerHTML };
+            return;
+          }
+          targets += num(target.value);
+          const d = v - num(target.value);
+          if (Math.abs(d) < TON) diff.innerHTML = '<span class="payer-ok">✔ ครบเป้า</span>';
+          else if (d < 0) diff.innerHTML = '<span class="payer-short">ยังไม่ครบเป้า ' + fmt(-d) + '</span>';
+          else diff.innerHTML = '<span class="payer-over">เกินเป้า ' + fmt(d) + '</span>';
+          goal[stone][id] = { target: num(target.value), html: diff.innerHTML };
+        });
+        row.querySelector('.payer-chosen-total').textContent = fmt(sum);
+        row.querySelector('.payer-stone-stock').textContent = fmt(total - sum);
+        row.querySelector('.payer-pool-warn').classList.toggle('d-none', targets - total < TON);
+      });
+
+      // หัวสินค้าในข้อ ③ : ตันที่เลือกในสินค้านี้ + เป้าของหินชนิดนี้ (รวมทุกเส้นทาง) และยังขาดเท่าไหร่
+      form.querySelectorAll('tr.payer-product').forEach(function (row) {
+        const product = row.getAttribute('data-product');
+        const stoneGoal = goal[row.getAttribute('data-stone')] || {};
+        row.querySelector('.payer-product-stock').textContent = fmt(productStock[product] || 0);
+        row.querySelectorAll('.payer-product-company').forEach(function (td) {
+          const id = td.getAttribute('data-company');
+          const v = (productCompany[product] || {})[id];
+          const g = stoneGoal[id];
+          // ข้อความในช่องสร้างจากตัวเลข (fmt) กับข้อความคงที่เท่านั้น
+          let html = v ? '<div class="fw-bold">' + fmt(v) + '</div>' : '';
+          if (g && g.target !== null) html += '<div class="text-muted">เป้า ' + fmt(g.target) + '</div>';
+          if (g && g.html) html += '<div>' + g.html + '</div>';
+          td.innerHTML = html;
+        });
+      });
+    }
+
+    // แถบกรองข้อ ③ : ซ่อนแถวทีมที่ไม่ตรง แล้วซ่อนหัวหิน / หัวเส้นทางที่ไม่เหลือแถวทีมให้เห็น
+    // ซ่อนด้วย class อย่างเดียว ช่องกรอกในแถวที่ซ่อนยังส่งไปตอนบันทึก (ไม่ทำให้ข้อมูลหาย)
+    function applyFilter() {
+      const credit = document.getElementById('filter-credit').value;
+      const route = document.getElementById('filter-route').value;
+      const stone = document.getElementById('filter-stone').value;
+      const onlyStock = document.getElementById('filter-stock').checked;
+      const stoneSelected = document.getElementById('filter-stone').selectedIndex > 0;
+      const shownProducts = new Set();
+      const shownRoutes = new Set();
+      let shown = 0;
+      let total = 0;
+      form.querySelectorAll('tr.payer-team').forEach(function (row) {
+        total += 1;
+        const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+        const taken = takenOf(row);
+        const assigned = Object.keys(taken).reduce(function (s, id) { return s + taken[id]; }, 0);
+        const visible = (!credit || row.dataset.credit === credit)
+          && (!route || row.dataset.route === route)
+          && (!stoneSelected || row.dataset.stone === stone)
+          && (!onlyStock || tons - assigned >= TON);
+        row.classList.toggle('d-none', !visible);
+        if (visible) {
+          shown += 1;
+          shownProducts.add(row.dataset.product);
+          shownRoutes.add(row.dataset.route);
+        }
+      });
+      form.querySelectorAll('tr.payer-product').forEach(function (row) {
+        row.classList.toggle('d-none', !shownProducts.has(row.dataset.product));
+      });
+      form.querySelectorAll('tr.payer-route').forEach(function (row) {
+        row.classList.toggle('d-none', !shownRoutes.has(row.dataset.route));
+      });
+      document.getElementById('filter-count').textContent =
+        shown === total ? 'แสดงทั้งหมด ' + total + ' แถวทีม' : 'แสดง ' + shown + ' จาก ' + total + ' แถวทีม';
+    }
+    ['filter-credit', 'filter-route', 'filter-stone', 'filter-stock'].forEach(function (id) {
+      document.getElementById(id).addEventListener('change', applyFilter);
+    });
+
+
+    form.querySelectorAll('.payer-mode').forEach(function (sel) { sel.dataset.prev = sel.value; });
+    document.querySelectorAll('.payer-toggle').forEach(function (box) {
+      box.addEventListener('change', function () { applyToggles(); recalc(); });
+    });
+    form.addEventListener('input', recalc);
+    form.addEventListener('change', function (e) {
+      if (e.target.classList.contains('payer-mode')) {
+        onModeChange(e.target);
+        applyToggles();
+      }
+      recalc();
+    });
+    applyToggles();
+    recalc();
+    // กรองตอนเปิดหน้า / ตอนเปลี่ยนตัวกรองเท่านั้น : ไม่กรองใหม่ทุกครั้งที่เลือกนาม
+    // (ติ๊ก "เฉพาะแถวค้าง stock" ไว้ แถวที่เพิ่งเลือกจะยังอยู่ให้เห็น ไม่หายไปกลางคัน)
+    applyFilter();
+  })();
+</script>
+{% endblock %}

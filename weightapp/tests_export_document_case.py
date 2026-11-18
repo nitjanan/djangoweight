@@ -951,8 +951,20 @@ class MineSummaryTests(SimpleTestCase):
         rows = self.rated([self.row(1), self.row(2, team='ทีม 2'), self.row(3)])
         rows.append(dict(self.row(4), weight_carried='', stone='หินใหญ่'))
         self.assertEqual(views._mineSummaryGroups(rows),
-                         [('หิน(0-35)', ['ทีม 1', 'ทีม 2']), ('หินใหญ่', ['ทีม 1'])])
+                         [(('หิน', '0-35'), ['ทีม 1', 'ทีม 2']), (('หินใหญ่', ''), ['ทีม 1'])])
         self.assertEqual(views._mineSummaryCriteria('a*b?c~"d"'), '"a~*b~?c~~""d"""')
+
+    def test_groups_sorted_by_stone_then_weight_band(self):
+        """เรียงตามชนิดหิน แล้วตามช่วงน้ำหนักที่แบก (ตัวเลขแรก ไม่ใช่ลำดับตัวอักษร) ไม่ว่าเที่ยวไหนมาก่อน"""
+        rows = [dict(self.row(1), stone='หิน 3/4', weight_carried='35.01 ขึ้นไป'),
+                dict(self.row(2), stone='หินฝุ่น', weight_carried='0-35'),
+                dict(self.row(3), stone='หิน 3/4', weight_carried='5-35'),
+                dict(self.row(4), stone='หิน 3/4', weight_carried=''),
+                dict(self.row(5), stone='หิน 3/4', weight_carried='0-4.99'),
+                dict(self.row(6), stone='แร่ก้อน', weight_carried='0-35')]   # สระหน้า : เรียงตาม ร
+        self.assertEqual([key for key, _ in views._mineSummaryGroups(rows)],
+                         [('แร่ก้อน', '0-35'), ('หิน 3/4', ''), ('หิน 3/4', '0-4.99'), ('หิน 3/4', '5-35'),
+                          ('หิน 3/4', '35.01 ขึ้นไป'), ('หินฝุ่น', '0-35')])
 
     def test_workbook_follows_the_field_files(self):
         wb = views._mineSummaryWorkbook(self.rated(self.rows()), 'ตุลาคม 2569')
@@ -962,42 +974,54 @@ class MineSummaryTests(SimpleTestCase):
 
         # รายเที่ยวด้านซ้าย (ตาราง Excel) + ตารางสรุปด้านขวา เป็นสูตรนับจากรายเที่ยว
         trips = wb['เหมือง ก-ท่า X']
-        self.assertEqual([trips.cell(1, c).value for c in (1, 5, 6, 7, 8, 10)],
-                         ['ลำดับที่ใบชั่ง', 'ชื่อเหมือง', 'ชื่อสินค้า', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.จ่ายค่าบรรทุก'])
-        self.assertEqual([trips.cell(2, c).value for c in (1, 5, 6, 7, 8)],
-                         ['00001', 'เหมือง ก-ท่า X', 'หิน(0-35)', 30.0, 29.5])
-        self.assertEqual(trips['I2'].value, '=IF(OR(G2="",H2=""),"",G2-H2)')
-        self.assertEqual(trips['J3'].value, '=IF(AND(G3="",H3=""),"",MIN(G3,H3))')
-        self.assertIsNone(trips['H3'].value)
+        # ชื่อสินค้า = ชนิดหินอย่างเดียว น้ำหนักที่แบกแยกคอลัมน์ G
+        self.assertEqual([trips.cell(1, c).value for c in (1, 5, 6, 7, 8, 9, 11)],
+                         ['ลำดับที่ใบชั่ง', 'ชื่อเหมือง', 'ชื่อสินค้า', 'น้ำหนักที่แบก', 'นน.ต้นทาง', 'นน.ปลายทาง',
+                          'นน.จ่ายค่าบรรทุก'])
+        self.assertEqual([trips.cell(2, c).value for c in (1, 5, 6, 7, 8, 9)],
+                         ['00001', 'เหมือง ก-ท่า X', 'หิน', '0-35', 30.0, 29.5])
+        self.assertEqual(trips['J2'].value, '=IF(OR(H2="",I2=""),"",H2-I2)')
+        self.assertEqual(trips['K3'].value, '=IF(AND(H3="",I3=""),"",MIN(H3,I3))')
+        self.assertIsNone(trips['I3'].value)
         self.assertEqual(trips['A3'].fill.start_color.rgb[-6:], views.MINE_SUMMARY_MISSING_FILL)
-        self.assertEqual(trips.tables['Trips1'].ref, 'A1:K3')
-        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', trips['M1'].value)
-        self.assertEqual([trips['M%d' % r].value for r in range(3, 8)],
-                         ['เหมือง ก-ท่า X', 'เหมือง ก-ท่า X', 'หิน(0-35)', 'ทีม 1', 'ผลรวมทั้งหมด'])
-        self.assertEqual(trips['N4'].value, '=COUNTA($F$2:$F$3)')
-        self.assertEqual(trips['N6'].value, '=COUNTIFS($F$2:$F$3,"หิน(0-35)",$D$2:$D$3,"ทีม 1")')
-        self.assertEqual(trips['O5'].value, '=SUMIFS($G$2:$G$3,$F$2:$F$3,"หิน(0-35)")')
+        self.assertEqual(trips.tables['Trips1'].ref, 'A1:L3')
+        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', trips['N1'].value)
+        # ตารางสรุปข้างรายเที่ยวหน้าตาเดียวกับใบปะหน้า : ผลรวมทั้งหมดบนสุด ไม่มีซ้ำท้ายตาราง
+        self.assertEqual([trips['N%d' % r].value for r in range(3, 8)],
+                         ['เหมือง ก-ท่า X', 'ผลรวมทั้งหมด', 'หิน', 'ทีม 1', None])
+        self.assertEqual((trips['O3'].value, trips['O5'].value, trips['O6'].value), ('น้ำหนักที่แบก', '0-35', None))
+        self.assertEqual(trips['P4'].value, '=COUNTA($F$2:$F$3)')
+        self.assertEqual(trips['P6'].value,
+                         '=COUNTIFS($F$2:$F$3,"หิน",$G$2:$G$3,"0-35",$D$2:$D$3,"ทีม 1")')
+        self.assertEqual(trips['Q5'].value, '=SUMIFS($H$2:$H$3,$F$2:$F$3,"หิน",$G$2:$G$3,"0-35")')
 
         # ใบปะหน้า : หนังสือถึง ผอ.ฝ่ายผลิต ตารางสรุปอ้าง sheet รายเที่ยว
         cover = wb['ปะหน้า เหมือง ก-ท่า X']
-        self.assertTrue(cover['A7'].value.startswith('เรื่อง'))
-        self.assertIn('ประจำเดือน ตุลาคม 2569', cover['A7'].value)
+        # หัวเรื่องไม่มีชนิดหิน : รายงานผลการขนส่ง จาก <เหมือง> ไป<ท่าเรือ>
+        self.assertEqual(cover['A7'].value,
+                         'เรื่อง        รายงานผลการขนส่ง จาก เหมือง ก ไปท่า X ประจำเดือน ตุลาคม 2569')
         self.assertEqual(cover['A8'].value, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ')
         self.assertEqual(cover['A11'].value, 'เหมือง ก-ท่า X')
-        self.assertEqual(cover['B12'].value, "=COUNTA('เหมือง ก-ท่า X'!$F$2:$F$3)")
-        self.assertEqual(cover['A15'].value, 'ผลรวมทั้งหมด')
-        self.assertIn('จึงเรียนมาเพื่อโปรดทราบ', cover['A16'].value)
-        self.assertEqual(cover['D17'].value, 'ขอแสดงความนับถือ')
-        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', cover['H5'].value)     # นอกพื้นที่พิมพ์ A:F
+        # ผลรวมทั้งหมดอยู่บนสุดแถวเดียว (แทนแถวชื่อเส้นทาง) ท้ายตารางไม่มีซ้ำ
+        self.assertEqual([cover['A%d' % r].value for r in range(12, 15)], ['ผลรวมทั้งหมด', 'หิน', 'ทีม 1'])
+        self.assertEqual((cover['B11'].value, cover['B13'].value), ('น้ำหนักที่แบก', '0-35'))
+        self.assertEqual(cover['C12'].value, "=COUNTA('เหมือง ก-ท่า X'!$F$2:$F$3)")
+        self.assertEqual(cover.print_area, ['$A$1:$G$27'])
+        self.assertIn('จึงเรียนมาเพื่อโปรดทราบ', cover['A15'].value)
+        self.assertEqual(cover['D16'].value, 'ขอแสดงความนับถือ')
+        self.assertEqual(sum(1 for row in cover.iter_rows() for c in row if c.value == 'ผลรวมทั้งหมด'), 1)
+        self.assertIn('ยังขาด นน.ปลายทาง 1 เที่ยว', cover['H5'].value)     # นอกพื้นที่พิมพ์ A:G
 
         # หนังสือสรุปยอดของเหมือง : 1 แถว = ท่าเรือ + สินค้า
         summary = wb['สรุป เหมือง ก']
         self.assertEqual(summary['A7'].value, 'ประจำเดือน ตุลาคม 2569')
         self.assertEqual(summary['A8'].value, 'เหมือง ก')
         self.assertEqual((summary['A12'].value, summary['A13'].value, summary['A14'].value),
-                         ('ท่า X หิน(0-35)', 'ท่า Y หิน(0-35)', 'รวมขนส่งทั้งหมด'))
+                         ('ท่า X หิน', 'ท่า Y หิน', 'รวมขนส่งทั้งหมด'))
+        self.assertEqual((summary['B10'].value, summary['B12'].value), ('น้ำหนักที่แบก', '0-35'))
         self.assertEqual(summary['E12'].value,
-                         "=COUNTIFS('เหมือง ก-ท่า X'!$F$2:$F$3,\"หิน(0-35)\",'เหมือง ก-ท่า X'!$H$2:$H$3,\"<>\")")
+                         "=COUNTIFS('เหมือง ก-ท่า X'!$F$2:$F$3,\"หิน\",'เหมือง ก-ท่า X'!$G$2:$G$3,\"0-35\","
+                         "'เหมือง ก-ท่า X'!$I$2:$I$3,\"<>\")")
         self.assertEqual(summary['G12'].value, '=D12-F12')
         self.assertEqual(summary['C14'].value, '=SUM(C12:C13)')
 
@@ -1011,9 +1035,9 @@ class MineSummaryTests(SimpleTestCase):
         wb = views._mineSummaryWorkbook(self.rated([self.row(1, team=evil)]), 'ตุลาคม 2569')
         trips = wb['เหมือง ก-ท่า X']
         self.assertEqual((trips['D2'].value, trips['D2'].data_type), (evil, 's'))
-        self.assertEqual(trips['M6'].data_type, 's')            # แถวทีมในตารางสรุป
-        self.assertEqual(trips['N6'].data_type, 'f')            # ตัวเลขยังเป็นสูตรของเรา
-        self.assertEqual(trips['I2'].data_type, 'f')
+        self.assertEqual(trips['N6'].data_type, 's')            # แถวทีมในตารางสรุป
+        self.assertEqual(trips['P6'].data_type, 'f')            # ตัวเลขยังเป็นสูตรของเรา
+        self.assertEqual(trips['J2'].data_type, 'f')
 
     def request(self, path, params):
         rq = RequestFactory().get(path, params)

@@ -15401,10 +15401,17 @@ MINE_SUMMARY_MISSING_FILL = 'FFF2CC'
 MINE_SUMMARY_NUM = '_-* #,##0.00_-;\-* #,##0.00_-;_-* "-"??_-;_-@_-'
 MINE_SUMMARY_TRIP_COLUMNS = [   # (หัว, ความกว้าง) แถว 1 = หัว ข้อมูลเริ่มแถว 2 เหมือนตัวอย่าง
     ('ลำดับที่ใบชั่ง', 13), ('ทะเบียนรถ', 12), ('วันที่', 11), ('ทีม', 26), ('ชื่อเหมือง', 30),
-    ('ชื่อสินค้า', 26), ('นน.ต้นทาง', 12), ('นน.ปลายทาง', 12), ('นน.ส่วนต่าง', 12),
+    ('ชื่อสินค้า', 22), ('น้ำหนักที่แบก', 14), ('นน.ต้นทาง', 12), ('นน.ปลายทาง', 12), ('นน.ส่วนต่าง', 12),
     ('นน.จ่ายค่าบรรทุก', 14), ('หมายเหตุ', 22),
 ]
-MINE_SUMMARY_PIVOT_COL = 13      # M : ตารางสรุปด้านขวาของรายเที่ยว (ตัวอย่างอยู่ S ถัดจากคอลัมน์ที่ซ่อน)
+# คอลัมน์ของชีตรายเที่ยว : D ทีม / F ชนิดหิน / G น้ำหนักที่แบก (แยกจากชื่อสินค้า) / H-K น้ำหนัก
+MINE_SUMMARY_COL_TEAM = 'D'
+MINE_SUMMARY_COL_STONE = 'F'
+MINE_SUMMARY_COL_BAND = 'G'
+MINE_SUMMARY_COL_ORIGIN_W = 'H'
+MINE_SUMMARY_COL_DEST_W = 'I'
+MINE_SUMMARY_WEIGHT_COLS = 'HIJK'   # นน.ต้นทาง / ปลายทาง / ส่วนต่าง / จ่ายค่าบรรทุก
+MINE_SUMMARY_PIVOT_COL = 14      # N : ตารางสรุปด้านขวาของรายเที่ยว (เว้น M หนึ่งคอลัมน์)
 MINE_SUMMARY_PIVOT_ROW = 3       # หัวตารางสรุปแถว 3 เหมือนตัวอย่าง
 MINE_SUMMARY_COVER_ROW = 11      # ใบปะหน้า : หัวตารางสรุปแถว 11 เหมือนตัวอย่าง
 # คำที่ตัดออกตอนตั้งชื่อ sheet (ชื่อ sheet ยาวได้ 31 ตัว ชื่อเต็มอยู่ในตัว sheet แล้ว)
@@ -15489,15 +15496,38 @@ def _mineSummaryRouteLabel(origin, destination):
     return '%s-%s' % (origin, destination)
 
 
+def _mineSummaryBandSortKey(band):
+    """เรียงช่วงน้ำหนักที่แบกจากน้อยไปมาก ตามตัวเลขแรกในข้อความ ('0-35' < '35.01 ขึ้นไป')
+    ไม่มีช่วง ขึ้นก่อน · ช่วงที่ไม่มีตัวเลข ไว้ท้าย"""
+    if not band:
+        return (0, 0.0, '')
+    match = re.search(r'\d+(?:\.\d+)?', band)
+    return (1, float(match.group()), band) if match else (2, 0.0, band)
+
+
+def _mineSummaryThaiSortKey(text):
+    """เรียงชื่อภาษาไทยแบบพจนานุกรมคร่าว ๆ : สระหน้า (เ แ โ ใ ไ) ไม่นับเป็นตัวแรก ให้ไปเรียงตามพยัญชนะที่ตามมา
+    ('แร่' อยู่ในหมวด ร ไม่ใช่ไปต่อท้าย ฮ ตามรหัสตัวอักษร)"""
+    text = text or ''
+    leading = ''
+    while text and text[0] in 'เแโใไ':
+        leading += text[0]
+        text = text[1:]
+    return (text, leading)
+
+
 def _mineSummaryGroups(trips):
-    """ลำดับแถวของตารางสรุป : สินค้า -> ทีม ตามลำดับที่โผล่ครั้งแรกในรายเที่ยว (เหมือน pivot ของหน้างาน)
-    คืน [(สินค้า, [ทีม, ...]), ...]"""
-    groups = OrderedDict()
+    """ลำดับแถวของตารางสรุป : (ชนิดหิน, น้ำหนักที่แบก) -> ทีม
+    เรียงตามชนิดหิน แล้วตามช่วงน้ำหนักที่แบก · ทีมตามลำดับที่โผล่ครั้งแรกในรายเที่ยว
+    คืน [((ชนิดหิน, น้ำหนักที่แบก), [ทีม, ...]), ...]"""
+    groups = {}
     for r in trips:
-        teams = groups.setdefault(_mineSummaryProduct(r), [])
+        key = (r['stone'] or '-', r.get('weight_carried') or '')
+        teams = groups.setdefault(key, [])
         if r['team'] not in teams:
             teams.append(r['team'])
-    return list(groups.items())
+    return sorted(groups.items(), key=lambda item: (_mineSummaryThaiSortKey(item[0][0]),
+                                                    _mineSummaryBandSortKey(item[0][1])))
 
 
 def _mineSummaryCriteria(text):
@@ -15520,21 +15550,28 @@ def _mineSummaryFont(cell, size=14, bold=False, color=None, fmt=None, align=None
 
 def _mineSummaryPivotFormulas(sheet_ref, last_row, product=None, team=None):
     """สูตร [เที่ยว, นน.ต้นทาง, นน.ปลายทาง, นน.ส่วนต่าง, นน.จ่าย] ของแถวสรุปหนึ่งแถว
-    อ้างรายเที่ยวในช่วงแถว 2..last_row : F สินค้า / D ทีม / G-J น้ำหนัก
-    sheet_ref = '' (sheet เดียวกัน) หรือ "'ชื่อ sheet'!" (อ้างข้าม sheet)"""
+    อ้างรายเที่ยวในช่วงแถว 2..last_row : F ชนิดหิน + G น้ำหนักที่แบก / D ทีม / H-K น้ำหนัก
+    product = (ชนิดหิน, น้ำหนักที่แบก) · sheet_ref = '' (sheet เดียวกัน) หรือ "'ชื่อ sheet'!" (อ้างข้าม sheet)"""
     def rng(col):
         return '%s$%s$2:$%s$%d' % (sheet_ref, col, col, last_row)
     conditions = []
     if product is not None:
-        conditions.append('%s,%s' % (rng('F'), _mineSummaryCriteria(product)))
+        conditions.append(_mineSummaryProductCriteria(rng, product))
     if team is not None:
-        conditions.append('%s,%s' % (rng('D'), _mineSummaryCriteria(team)))
+        conditions.append('%s,%s' % (rng(MINE_SUMMARY_COL_TEAM), _mineSummaryCriteria(team)))
     if not conditions:
-        return (['=COUNTA(%s)' % rng('F')] +
-                ['=SUM(%s)' % rng(col) for col in 'GHIJ'])
+        return (['=COUNTA(%s)' % rng(MINE_SUMMARY_COL_STONE)] +
+                ['=SUM(%s)' % rng(col) for col in MINE_SUMMARY_WEIGHT_COLS])
     cond = ','.join(conditions)
     return (['=COUNTIFS(%s)' % cond] +
-            ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in 'GHIJ'])
+            ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in MINE_SUMMARY_WEIGHT_COLS])
+
+
+def _mineSummaryProductCriteria(rng, product):
+    """เงื่อนไข COUNTIFS / SUMIFS ของสินค้า = ชนิดหิน และน้ำหนักที่แบก (ช่วงว่าง = เงื่อนไข "" ตรงกับช่องว่าง)"""
+    stone, band = product
+    return '%s,%s,%s,%s' % (rng(MINE_SUMMARY_COL_STONE), _mineSummaryCriteria(stone),
+                            rng(MINE_SUMMARY_COL_BAND), _mineSummaryCriteria(band))
 
 
 # สีของตารางสรุป แยกระดับให้อ่านง่าย (ทำ PivotTable จริงจากโค้ดไม่ได้ Excel ตัดทิ้งตอนเปิดไฟล์)
@@ -15548,9 +15585,12 @@ MINE_SUMMARY_LEVEL_STYLE = {
 }
 
 
-def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, source_ref, last_row, size=14):
+def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, source_ref, last_row, size=14,
+                           total_on_top=False):
     """ตารางสรุป เส้นทาง -> สินค้า -> ทีม + ผลรวมทั้งหมด (ลำดับเดียวกับ pivot ของหน้างาน)
     แต่ละระดับคนละสี ทีมย่อหน้าเข้าไป จะได้ดูออกว่าแถวไหนเป็นหัวข้อ แถวไหนเป็นรายละเอียด
+    total_on_top (ใบปะหน้า / ตารางข้างรายเที่ยว) : แถวแรกใต้หัวตาราง = ผลรวมทั้งหมด แทนแถวชื่อเส้นทาง และไม่มีแถวผลรวมท้ายตาราง
+    (ยอดเดียวกัน ไม่ต้องขึ้นสองที่ ชื่อเส้นทางอยู่บนหัวตารางแล้ว)
     คืนแถวสุดท้ายของตาราง"""
     thin = Side(style='thin')
     hair = Side(style='hair')
@@ -15561,32 +15601,41 @@ def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, sou
         style = MINE_SUMMARY_LEVEL_STYLE[level]
         for i, value in enumerate(labels):
             cell = worksheet.cell(row, left + i)
-            if i == 0 or level == 'head':
-                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / สินค้า / ทีม มาจากข้อมูลชั่ง
+            if i <= 1 or level == 'head':
+                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / หิน / ช่วงน้ำหนัก / ทีม มาจากข้อมูล
             else:
                 cell.value = value                   # สูตรนับ / รวมที่เราสร้างเอง
             if i == 0:
                 align = Alignment(horizontal='left', indent=style['indent'], vertical='center')
                 fmt = None
+            elif i == 1 or level == 'head':
+                align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                fmt = None
             else:
-                align = Alignment(horizontal='center', vertical='center', wrap_text=True) if level == 'head' else None
-                fmt = None if level == 'head' else ('#,##0' if i == 1 else '#,##0.00')
+                align = None
+                fmt = '#,##0' if i == 2 else '#,##0.00'
             _mineSummaryFont(cell, size=size, bold=style['bold'], color=style['color'], fill=style['fill'],
                              fmt=fmt, align=align, border=border)
 
-    paint(top, [route, 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง', 'นน.จ่ายค่าบรรทุก'], 'head',
+    paint(top, [route, 'น้ำหนักที่แบก', 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง', 'นน.จ่ายค่าบรรทุก'], 'head',
           Border(left=thin, right=thin, top=thin, bottom=thin))
     worksheet.row_dimensions[top].height = 24
 
-    rows = [('route', route, _mineSummaryPivotFormulas(source_ref, last_row))]
+    # แถวสินค้า = ชนิดหิน + คอลัมน์น้ำหนักที่แบกแยก (ไม่ต่อท้ายชื่อหินแล้ว) · แถวทีมเว้นช่องน้ำหนักที่แบกไว้
+    grand = ('total', 'ผลรวมทั้งหมด', None, _mineSummaryPivotFormulas(source_ref, last_row))
+    rows = [grand if total_on_top else ('route', route, None, _mineSummaryPivotFormulas(source_ref, last_row))]
     for product, teams in _mineSummaryGroups(trips):
-        rows.append(('product', product, _mineSummaryPivotFormulas(source_ref, last_row, product=product)))
+        stone, band = product
+        rows.append(('product', stone, band or None,
+                     _mineSummaryPivotFormulas(source_ref, last_row, product=product)))
         for team in teams:
-            rows.append(('team', team, _mineSummaryPivotFormulas(source_ref, last_row, product=product, team=team)))
-    rows.append(('total', 'ผลรวมทั้งหมด', _mineSummaryPivotFormulas(source_ref, last_row)))
+            rows.append(('team', team, None,
+                         _mineSummaryPivotFormulas(source_ref, last_row, product=product, team=team)))
+    if not total_on_top:
+        rows.append(grand)
 
     row = top
-    for level, label, formulas in rows:
+    for level, label, band, formulas in rows:
         row += 1
         if level == 'team':
             border = Border(left=thin, right=thin, top=hair, bottom=hair)
@@ -15594,7 +15643,7 @@ def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, sou
             border = Border(left=thin, right=thin, top=medium, bottom=medium)
         else:
             border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        paint(row, [label] + formulas, level, border)
+        paint(row, [label, band] + formulas, level, border)
     return row
 
 
@@ -15620,22 +15669,23 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
     for i, r in enumerate(ordered):
         row = 2 + i
         fill = MINE_SUMMARY_MISSING_FILL if r['dest_weight'] is None else None
-        values = [r['doc_id'], r['car_registration'], r['date'], r['team'], route, _mineSummaryProduct(r),
+        values = [r['doc_id'], r['car_registration'], r['date'], r['team'], route, r['stone'] or '-',
+                  r.get('weight_carried') or None,     # ช่วงว่าง = ช่องว่าง (สูตรสรุปจับด้วยเงื่อนไข "")
                   float(r['origin_weight']) if r['origin_weight'] is not None else None,
                   float(r['dest_weight']) if r['dest_weight'] is not None else None,
                   # ส่วนต่าง / จ่ายค่าบรรทุก เป็นสูตรเหมือนตัวอย่าง กรอก นน.ปลายทางในไฟล์แล้วคิดใหม่เอง
-                  '=IF(OR(G{0}="",H{0}=""),"",G{0}-H{0})'.format(row),
-                  '=IF(AND(G{0}="",H{0}=""),"",MIN(G{0},H{0}))'.format(row),
+                  '=IF(OR(H{0}="",I{0}=""),"",H{0}-I{0})'.format(row),
+                  '=IF(AND(H{0}="",I{0}=""),"",MIN(H{0},I{0}))'.format(row),
                   _mineSummaryStatus(r) or None]
         for col, value in enumerate(values, start=1):
             cell = worksheet.cell(row, col)
-            if col in (9, 10):
+            if col in (10, 11):
                 cell.value = value                   # สูตรส่วนต่าง / จ่ายค่าบรรทุก ที่เราสร้างเอง
             else:
                 _mineSummaryText(cell, value)
-            fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 7 <= col <= 10 else '@' if col in (1, 2) else None)
+            fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 8 <= col <= 11 else '@' if col in (1, 2, 7) else None)
             _mineSummaryFont(cell, fmt=fmt, border=cell_border, fill=fill,
-                             align=center if col in (1, 2, 3, 5, 6) else None)
+                             align=center if col in (1, 2, 3, 5, 6, 7) else None)
     last_row = 1 + len(ordered)
     if ordered:
         table = Table(displayName=table_name,
@@ -15649,8 +15699,10 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
         note = worksheet.cell(1, left)
         note.value = 'ยังขาด นน.ปลายทาง %s เที่ยว (แถวสีเหลือง) กรอกให้ครบก่อนส่งบัญชี' % missing
         _mineSummaryFont(note, bold=True, color='C00000')
-    _mineSummaryWritePivot(worksheet, MINE_SUMMARY_PIVOT_ROW, left, origin, destination, trips, '', last_row)
-    for i, width in enumerate((30, 8, 13, 13, 13, 15)):
+    # รูปแบบเดียวกับใบปะหน้า : ผลรวมทั้งหมดบนสุดแถวเดียว
+    _mineSummaryWritePivot(worksheet, MINE_SUMMARY_PIVOT_ROW, left, origin, destination, trips, '', last_row,
+                           total_on_top=True)
+    for i, width in enumerate((30, 14, 8, 13, 13, 13, 15)):
         worksheet.column_dimensions[get_column_letter(left + i)].width = width
     worksheet.column_dimensions[get_column_letter(left - 1)].width = 3
     worksheet.freeze_panes = 'A2'
@@ -15660,13 +15712,15 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
 def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, trip_sheet, last_row):
     """ใบปะหน้าของคู่หนึ่ง : บันทึกถึงผู้อำนวยการฝ่ายผลิต (ตามใบปะหน้าของตัวอย่าง)
     เลขที่หนังสือ / วันที่ / ผู้ลงนาม / สำเนาเรียน เว้นให้หน้างานกรอกเอง"""
-    for col, width in enumerate((28.3, 13.3, 15.3, 18.9, 20.9, 15.7), start=1):
+    # A ชื่อ / B น้ำหนักที่แบก / C เที่ยว / D-G น้ำหนัก
+    for col, width in enumerate((28.3, 14, 9, 15.3, 16, 14, 15.7), start=1):
         worksheet.column_dimensions[get_column_letter(col)].width = width
-    products = ', '.join(OrderedDict((r['stone'] or '-', None) for r in trips))
+    products =', '.join(OrderedDict((r['stone'] or '-', None) for r in trips))
     lines = [
         (5, 1, 'ที่ ........................................'),
         (6, 4, 'วันที่ ........................................'),
-        (7, 1, 'เรื่อง        รายงานผลการขนส่ง%s %s ไป%s ประจำเดือน %s' % (products, origin, destination, month_label)),
+        # หัวเรื่องไม่ใส่ชนิดหิน (อยู่ในตารางสรุปแล้ว) : รายงานผลการขนส่ง จาก <เหมือง> ไป<ท่าเรือ>
+        (7, 1, 'เรื่อง        รายงานผลการขนส่ง จาก %s ไป%s ประจำเดือน %s' % (origin, destination, month_label)),
         (8, 1, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ'),
         (9, 1, '               ด้วย ทางหน่วยงาน%s ขอส่งรายงานขนส่ง%s จาก %s ไป%s' % (origin, products, origin, destination)),
         (10, 1, 'ประจำเดือน %s ตามรายละเอียดดังนี้' % month_label),
@@ -15676,7 +15730,7 @@ def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, t
         _mineSummaryFont(worksheet.cell(row, col), size=16)
     worksheet.merge_cells('D6:F6')
     end = _mineSummaryWritePivot(worksheet, MINE_SUMMARY_COVER_ROW, 1, origin, destination, trips,
-                                 "'%s'!" % trip_sheet, last_row, size=16)
+                                 "'%s'!" % trip_sheet, last_row, size=16, total_on_top=True)
     tail = [
         (end + 1, 1, '             จึงเรียนมาเพื่อโปรดทราบ', None),
         (end + 2, 4, 'ขอแสดงความนับถือ', 'center'),
@@ -15698,7 +15752,7 @@ def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, t
         _mineSummaryFont(note, bold=True, color='C00000')
     for row in range(5, end + 14):
         worksheet.row_dimensions[row].height = 23.25
-    worksheet.print_area = 'A1:F%d' % (end + 13)
+    worksheet.print_area = 'A1:G%d' % (end + 13)
     worksheet.page_setup.orientation = 'portrait'
     worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
     worksheet.page_setup.fitToWidth = 1
@@ -15713,13 +15767,15 @@ def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
     medium = Side(style='medium')
     box = Border(left=medium, right=medium, top=medium, bottom=medium)
     center = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    for col, width in enumerate((9.1, 34, 13, 17, 12.7, 17, 14.6), start=1):
+    # A ท่าเรือ + ชนิดหิน / B น้ำหนักที่แบก (แยกจากชื่อสินค้า) / C-G เที่ยว ตัน
+    for col, width in enumerate((34, 14, 13, 17, 12.7, 17, 14.6), start=1):
         worksheet.column_dimensions[get_column_letter(col)].width = width
     for row, text in ((7, 'ประจำเดือน %s' % month_label), (8, origin), (9, 'สรุปยอดการขนส่งไปท่าเรือ')):
         worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
         worksheet.cell(row, 1).value = text
         _mineSummaryFont(worksheet.cell(row, 1), size=16, bold=True, align=center)
-    heads = [('A10:B11', 'ท่าเรือ'), ('C10:D10', 'ต้นทาง (%s)' % _mineSummaryShortName(origin)),
+    heads = [('A10:A11', 'ท่าเรือ'), ('B10:B11', 'น้ำหนักที่แบก'),
+             ('C10:D10', 'ต้นทาง (%s)' % _mineSummaryShortName(origin)),
              ('E10:F10', 'ปลายทาง (ท่าเรือ)'), ('G10', 'ส่วนต่าง'),
              ('C11', 'เที่ยว'), ('D11', 'ตัน'), ('E11', 'เที่ยว'), ('F11', 'ตัน'), ('G11', 'ตัน')]
     for ref, text in heads:
@@ -15740,19 +15796,20 @@ def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
 
             def rng(col):
                 return '%s$%s$2:$%s$%d' % (ref, col, col, last_row)
-            crit = '%s,%s' % (rng('F'), _mineSummaryCriteria(product))
-            worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-            _mineSummaryText(worksheet.cell(row, 1), '%s %s' % (destination, product))
-            worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('G'))
-            worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (rng('G'), crit)
-            worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('H'))
-            worksheet.cell(row, 6).value = '=SUMIFS(%s,%s)' % (rng('H'), crit)
+            crit = _mineSummaryProductCriteria(rng, product)
+            origin_w, dest_w = rng(MINE_SUMMARY_COL_ORIGIN_W), rng(MINE_SUMMARY_COL_DEST_W)
+            _mineSummaryText(worksheet.cell(row, 1), '%s %s' % (destination, product[0]))
+            _mineSummaryText(worksheet.cell(row, 2), product[1] or None)
+            worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, origin_w)
+            worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (origin_w, crit)
+            worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, dest_w)
+            worksheet.cell(row, 6).value = '=SUMIFS(%s,%s)' % (dest_w, crit)
             worksheet.cell(row, 7).value = '=D%d-F%d' % (row, row)
             for col in range(1, 8):
                 _mineSummaryFont(worksheet.cell(row, col), size=16, border=box,
                                  fmt=MINE_SUMMARY_NUM if col >= 3 else None,
                                  align=Alignment(horizontal='left', vertical='center', wrap_text=True)
-                                 if col == 1 else None)
+                                 if col == 1 else center if col == 2 else None)
     first, last = 12, row
     row += 1
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)

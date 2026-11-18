@@ -189,6 +189,21 @@
           </p>
         </div>
         <div class="card-body">
+          <!-- แบ่งอัตโนมัติ : เติมบนจออย่างเดียว ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง" -->
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-2 border rounded">
+            <button type="button" class="btn btn-sm btn-success" id="payer-auto">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> แบ่งอัตโนมัติ (เครดิตน้อยก่อน)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="payer-clear">
+              <i class="fa-solid fa-eraser"></i> ล้างการแบ่งทั้งหมด
+            </button>
+            <span class="small text-muted">
+              เติมส่วนที่ยังขาดเป้าของทุกนาม จากแถวทีมที่ยังค้าง stock เรียงทีมเครดิตน้อยไปมาก (เงินสดก่อน ไม่ระบุเครดิตท้ายสุด) ·
+              นามทางซ้ายได้ก่อน · แถวใหญ่กว่าที่ขาดตัดให้พอดี ส่วนที่เหลือของแถวไปนามถัดไป ·
+              แถวที่เลือกไว้เองคงไว้ · ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง" (ไม่พอใจรีเฟรชหน้าได้)
+            </span>
+            <div class="w-100 small d-none" id="payer-auto-result"></div>
+          </div>
           <!-- แถบกรอง : ซ่อนแถวบนจออย่างเดียว แถวที่ซ่อนยังถูกส่งตอนบันทึกเหมือนเดิม -->
           <div class="row gx-2 gy-2 align-items-end mb-2" id="payer-filter">
             <div class="col-auto">
@@ -567,6 +582,101 @@
       document.getElementById(id).addEventListener('change', applyFilter);
     });
 
+    // เครดิตของแถวไว้เรียง : เงินสด (0) ก่อน ... ไม่ระบุเครดิตท้ายสุด
+    function creditRank(row) {
+      const c = row.dataset.credit;
+      return c === 'none' || c === '' ? Infinity : (parseInt(c, 10) || 0);
+    }
+    function round3(n) { return Math.round(n * 1000) / 1000; }
+
+    // ตั้งแถวให้ตรงกับ {id: ตัน} : ทั้งแถวให้นามเดียว = เลือกนามนั้น · นอกนั้น = แบ่งหลายนาม (กรอกตัน)
+    function setRow(row, taken) {
+      const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+      const ids = Object.keys(taken).filter(function (id) { return taken[id] >= TON; });
+      const sel = row.querySelector('.payer-mode');
+      if (ids.length === 0) sel.value = '';
+      else if (ids.length === 1 && Math.abs(taken[ids[0]] - tons) < TON) sel.value = ids[0];
+      else sel.value = SPLIT;
+      row.querySelectorAll('.payer-split').forEach(function (inp) {
+        const v = taken[inp.getAttribute('data-company')];
+        inp.value = sel.value === SPLIT && v >= TON ? round3(v).toFixed(3) : '';
+      });
+      sel.dataset.prev = sel.value;
+    }
+
+    // แบ่งอัตโนมัติ : ต่อหิน ไล่แถวทีมที่ยังมีส่วนค้าง stock จากเครดิตน้อยไปมาก (เครดิตเท่ากันเรียงตามจอ)
+    // เติมให้นามที่ติ๊กไว้และตั้งเป้าแล้ว จากซ้ายไปขวา จนครบเป้า · ไม่แตะแถว / ตันที่เลือกไว้แล้ว
+    function autoAllocate() {
+      const teamRows = [...form.querySelectorAll('tr.payer-team')];
+      const result = [];
+      let changed = 0;
+      form.querySelectorAll('tr.payer-stone').forEach(function (stoneTr) {
+        const stone = stoneTr.dataset.stone;
+        const rows = teamRows.filter(function (r) { return r.dataset.stone === stone; });
+        const need = [];   // [{id, name, left}] ตามลำดับคอลัมน์
+        stoneTr.querySelectorAll('td.payer-col').forEach(function (td) {
+          const id = td.getAttribute('data-company');
+          const target = td.querySelector('.payer-target');
+          if (!checked(id) || target.disabled || target.value.trim() === '') return;
+          let got = 0;
+          rows.forEach(function (r) { got += takenOf(r)[id] || 0; });
+          const name = document.querySelector('label[for="payer-' + id + '"]').textContent.trim();
+          need.push({ id: id, name: name, left: round3(num(target.value) - got) });
+        });
+        if (!need.some(function (n) { return n.left >= TON; })) return;
+
+        rows.map(function (r, i) { return { row: r, i: i }; })
+          .sort(function (a, b) { return creditRank(a.row) - creditRank(b.row) || a.i - b.i; })
+          .forEach(function (item) {
+            const row = item.row;
+            const taken = takenOf(row);
+            const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+            let free = round3(tons - Object.keys(taken).reduce(function (s, id) { return s + taken[id]; }, 0));
+            let touched = false;
+            need.forEach(function (n) {
+              if (free < TON || n.left < TON) return;
+              const give = round3(Math.min(free, n.left));
+              taken[n.id] = round3((taken[n.id] || 0) + give);
+              n.left = round3(n.left - give);
+              free = round3(free - give);
+              touched = true;
+            });
+            if (touched) { setRow(row, taken); changed += 1; }
+          });
+        need.forEach(function (n) {
+          if (n.left >= TON) result.push(n.name + ' · ' + (stone || '(ไม่ระบุชนิดหิน)') + ' ยังขาด ' + fmt(n.left) + ' ตัน');
+        });
+      });
+      applyToggles();
+      recalc();
+      applyFilter();
+      const box = document.getElementById('payer-auto-result');
+      box.classList.remove('d-none');
+      // ข้อความประกอบจากชื่อบน label / ชื่อหิน : ใส่ด้วย textContent เท่านั้น
+      box.textContent = '';
+      const head = document.createElement('div');
+      head.className = changed ? 'payer-ok' : 'text-muted';
+      head.textContent = changed
+        ? 'แบ่งแล้ว ' + changed + ' แถวทีม : ตรวจดูแล้วกด "บันทึกการแบ่ง"'
+        : 'ไม่มีอะไรให้แบ่งเพิ่ม (ครบเป้าแล้ว / ยังไม่ได้ตั้งเป้า / ไม่มีแถวค้าง stock)';
+      box.appendChild(head);
+      result.forEach(function (t) {
+        const d = document.createElement('div');
+        d.className = 'payer-short';
+        d.textContent = t + ' (หินในกองกลางไม่พอ)';
+        box.appendChild(d);
+      });
+    }
+    document.getElementById('payer-auto').addEventListener('click', autoAllocate);
+
+    document.getElementById('payer-clear').addEventListener('click', function () {
+      if (!confirm('ล้างการเลือกนามทุกแถวทีม (กลับเป็นค้าง stock ทั้งหมด) ?\nเป้าในข้อ ② ไม่หาย · ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง"')) return;
+      form.querySelectorAll('tr.payer-team').forEach(function (row) { setRow(row, {}); });
+      document.getElementById('payer-auto-result').classList.add('d-none');
+      applyToggles();
+      recalc();
+      applyFilter();
+    });
 
     form.querySelectorAll('.payer-mode').forEach(function (sel) { sel.dataset.prev = sel.value; });
     document.querySelectorAll('.payer-toggle').forEach(function (box) {

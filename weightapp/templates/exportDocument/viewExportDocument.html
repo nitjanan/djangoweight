@@ -345,7 +345,7 @@
       <div class="card-header">
         <h5 class="card-title mb-0">หน้าเหมือง : กรอกน้ำหนักปลายทาง แล้วออกใบสรุป</h5>
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
-          ① โหลดไฟล์กรอก นน.ปลายทาง → ② อัปโหลด แล้วกดยืนยัน → ③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี
+          ① โหลดไฟล์กรอก นน.ปลายทาง → ② อัปโหลด แล้วกดยืนยัน → ③ ตรวจและอนุมัติเที่ยวรายวัน → ④ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี
         </p>
       </div>
       <div class="card-body">
@@ -510,7 +510,19 @@
 
         <hr>
         <div class="d-flex flex-wrap align-items-center gap-2">
-          <div class="small text-muted w-100">③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี (ต่อเหมือง : หนังสือสรุปยอด · ต่อเส้นทาง : รายเที่ยว + ใบปะหน้า)</div>
+          <div class="small text-muted w-100">③ ตรวจเที่ยวทีละวัน แยกต้นทาง แล้วกดอนุมัติ (เปิดเป็นหน้าแยก)</div>
+          {% if approval_available %}
+          <a class="btn btn-primary" href="{% url 'viewExportDocumentApproval' %}?month={{ selected_month }}">
+            <i class="fa-solid fa-clipboard-check"></i> ตรวจและอนุมัติเที่ยวรายวัน
+          </a>
+          {% else %}
+          <span class="small text-muted">แท็บนี้อนุมัติไม่ได้ (แท็บท่าเรือเห็นเที่ยวไม่ครบทั้งต้นทาง) ให้อนุมัติจากแท็บเหมือง</span>
+          {% endif %}
+        </div>
+
+        <hr>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="small text-muted w-100">④ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี (ต่อเหมือง : หนังสือสรุปยอด · ต่อเส้นทาง : รายเที่ยว + ใบปะหน้า)</div>
           <a class="btn btn-success" data-busy-download="กำลังทำใบสรุปหน้าเหมือง..."
              href="{% url 'exportExcelMineSummary' %}?{{ route_query }}">
             <i class="fa-solid fa-file-excel"></i> ใบสรุปหน้าเหมือง
@@ -880,11 +892,12 @@
     <div class="card" id="trips">
       <div class="card-header">
         <h5 class="card-title mb-0">รายเที่ยว</h5>
-        {% if problem or selected_route %}
+        {% if problem or selected_route or selected_origin %}
         <div class="alert alert-secondary d-flex flex-wrap align-items-center gap-2 py-2 mt-2 mb-0">
           <span>
             กำลังดูเฉพาะ:
-            {% if route_label %}<strong>{{ route_label }}</strong>{% if problem %} · {% endif %}{% endif %}
+            {% if route_label %}<strong>{{ route_label }}</strong>{% if problem or origin_label %} · {% endif %}{% endif %}
+            {% if origin_label %}<strong>ต้นทาง {{ origin_label }}</strong>{% if selected_date_from %} วันที่ {{ selected_date_from }}{% if selected_date_to and selected_date_to != selected_date_from %} ถึง {{ selected_date_to }}{% endif %}{% endif %}{% if problem %} · {% endif %}{% endif %}
             {% if problem %}<strong>{{ problem_label }}</strong>{% endif %}
             ({{ problem_count|intcomma }} เที่ยว)
             <span class="small text-muted d-block">ตัวเลขสรุปด้านบนและไฟล์ที่กด Export ยังเป็นข้อมูลทั้งชุดตามตัวกรอง</span>

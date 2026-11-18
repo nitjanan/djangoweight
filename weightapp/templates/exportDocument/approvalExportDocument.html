@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block css %}
+<style>
+  .trip-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+  .trip-table { white-space: nowrap; font-size: 0.85rem; }
+  .trip-table thead th { position: sticky; top: 0; z-index: 2; background: #fff; vertical-align: middle; }
+  .trip-num { text-align: right; }
+  /* ตารางรวม : สีพื้นของช่องบอกสถานะ ไล่ดูทั้งเดือนได้ด้วยตา
+     ธีมวาดพื้นแถวด้วย box-shadow inset ทับ background ต้องสั่ง none ถึงจะเห็นสี (ดู viewExportDocument.html) */
+  .approval-table > tbody > tr > td.approval-problem { background: #fdecea; box-shadow: none; }
+  .approval-table > tbody > tr > td.approval-ready { background: #fff8e1; box-shadow: none; }
+  .approval-table > tbody > tr > td.approval-approved { background: #e8f5e9; box-shadow: none; }
+  .approval-table > tbody > tr > td.approval-changed { background: #ffeedd; box-shadow: none; }
+  .approval-table td.approval-cell { min-width: 11rem; }
+  .approval-badge-changed { background: #fd7e14; color: #fff; }
+  /* หน้าดูรายวัน : ช่องที่ขาดข้อมูล */
+  .trip-table > tbody > tr > td.trip-missing { background: #fdecea; box-shadow: none; color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-3">
+  <a href="#" class="burger-btn d-block d-xl-none">
+    <i class="bi bi-justify fs-3"></i>
+  </a>
+</header>
+
+<div class="page-heading">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-12 col-md-6 order-md-1 order-last">
+        <h3>ตรวจและอนุมัติเที่ยวรายวัน</h3>
+        <p class="text-subtitle text-muted mb-0">หน้าเหมืองตรวจเที่ยวทีละวัน แยกต้นทาง แล้วกดอนุมัติ</p>
+      </div>
+      <div class="col-12 col-md-6 order-md-2 order-first">
+        <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'viewExportDocument' %}?month={{ selected_month }}">Export เอกสาร</a></li>
+            <li class="breadcrumb-item active" aria-current="page">ตรวจและอนุมัติ</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="card">
+      <div class="card-body">
+        <form method="get" class="row gx-3 gy-2 align-items-end">
+          <div class="form-group col-md-3 mb-0">
+            <label for="month">ประจำเดือน</label>
+            <select class="form-select" id="month" name="month">
+              {% for m in month_list %}
+                <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-md-9 mb-0 d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-magnifying-glass"></i> ดูข้อมูล
+            </button>
+            <a class="btn btn-outline-secondary ms-md-auto" href="{% url 'viewExportDocument' %}?month={{ selected_month }}">
+              <i class="fa-solid fa-arrow-left"></i> กลับหน้า Export เอกสาร
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-light-danger color-danger{% else %}alert-light-success color-success{% endif %}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if tab_no_origin %}
+    <div class="alert alert-warning">
+      แท็บบริษัทนี้ยังไม่ได้ผูก "ต้นทาง" ไว้ในระบบ จึงยังไม่มีเที่ยวให้ตรวจ
+      (ผูกบริษัทให้แถวต้นทางในหน้าจัดการต้นทาง / ปลายทางก่อน หรือดูที่แท็บร้อยเกาะซึ่งเห็นทุกต้นทาง)
+    </div>
+    {% elif tab_is_port %}
+    <div class="alert alert-warning">
+      แท็บท่าเรือเห็นเฉพาะเที่ยวที่ชั่งที่ท่าเรือนี้ ไม่ครบทั้งต้นทาง จึงอนุมัติจากแท็บนี้ไม่ได้
+      ให้อนุมัติจากแท็บของเหมืองต้นทาง (หรือแท็บร้อยเกาะ)
+    </div>
+    {% endif %}
+
+    {% if day %}
+    {# ---------------- หน้าดูรายวัน : เที่ยวของวันนั้น ต้นทางนั้น + ปุ่มอนุมัติ / ยกเลิก ---------------- #}
+    {% with d=day day_link=day.date|date:'Y-m-d' %}
+    <div class="card" id="day">
+      <div class="card-header">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <h5 class="card-title mb-0">วันที่ {{ d.date|date:"d/m/Y" }} · ต้นทาง {{ d.origin }}</h5>
+          <span>{{ d.trips }} เที่ยว</span>
+          {% if d.status == 'problem' %}<span class="badge bg-danger">มีปัญหา {{ d.problem_trips|add:d.carry_empty }}</span>
+          {% elif d.status == 'ready' %}<span class="badge bg-warning text-dark">รออนุมัติ</span>
+          {% elif d.status == 'changed' %}<span class="badge approval-badge-changed">แก้หลังอนุมัติ</span>
+          {% elif d.status == 'approved' %}<span class="badge bg-success">✔ อนุมัติแล้ว</span>{% endif %}
+          <span class="ms-auto d-flex flex-wrap gap-2">
+            {% if prev_day %}
+            <a class="btn btn-sm btn-outline-secondary" href="?month={{ selected_month }}&amp;date={{ prev_day|date:'Y-m-d' }}&amp;origin={{ d.origin_id }}">
+              <i class="fa-solid fa-chevron-left"></i> {{ prev_day|date:"d/m" }}
+            </a>
+            {% endif %}
+            {% if next_day %}
+            <a class="btn btn-sm btn-outline-secondary" href="?month={{ selected_month }}&amp;date={{ next_day|date:'Y-m-d' }}&amp;origin={{ d.origin_id }}">
+              {{ next_day|date:"d/m" }} <i class="fa-solid fa-chevron-right"></i>
+            </a>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-dark" href="?month={{ selected_month }}#board">
+              <i class="fa-solid fa-table-cells"></i> กลับไปตารางรวม
+            </a>
+          </span>
+        </div>
+
+        {% if d.status == 'problem' %}
+        <div class="alert alert-light-danger color-danger py-2 mt-2 mb-0">
+          ต้องแก้ก่อนถึงจะอนุมัติได้ :
+          {% for label, n in d.problems %}{{ label }} {{ n }} เที่ยว{% if not forloop.last %} · {% endif %}{% endfor %}
+          {% if d.carry_empty %}
+            {% if d.problems %} · {% endif %}ประเภทการบรรทุกว่าง {{ d.carry_empty }} ใบ
+            (<a href="#carry-empty">ดูรายการด้านล่าง</a>)
+          {% endif %}
+        </div>
+        {% elif d.status == 'changed' %}
+        <div class="alert alert-light-warning py-2 mt-2 mb-0">
+          เคยอนุมัติโดย {{ d.approval.approved_by.username|default:'-' }} เมื่อ {{ d.approval.approved_at|date:'d/m/Y H:i' }}
+          ({{ d.approval.trip_count }} เที่ยว) แล้วมีการแก้ข้อมูลหลังจากนั้น กรุณาตรวจใหม่
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <div class="btn-group btn-group-sm" role="group" aria-label="เลือกเที่ยวที่แสดง">
+            <a class="btn {% if only_problems %}btn-outline-primary{% else %}btn-primary{% endif %}"
+               href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ d.origin_id }}">ทุกเที่ยว ({{ d.trips }})</a>
+            <a class="btn {% if only_problems %}btn-danger{% else %}btn-outline-danger{% endif %} {% if not d.problem_trips %}disabled{% endif %}"
+               href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ d.origin_id }}&amp;problems=1">เฉพาะเที่ยวที่ต้องแก้ ({{ d.problem_trips }})</a>
+          </div>
+          <a class="small ms-auto" href="{% url 'viewExportDocument' %}?month={{ selected_month }}&amp;date_from={{ day_link }}&amp;date_to={{ day_link }}&amp;origin={{ d.origin_id }}#trips">
+            เปิดวันนี้ในหน้า Export เอกสาร (อัปโหลดแก้ นน.ปลายทาง)
+          </a>
+        </div>
+
+        <div class="trip-scroll">
+          <table class="table table-sm table-striped trip-table mb-0">
+            <thead>
+              <tr>
+                <th class="trip-num">#</th>
+                <th>เลขที่ชั่ง</th>
+                <th>ชั่งที่</th>
+                <th>ทะเบียนรถ</th>
+                <th>ทีมรถร่วม</th>
+                <th>ชนิดแร่/หิน</th>
+                <th>ปลายทาง</th>
+                <th>ช่วงน้ำหนักที่แบก</th>
+                <th class="trip-num">นน.ต้นทาง</th>
+                <th class="trip-num">นน.ปลายทาง</th>
+                <th class="trip-num">นน.ส่วนต่าง</th>
+                <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
+                <th>ต้องแก้</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in day_trips %}
+              <tr>
+                <td class="trip-num">{{ forloop.counter }}</td>
+                <td>{{ t.doc_id }}</td>
+                <td>{{ t.bws_id }}</td>
+                <td>{{ t.car_registration|default:"-" }}</td>
+                <td class="{% if t.team_missing %}trip-missing{% endif %}">{{ t.team }}</td>
+                <td>{{ t.stone|default:"-" }}</td>
+                <td>{{ t.destination }}</td>
+                <td class="{% if t.wc_status != 'filled' %}trip-missing{% endif %}">{{ t.weight_carried|default:"ไม่มี" }}</td>
+                <td class="trip-num {% if t.origin_weight is None %}trip-missing{% endif %}">{{ t.origin_weight|floatformat:2|default:"ไม่มี" }}</td>
+                <td class="trip-num {% if t.dest_weight is None %}trip-missing{% endif %}">{{ t.dest_weight|floatformat:2|default:"ไม่มี" }}</td>
+                <td class="trip-num">{{ t.diff_weight|floatformat:2 }}</td>
+                <td class="trip-num">{{ t.pay_weight|floatformat:2 }}</td>
+                <td class="text-danger">{{ t.approval_problems|join:", " }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="13" class="text-center text-muted">ไม่มีเที่ยว</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if not only_problems %}
+            <tfoot>
+              <tr class="fw-bold">
+                <td colspan="8">รวม {{ d.trips }} เที่ยว</td>
+                <td class="trip-num">{{ d.totals.origin_weight|floatformat:2|intcomma }}</td>
+                <td class="trip-num">{{ d.totals.dest_weight|floatformat:2|intcomma }}</td>
+                <td></td>
+                <td class="trip-num">{{ d.totals.pay_weight|floatformat:2|intcomma }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+            {% endif %}
+          </table>
+        </div>
+
+        {% comment %}
+        ใบที่ประเภทการบรรทุกว่าง : ไม่นับในรายงาน (ไม่อยู่ในตารางบน) แต่เส้นทางมีราคาแล้ว = เที่ยวจริงที่หลุด
+        โชว์ที่นี่เลย คนตรวจจะได้ไม่ต้องข้ามไปหาในหน้า Export เอกสาร
+        {% endcomment %}
+        {% if d.carry_list %}
+        <div id="carry-empty" class="mt-3">
+          <h6 class="text-danger mb-1">
+            ใบชั่งที่ไม่ได้นับ เพราะประเภทการบรรทุกว่าง ({{ d.carry_list|length }} ใบ)
+          </h6>
+          <p class="small text-muted mb-2">
+            ใบเหล่านี้ไม่อยู่ในตารางด้านบนและไม่ลงไฟล์บัญชี ถ้าเป็นเที่ยวส่งของจริง
+            ให้แก้ช่อง "ประเภทการบรรทุก" ในใบชั่งเป็น "{{ carry_type }}" แล้วเที่ยวจะเข้ารายงานเอง
+          </p>
+          <div class="trip-scroll">
+            <table class="table table-sm table-striped trip-table mb-0">
+              <thead>
+                <tr>
+                  <th class="trip-num">#</th>
+                  <th>เลขที่ชั่ง</th>
+                  <th>ชั่งที่</th>
+                  <th>ทะเบียนรถ</th>
+                  <th>ทีมรถร่วม</th>
+                  <th>ชนิดแร่/หิน</th>
+                  <th>ปลายทาง</th>
+                  <th class="trip-num">นน.ต้นทาง</th>
+                  <th class="trip-num">นน.ปลายทาง</th>
+                  <th>ประเภทการบรรทุก</th>
+                  <th>weight_id</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in d.carry_list %}
+                <tr>
+                  <td class="trip-num">{{ forloop.counter }}</td>
+                  <td>{{ t.doc_id }}</td>
+                  <td>{{ t.bws_id }}</td>
+                  <td>{{ t.car_registration|default:"-" }}</td>
+                  <td>{{ t.team }}</td>
+                  <td>{{ t.stone|default:"-" }}</td>
+                  <td>{{ t.destination }}</td>
+                  <td class="trip-num">{{ t.origin_weight|floatformat:2 }}</td>
+                  <td class="trip-num">{{ t.dest_weight|floatformat:2 }}</td>
+                  <td class="trip-missing">{{ t.carry_type }}</td>
+                  <td>{{ t.weight_id }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        <hr>
+        {% if d.status == 'ready' or d.status == 'changed' %}
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span>ไล่ดูเที่ยวด้านบนแล้ว เทียบกับหน้างาน ครบ {{ d.trips }} เที่ยว ข้อมูลถูกต้อง</span>
+          <button type="button" class="btn btn-success ms-auto" data-bs-toggle="modal" data-bs-target="#approveDayModal">
+            <i class="fa-solid fa-check"></i> อนุมัติวันนี้
+          </button>
+        </div>
+        {% elif d.status == 'approved' %}
+        <form method="post" action="{% url 'exportDocumentApproveDay' %}" class="d-flex flex-wrap align-items-center gap-2"
+              data-confirm="ยกเลิกการอนุมัติวันที่ {{ d.date|date:'d/m/Y' }} ต้นทาง {{ d.origin }} ใช่ไหม?">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="revoke">
+          <input type="hidden" name="date" value="{{ day_link }}">
+          <input type="hidden" name="origin" value="{{ d.origin_id }}">
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <span>อนุมัติโดย <strong>{{ d.approval.approved_by.username|default:'-' }}</strong> เมื่อ {{ d.approval.approved_at|date:'d/m/Y H:i' }}</span>
+          <button type="submit" class="btn btn-outline-danger btn-sm ms-auto">ยกเลิกการอนุมัติ</button>
+        </form>
+        {% elif d.status == 'problem' %}
+        <div class="text-danger">แก้เที่ยวที่ขึ้นสีแดงให้ครบก่อน แล้วกลับมาที่หน้านี้เพื่ออนุมัติ</div>
+        {% else %}
+        <div class="text-muted">หาต้นทางนี้ในตารางจัดการต้นทาง / ปลายทางไม่เจอ ผูกการอนุมัติไม่ได้</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% comment %}
+    หน้าต่างยืนยันอนุมัติ : แสดงทุกเที่ยวของวันนั้น ต้นทางนั้น (ไม่ขึ้นกับปุ่ม "เฉพาะเที่ยวที่ต้องแก้")
+    คนกดเห็นครบว่ากำลังอนุมัติเที่ยวไหนบ้าง แล้วค่อยกดยืนยัน
+    {% endcomment %}
+    {% if d.status == 'ready' or d.status == 'changed' %}
+    <div class="modal fade" id="approveDayModal" tabindex="-1" aria-labelledby="approveDayModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="approveDayModalLabel">
+              ยืนยันอนุมัติวันที่ {{ d.date|date:"d/m/Y" }} · ต้นทาง {{ d.origin }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="ปิด"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2">เที่ยวที่จะอนุมัติ <strong>{{ d.trips }} เที่ยว</strong> เทียบกับหน้างานว่าครบและข้อมูลถูกต้อง</p>
+            <table class="table table-sm table-striped trip-table mb-0">
+              <thead>
+                <tr>
+                  <th class="trip-num">#</th>
+                  <th>เลขที่ชั่ง</th>
+                  <th>ทะเบียนรถ</th>
+                  <th>ทีมรถร่วม</th>
+                  <th>ชนิดแร่/หิน</th>
+                  <th>ปลายทาง</th>
+                  <th>ช่วงน้ำหนักที่แบก</th>
+                  <th class="trip-num">นน.ต้นทาง</th>
+                  <th class="trip-num">นน.ปลายทาง</th>
+                  <th class="trip-num">นน.จ่ายค่าบรรทุก</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in d.trip_list %}
+                <tr>
+                  <td class="trip-num">{{ forloop.counter }}</td>
+                  <td>{{ t.doc_id }}</td>
+                  <td>{{ t.car_registration|default:"-" }}</td>
+                  <td>{{ t.team }}</td>
+                  <td>{{ t.stone|default:"-" }}</td>
+                  <td>{{ t.destination }}</td>
+                  <td>{{ t.weight_carried|default:"-" }}</td>
+                  <td class="trip-num">{{ t.origin_weight|floatformat:2 }}</td>
+                  <td class="trip-num">{{ t.dest_weight|floatformat:2 }}</td>
+                  <td class="trip-num">{{ t.pay_weight|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                <tr class="fw-bold">
+                  <td colspan="7">รวม {{ d.trips }} เที่ยว</td>
+                  <td class="trip-num">{{ d.totals.origin_weight|floatformat:2|intcomma }}</td>
+                  <td class="trip-num">{{ d.totals.dest_weight|floatformat:2|intcomma }}</td>
+                  <td class="trip-num">{{ d.totals.pay_weight|floatformat:2|intcomma }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <form method="post" action="{% url 'exportDocumentApproveDay' %}" class="d-flex gap-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve">
+              <input type="hidden" name="date" value="{{ day_link }}">
+              <input type="hidden" name="origin" value="{{ d.origin_id }}">
+              <input type="hidden" name="fingerprint" value="{{ d.fingerprint }}">
+              <input type="hidden" name="next" value="{{ request.path }}?month={{ selected_month }}#board">
+              <button type="button" class="btn btn-light-secondary" data-bs-dismiss="modal">ยังไม่อนุมัติ</button>
+              <button type="submit" class="btn btn-success">
+                <i class="fa-solid fa-check"></i> ยืนยันอนุมัติ {{ d.trips }} เที่ยว
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% elif board %}
+    {# ---------------- ตารางรวม : แถว = วันที่ · คอลัมน์ = ต้นทาง ---------------- #}
+    <div class="card" id="board">
+      <div class="card-header">
+        <p class="text-muted mb-2" style="font-size: 0.85rem;">
+          ระบบตรวจให้ : ทีม · นน.ต้นทาง · นน.ปลายทาง · ช่วงน้ำหนักที่แบก · ประเภทการบรรทุกว่าง
+          — ส่วน <strong>เที่ยวครบไหม</strong> ต้องเทียบกับหน้างานเอง ·
+          <strong>กด "<i class="fa-solid fa-list"></i> N เที่ยว" ในช่อง เพื่อดูรายเที่ยวของวันนั้น</strong> แล้วกดอนุมัติจากหน้านั้น ·
+          ถ้ามีคนแก้เที่ยวหลังอนุมัติ ช่องจะเปลี่ยนเป็น "แก้หลังอนุมัติ" ต้องตรวจใหม่
+        </p>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="badge bg-success">อนุมัติแล้ว {{ board.counts.approved }}</span>
+          <span class="badge bg-warning text-dark">รออนุมัติ {{ board.counts.ready }}</span>
+          {% if board.counts.changed %}
+          <span class="badge approval-badge-changed">แก้หลังอนุมัติ {{ board.counts.changed }}</span>
+          {% endif %}
+          <span class="badge bg-danger">มีปัญหา {{ board.counts.problem }}</span>
+          {% if board.counts.no_origin %}
+          <span class="badge bg-secondary">ไม่ทราบต้นทาง {{ board.counts.no_origin }}</span>
+          {% endif %}
+          <span class="small text-muted">จากทั้งหมด {{ board.total }} ช่อง (วัน × ต้นทาง)</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="trip-scroll">
+          <table class="table table-sm table-bordered trip-table approval-table mb-0">
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                {% for o in board.origins %}
+                <th>{{ o.name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in board.rows %}
+              <tr>
+                <td class="text-nowrap">{{ row.date|date:"d/m/Y" }}</td>
+                {% for c in row.cells %}
+                <td class="approval-cell{% if c %} approval-{{ c.status }}{% endif %}">
+                  {% if not c %}
+                  <span class="text-muted">-</span>
+                  {% else %}
+                  {% with day_link=c.date|date:'Y-m-d' %}
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    {# กดจำนวนเที่ยว = ดูรายเที่ยวของวันนั้น ต้นทางนั้น (หน้าดูรายวัน) #}
+                    <a class="text-nowrap fw-bold" title="ดูรายเที่ยวของวันนี้"
+                       href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ c.origin_id }}#day">
+                      <i class="fa-solid fa-list"></i> {{ c.trips }} เที่ยว
+                    </a>
+                    {% if c.status == 'problem' %}
+                    <a class="badge bg-danger" title="ดูเที่ยวที่ต้องแก้"
+                       href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ c.origin_id }}{% if c.problem_trips %}&amp;problems=1{% endif %}#day">
+                      มีปัญหา {{ c.problem_trips|add:c.carry_empty }}
+                    </a>
+                    <span class="small text-danger w-100">
+                      {% for label, n in c.problems %}{{ label }} {{ n }}{% if not forloop.last %} · {% endif %}{% endfor %}
+                      {% if c.carry_empty %}{% if c.problems %} · {% endif %}ประเภทการบรรทุกว่าง {{ c.carry_empty }}{% endif %}
+                    </span>
+                    {% elif c.status == 'ready' %}
+                    <a class="badge bg-warning text-dark" title="ดูเที่ยวของวันนี้ แล้วกดอนุมัติ"
+                       href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ c.origin_id }}#day">
+                      รออนุมัติ
+                    </a>
+                    {% elif c.status == 'changed' %}
+                    <a class="badge approval-badge-changed"
+                       title="เคยอนุมัติโดย {{ c.approval.approved_by.username|default:'-' }} {{ c.approval.approved_at|date:'d/m/Y H:i' }} ({{ c.approval.trip_count }} เที่ยว) แล้วมีการแก้ข้อมูลหลังจากนั้น ต้องตรวจใหม่"
+                       href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ c.origin_id }}#day">
+                      แก้หลังอนุมัติ
+                    </a>
+                    {% elif c.status == 'approved' %}
+                    <a class="badge bg-success" title="ดูเที่ยวของวันนี้"
+                       href="?month={{ selected_month }}&amp;date={{ day_link }}&amp;origin={{ c.origin_id }}#day">
+                      ✔ อนุมัติแล้ว
+                    </a>
+                    <span class="small text-muted text-nowrap">
+                      {{ c.approval.approved_by.username|default:'-' }} · {{ c.approval.approved_at|date:'d/m H:i' }}
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary" title="หาต้นทางนี้ในตารางจัดการต้นทาง / ปลายทางไม่เจอ ผูกการอนุมัติไม่ได้">ไม่ทราบต้นทาง</span>
+                    {% endif %}
+                  </div>
+                  {% endwith %}
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {% elif selected_month and not tab_no_origin and not tab_is_port %}
+    <div class="alert alert-light-secondary">เดือนนี้ไม่มีเที่ยวส่งออกในแท็บนี้</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  // ถามยืนยันก่อนส่งฟอร์มที่มี data-confirm (ปุ่มยกเลิกการอนุมัติ)
+  document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      if (!window.confirm(form.getAttribute('data-confirm'))) {
+        event.preventDefault();
+      }
+    });
+  });
+</script>
+{% endblock %}

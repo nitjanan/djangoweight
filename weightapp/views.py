@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY, ExportDocumentDayApproval
 from django.db.models import Sum, Q, Max, Min, Value
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.views.decorators.cache import cache_control
@@ -87,6 +87,8 @@ from openpyxl.workbook.protection import WorkbookProtection
 from openpyxl.styles import Protection
 import time
 import re
+import hashlib
+from django.utils.http import url_has_allowed_host_and_scheme
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -13293,6 +13295,15 @@ def _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws):
     return condition, not origins
 
 
+def _exportDocumentTabIsPort(company_code, own_port_bws):
+    """แท็บนี้เป็นแท็บท่าเรือเราไหม (กติกาเดียวกับ _exportDocumentTabOriginQ)
+    แท็บท่าเรือเห็นเฉพาะเที่ยวที่ชั่งที่ท่าเรือนั้น = เห็นเที่ยวของต้นทางไม่ครบ จึงอนุมัติรายวันไม่ได้"""
+    if not company_code or company_code in COMPANY_TAB_SEES_ALL:
+        return False
+    return BaseWeightStation.objects.filter(id__in=list(own_port_bws),
+                                            company__code=company_code).exists()
+
+
 def _exportDocumentStationOptions(qs):
     """ตัวเลือกช่อง "ชั่งที่ (ตาชั่ง)" = ตาชั่งที่มีเที่ยวอยู่จริงในขอบเขตของแท็บ+เดือนนี้
     คืน [{'id', 'company', 'label'}] เรียงตามรหัสตาชั่ง"""
@@ -13477,9 +13488,15 @@ def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_p
     return base_qs
 
 
-def _exportDocumentQuerySet(request):
+def _exportDocumentQuerySet(request, params=None):
     """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
-    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
+    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน
+
+    params : ใส่เมื่ออยากได้ขอบเขตด้วยตัวกรองชุดอื่นที่ไม่ใช่ของหน้าจอ (ค่าเริ่มต้น = request.GET)
+    เช่น ส่วนอนุมัติรายวันส่ง {'month': ...} อย่างเดียว เพื่อให้ได้เที่ยวครบทั้งวันเสมอ
+    ไม่ว่าบนจอจะกรองทีม / ตาชั่ง / หินไว้หรือไม่ (แท็บบริษัทยังมาจาก session เหมือนเดิม)"""
+    if params is None:
+        params = request.GET
     _exportProgressSet(request, 3, 'กำลังตรวจรายชื่อตาชั่งและลูกค้าส่งออก')
     own_port_bws = _exportDocumentOwnPortBwsIds()
     other_bws = _exportDocumentOtherBwsIds()
@@ -13513,21 +13530,21 @@ def _exportDocumentQuerySet(request):
 
     _exportProgressSet(request, 26, 'กำลังกรองรายการชั่งตามเงื่อนไข')
 
-    selected_month = request.GET.get('month') or (month_list[0] if month_list else '')
+    selected_month = params.get('month') or (month_list[0] if month_list else '')
     # ตัวกรองเคสกับตาชั่งยุบเป็น dropdown เดียว เพราะตาชั่ง 1 ตัวอยู่ได้เคสเดียวอยู่แล้ว
     # ค่าที่ส่งมาเป็นได้ 3 แบบ : ว่าง = ทั้งหมด | 'case:1'/'case:2' = ทุกตาชั่งของเคสนั้น | รหัสตาชั่ง
     # ยังรับพารามิเตอร์ case แยกอยู่ เผื่อลิงก์เก่าที่ bookmark ไว้
-    raw_bws = request.GET.get('bws') or ''
-    selected_team = request.GET.get('team') or ''
+    raw_bws = params.get('bws') or ''
+    selected_team = params.get('team') or ''
     # ชนิดหินเก็บเป็นชื่อใน Weight ไม่มีตารางอ้างอิง จึงกรองด้วยชื่อตรง ๆ
-    selected_stone = request.GET.get('stone') or ''
+    selected_stone = params.get('stone') or ''
     # ขอบเขตของแท็บบริษัท (ดู _exportDocumentTabOriginQ) : แท็บเหมือง = ตามต้นทาง · แท็บท่าเรือเรา = ตามที่ชั่ง
     # แท็บร้อยเกาะ / ทั้งหมด เห็นทุกเที่ยว · ช่อง "ชั่งที่ (ตาชั่ง)" กรองต่อจากนี้ด้วย bws_id
     company_code = request.session.get('company_code')
     tab_sees_all = company_code in COMPANY_TAB_SEES_ALL
     tab_q, tab_no_origin = _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws)
     # ค่าว่าง = แสดงทั้งสองเคสรวมกัน
-    selected_case = request.GET.get('case') or ''
+    selected_case = params.get('case') or ''
     selected_bws = ''
     if raw_bws.startswith('case:'):
         selected_case = raw_bws.split(':', 1)[1]
@@ -13539,7 +13556,7 @@ def _exportDocumentQuerySet(request):
     # และเที่ยวลงท่าเรือบริษัทอื่น เลือกตาชั่งอย่างเดียวจึงเห็นทุกเที่ยวของตาชั่งนั้น
 
     # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
-    include_cancel = request.GET.get('include_cancel') == '1'
+    include_cancel = params.get('include_cancel') == '1'
 
     qs = base_qs
     if selected_month:
@@ -13553,8 +13570,8 @@ def _exportDocumentQuerySet(request):
     # เพราะราคาที่ใช้คิดเงิน (ดู _exportDocumentRateAsOf) อิงกับ "เดือน" ทั้งเดือนอยู่แล้ว
     # เลือกวันที่ได้แค่เพื่อ "ดูย่อยลงไป" ในเดือนนั้น ไม่ได้เปลี่ยนราคาที่ใช้
     # วันที่นอกเดือนที่เลือกจะไม่มีผล เพราะ qs ถูกกรองด้วยเดือนไปก่อนหน้านี้แล้ว
-    selected_date_from = request.GET.get('date_from') or ''
-    selected_date_to = request.GET.get('date_to') or ''
+    selected_date_from = params.get('date_from') or ''
+    selected_date_to = params.get('date_to') or ''
     try:
         if selected_date_from:
             datetime.strptime(selected_date_from, '%Y-%m-%d')
@@ -13644,6 +13661,7 @@ def _exportDocumentQuerySet(request):
         'selected_team': selected_team,
         'selected_stone': selected_stone,
         'tab_no_origin': tab_no_origin,
+        'tab_is_port': _exportDocumentTabIsPort(company_code, own_port_bws),
         # ส่งรายการออกไปด้วย ไม่ให้หน้าเว็บไปคำนวณเองซ้ำ ไม่งั้นมีโอกาสที่ตัวเลือกบนจอ
         # กับตัวที่ใช้กรองจริงไม่ตรงกัน เวลาแก้กติกาแล้วลืมแก้อีกฝั่ง
         'bws_options': bws_options,
@@ -13780,6 +13798,9 @@ EXPORT_DOC_PROBLEM_FILTERS = {
     'no_dest_weight': ('ยังไม่ได้กรอก นน.ปลายทาง', lambda r: r.get('dest_weight') is None),
     'no_origin_weight': ('ยังไม่มี นน.ต้นทาง', lambda r: r.get('origin_weight') is None),
     'no_fuel': ('ทีมไม่มีบิลเติมน้ำมันเดือนนี้ (อัตราว่าง)', lambda r: r.get('fuel_missing')),
+    # ส่วนอนุมัติรายวัน : ขาดอย่างใดอย่างหนึ่งที่ทำให้กดอนุมัติวันนั้นไม่ได้ (ดู _exportDocumentApprovalReasons)
+    'approval': ('เที่ยวที่ยังอนุมัติไม่ได้ (ข้อมูลไม่ครบ)',
+                 lambda r: bool(_exportDocumentApprovalReasons(r))),
     'off_route': ('เส้นทางยังไม่มีในหน้าค่าขนส่ง (ไม่นับในรายงาน)', None),
     'carry_empty': ('ประเภทการบรรทุกว่าง (ไม่นับในรายงาน)', None),
 }
@@ -13896,6 +13917,16 @@ def viewExportDocument(request):
                 r['weight_id'] for r in all_rows if _exportDocumentRouteKey(r) == selected_route])
     else:
         selected_route = ''
+    # ?origin= : กรองตารางรายเที่ยวเหลือต้นทางเดียว (กดจากช่องในตารางอนุมัติรายวัน คู่กับ date_from/date_to)
+    selected_origin = request.GET.get('origin') or ''
+    origin_label = ''
+    if selected_origin.isdigit() and problem not in ('off_route', 'carry_empty'):
+        origin_id = int(selected_origin)
+        origin_rows = [r for r in all_rows if r.get('origin_map_id') == origin_id]
+        origin_label = origin_rows[0]['origin'] if origin_rows else ''
+        table_qs = table_qs.filter(weight_id__in=[r['weight_id'] for r in origin_rows])
+    else:
+        selected_origin = ''
     # ลิงก์ของปุ่มต้องกลับไปหน้า 1 เสมอ ไม่งั้นกดจากหน้า 5 ของทั้งเดือนจะไปตกหน้าที่ไม่มีอยู่
     problem_query = request.GET.copy()
     problem_query.pop('page', None)
@@ -13903,6 +13934,7 @@ def viewExportDocument(request):
     # ลิงก์ของตารางเส้นทาง / ปุ่มของหน้าเหมือง : ตัวกรองหลักชุดเดียวกับหน้าจอ ไม่ติด route / problem ค้าง
     route_query = problem_query.copy()
     route_query.pop('route', None)
+    route_query.pop('origin', None)
 
     p = Paginator(table_qs, 100)
     page = request.GET.get('page')
@@ -13966,6 +13998,10 @@ def viewExportDocument(request):
         'route_totals': route_totals,
         'selected_route': selected_route,
         'route_label': route_label,
+        'selected_origin': selected_origin,
+        'origin_label': origin_label,
+        # ปุ่มไปหน้าตรวจและอนุมัติเที่ยวรายวัน (แท็บท่าเรือ / แท็บไม่มีต้นทาง อนุมัติไม่ได้)
+        'approval_available': not filters['tab_no_origin'] and not filters['tab_is_port'],
         # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
         'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
     }
@@ -15000,6 +15036,343 @@ def _exportDocumentRouteSummary(trip_rows):
     totals = {k: sum(e[k] for e in result)
               for k in ('trips', 'no_dest_weight', 'no_origin_weight', 'no_team')}
     return result, totals
+
+
+# ---------- อนุมัติเที่ยวรายวันของหน้าเหมือง (วันที่ × ต้นทาง) ----------
+# หน้าเหมืองตรวจเที่ยวของวันหนึ่งแล้วกดอนุมัติ เก็บใน ExportDocumentDayApproval (1 แถว = 1 วัน × 1 ต้นทาง)
+# หน้าเหมืองแต่ละเหมืองมีคนดูแลแยกกัน (บางคนดูหลายที่) จึงอนุมัติแยกต้นทาง ใครเปิดหน้านี้ได้ก็กดได้ บันทึกชื่อคนกดไว้
+#
+# ระบบตรวจเองได้ 4 เรื่องตามด้านล่าง + ใบที่ประเภทการบรรทุกว่าง (เที่ยวที่ควรอยู่ในรายงานแต่หลุด)
+# ส่วน "เที่ยวครบไหม" ระบบไม่รู้ว่าวันนั้นควรมีกี่เที่ยว คนกดต้องเทียบกับหน้างานเอง (กล่องยืนยันตอนกดบอกจำนวนเที่ยว)
+EXPORT_DOC_APPROVAL_REASONS = (
+    ('no_team', 'ไม่ระบุทีม'),
+    ('no_origin_weight', 'ขาด นน.ต้นทาง'),
+    ('no_dest_weight', 'ขาด นน.ปลายทาง'),
+    ('no_weight_band', 'ไม่มีช่วงน้ำหนักที่แบก'),
+)
+EXPORT_DOC_APPROVAL_PROBLEM = 'problem'        # มีเที่ยวข้อมูลไม่ครบ กดอนุมัติไม่ได้
+EXPORT_DOC_APPROVAL_READY = 'ready'            # ระบบตรวจผ่าน รอคนอนุมัติ
+EXPORT_DOC_APPROVAL_APPROVED = 'approved'      # อนุมัติแล้ว และข้อมูลยังตรงกับตอนอนุมัติ
+EXPORT_DOC_APPROVAL_CHANGED = 'changed'        # เคยอนุมัติ แต่มีคนแก้ข้อมูลหลังจากนั้น ต้องตรวจใหม่
+EXPORT_DOC_APPROVAL_NO_ORIGIN = 'no_origin'    # หาแถวต้นทางในตาราง map ไม่เจอ ผูกการอนุมัติไม่ได้
+
+
+def _exportDocumentApprovalReasons(row):
+    """เหตุที่ทำให้เที่ยวนี้อนุมัติไม่ได้ (list ว่าง = ผ่าน)
+    ต้องผ่าน _exportDocumentAssignWeightCarried มาก่อน ถึงจะมี wc_status"""
+    reasons = []
+    if row.get('team_missing'):
+        reasons.append('no_team')
+    if row.get('origin_weight') is None:
+        reasons.append('no_origin_weight')
+    if row.get('dest_weight') is None:
+        reasons.append('no_dest_weight')
+    # ไม่มีสัญญา / น้ำหนักไม่เข้าช่วง = คอลัมน์ "ช่วงน้ำหนักที่แบก" ว่าง เที่ยวนี้คิดเงินไม่ได้
+    if row.get('wc_status') in ('no_contract', 'out_of_range'):
+        reasons.append('no_weight_band')
+    return reasons
+
+
+def _exportDocumentDayFingerprint(rows):
+    """ค่าย่อของเที่ยวทั้งชุด เปลี่ยนเมื่อเที่ยวเพิ่ม / หาย (รวมยกเลิกใบ) หรือแก้ช่องที่หน้าเหมืองรับผิดชอบ
+
+    ไม่รวมช่วงน้ำหนักที่แบก เพราะคิดจากสัญญาค่าขนส่งของบัญชี บัญชีแก้สัญญาแล้วไม่ควรทำให้ทุกวันกลายเป็น
+    "แก้หลังอนุมัติ" (ถ้าแก้สัญญาแล้วเที่ยวไม่มีช่วง สถานะจะขึ้น "มีปัญหา" ให้เองอยู่แล้ว)
+    """
+    parts = sorted(
+        (r['weight_id'], r.get('doc_id') or '', str(r.get('origin_weight')), str(r.get('dest_weight')),
+         r.get('team_id') or '', r.get('stone') or '', r.get('car_registration') or '')
+        for r in rows)
+    return hashlib.sha256(repr(parts).encode('utf-8')).hexdigest()
+
+
+def _exportDocumentDayApprovals(trip_rows, carry_empty_rows=()):
+    """จัดเที่ยวเป็นกลุ่ม วันที่ × ต้นทาง พร้อมสถานะอนุมัติ (อ่าน db อย่างเดียว ไม่เขียน)
+
+    trip_rows        : แถวรายเที่ยวในรายงาน ผ่าน _exportDocumentAssignWeightCarried แล้ว
+    carry_empty_rows : ใบที่ประเภทการบรรทุกว่างแต่เส้นทางมีราคาแล้ว = เที่ยวที่หลุดจากรายงาน
+                       นับเป็นปัญหาของวันนั้นด้วย ไม่งั้นจะอนุมัติไปทั้งที่เที่ยวไม่ครบ
+    คืน list ของ dict เรียงวันที่ล่าสุดก่อน แล้วตามชื่อต้นทาง
+    """
+    groups = OrderedDict()
+
+    def group_of(r):
+        key = (r['date'], r.get('origin_map_id'))
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {'date': r['date'], 'origin_id': r.get('origin_map_id'),
+                               'origin': r.get('origin') or '-', 'rows': [], 'carry_empty': 0,
+                               'carry_rows': []}
+        return g
+
+    for r in trip_rows:
+        if r.get('date') is not None:
+            group_of(r)['rows'].append(r)
+    for r in carry_empty_rows:
+        if r.get('date') is not None:
+            g = group_of(r)
+            g['carry_empty'] += 1
+            g['carry_rows'].append(r)
+
+    keys = [k for k in groups if k[1] is not None]
+    approvals = {}
+    if keys:
+        for a in (ExportDocumentDayApproval.objects
+                  .filter(date__in={k[0] for k in keys}, origin_id__in={k[1] for k in keys})
+                  .select_related('approved_by')):
+            approvals[(a.date, a.origin_id)] = a
+
+    items = []
+    for key, g in groups.items():
+        counts = OrderedDict((code, 0) for code, _label in EXPORT_DOC_APPROVAL_REASONS)
+        problem_trips = 0
+        for r in g['rows']:
+            reasons = _exportDocumentApprovalReasons(r)
+            r['approval_problems'] = [dict(EXPORT_DOC_APPROVAL_REASONS)[code] for code in reasons]
+            if reasons:
+                problem_trips += 1
+            for code in reasons:
+                counts[code] += 1
+        fingerprint = _exportDocumentDayFingerprint(g['rows'])
+        approval = approvals.get(key)
+        if g['origin_id'] is None:
+            status = EXPORT_DOC_APPROVAL_NO_ORIGIN
+        elif problem_trips or g['carry_empty'] or not g['rows']:
+            status = EXPORT_DOC_APPROVAL_PROBLEM
+        elif approval is None:
+            status = EXPORT_DOC_APPROVAL_READY
+        elif approval.fingerprint == fingerprint:
+            status = EXPORT_DOC_APPROVAL_APPROVED
+        else:
+            status = EXPORT_DOC_APPROVAL_CHANGED
+        # รายการเที่ยวทั้งวัน โชว์ในหน้าต่างยืนยันอนุมัติ (ตารางรายเที่ยวของหน้าเว็บแบ่งหน้า / กรองได้ ใช้แทนไม่ได้)
+        trip_list = sorted(g['rows'], key=lambda r: (str(r.get('doc_id') or ''), r['weight_id']))
+        items.append({
+            'date': g['date'],
+            'origin_id': g['origin_id'],
+            'origin': g['origin'],
+            'trips': len(g['rows']),
+            'trip_list': trip_list,
+            'totals': {k: sum(r[k] for r in g['rows'] if r.get(k) is not None)
+                       for k in ('origin_weight', 'dest_weight', 'pay_weight')},
+            'problem_trips': problem_trips,
+            'problems': [(label, counts[code]) for code, label in EXPORT_DOC_APPROVAL_REASONS if counts[code]],
+            'carry_empty': g['carry_empty'],
+            # ใบที่หลุดจากรายงานเพราะประเภทการบรรทุกว่าง โชว์ในหน้าดูรายวันเลย ไม่ต้องข้ามไปหน้า export
+            'carry_list': sorted(g['carry_rows'], key=lambda r: (str(r.get('doc_id') or ''), r['weight_id'])),
+            'fingerprint': fingerprint,
+            'approval': approval,
+            'status': status,
+        })
+    items.sort(key=lambda i: (-i['date'].toordinal(), str(i['origin'])))
+    return items
+
+
+def _exportDocumentApprovalBoard(items):
+    """จัดเป็นตาราง แถว = วันที่ (ล่าสุดก่อน) · คอลัมน์ = ต้นทาง
+    คนที่ดูหลายเหมืองเห็นทุกเหมืองของวันเดียวกันในแถวเดียว ช่องที่ไม่มีเที่ยวเป็น None"""
+    if not items:
+        return None
+    origins = OrderedDict()
+    for i in sorted(items, key=lambda i: str(i['origin'])):
+        origins.setdefault(i['origin_id'], i['origin'])
+    by_key = {(i['date'], i['origin_id']): i for i in items}
+    dates = sorted({i['date'] for i in items}, reverse=True)
+    counts = {s: 0 for s in (EXPORT_DOC_APPROVAL_PROBLEM, EXPORT_DOC_APPROVAL_READY,
+                             EXPORT_DOC_APPROVAL_APPROVED, EXPORT_DOC_APPROVAL_CHANGED,
+                             EXPORT_DOC_APPROVAL_NO_ORIGIN)}
+    for i in items:
+        counts[i['status']] += 1
+    return {
+        'origins': [{'id': k, 'name': v} for k, v in origins.items()],
+        'rows': [{'date': d, 'cells': [by_key.get((d, oid)) for oid in origins]} for d in dates],
+        'counts': counts,
+        'total': len(items),
+    }
+
+
+def _exportDocumentApprovalMonth(request, selected_month):
+    """เที่ยวทั้งเดือนของแท็บที่เปิดอยู่ จัดเป็น วันที่ × ต้นทาง พร้อมสถานะ (หน้า /exportDocument/approval/)
+
+    คืน (items, filters, month_list) · items ว่างถ้าแท็บนี้อนุมัติไม่ได้ (แท็บท่าเรือ / ไม่มีต้นทาง)
+    แท็บท่าเรือเห็นเฉพาะเที่ยวที่ชั่งที่ท่าเรือนั้น (ไม่ครบทั้งต้นทาง) จึงอนุมัติจากแท็บท่าเรือไม่ได้
+    ใช้ขอบเขตของ _exportDocumentQuerySet ชุดเดียวกับหน้า export (ส่งแค่เดือน ไม่มีตัวกรองอื่น)
+    """
+    qs, filters, month_list = _exportDocumentQuerySet(request, params={'month': selected_month})
+    if not filters['selected_month'] or filters['tab_no_origin'] or filters['tab_is_port']:
+        return [], filters, month_list
+    own_port_bws = filters['own_port_bws']
+    own_port_customers = filters['own_port_customers']
+    rows = _exportDocumentRows(qs, own_port_bws, own_port_customers)
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, filters['selected_month'])
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    carry_rows = _exportDocumentRows(filters['carry_empty_qs'], own_port_bws, own_port_customers)
+    return _exportDocumentDayApprovals(rows, carry_rows), filters, month_list
+
+
+def _exportDocumentTabOwnsOrigin(company_code, origin_id):
+    """แท็บนี้ดูแลต้นทางนี้ไหม : แท็บร้อยเกาะ / ทั้งหมด = ทุกต้นทาง · แท็บเหมือง = แถว map ที่ผูกกับบริษัทนั้น
+    แท็บท่าเรือไม่ดูแลต้นทางไหนเลย (กติกาเดียวกับ _exportDocumentTabOriginQ)
+    ใช้กันทั้งปุ่มอนุมัติและยกเลิก ไม่ให้แท็บหนึ่งไปแตะการอนุมัติของเหมืองที่ไม่ใช่ของตัวเอง"""
+    if company_code in COMPANY_TAB_SEES_ALL:
+        return True
+    if _exportDocumentTabIsPort(company_code, _exportDocumentOwnPortBwsIds()):
+        return False
+    return BaseCompanyMapBaseCustomer.objects.filter(id=origin_id, base_company__code=company_code).exists()
+
+
+def _exportDocumentApprovalDayCell(board, selected_origin, date_from, date_to):
+    """ช่องของตารางอนุมัติที่ตรงกับหน้าดูรายวัน (วันเดียว + ต้นทางเดียว) หรือ None"""
+    if not board or not selected_origin or not date_from or date_from != date_to:
+        return None
+    day = datetime.strptime(date_from, '%Y-%m-%d').date()
+    origin_id = int(selected_origin)
+    for row in board['rows']:
+        if row['date'] == day:
+            return next((c for c in row['cells'] if c and c['origin_id'] == origin_id), None)
+    return None
+
+
+def _exportDocumentApprovalItem(request, day, origin_id):
+    """สถานะของ วันที่ × ต้นทาง คำนวณใหม่จาก db (ไม่เชื่อค่าที่หน้าเว็บส่งมา)
+    คืน None ถ้าแท็บนี้ไม่เห็นเที่ยวของต้นทางนั้นในวันนั้นเลย"""
+    month = day.strftime('%Y-%m')
+    qs, filters, _months = _exportDocumentQuerySet(request, params={'month': month})
+    if filters['tab_no_origin'] or filters['tab_is_port']:
+        return None
+    own_port_bws = filters['own_port_bws']
+    own_port_customers = filters['own_port_customers']
+    rows = [r for r in _exportDocumentRows(qs.filter(date=day), own_port_bws, own_port_customers)
+            if r.get('origin_map_id') == origin_id]
+    carry_rows = [r for r in _exportDocumentRows(filters['carry_empty_qs'].filter(date=day),
+                                                 own_port_bws, own_port_customers)
+                  if r.get('origin_map_id') == origin_id]
+    if not rows and not carry_rows:
+        return None
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    return _exportDocumentDayApprovals(rows, carry_rows)[0]
+
+
+@login_required(login_url='login')
+def exportDocumentApproveDay(request):
+    """กดอนุมัติ / ยกเลิกอนุมัติ ของ วันที่ × ต้นทาง จากตารางอนุมัติรายวันบนหน้า /exportDocument/
+
+    ตอนอนุมัติ ตรวจใหม่จาก db ทุกครั้ง : ต้องไม่มีเที่ยวที่ข้อมูลไม่ครบ และข้อมูลต้องตรงกับที่คนกดเห็นบนจอ
+    (fingerprint ที่หน้าเว็บส่งมา) ไม่งั้นจะเป็นการอนุมัติของที่ไม่ได้ดูจริง เช่น มีคนแก้ระหว่างที่เปิดหน้าค้างไว้
+    """
+    if request.method != 'POST':
+        return redirect('viewExportDocumentApproval')
+    if 'company_code' not in request.session:
+        return redirect('logout')
+    next_url = request.POST.get('next') or ''
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        next_url = reverse('viewExportDocumentApproval')
+    try:
+        day = datetime.strptime(request.POST.get('date') or '', '%Y-%m-%d').date()
+        origin_id = int(request.POST.get('origin') or '')
+    except ValueError:
+        messages.error(request, 'ข้อมูลที่ส่งมาไม่ถูกต้อง (วันที่ / ต้นทาง)')
+        return redirect(next_url)
+    day_label = day.strftime('%d/%m/%Y')
+    action = request.POST.get('action')
+    if not _exportDocumentTabOwnsOrigin(request.session['company_code'], origin_id):
+        messages.error(request, 'ต้นทางนี้ไม่ได้อยู่ในแท็บบริษัทที่เปิดอยู่ อนุมัติ / ยกเลิกจากแท็บนี้ไม่ได้')
+        return redirect(next_url)
+
+    if action == 'revoke':
+        # ลบแถวเดียวด้วยคีย์ unique (วันที่, ต้นทาง)
+        deleted, _detail = ExportDocumentDayApproval.objects.filter(date=day, origin_id=origin_id).delete()
+        if deleted:
+            messages.success(request, 'ยกเลิกการอนุมัติวันที่ %s แล้ว' % day_label)
+        else:
+            messages.error(request, 'วันที่ %s ยังไม่ได้อนุมัติอยู่แล้ว' % day_label)
+        return redirect(next_url)
+    if action != 'approve':
+        messages.error(request, 'ไม่รู้จักคำสั่งนี้')
+        return redirect(next_url)
+
+    item = _exportDocumentApprovalItem(request, day, origin_id)
+    if item is None:
+        messages.error(request, 'ไม่พบเที่ยวของวันที่ %s ต้นทางนี้ในแท็บที่เปิดอยู่' % day_label)
+        return redirect(next_url)
+    name = item['origin']
+    if item['status'] == EXPORT_DOC_APPROVAL_PROBLEM:
+        detail = ', '.join('%s %d' % (label, n) for label, n in item['problems'])
+        if item['carry_empty']:
+            detail = ', '.join(filter(None, [detail, 'ประเภทการบรรทุกว่าง %d' % item['carry_empty']]))
+        messages.error(request, 'วันที่ %s %s ยังมีเที่ยวที่ข้อมูลไม่ครบ (%s) แก้ก่อนแล้วค่อยอนุมัติ'
+                       % (day_label, name, detail))
+        return redirect(next_url)
+    if request.POST.get('fingerprint') != item['fingerprint']:
+        messages.error(request, 'ข้อมูลวันที่ %s %s เปลี่ยนไประหว่างที่เปิดหน้านี้อยู่ (ตอนนี้มี %d เที่ยว) '
+                                'กรุณาตรวจอีกครั้งแล้วค่อยกดอนุมัติ' % (day_label, name, item['trips']))
+        return redirect(next_url)
+    ExportDocumentDayApproval.objects.update_or_create(
+        date=day, origin_id=origin_id,
+        defaults={'trip_count': item['trips'], 'fingerprint': item['fingerprint'],
+                  'approved_by': request.user, 'approved_at': dj_timezone.now()})
+    messages.success(request, 'อนุมัติวันที่ %s %s (%d เที่ยว) แล้ว' % (day_label, name, item['trips']))
+    return redirect(next_url)
+
+
+def _exportDocumentApprovalNeighbours(board, day_item):
+    """วันก่อนหน้า / ถัดไปของต้นทางเดียวกันที่มีเที่ยว (ปุ่มเลื่อนวันในหน้าดูรายวัน) คืน (ก่อนหน้า, ถัดไป)"""
+    days = sorted(c['date'] for row in board['rows'] for c in row['cells']
+                  if c and c['origin_id'] == day_item['origin_id'])
+    i = days.index(day_item['date'])
+    return (days[i - 1] if i > 0 else None), (days[i + 1] if i + 1 < len(days) else None)
+
+
+@login_required(login_url='login')
+def viewExportDocumentApproval(request):
+    """หน้าเหมือง : ตรวจและอนุมัติเที่ยวรายวัน (แยกจากหน้า /exportDocument/ ที่ข้อมูลเยอะอยู่แล้ว)
+
+    ไม่มี ?date= : ตารางรวม แถว = วันที่ · คอลัมน์ = ต้นทาง · ช่อง = สถานะ
+    มี ?date= & ?origin= : หน้าดูรายวัน รายเที่ยวของวันนั้น ต้นทางนั้น + ปุ่มอนุมัติ / ยกเลิก
+      ?problems=1 : เหลือเฉพาะเที่ยวที่ทำให้อนุมัติไม่ได้
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    items, filters, month_list = _exportDocumentApprovalMonth(request, request.GET.get('month') or '')
+    selected_month = filters['selected_month']
+    board = _exportDocumentApprovalBoard(items)
+
+    selected_date = request.GET.get('date') or ''
+    selected_origin = request.GET.get('origin') or ''
+    day = None
+    if board and selected_origin.isdigit():
+        try:
+            day = _exportDocumentApprovalDayCell(board, selected_origin, selected_date, selected_date)
+        except ValueError:
+            day = None
+    only_problems = request.GET.get('problems') == '1'
+    day_trips = []
+    prev_day = next_day = None
+    if day:
+        day_trips = [t for t in day['trip_list'] if t['approval_problems']] if only_problems else day['trip_list']
+        prev_day, next_day = _exportDocumentApprovalNeighbours(board, day)
+
+    context = {
+        'export_document_page': 'active',
+        active: 'active',
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'tab_no_origin': filters['tab_no_origin'],
+        'tab_is_port': filters['tab_is_port'],
+        'board': board,
+        'day': day,
+        'day_trips': day_trips,
+        'only_problems': only_problems,
+        'prev_day': prev_day,
+        'next_day': next_day,
+        'carry_type': EXPORT_DOC_CARRY_TYPE,
+    }
+    return render(request, 'exportDocument/approvalExportDocument.html', context)
 
 
 # ใบสรุปหน้าเหมือง : ทำตามไฟล์ที่หน้างานทำจริง (ตัวอย่าง "กงตาก3-ปัญจะใหม่ ต.ค69 แร่ยิปซั่ม6นิ้ว.xlsx")

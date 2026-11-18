@@ -337,6 +337,8 @@ urlpatterns = [
       path('exportDocument/edit/confirm/', views.confirmTripEdit, name="confirmTripEdit"),
       path('exportDocument/edit/cancel/', views.cancelTripEdit, name="cancelTripEdit"),
       path('exportDocument/mineSummary/', views.exportExcelMineSummary, name="exportExcelMineSummary"),
+      path('exportDocument/approval/', views.viewExportDocumentApproval, name="viewExportDocumentApproval"),
+      path('exportDocument/approveDay/', views.exportDocumentApproveDay, name="exportDocumentApproveDay"),
       path('baseCarTeam/api/options/', views.baseCarTeamOptions, name="baseCarTeamOptions"),
       path('baseCompanyCustomerMap/api/options/', views.baseCompanyCustomerMapOptions, name="baseCompanyCustomerMapOptions"),
 

@@ -2001,3 +2001,36 @@ class ExpressFuelBillSync(models.Model):
 
     def __str__(self):
         return '%s @ %s' % (self.month, self.synced_at)
+
+
+class ExportDocumentDayApproval(models.Model):
+    """หน้าเหมืองอนุมัติว่าเที่ยวส่งออกของ "วันหนึ่ง × ต้นทางหนึ่ง" ตรวจแล้วถูกต้อง (หน้า /exportDocument/)
+
+    เก็บแค่การตัดสินใจของคน สถานะ "มีปัญหา / พร้อมอนุมัติ" ไม่เก็บ ระบบคำนวณสดทุกครั้งที่เปิดหน้า
+    จะได้ไม่มีวันค้างไม่ตรงกับข้อมูลจริง
+
+    fingerprint = ค่าย่อของเที่ยวทั้งชุดตอนกดอนุมัติ (เลขที่ใบ / น้ำหนัก / ทีม / หิน / ทะเบียน)
+    เปิดหน้าครั้งต่อไปคำนวณใหม่แล้วเทียบ ถ้าไม่ตรง = มีคนแก้หลังอนุมัติ -> ต้องตรวจใหม่
+    ไม่ต้องไปดักทุกทางที่แก้ใบชั่งได้ (หน้าแก้ใบชั่ง / อัปโหลดไฟล์ นน.ปลายทาง / ...) ซึ่งหลุดง่าย
+
+    ไม่ใช้ Weight.is_apw เพราะนั่นคือ "ตรวจรายการชั่ง" ของหน้า weight table คนละเรื่องกัน
+    """
+    id = models.AutoField(primary_key=True)
+    date = models.DateField(verbose_name="วันที่ของเที่ยว")
+    # แถว map ของต้นทาง (ตัวเดียวกับ origin_map_id ในแถวรายเที่ยว) ชื่อในตาราง map ไม่ unique จึงผูกด้วย id
+    origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.CASCADE,
+                               related_name='export_day_approvals', verbose_name="ต้นทาง")
+    trip_count = models.PositiveIntegerField(default=0, verbose_name="จำนวนเที่ยวตอนอนุมัติ")
+    fingerprint = models.CharField(max_length=64, verbose_name="ค่าย่อของข้อมูลตอนอนุมัติ")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                    related_name='export_day_approvals', verbose_name="ผู้อนุมัติ")
+    approved_at = models.DateTimeField(default=timezone.now, verbose_name="อนุมัติเมื่อ")
+
+    class Meta:
+        db_table = 'export_document_day_approval'
+        unique_together = ('date', 'origin')
+        verbose_name = 'อนุมัติเที่ยวส่งออกรายวัน'
+        verbose_name_plural = 'อนุมัติเที่ยวส่งออกรายวัน'
+
+    def __str__(self):
+        return '%s %s' % (self.date, self.origin_id)

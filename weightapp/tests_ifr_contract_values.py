@@ -300,12 +300,12 @@ class IfrContractValueTests(IfrRateFixtureMixin, TestCase):
 
 
 class TripReportRateSheetColumnTests(SimpleTestCase):
-    """ไฟล์รายงานรายเที่ยว template v20 : ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express)
+    """ไฟล์รายงานรายเที่ยว template v22 : ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) คิดเงินต่อชุดราคาทั้งเดือน
 
     ชีตคำนวณค่าขนส่ง (เดิมชื่อ อัตราค่าขนส่ง)
       G ค่าขนส่งตามสัญญา / H-I น้ำมันฐานวันทำสัญญา ขอบล่าง-ขอบบน / J ปรับตามน้ำมัน / K คีย์ / L หมายเหตุ
-      M สาขาที่ใช้ราคา / N ราคาน้ำมันเฉลี่ย / O อัตรา + ตารางน้ำมัน Q-T (U เฉลี่ย)
-      W-AE ตารางค่าขนส่งรายเที่ยว (AD อัตรา / AE ค่าขนส่ง) ย้ายมาจาก O/P ของบันทึกรายเที่ยว
+      M สาขาที่ใช้ราคา / N ราคาน้ำมันเฉลี่ย / O อัตรา / P เที่ยว / Q ตันรวม / R ค่าขนส่งทั้งเดือน
+      ตารางน้ำมัน T-W (X เฉลี่ย) · ไม่มีตารางค่าขนส่งรายเที่ยวแล้ว (v20 เคยอยู่ W-AE)
     บันทึกรายเที่ยว เหลือ A-M (ไม่มีส่วนคิดค่าขนส่งแล้ว) ช่องตรวจ N-O
     """
 
@@ -391,29 +391,28 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertEqual(trip['E5'].value, 'ช่วงน้ำหนักที่แบก')
         self.assertEqual(trip['M5'].value, 'นน.จ่ายค่าบรรทุก (ตัน)')
         self.assertEqual(trip['N4'].value, 'ช่องตรวจทาน (ห้ามลบ)')      # ไม่มีคอลัมน์อัตรา/ค่าขนส่งแล้ว
-        self.assertEqual([header(c) for c in range(23, 32)],
-                         ['วันที่', 'เลขที่ชั่ง', 'ทีมรถร่วม', 'เส้นทาง (ช่วงน้ำหนักที่แบก)', 'ชนิดแร่/หิน',
-                          'นน.จ่ายค่าบรรทุก (ตัน)', 'ราคาน้ำมันเฉลี่ย (บาท/ลิตร)',
-                          'อัตราค่าขนส่ง (บาท/ตัน)', 'ค่าขนส่ง (บาท)'])
+        self.assertEqual([header(c) for c in (16, 17, 18)],
+                         ['เที่ยว (ทั้งเดือน)', 'นน.จ่ายค่าบรรทุก (ตัน ทั้งเดือน)', 'ค่าขนส่งทั้งเดือน (บาท)'])
+        self.assertEqual(header(views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4), 'ราคาน้ำมันเฉลี่ย (บาท/ลิตร)')
+        self.assertEqual(ws.max_column, views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4)   # ไม่มีตารางรายเที่ยวต่อท้ายแล้ว
 
     def test_trip_rate_formula_reads_the_calc_sheet(self):
-        """อัตรารายเที่ยว (ชีตคำนวณ AD) : อัตรา O ของชุดราคาที่ตรงกับเที่ยว (บันทึกรายเที่ยว AB)
-        O คิดจากราคาน้ำมันเฉลี่ย N ซึ่งหาจากตารางน้ำมันด้วยทีม + สาขาในช่อง M
-        แถว 5 ของตารางรายเที่ยว = แถว 6 ของบันทึกรายเที่ยว"""
+        """ค่าขนส่งต่อชุดราคาทั้งเดือน : R = อัตรา O x นน.จ่ายรวมของเที่ยวที่ตรงชุดราคานั้น (บันทึกรายเที่ยว AB = ลำดับชุดราคา)
+        O คิดจากราคาน้ำมันเฉลี่ย N ซึ่งหาจากตารางน้ำมันด้วยทีม + สาขาในช่อง M"""
         workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
         trip = workbook['บันทึกรายเที่ยว']
         calc = workbook[views.EXPORT_DOC_RATE_SHEET]
-        self.assertEqual(calc['AD5'].value,
-                         '=IF(บันทึกรายเที่ยว!$A6="","",IF(บันทึกรายเที่ยว!$AB6="",0,'
-                         'INDEX(คำนวณค่าขนส่ง!$O$5:$O$204,บันทึกรายเที่ยว!$AB6)))')
-        self.assertEqual(calc['AE5'].value,
-                         '=IF(OR(บันทึกรายเที่ยว!$A6="",บันทึกรายเที่ยว!$M6="",$AD5=""),"",'
-                         'บันทึกรายเที่ยว!$M6*$AD5)')
-        self.assertTrue(calc['AE10004'].value.startswith('=IF(OR(บันทึกรายเที่ยว!$A10005=""'))
+        self.assertEqual(calc['R5'].value,
+                         '=IF(OR($K5="",$O5=""),"",ROUND($O5*SUMIF(บันทึกรายเที่ยว!$AB$6:$AB$10005,ROW()-4,'
+                         'บันทึกรายเที่ยว!$AF$6:$AF$10005),2))')
+        # v22 : เที่ยว / ตัน อ่านคอลัมน์ช่วย AE / AF (= ค่าจริง x สัดส่วนที่นามนี้จ่าย AD · ว่าง = ทั้งเที่ยว)
+        self.assertIn('SUMIF(บันทึกรายเที่ยว!$AB$6:$AB$10005,ROW()-4,บันทึกรายเที่ยว!$AE$6:$AE$10005)',
+                      calc['P204'].value)
+        self.assertEqual(trip['AE6'].value, '=IF($A6="","",IF($AD6="",1,N($AD6)))')
         self.assertIn('MATCH($V6,คำนวณค่าขนส่ง!$K$5:$K$204,0)', trip['AB6'].value)
-        self.assertIn('INDEX($N$5:$N$204,บันทึกรายเที่ยว!$AB6)', calc['AC5'].value)   # ราคาน้ำมันของเที่ยว
+        self.assertEqual(trip['O12'].value, '=COUNTIF($AC$6:$AC$10005,"*|-")')   # เที่ยวที่ยังไม่มีราคาน้ำมัน
         self.assertIn('$M5="%s"' % views.EXPORT_DOC_FUEL_ALL_BRANCHES, calc['N5'].value)
-        self.assertIn('SUMIFS($T$5:$T$204,$Q$5:$Q$204,$A5,$R$5:$R$204,$M5)', calc['N5'].value)
+        self.assertIn('SUMIFS($W$5:$W$204,$T$5:$T$204,$A5,$U$5:$U$204,$M5)', calc['N5'].value)
         self.assertIn('IF($N5="","",', calc['O5'].value)      # ไม่มีราคาน้ำมัน = อัตราว่าง
         self.assertNotIn('วิธีกรอก', workbook.sheetnames)
 
@@ -429,8 +428,8 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
                                             lines, {'ทีมทดสอบ'})
         ws = workbook[views.EXPORT_DOC_RATE_SHEET]
         self.assertEqual(ws['M5'].value, 'ศิลาชัย')
-        self.assertEqual([ws['%s5' % c].value for c in 'QRST'], ['ทีมทดสอบ', 'ศิลาชัย', 150.0, 6100.0])
-        self.assertIsNone(ws['Q6'].value)
+        self.assertEqual([ws['%s5' % c].value for c in 'TUVW'], ['ทีมทดสอบ', 'ศิลาชัย', 150.0, 6100.0])
+        self.assertIsNone(ws['T6'].value)
         self.assertTrue(ws['N5'].value.startswith('=IF(OR($A5="",$M5="")'))   # สูตรยังอยู่
 
     def test_payment_group_tables_are_gone(self):
@@ -452,32 +451,41 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
 
     def test_payment_summary_splits_lines_by_rate(self):
         """หน้าสรุปจ่าย : 1 บรรทัด = accKey + อัตรา (payKey บันทึกรายเที่ยว AC)
-        อัตราอ่านจาก AD / รายได้ = Σ AE ของตารางรายเที่ยวในชีตคำนวณ"""
+        อัตรา = O ของชุดราคา / รายได้ = อัตรา x นน.จ่ายรวมของบรรทัด (ยอดเท่ากับรวมทีละเที่ยว เพราะอัตราเดียวกัน)"""
         workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
         trip = workbook['บันทึกรายเที่ยว']
         self.assertEqual(trip['AC6'].value,
-                         '=IF($V6="","",$V6&"|"&IF(คำนวณค่าขนส่ง!$AD5="","-",TEXT(คำนวณค่าขนส่ง!$AD5,"0.00")))')
+                         '=IF($V6="","",$V6&"|"&IF($A6="","-",IF($AB6="","0.00",'
+                         'IF(INDEX(คำนวณค่าขนส่ง!$O$5:$O$204,$AB6)="","-",'
+                         'TEXT(INDEX(คำนวณค่าขนส่ง!$O$5:$O$204,$AB6),"0.00")))))')
         pay = workbook['สรุปจ่ายรถร่วม']
         self.assertIn('บันทึกรายเที่ยว!$AC$6:$AC$10005', pay['R5'].value)
         self.assertIn('บันทึกรายเที่ยว!$AC$6:$AC$10005', pay['AR5'].value)
-        self.assertIn('คำนวณค่าขนส่ง!$AD$5:$AD$10004', pay['BD5'].value)     # อัตรา
-        self.assertIn('คำนวณค่าขนส่ง!$AE$5:$AE$10004', pay['AU5'].value)     # รายได้
+        self.assertIn('INDEX(คำนวณค่าขนส่ง!$O$5:$O$204,INDEX(บันทึกรายเที่ยว!$AB$6:$AB$10005,$W5))',
+                      pay['BD5'].value)                                       # อัตรา
+        self.assertEqual(pay['AU404'].value,
+                         '=IF($Y404="",0,ROUND(N($BD404)*SUMIF(บันทึกรายเที่ยว!$AC$6:$AC$10005,$Y404,'
+                         'บันทึกรายเที่ยว!$AF$6:$AF$10005),2))')             # รายได้
         self.assertIn('คำนวณค่าขนส่ง!$G$5:$G$204', pay['AT404'].value)       # ตามสัญญา (ซ่อน)
+
+    def test_payment_summary_levels_are_coloured(self):
+        """v23 : สีแยกระดับอ้างประเภทแถว AD (เดิมอ้าง AA ที่เป็นตัวนับ สีไม่ขึ้น) กฎขอบทั่วไปอยู่ท้ายสุด
+        แถวเส้นทางย่อหน้า · แถวรวมของทีมบอกชื่อทีม"""
+        pay = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)['สรุปจ่ายรถร่วม']
+        rules = sorted((rule for cf in pay.conditional_formatting for rule in cf.rules), key=lambda r: r.priority)
+        self.assertEqual([r.formula[0] for r in rules],
+                         ['$AD5="Z"', '$AD5="H"', '$AD5="B"', '$AD5="T"', '$AD5<>""'])
+        self.assertIn('IF($AD5="T","รวม "&$AF5,', pay['A5'].value)
+        self.assertIn('"      "&INDEX($AY$5:$AY$404,$AC5)', pay['A5'].value)
 
     def test_summary_headers_follow_accounting_layout(self):
         """หัวตารางหน้าสรุปเหมือนไฟล์บัญชีเดิม (ส่งออก ด.5-69)
         สรุปจ่าย ซ่อนตามสัญญา/ส่วนปรับ เหลือ อัตราค่าขนส่ง (บาท/ตัน) คู่ (บาท/กม.)
-        สรุปเหมือง มีหัวใหญ่ "อัตราค่าขนส่ง" ครอบสองคอลัมน์นี้"""
+        v21 ไม่มีชีต สรุปเหมือง เดิมแล้ว (ระบบใส่ชีต สรุปหน้าเหมือง ให้ตอน export)"""
         workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
         pay = workbook['สรุปจ่ายรถร่วม']
         self.assertTrue(pay.column_dimensions['G'].hidden)
         self.assertEqual([pay['I%d' % r].value for r in (2, 3, 4)], ['อัตรา', 'ค่าขนส่ง', '(บาท/ตัน)'])
         self.assertEqual([pay['J%d' % r].value for r in (2, 3, 4)], ['อัตรา', 'ค่าขนส่ง', '(บาท/กม.)'])
 
-        mine = workbook['สรุปเหมือง']
-        self.assertEqual(mine['I7'].value, 'อัตราค่าขนส่ง')
-        self.assertIn('I7:J7', {str(m) for m in mine.merged_cells.ranges})
-        self.assertEqual((mine['I8'].value, mine['J8'].value), ('(บาท/ตัน)', '(บาท/กม.)'))
-        # อัตราแถวทีม = ค่าขนส่งรวม (P ของเที่ยวในกลุ่ม) ÷ ตันจ่ายรวม
-        self.assertIn('คำนวณค่าขนส่ง!$AE$5:$AE$10004', mine['AM9'].value)
-        self.assertEqual(mine['AK9'].value, '=IF($W9="","",IF(N($AJ9)=0,0,ROUND($AM9/$AJ9,2)))')
+        self.assertNotIn('สรุปเหมือง', workbook.sheetnames)

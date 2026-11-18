@@ -12499,13 +12499,13 @@ EXPORT_DOC_RATE_ADJUST_COL = 10             # J ปรับค่าขนส�
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีค่าสัญญา / ไม่ปรับตามน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่องว่าง
 EXPORT_DOC_RATE_NOTE_COL = 12
 
-# v20 ชีตคำนวณค่าขนส่ง (ทำด้วย Excel จริง : ลบคอลัมน์ M-R ของตารางกลุ่มจ่ายเดิม แล้วส่วนนี้ขยับมาแทน)
+# v21 ชีตคำนวณค่าขนส่ง (ทำด้วย Excel จริง) : คิดเงินต่อชุดราคาทั้งเดือน ไม่มีตารางรายเที่ยวแล้ว
 #   M สาขาที่ใช้ราคาน้ำมัน (ระบบเติม) / N ราคาน้ำมันเฉลี่ย (สูตร) / O อัตรา บาท/ตัน (สูตร)
-#   Q-T ตารางน้ำมันของเดือน ทีม / สาขาที่ไปเติม / ลิตรรวม / เงินรวม (ระบบเติม) / U เฉลี่ย (สูตร)
-#   W-AE ตารางค่าขนส่งรายเที่ยว (สูตรล้วน แถว 5 = แถว 6 ของบันทึกรายเที่ยว) AD อัตรา / AE ค่าขนส่ง
-#   (ย้ายมาจาก O/P ของบันทึกรายเที่ยวด้วย Cut ของ Excel · บันทึกรายเที่ยวเหลือ A-M + ช่องตรวจ N-O)
+#   P เที่ยว / Q นน.จ่ายค่าบรรทุกรวมทั้งเดือน / R ค่าขนส่งทั้งเดือน = O x Q (สูตร นับจากบันทึกรายเที่ยว AB)
+#   T-W ตารางน้ำมันของเดือน ทีม / สาขาที่ไปเติม / ลิตรรวม / เงินรวม (ระบบเติม) / X เฉลี่ย (สูตร)
+#   สรุปจ่ายรถร่วมดึงอัตรา O ตรง ๆ และคิดรายได้ = อัตรา x ตันรวมของกลุ่ม
 EXPORT_DOC_RATE_FUEL_BRANCH_COL = 13   # M
-EXPORT_DOC_FUEL_TABLE_FIRST_COL = 17   # Q ทีม / R สาขา / S ลิตร / T เงิน
+EXPORT_DOC_FUEL_TABLE_FIRST_COL = 20   # T ทีม / U สาขา / V ลิตร / W เงิน
 EXPORT_DOC_FUEL_TABLE_MAX_ROWS = 200   # แถว 5-204 ตามช่วงที่สูตร N อ้างถึง
 
 
@@ -15870,52 +15870,158 @@ def exportExcelMineSummary(request):
     return _exportDocumentMarkDownloadDone(request, response)
 
 
-@login_required(login_url='login')
-def exportExcelExportDocument(request):
-    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+# ชีตสรุปหน้าเหมืองของไฟล์บัญชี : หน้าตาแบบใบปะหน้าของปุ่ม "ใบสรุปหน้าเหมือง" (ดู _mineSummaryWriteCover)
+# แทนชีต "สรุปเหมือง" เดิมของ template ที่เป็นสูตร INDEX ซ้อนหลายชั้น + ตัวกรอง dropdown อ่านยาก
+# ไม่มีสูตรชีตไหนอ้างชีตเดิม (มีแค่ข้อความแนะนำใน A4 ของบันทึกรายเที่ยว) จึงลบทิ้งได้
+# ตั้งชื่อใหม่ไม่ซ้ำชื่อเดิม : save_with_template_extensions ก๊อป dropdown (x14) ของชีตตามชื่อ
+# ถ้าใช้ชื่อเดิม dropdown ตัวกรองของชีตเก่าจะติดมากับชีตใหม่
+EXPORT_DOC_MINE_SHEET_OLD = 'สรุปเหมือง'
+EXPORT_DOC_MINE_SHEET = 'สรุปหน้าเหมือง'
+EXPORT_DOC_TRIP_SHEET_REF = "'บันทึกรายเที่ยว'!"
 
-    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
-    ถ้าเขียนทับจะเสียสูตรถาวร
+
+def _exportDocumentMineCoverFormulas(conditions):
+    """สูตร [เที่ยว, นน.ต้นทาง, นน.ปลายทาง, นน.ส่วนต่าง, นน.จ่ายค่าบรรทุก] ของแถวสรุปหนึ่งแถว
+    นับ / รวมจากชีตบันทึกรายเที่ยวทั้งช่วงของ template (บัญชีแก้น้ำหนักในไฟล์แล้วยอดตามเอง)
+    conditions = [(คอลัมน์, ค่า)] ของบันทึกรายเที่ยว : B ต้นทาง / C ปลายทาง / D หิน / E ช่วงน้ำหนัก / F ทีม
+    ค่าว่าง = เงื่อนไข "" ซึ่ง COUNTIFS / SUMIFS ตีความว่าช่องว่าง
+
+    รวมจากคอลัมน์ช่วยของ template v22 (= ค่าจริง x สัดส่วนที่นามนี้จ่าย AD) ไม่ใช่ J-M ตรง ๆ
+    ไฟล์ของนามที่รับแถวทีมแค่บางส่วนจึงได้ยอดตามส่วนที่รับ · ไฟล์รวม (AD ว่าง) ได้ยอดเท่าค่าจริง
+    เที่ยว = ผลรวมสัดส่วน ปัดเป็นจำนวนเต็ม"""
+    last = EXPORT_DOC_FIRST_DATA_ROW + EXPORT_DOC_MAX_TRIPS - 1
+    trip_col = 'AE'
+    sum_cols = ('AG', 'AH', 'AI', 'AF')   # นน.ต้นทาง / ปลายทาง / ส่วนต่าง / จ่ายค่าบรรทุก
+
+    def rng(col):
+        return '%s$%s$%d:$%s$%d' % (EXPORT_DOC_TRIP_SHEET_REF, col, EXPORT_DOC_FIRST_DATA_ROW, col, last)
+    if not conditions:
+        return ['=ROUND(SUM(%s),0)' % rng(trip_col)] + ['=SUM(%s)' % rng(col) for col in sum_cols]
+    cond = ','.join('%s,%s' % (rng(col), _mineSummaryCriteria(value)) for col, value in conditions)
+    return (['=ROUND(SUMIFS(%s,%s),0)' % (rng(trip_col), cond)]
+            + ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in sum_cols])
+
+
+def _exportDocumentWriteMineCover(worksheet, rows, selected_month):
+    """บันทึกถึงผู้อำนวยการฝ่ายผลิต + ตารางสรุป เส้นทาง -> สินค้า -> ทีม ทุกเส้นทางต่อกันในชีตเดียว + ผลรวมทั้งหมด
+    สีแต่ละระดับชุดเดียวกับใบสรุปหน้าเหมือง (MINE_SUMMARY_LEVEL_STYLE) เลขที่ / วันที่ / ผู้ลงนาม เว้นให้กรอกเอง"""
+    month_label = _exportDocumentThaiMonth(selected_month) if selected_month else ''
+    thin = Side(style='thin')
+    hair = Side(style='hair')
+    medium = Side(style='medium')
+    for col, width in enumerate((40, 10, 15, 15, 15, 17), start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = width
+
+    lines = [
+        (1, 1, 'ที่ ........................................'),
+        (2, 4, 'วันที่ ........................................'),
+        (3, 1, 'เรื่อง        รายงานผลการขนส่งหินจากเหมืองไปท่าเรือ ประจำเดือน %s' % month_label),
+        (4, 1, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ'),
+        (5, 1, '               ขอส่งรายงานผลการขนส่งหิน ประจำเดือน %s ตามรายละเอียดดังนี้' % month_label),
+    ]
+    for row, col, text in lines:
+        worksheet.cell(row, col).value = text
+        _mineSummaryFont(worksheet.cell(row, col), size=16)
+    worksheet.merge_cells('D2:F2')
+
+    # เส้นทาง -> สินค้า (หิน + ช่วงน้ำหนัก) -> ทีม เรียงตามชื่อทุกระดับ (ไล่หาง่ายกว่าเรียงตามที่โผล่ในรายเที่ยว)
+    pairs = OrderedDict()
+    for r in rows:
+        pair = pairs.setdefault((r['origin'] or '', r['destination'] or ''), OrderedDict())
+        product = pair.setdefault((r['stone'] or '', r['weight_carried'] or ''),
+                                  {'label': _mineSummaryProduct(r), 'teams': []})
+        if r['team'] not in product['teams']:
+            product['teams'].append(r['team'])
+
+    def paint(row, labels, level, border):
+        style = MINE_SUMMARY_LEVEL_STYLE[level]
+        for i, value in enumerate(labels):
+            cell = worksheet.cell(row, 1 + i)
+            if i == 0 or level == 'head':
+                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / สินค้า / ทีม มาจากข้อมูลชั่ง
+            else:
+                cell.value = value                   # สูตรนับ / รวมที่เราสร้างเอง
+            if i == 0:
+                align = Alignment(horizontal='left', indent=style['indent'], vertical='center', wrap_text=True)
+                fmt = None
+            else:
+                align = Alignment(horizontal='center', vertical='center', wrap_text=True) if level == 'head' else None
+                fmt = None if level == 'head' else ('#,##0' if i == 1 else '#,##0.00')
+            _mineSummaryFont(cell, size=16, bold=style['bold'], color=style['color'], fill=style['fill'],
+                             fmt=fmt, align=align, border=border)
+
+    top = 7
+    paint(top, ['ต้นทาง - ปลายทาง / สินค้า / ทีม', 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง',
+                'นน.จ่ายค่าบรรทุก'], 'head', Border(left=thin, right=thin, top=thin, bottom=thin))
+    worksheet.row_dimensions[top].height = 24
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    row = top
+    for (origin, destination) in sorted(pairs):
+        products = pairs[(origin, destination)]
+        route = [('B', origin), ('C', destination)]
+        row += 1
+        paint(row, [_mineSummaryRouteLabel(origin or '-', destination or '-')]
+              + _exportDocumentMineCoverFormulas(route), 'route', box)
+        for (stone, band) in sorted(products):
+            product = products[(stone, band)]
+            product_cond = route + [('D', stone), ('E', band)]
+            row += 1
+            paint(row, [product['label']] + _exportDocumentMineCoverFormulas(product_cond), 'product', box)
+            for team in sorted(product['teams'], key=str):
+                row += 1
+                paint(row, [team] + _exportDocumentMineCoverFormulas(product_cond + [('F', team)]), 'team',
+                      Border(left=thin, right=thin, top=hair, bottom=hair))
+    row += 1
+    paint(row, ['ผลรวมทั้งหมด'] + _exportDocumentMineCoverFormulas([]), 'total',
+          Border(left=thin, right=thin, top=medium, bottom=medium))
+    end = row
+
+    tail = [
+        (end + 2, 1, '             จึงเรียนมาเพื่อโปรดทราบ', None),
+        (end + 3, 4, 'ขอแสดงความนับถือ', 'center'),
+        (end + 5, 4, '(                                        )', 'center'),
+        (end + 6, 4, 'เจ้าหน้าที่ธุรการฝ่ายผลิต', 'center'),
+        (end + 7, 1, 'สำเนาเรียน', None),
+    ]
+    for row, col, text, align in tail:
+        cell = worksheet.cell(row, col)
+        cell.value = text
+        _mineSummaryFont(cell, size=16, align=Alignment(horizontal=align) if align else None)
+        if col == 4:
+            worksheet.merge_cells(start_row=row, start_column=4, end_row=row, end_column=6)
+    worksheet.freeze_panes = 'A8'
+    worksheet.print_area = 'A1:F%d' % (end + 10)
+    worksheet.print_title_rows = '7:7'
+    worksheet.page_setup.orientation = 'portrait'
+    worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _exportDocumentReplaceMineSheet(workbook, rows, selected_month):
+    """ลบชีต สรุปเหมือง เดิมของ template แล้วใส่ชีต สรุปหน้าเหมือง แบบใบปะหน้าไว้ตำแหน่งเดิม"""
+    index = (workbook.sheetnames.index('oil') + 1 if 'oil' in workbook.sheetnames
+             else len(workbook.sheetnames))
+    if EXPORT_DOC_MINE_SHEET_OLD in workbook.sheetnames:
+        index = workbook.sheetnames.index(EXPORT_DOC_MINE_SHEET_OLD)
+        workbook.remove(workbook[EXPORT_DOC_MINE_SHEET_OLD])
+    _exportDocumentWriteMineCover(workbook.create_sheet(EXPORT_DOC_MINE_SHEET, index), rows, selected_month)
+    # ข้อความแนะนำขั้นตอนบนหัวบันทึกรายเที่ยว ยังพูดถึงชีตเดิม
+    guide = workbook['บันทึกรายเที่ยว']['A4']
+    if isinstance(guide.value, str):
+        guide.value = guide.value.replace(
+            'เปิด sheet "สรุปเหมือง" ตรวจให้ถูกต้อง (ช่อง K11 ต้องขึ้นว่า ยอดตรงกับรายเที่ยว)',
+            'เปิด sheet "%s" ตรวจยอดให้ถูกต้อง' % EXPORT_DOC_MINE_SHEET)
+
+
+def _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats, fuel_lines, fuel_stats,
+                                      selected_month):
+    """เปิด template ไฟล์บัญชี แล้วเขียนรายเที่ยว + ชีตคำนวณค่าขนส่ง / อัตรา / oil / express
+    คืน workbook ที่ยังไม่ได้ save (ใช้ร่วมกันระหว่างไฟล์บัญชีรวม กับไฟล์ของแต่ละนามที่จ่าย)
+
+    rows ต้องผ่าน _exportDocumentAssignWeightCarried + _exportDocumentAssignMonthlyFuelPrice มาแล้ว
     """
-    try:
-        active = request.session['company_code']
-    except KeyError:
-        return redirect('logout')
-
-    _exportProgressSweep()
-    # ตัวเลข % ตั้งจากสัดส่วนเวลาจริงของแต่ละขั้น วัดกับเดือนที่เที่ยวเยอะสุด
-    # (3,595 เที่ยว รวม ~31 วินาที) : เตรียมข้อมูล 26% · ดึงรายเที่ยว 3% · เปิด template 40%
-    # · เขียน 4% · บันทึกไฟล์ 27%
-    # ไม่ได้แบ่งเท่า ๆ กัน เพราะจะทำให้แถบค้างอยู่ที่เดียวนานแล้วกระโดดทีเดียวจบ
-    # และเวลาที่เหลือที่หน้าเว็บคำนวณจะเพี้ยนไปด้วย
-    _exportProgressSet(request, 2, 'กำลังอ่านเงื่อนไขที่เลือก')
-    qs, filters, _ = _exportDocumentQuerySet(request)
-    selected_month = filters['selected_month']
-
-    _exportProgressSet(request, 27, 'กำลังนับจำนวนเที่ยว')
-    trip_count = qs.count()
-    if trip_count == 0:
-        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
-    if trip_count > EXPORT_DOC_MAX_TRIPS:
-        return HttpResponse(
-            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
-            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
-            % (trip_count, EXPORT_DOC_MAX_TRIPS)
-        )
-
-    _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
-    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
-
-    # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
-    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
-    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
-        rows, selected_month)
-    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
-    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) ลงชีตคำนวณค่าขนส่ง ช่อง M + ตาราง Q-T
-    # อัตรา / ค่าขนส่งรายเที่ยวเป็นสูตรในตาราง W-AE ของชีตเดียวกัน
-    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
-    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
-
     _exportProgressSet(request, 33, 'กำลังเปิดไฟล์ต้นแบบ')
     workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
     worksheet = workbook['บันทึกรายเที่ยว']
@@ -15962,7 +16068,10 @@ def exportExcelExportDocument(request):
             float(r['origin_weight']) if r['origin_weight'] is not None else None)   # J นน.ต้นทาง
         worksheet.cell(row=excel_row, column=11).value = (
             float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
+    # AD สัดส่วนที่นามนี้จ่าย : เฉพาะไฟล์ของนามที่มีแถวทีมแบ่งหลายนาม
+    _exportDocumentWritePayerShares(workbook, worksheet, rows)
 
+    _exportDocumentReplaceMineSheet(workbook, rows, selected_month)
     trip_teams = {r['team'] for r in rows}
     _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats, fuel_lines, trip_teams)
     _exportDocumentWriteRateViewSheet(workbook, rows, selected_month)
@@ -15985,6 +16094,112 @@ def exportExcelExportDocument(request):
                 if std.cell(row=row, column=col).value in (None, ''):
                     std.cell(row=row, column=col).value = EXPORT_DOC_NO_TEAM
                     break
+
+    _exportDocumentAddSortFilters(workbook)
+    return workbook
+
+
+# ปุ่มกรอง / เรียง (AutoFilter) : ใส่เฉพาะชีตที่ 1 แถว = 1 รายการ เรียงแล้วไม่เสีย
+#   บันทึกรายเที่ยว มีของ template อยู่แล้ว (A5:M)
+#   ไม่ใส่ : สรุปจ่ายรถร่วม / ปะหน้า (สูตรคิดจากตำแหน่งแถว) · สรุปหน้าเหมือง / อัตราค่าขนส่ง (หัวข้อซ้อน เรียงแล้วทีมหลุดจากหัวข้อ)
+#           รายการมาตรฐาน (สูตรกลุ่มจ่ายหยิบรายการแรกของคอลัมน์ G เป็นค่าเริ่มต้น เรียงแล้วกลุ่มสลับ)
+#           oil (แถวรวมติดใต้ตาราง Excel ขยายช่วงกรองไปรวมแถวรวมเอง เรียงแล้วแถวรวมหลุด ลองใน Excel แล้ว)
+#           คำนวณค่าขนส่ง (Excel ขยายช่วงกรองลงไปถึงแถว 369 เอง เรียงแล้วชุดราคาหลุดจากช่วง K5:K204
+#             ค่าขนส่งรวม ต.ค. 69 เปลี่ยนจาก 8,274,690.63 เป็น 3,142,027.58 ลองใน Excel แล้ว)
+# (ชีต, แถวหัวตาราง, คอลัมน์สุดท้าย, แถวสุดท้าย หรือ None = ถึงแถวสุดท้ายที่มีข้อมูล)
+EXPORT_DOC_SORT_FILTERS = (
+    (EXPORT_DOC_EXPRESS_SHEET, 4, 'I', None),
+)
+
+
+def _exportDocumentAddSortFilters(workbook):
+    for name, header, last_col, last_row in EXPORT_DOC_SORT_FILTERS:
+        if name not in workbook.sheetnames:
+            continue
+        ws = workbook[name]
+        end = last_row or max(ws.max_row, header + 1)
+        ws.auto_filter.ref = 'A%d:%s%d' % (header, last_col, end)
+
+
+# ไฟล์ของนาม : สัดส่วนของเที่ยวที่อยู่ในแถวทีมที่แบ่งหลายนาม เก็บในชีตซ่อน แล้ว AD ของบันทึกรายเที่ยวเป็นสูตรหา
+# จากคีย์ของแถวตัวเอง (เลขที่ชั่ง|ต้นทาง|ทีม) : บัญชีกดเรียงชีตบันทึกรายเที่ยว (ปุ่มกรองครอบแค่ A-M) สัดส่วนก็ยังตามเที่ยวถูก
+# ถ้าเขียนเป็นตัวเลขตรง ๆ เรียงแล้วตัวเลขค้างอยู่แถวเดิม ไปคูณกับเที่ยวอื่น
+EXPORT_DOC_PAYER_SHARE_SHEET = 'สัดส่วนนาม'
+
+
+def _exportDocumentPayerShareKey(doc_id, origin, team):
+    return '%s|%s|%s' % (doc_id or '', origin or '', team or '')
+
+
+def _exportDocumentWritePayerShares(workbook, worksheet, rows):
+    shares = [(r, r['payer_share']) for r in rows if r.get('payer_share') is not None]
+    if not shares:
+        return
+    table = workbook.create_sheet(EXPORT_DOC_PAYER_SHARE_SHEET)
+    table.sheet_state = 'hidden'
+    table['A1'] = 'คีย์ (เลขที่ชั่ง|ต้นทาง|ทีม)'
+    table['B1'] = 'สัดส่วนที่นามนี้จ่าย'
+    for i, (r, share) in enumerate(shares, start=2):
+        key = table.cell(row=i, column=1)
+        key.value = _exportDocumentPayerShareKey(r['doc_id'], r['origin'], r['team'])
+        key.data_type = 's'   # มาจากข้อมูลชั่ง : บังคับเป็นข้อความ กัน formula injection
+        table.cell(row=i, column=2).value = float(share)
+    last = len(shares) + 1
+    for i in range(len(rows)):
+        row = EXPORT_DOC_FIRST_DATA_ROW + i
+        worksheet.cell(row=row, column=EXPORT_DOC_PAYER_SHARE_COL).value = (
+            "=IFERROR(VLOOKUP($I{r}&\"|\"&$B{r}&\"|\"&$F{r},'{s}'!$A$2:$B${n},2,FALSE),\"\")".format(
+                r=row, s=EXPORT_DOC_PAYER_SHARE_SHEET, n=last))
+
+
+@login_required(login_url='login')
+def exportExcelExportDocument(request):
+    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+
+    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
+    ถ้าเขียนทับจะเสียสูตรถาวร
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    # ตัวเลข % ตั้งจากสัดส่วนเวลาจริงของแต่ละขั้น วัดกับเดือนที่เที่ยวเยอะสุด
+    # (3,595 เที่ยว รวม ~31 วินาที) : เตรียมข้อมูล 26% · ดึงรายเที่ยว 3% · เปิด template 40%
+    # · เขียน 4% · บันทึกไฟล์ 27%
+    # ไม่ได้แบ่งเท่า ๆ กัน เพราะจะทำให้แถบค้างอยู่ที่เดียวนานแล้วกระโดดทีเดียวจบ
+    # และเวลาที่เหลือที่หน้าเว็บคำนวณจะเพี้ยนไปด้วย
+    _exportProgressSet(request, 2, 'กำลังอ่านเงื่อนไขที่เลือก')
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    selected_month = filters['selected_month']
+
+    _exportProgressSet(request, 27, 'กำลังนับจำนวนเที่ยว')
+    trip_count = qs.count()
+    if trip_count == 0:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
+    if trip_count > EXPORT_DOC_MAX_TRIPS:
+        return HttpResponse(
+            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
+            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
+            % (trip_count, EXPORT_DOC_MAX_TRIPS)
+        )
+
+    _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+
+    # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
+    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
+        rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) ลงชีตคำนวณค่าขนส่ง ช่อง N + ตาราง T-X
+    # อัตรา (O) / ค่าขนส่งทั้งเดือนของชุดราคา (R) เป็นสูตรในชีตเดียวกัน
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
+
+    workbook = _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats,
+                                                 fuel_lines, fuel_stats, selected_month)
 
     _exportProgressSet(request, 77, 'กำลังบันทึกไฟล์')
     content = xlsx_template.save_with_template_extensions(

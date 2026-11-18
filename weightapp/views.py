@@ -14945,8 +14945,11 @@ def confirmTripEdit(request):
                 setattr(weight, attr, value)
             weight.save()
 
-            history = (WeightHistory.objects.filter(weight_id=weight.pk)
-                       .order_by('-update').first())
+            # ค้นด้วย weight_table_id (FK มี index) ไม่ใช่ weight_id ซึ่งไม่มี index
+            # ค่าเท่ากันเสมอ (signal ใส่ทั้งคู่จากใบเดียวกัน) แต่ weight_id ต้องไล่ทั้งตาราง ~2.8 แสนแถวทีละเที่ยว
+            # ไฟล์ 1,096 เที่ยวเคยค้างใน transaction นี้ 20+ นาที กดซ้ำแล้วเจอ Lock wait timeout (1205)
+            history = (WeightHistory.objects.filter(weight_table_id=weight.pk)
+                       .order_by('-update', '-id').first())
             if history:
                 history.user_update = request.user
                 history.save()

@@ -14,7 +14,7 @@
   /* คอลัมน์ต่อนามให้แคบ : ช่องกรอก 6.5rem · ช่องเลือกนาม 10.5rem · ชื่อยาวตัดบรรทัด */
   .payer-input { width: 6.5rem; text-align: right; }
   .payer-mode { min-width: 10.5rem; max-width: 12rem; }
-  .payer-product-company { font-weight: 400; font-size: .85rem; white-space: normal; min-width: 7rem; }
+  .payer-product-company { font-weight: 400; font-size: .85rem; white-space: nowrap; min-width: 7rem; }
   .payer-route td, .payer-product td:first-child { white-space: normal; }
   .payer-stone td:first-child, .trip-table thead th { white-space: normal; }
   .payer-ok { color: #198754; font-weight: 600; }
@@ -185,7 +185,7 @@
             ถ้าแถวมีตันมากกว่าที่นามยังขาดจากเป้า ระบบตัดให้เท่าที่ขาดพอดี (แถวเปลี่ยนเป็น "แบ่งหลายนาม") ส่วนที่เหลือของแถวเลือกให้นามอื่นต่อได้ ·
             แบ่งเองได้ด้วย <strong>"แบ่งหลายนาม"</strong> แล้วกรอกตัน ·
             แถวที่ไม่ได้เลือก / ส่วนที่ไม่ได้กรอก = <span class="payer-short">ค้าง stock</span> · ห้ามเกินตันของแถว / เกินเป้า ·
-            แถวหัวหิน (สีเทา) แสดงเป้าของแต่ละนาม และยังขาดอีกเท่าไหร่ (เป้าของหินชนิดนั้น รวมทุกเส้นทาง)
+            แถวหัวหิน (สีเทา) : "เส้นทางนี้" = ตันที่เลือกในเส้นทางนี้ · "รวม" / "เป้า" / ครบเป้า = ของหินชนิดนั้น<strong>รวมทุกเส้นทาง</strong>
           </p>
         </div>
         <div class="card-body">
@@ -508,7 +508,7 @@
           goal[stone] = goal[stone] || {};
           if (target.disabled || target.value.trim() === '') {
             diff.innerHTML = v >= TON ? '<span class="payer-over">ยังไม่ตั้งเป้า</span>' : '';
-            goal[stone][id] = { target: null, html: diff.innerHTML };
+            goal[stone][id] = { target: null, chosen: v, html: diff.innerHTML };
             return;
           }
           targets += num(target.value);
@@ -516,7 +516,7 @@
           if (Math.abs(d) < TON) diff.innerHTML = '<span class="payer-ok">✔ ครบเป้า</span>';
           else if (d < 0) diff.innerHTML = '<span class="payer-short">ยังไม่ครบเป้า ' + fmt(-d) + '</span>';
           else diff.innerHTML = '<span class="payer-over">เกินเป้า ' + fmt(d) + '</span>';
-          goal[stone][id] = { target: num(target.value), html: diff.innerHTML };
+          goal[stone][id] = { target: num(target.value), chosen: v, html: diff.innerHTML };
         });
         row.querySelector('.payer-chosen-total').textContent = fmt(sum);
         row.querySelector('.payer-stone-stock').textContent = fmt(total - sum);
@@ -533,8 +533,12 @@
           const v = (productCompany[product] || {})[id];
           const g = stoneGoal[id];
           // ข้อความในช่องสร้างจากตัวเลข (fmt) กับข้อความคงที่เท่านั้น
-          let html = v ? '<div class="fw-bold">' + fmt(v) + '</div>' : '';
-          if (g && g.target !== null) html += '<div class="text-muted">เป้า ' + fmt(g.target) + '</div>';
+          // บรรทัดแรก = ตันในเส้นทางนี้ · เป้า / สถานะ = ของหินชนิดนี้รวมทุกเส้นทาง (บอกยอดรวมด้วย ไม่ให้สับสน)
+          let html = v ? '<div class="text-muted">เส้นทางนี้</div><div class="fw-bold">' + fmt(v) + '</div>' : '';
+          if (g && g.target !== null) {
+            html += '<div class="text-muted">รวม ' + fmt(g.chosen || 0) + '</div>';
+            html += '<div class="text-muted">เป้า ' + fmt(g.target) + '</div>';
+          }
           if (g && g.html) html += '<div>' + g.html + '</div>';
           td.innerHTML = html;
         });

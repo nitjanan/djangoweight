@@ -15210,6 +15210,19 @@ def _exportDocumentApprovalMonth(request, selected_month):
     return _exportDocumentDayApprovals(rows, carry_rows), filters, month_list
 
 
+def _userHasCompanyTab(user, company_code):
+    """แท็บใน session เป็นบริษัทที่ผูกกับ UserProfile ของผู้ใช้จริงไหม
+    setSessionCompany ใส่รหัสอะไรลง session ก็ได้ งานที่เขียนข้อมูลแทนเหมือง (อนุมัติ / ยกเลิก)
+    จึงเชื่อแท็บใน session อย่างเดียวไม่ได้ · ALL ไม่มีแถวใน BaseCompany : ให้เฉพาะคนที่มีแท็บร้อยเกาะ"""
+    codes = set(BaseCompany.objects.filter(userprofile__user=user).values_list('code', flat=True))
+    return company_code in codes or (company_code == 'ALL' and 'ROI' in codes)
+
+
+def _plainText(message, status=200):
+    """ข้อความตอบกลับแบบ text ธรรมดา : ข้อความมีชื่อนาม / ชื่อหินจากข้อมูล ห้ามให้เบราว์เซอร์ตีความเป็น HTML"""
+    return HttpResponse(message, content_type='text/plain; charset=utf-8', status=status)
+
+
 def _exportDocumentTabOwnsOrigin(company_code, origin_id):
     """แท็บนี้ดูแลต้นทางนี้ไหม : แท็บร้อยเกาะ / ทั้งหมด = ทุกต้นทาง · แท็บเหมือง = แถว map ที่ผูกกับบริษัทนั้น
     แท็บท่าเรือไม่ดูแลต้นทางไหนเลย (กติกาเดียวกับ _exportDocumentTabOriginQ)
@@ -15277,7 +15290,8 @@ def exportDocumentApproveDay(request):
         return redirect(next_url)
     day_label = day.strftime('%d/%m/%Y')
     action = request.POST.get('action')
-    if not _exportDocumentTabOwnsOrigin(request.session['company_code'], origin_id):
+    code = request.session['company_code']
+    if not _userHasCompanyTab(request.user, code) or not _exportDocumentTabOwnsOrigin(code, origin_id):
         messages.error(request, 'ต้นทางนี้ไม่ได้อยู่ในแท็บบริษัทที่เปิดอยู่ อนุมัติ / ยกเลิกจากแท็บนี้ไม่ได้')
         return redirect(next_url)
 
@@ -16664,6 +16678,8 @@ def viewExportDocumentPayer(request):
         active = request.session['company_code']
     except KeyError:
         return redirect('logout')
+    if not _userHasCompanyTab(request.user, active):
+        return _plainText('แท็บบริษัทที่เปิดอยู่ไม่ได้อยู่ในสิทธิ์ของผู้ใช้นี้', status=403)
 
     month_param = request.POST.get('month') or request.GET.get('month') or ''
     rows, filters, month_list = _exportDocumentPayerScope(request, month_param)
@@ -16711,33 +16727,35 @@ def exportExcelPayerDocument(request):
         active = request.session['company_code']
     except KeyError:
         return redirect('logout')
+    if not _userHasCompanyTab(request.user, active):
+        return _plainText('แท็บบริษัทที่เปิดอยู่ไม่ได้อยู่ในสิทธิ์ของผู้ใช้นี้', status=403)
 
     _exportProgressSweep()
     _exportProgressSet(request, 2, 'กำลังอ่านการแบ่งนาม')
     rows, filters, _months = _exportDocumentPayerScope(request, request.GET.get('month') or '')
     if rows is None:
-        return HttpResponse('ต้องออกไฟล์ของนามจากแท็บร้อยเกาะ / ทั้งหมด (แท็บที่เห็นเที่ยวทุกต้นทาง)')
+        return _plainText('ต้องออกไฟล์ของนามจากแท็บร้อยเกาะ / ทั้งหมด (แท็บที่เห็นเที่ยวทุกต้นทาง)')
     selected_month = filters['selected_month']
     companies = _exportDocumentPayerCompanies()
     company_param = request.GET.get('company') or ''
     company = next((c for c in companies if str(c.id) == company_param), None)
     if company is None:
-        return HttpResponse('ไม่พบนามที่จ่ายที่เลือก')
+        return _plainText('ไม่พบนามที่จ่ายที่เลือก')
 
     team_rows = _exportDocumentPayerTeamRows(rows)
     targets, row_allocs = _exportDocumentPayerLoad(selected_month)
     plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
     if not plan['can_export']:
-        return HttpResponse('มีแถวทีมที่แบ่งตันเกินยอดจริง หรือนามที่เลือกเกินเป้า / ยังไม่ได้ตั้งเป้า '
+        return _plainText('มีแถวทีมที่แบ่งตันเกินยอดจริง หรือนามที่เลือกเกินเป้า / ยังไม่ได้ตั้งเป้า '
                             'กรุณากลับไปแก้ที่หน้าแบ่งนามที่จ่ายก่อนออกไฟล์')
     payer = next(c for c in plan['companies'] if c['id'] == company.id)
     if not payer['complete']:
-        return HttpResponse('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
+        return _plainText('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
                             % (company.name, ', '.join(payer['problems']) or 'ยังไม่ได้ตั้งเป้า'))
     # credit = ไฟล์เฉพาะทีมเครดิตนั้น (none = ไม่ระบุ / ตัวเลข = วัน) · ไม่ส่ง = รวมทุกเครดิต
     credit_param = request.GET.get('credit') or ''
     if credit_param and credit_param != 'none' and not credit_param.isdigit():
-        return HttpResponse('เครดิตที่เลือกไม่ถูกต้อง')
+        return _plainText('เครดิตที่เลือกไม่ถูกต้อง')
     shares = _exportDocumentPayerShares(team_rows, row_allocs, company.id)
     picked = []
     for r in rows:
@@ -16752,10 +16770,10 @@ def exportExcelPayerDocument(request):
     if credit_param:
         credit_part = '_%s' % _exportDocumentCreditLabel(None if credit_param == 'none' else int(credit_param))
     if not rows:
-        return HttpResponse('นาม %s ยังไม่ได้รับแถวทีมไหนในเดือนนี้%s'
+        return _plainText('นาม %s ยังไม่ได้รับแถวทีมไหนในเดือนนี้%s'
                             % (company.name, (' (%s)' % credit_part[1:]) if credit_part else ''))
     if len(rows) > EXPORT_DOC_MAX_TRIPS:
-        return HttpResponse('มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว)'
+        return _plainText('มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว)'
                             % (len(rows), EXPORT_DOC_MAX_TRIPS))
 
     # ชุดราคาของไฟล์ = เฉพาะเที่ยวของนามนี้ (ช่วงน้ำหนักที่แบกเติมไว้แล้วตอนดึง ได้ค่าเดิม)

@@ -66,7 +66,8 @@ class PayerAllocationTests(TestCase):
         cls.trip(31, 'W1A', '06-V-900', STONE_6, '30.000', '29.500')
 
         cls.user = User.objects.create_user('acc', 'a@t.com', 'pw12345!')
-        UserProfile.objects.create(user=cls.user)
+        UserProfile.objects.create(user=cls.user).company.add(
+            *BaseCompany.objects.filter(code__in=('ROI', 'SLC')))
 
     @staticmethod
     def trip(weight_id, bws_id, customer_id, stone, weight_total, origin_weight):
@@ -149,6 +150,19 @@ class PayerAllocationTests(TestCase):
         self.assertIn('ครีเอทีฟ', names)
         self.assertNotIn('ร้อยเกาะ', names)
         self.assertTrue(plan['can_export'])
+
+    def test_tab_not_in_user_profile_is_refused(self):
+        """ปลอมแท็บร้อยเกาะใน session (setSessionCompany รับรหัสอะไรก็ได้) : ดู / บันทึก / ออกไฟล์ไม่ได้"""
+        other = User.objects.create_user('mine2', 'b@t.com', 'pw12345!')
+        UserProfile.objects.create(user=other).company.add(self.mine)
+        self.client.force_login(other)
+        self.useTab('ROI')
+        self.assertEqual(self.page().status_code, 403)
+        response = self.client.post('/exportDocument/payer/', {
+            'month': '2026-08', 'stone-0': STONE_2, 'target-%d-0' % self.mine.id: '10'})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ExportDocumentPayerAllocation.objects.exists())
+        self.assertEqual(self.download(self.mine).status_code, 403)
 
     def test_mine_tab_cannot_allocate(self):
         """ยอดต้องเป็นของทุกต้นทาง แท็บเหมืองเห็นไม่ครบ"""

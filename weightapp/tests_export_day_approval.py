@@ -148,7 +148,7 @@ class DayApprovalPageTests(TestCase):
         cls.trip(31, 11, 'W1A', '06-V-900', '42.000', None)
 
         cls.user = User.objects.create_user('mine', 'm@t.com', 'pw12345!')
-        UserProfile.objects.create(user=cls.user)
+        UserProfile.objects.create(user=cls.user).company.add(mine, port)
 
     @staticmethod
     def trip(weight_id, day, bws_id, customer_id, weight_total, origin_weight):
@@ -256,7 +256,8 @@ class DayApprovalPageTests(TestCase):
         """แท็บเหมืองอื่น / แท็บท่าเรือ ยกเลิกหรืออนุมัติต้นทางที่ไม่ใช่ของตัวเองไม่ได้ แม้จะยิงคำขอเอง"""
         fingerprint = self.cell(self.board(), 10)['fingerprint']
         self.post('approve', 10, fingerprint)
-        BaseCompany.objects.create(name='กงตาก', code='KTK', biz_id=1)
+        UserProfile.objects.get(user=self.user).company.add(
+            BaseCompany.objects.create(name='กงตาก', code='KTK', biz_id=1))
         for tab in ('KTK', 'STPS'):
             self.useTab(tab)
             self.post('revoke', 10)
@@ -265,6 +266,17 @@ class DayApprovalPageTests(TestCase):
         self.useTab('KTK')
         self.post('approve', 10, fingerprint)
         self.assertFalse(ExportDocumentDayApproval.objects.exists())
+
+    def test_tab_not_in_user_profile_cannot_approve(self, _wc):
+        """ปลอมแท็บใน session เป็นเหมืองที่ไม่ได้ผูกกับผู้ใช้ (setSessionCompany รับรหัสอะไรก็ได้) : อนุมัติไม่ได้"""
+        fingerprint = self.cell(self.board(), 10)['fingerprint']
+        other = User.objects.create_user('port', 'p@t.com', 'pw12345!')
+        UserProfile.objects.create(user=other).company.add(BaseCompany.objects.get(code='STPS'))
+        self.client.force_login(other)
+        for tab in ('SLC', 'ROI', 'ALL'):
+            self.useTab(tab)
+            self.post('approve', 10, fingerprint)
+            self.assertFalse(ExportDocumentDayApproval.objects.exists())
 
     def test_day_view_lists_the_day_and_offers_approve(self, _wc):
         """กดช่องในตารางรวม -> หน้าดูรายวัน : เที่ยวของวันนั้น ต้นทางนั้น + ปุ่มอนุมัติ (หน้าต่างยืนยันมีรายเที่ยว)"""

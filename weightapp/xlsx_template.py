@@ -29,7 +29,9 @@ _EXTLST_RE = re.compile(r'<extLst>.*?</extLst>\s*</worksheet>\s*$', re.S)
 _XR_UID_RE = re.compile(r'\s+xr:uid="[^"]*"')
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exceltemplate')
-TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v27.xlsx')
+TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v28.xlsx')
+# v28 = v27 ที่กฎสีแถว Z/H/B/T ของสรุปจ่ายรถร่วมสร้างใหม่ใน Excel จริง (COM) ให้มีแค่ ตัวหนา + สีพื้น + กรอบ
+#   กฎเดิมฝังขนาด 14 + ชื่อฟอนต์ไว้ ตอนซูมไม่ใช่ 100% Excel วาดชื่อทีมบางแถวตัวใหญ่ผิดขนาด
 # v27 = v26 ที่ N ของชีตคำนวณค่าขนส่งไม่อ่านช่องว่างเป็น 0 ทำใน Excel จริง (COM)
 #   ราคาที่ใช้ของ (ทีม, สาขา M) · ไม่มีแถวทีม / ช่องว่าง = ราคาที่ใช้ของสาขา (ชีต ราคาน้ำมันเฉลี่ย G6:G25) · ไม่มีอีก = ว่าง
 #   A2 ของชีต ราคาน้ำมันเฉลี่ย บอกวิธีเพิ่มทีมเอง

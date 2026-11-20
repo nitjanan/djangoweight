@@ -561,6 +561,23 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertIn('IF($AD5="T","รวม "&$AF5,', pay['A5'].value)
         self.assertIn('"      "&INDEX($AY$5:$AY$404,$AC5)', pay['A5'].value)
 
+    def test_payment_summary_level_rules_keep_cell_font_size(self):
+        """v28 : กฎสีแถว Z/H/B/T มีแค่ตัวหนา + สีพื้น ไม่ฝังขนาด / ชื่อฟอนต์
+        (กฎที่ฝังขนาดไว้ Excel วาดบางแถวตัวใหญ่ผิดขนาดตอนซูมไม่ใช่ 100%)"""
+        pay = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)['สรุปจ่ายรถร่วม']
+        fills = {}
+        for cf in pay.conditional_formatting:
+            for rule in cf.rules:
+                if rule.formula[0] == '$AD5<>""':
+                    continue
+                self.assertTrue(rule.dxf.font.b)
+                self.assertIsNone(rule.dxf.font.sz)
+                self.assertIsNone(rule.dxf.font.name)
+                self.assertTrue(rule.stopIfTrue)
+                fills[rule.formula[0]] = rule.dxf.fill.bgColor.rgb
+        self.assertEqual(fills, {'$AD5="Z"': 'FFFFE699', '$AD5="H"': 'FFBDD7EE',
+                                 '$AD5="B"': 'FFFFE699', '$AD5="T"': 'FFE2EFDA'})
+
     def test_pay_cover_shows_roikoh_apart_from_partner_teams(self):
         """v24 : ปะหน้าจ่ายรถร่วม แถว 20 ร้อยเกาะ (กลุ่มจ่าย 2) · แถว 21 ทีมรถร่วม รวม (กลุ่ม 1)
         แถว 22-61 ทีมรถร่วมทีละทีม · รวมทั้งสิ้น = สองกลุ่มรวมกัน (ตรงกับรวมจ่ายทั้งสิ้นของสรุปจ่ายรถร่วม)"""

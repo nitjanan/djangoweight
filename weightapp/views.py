@@ -16590,6 +16590,9 @@ EXPORT_DOC_PAYER_SHARE_COL = 30
 # กันฟอร์มที่ส่งมาผิดรูปไม่ให้วนไม่จบ (หินในเดือนหนึ่งมีไม่กี่สิบชนิด แถวทีมไม่กี่ร้อย)
 EXPORT_DOC_PAYER_MAX_STONES = 500
 EXPORT_DOC_PAYER_MAX_ROWS = 5000
+# ปุ่มไฟล์รวมทุกนาม : company=all · ชื่อที่ขึ้นหัวเอกสาร (นาม ...) และชื่อไฟล์
+EXPORT_DOC_PAYER_ALL = 'all'
+EXPORT_DOC_PAYER_ALL_LABEL = 'รวมทุกนาม'
 # ค่าในช่องเลือกนามของแถวทีม : '' = ค้าง stock · id บริษัท = ทั้งแถว · split = แบ่งหลายนาม (กรอกตัน)
 EXPORT_DOC_PAYER_SPLIT = 'split'
 
@@ -16827,6 +16830,25 @@ def _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies):
                                      credit_tons.items(), key=lambda kv: _exportDocumentCreditSort(kv[0][1]))
                                  if cid == c.id]})
 
+    # ไฟล์รวมทุกนาม : ขึ้นเมื่อมีตั้งแต่ 2 นาม (นามเดียวก็คือไฟล์ของนามนั้น) · กดได้เมื่อทุกนามครบเป้า
+    payers = [c for c in company_rows if c['selected']]
+    payer_ids = {c['id'] for c in payers}
+    all_credit = {}
+    for (cid, credit), t in credit_tons.items():
+        if cid in payer_ids:
+            all_credit[credit] = all_credit.get(credit, Decimal('0')) + t
+    all_payers = {
+        'show': len(payers) >= 2,
+        'complete': bool(payers) and all(c['complete'] for c in payers),
+        'tons': sum((c['tons'] for c in payers), Decimal('0')),
+        'target': sum((c['target'] for c in payers), Decimal('0')),
+        'names': [c['name'] for c in payers],
+        'credit_groups': [{'credit': credit, 'label': _exportDocumentCreditLabel(credit),
+                           'param': _exportDocumentCreditParam(credit), 'tons': t}
+                          for credit, t in sorted(all_credit.items(),
+                                                  key=lambda kv: _exportDocumentCreditSort(kv[0]))],
+    }
+
     keys = {item['key'] for item in team_rows}
     orphans = []
     for a in sorted(row_allocs, key=lambda a: (a.origin, a.destination, a.stone_type_name, a.team, a.company_id)):
@@ -16842,6 +16864,8 @@ def _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies):
         'groups': groups,
         'stones': stones,
         'companies': company_rows,
+        'all_payers': all_payers,
+        'all_payers_param': EXPORT_DOC_PAYER_ALL,
         'orphans': orphans,
         'over_rows': over_rows,
         'target_errors': target_errors,
@@ -16870,19 +16894,26 @@ def _exportDocumentPayerTargetStatus(target, chosen):
     return 'ok'
 
 
-def _exportDocumentPayerShares(team_rows, row_allocs, company_id):
-    """คีย์แถวทีมที่นามนี้รับ -> สัดส่วน (None = ทั้งแถว · Decimal = ตันที่รับ ÷ ตันของแถว)"""
+def _exportDocumentPayerShares(team_rows, row_allocs, company_ids):
+    """คีย์แถวทีมที่นามเหล่านี้รับ -> สัดส่วน (None = ทั้งแถว · Decimal = ตันที่รับรวม ÷ ตันของแถว)
+    company_ids หลายนาม = ไฟล์รวมทุกนาม : แถวที่แบ่งให้หลายนามรวมตันของทุกนามเข้าด้วยกัน"""
     tons_by_key = {item['key']: item['tons'] for item in team_rows}
-    shares = {}
+    whole = set()
+    taken = {}
     for a in row_allocs:
-        if a.company_id != company_id or a.row_key not in tons_by_key:
+        if a.company_id not in company_ids or a.row_key not in tons_by_key:
             continue
         if a.tons is None:
-            shares[a.row_key] = None
+            whole.add(a.row_key)
         elif a.tons > 0 and tons_by_key[a.row_key] > 0:
-            share = Decimal(a.tons) / tons_by_key[a.row_key]
-            # กรอกเท่ายอดของแถวพอดี = ทั้งแถว (ไม่ต้องมีสัดส่วนในไฟล์)
-            shares[a.row_key] = None if share >= 1 else share
+            taken[a.row_key] = taken.get(a.row_key, Decimal('0')) + Decimal(a.tons)
+    shares = {key: None for key in whole}
+    for key, tons in taken.items():
+        if key in whole:
+            continue
+        share = tons / tons_by_key[key]
+        # กรอกเท่ายอดของแถวพอดี = ทั้งแถว (ไม่ต้องมีสัดส่วนในไฟล์)
+        shares[key] = None if share >= 1 else share
     return shares
 
 
@@ -17081,8 +17112,9 @@ def exportExcelPayerDocument(request):
     selected_month = filters['selected_month']
     companies = _exportDocumentPayerCompanies()
     company_param = request.GET.get('company') or ''
+    all_payers = company_param == EXPORT_DOC_PAYER_ALL
     company = next((c for c in companies if str(c.id) == company_param), None)
-    if company is None:
+    if company is None and not all_payers:
         return _plainText('ไม่พบนามที่จ่ายที่เลือก')
 
     team_rows = _exportDocumentPayerTeamRows(rows)
@@ -17091,15 +17123,29 @@ def exportExcelPayerDocument(request):
     if not plan['can_export']:
         return _plainText('มีแถวทีมที่แบ่งตันเกินยอดจริง หรือนามที่เลือกเกินเป้า / ยังไม่ได้ตั้งเป้า '
                             'กรุณากลับไปแก้ที่หน้าแบ่งนามที่จ่ายก่อนออกไฟล์')
-    payer = next(c for c in plan['companies'] if c['id'] == company.id)
-    if not payer['complete']:
-        return _plainText('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
-                            % (company.name, ', '.join(payer['problems']) or 'ยังไม่ได้ตั้งเป้า'))
+    if all_payers:
+        # รวมทุกนาม : ทุกนามที่ตั้งเป้า / เลือกแถวไว้ต้องครบเป้า ไม่งั้นยอดรวมไม่ใช่ยอดที่จะจ่ายจริง
+        payers = [c for c in plan['companies'] if c['selected']]
+        if not payers:
+            return _plainText('เดือนนี้ยังไม่มีนามไหนได้รับแถวทีม')
+        short = ['%s (%s)' % (c['name'], ', '.join(c['problems']) or 'ยังไม่ได้ตั้งเป้า')
+                 for c in payers if not c['complete']]
+        if short:
+            return _plainText('ออกไฟล์รวมทุกนามไม่ได้ ยังมีนามที่แบ่งไม่ครบเป้า : %s' % ' · '.join(short))
+        payer_ids = {c['id'] for c in payers}
+        payer_name = EXPORT_DOC_PAYER_ALL_LABEL
+    else:
+        payer = next(c for c in plan['companies'] if c['id'] == company.id)
+        if not payer['complete']:
+            return _plainText('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
+                                % (company.name, ', '.join(payer['problems']) or 'ยังไม่ได้ตั้งเป้า'))
+        payer_ids = {company.id}
+        payer_name = company.name
     # credit = ไฟล์เฉพาะทีมเครดิตนั้น (none = ไม่ระบุ / ตัวเลข = วัน) · ไม่ส่ง = รวมทุกเครดิต
     credit_param = request.GET.get('credit') or ''
     if credit_param and credit_param != 'none' and not credit_param.isdigit():
         return _plainText('เครดิตที่เลือกไม่ถูกต้อง')
-    shares = _exportDocumentPayerShares(team_rows, row_allocs, company.id)
+    shares = _exportDocumentPayerShares(team_rows, row_allocs, payer_ids)
     picked = []
     for r in rows:
         if credit_param and _exportDocumentCreditParam(r.get('credit')) != credit_param:
@@ -17114,7 +17160,7 @@ def exportExcelPayerDocument(request):
         credit_part = '_%s' % _exportDocumentCreditLabel(None if credit_param == 'none' else int(credit_param))
     if not rows:
         return _plainText('นาม %s ยังไม่ได้รับแถวทีมไหนในเดือนนี้%s'
-                            % (company.name, (' (%s)' % credit_part[1:]) if credit_part else ''))
+                            % (payer_name, (' (%s)' % credit_part[1:]) if credit_part else ''))
     if len(rows) > EXPORT_DOC_MAX_TRIPS:
         return _plainText('มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว)'
                             % (len(rows), EXPORT_DOC_MAX_TRIPS))
@@ -17129,7 +17175,7 @@ def exportExcelPayerDocument(request):
     workbook = _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats,
                                                  fuel_lines, fuel_stats, selected_month)
     # หัวเอกสารทุกชีต (ปะหน้า / สรุปจ่าย) ดึงชื่อนามจากช่องนี้
-    workbook['บันทึกรายเที่ยว']['F3'] = company.name
+    workbook['บันทึกรายเที่ยว']['F3'] = payer_name
     # ยังไม่หัก oil ตามนาม : เขียน 0 ทับสูตรหัก oil ของสรุปจ่ายรถร่วม ชีต oil ยังติดไว้ให้ดู
     pay_sheet = workbook['สรุปจ่ายรถร่วม']
     for row in range(EXPORT_DOC_PAY_FIRST_ROW, EXPORT_DOC_PAY_LAST_ROW + 1):
@@ -17140,7 +17186,7 @@ def exportExcelPayerDocument(request):
     _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
     response = HttpResponse(
         content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    filename = 'trip_report_%s_%s_นาม%s%s.xlsx' % (active, selected_month, company.name,
+    filename = 'trip_report_%s_%s_นาม%s%s.xlsx' % (active, selected_month, payer_name,
                                                   credit_part.replace(' ', ''))
     response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
     return _exportDocumentMarkDownloadDone(request, response)

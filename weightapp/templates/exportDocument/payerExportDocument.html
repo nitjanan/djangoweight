@@ -363,6 +363,30 @@
         </div>
         {% endwith %}
         {% endif %}{% endfor %}
+        {% with a=plan.all_payers %}{% if a.show %}
+        {% with ok=plan.can_export|yesno:"1," %}
+        <div class="border border-success rounded p-2 mb-2">
+          <div class="fw-bold mb-1">
+            รวมทุกนาม
+            <span class="fw-normal text-muted">({{ a.tons|floatformat:3|intcomma }} / เป้า {{ a.target|floatformat:3|intcomma }} ตัน · {{ a.names|join:", " }})</span>
+            {% if not a.complete %}<span class="small payer-short ms-2">ยังมีนามที่ไม่ครบเป้า</span>{% endif %}
+          </div>
+          <div class="small text-muted mb-1">ไฟล์เดียวของทุกแถวที่แบ่งให้นามแล้ว (ไม่รวมค้าง stock) · ทีมที่แบ่งให้หลายนามรวมเป็นก้อนเดียว</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for g in a.credit_groups %}
+            <a class="btn btn-sm {% if ok and a.complete %}btn-outline-success{% else %}btn-outline-secondary disabled{% endif %}"
+               href="{% url 'exportExcelPayerDocument' %}?month={{ selected_month }}&amp;company={{ plan.all_payers_param }}&amp;credit={{ g.param }}">
+              <i class="fa-solid fa-file-excel"></i> {{ g.label }} ({{ g.tons|floatformat:3|intcomma }} ตัน)
+            </a>
+            {% endfor %}
+            <a class="btn btn-sm {% if ok and a.complete %}btn-success{% else %}btn-outline-secondary disabled{% endif %}"
+               href="{% url 'exportExcelPayerDocument' %}?month={{ selected_month }}&amp;company={{ plan.all_payers_param }}">
+              <i class="fa-solid fa-file-excel"></i> รวมทุกนาม ({{ a.tons|floatformat:3|intcomma }} ตัน)
+            </a>
+          </div>
+        </div>
+        {% endwith %}
+        {% endif %}{% endwith %}
       </div>
     </div>
     {% endif %}

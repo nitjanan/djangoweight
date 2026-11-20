@@ -364,6 +364,33 @@ class PayerAllocationTests(TestCase):
         self.assertAlmostEqual(cells['30'][2], 21.5 / 41.5)
         self.assertEqual(wb['บันทึกรายเที่ยว']['F3'].value, 'ครีเอทีฟ')
 
+    def test_all_payers_file_joins_every_payer(self):
+        """รวมทุกนาม : ทุกแถวที่แบ่งให้นามแล้ว · แถวที่แบ่ง 2 นามจนครบ = ทั้งแถว · ค้าง stock ไม่อยู่"""
+        self.allocate()
+        plan = self.plan()
+        a = plan['all_payers']
+        self.assertEqual((a['show'], a['complete'], a['tons'], a['names']),
+                         (True, True, Decimal('85.760'), ['ศิลาชัย', 'ครีเอทีฟ']))
+        self.assertEqual(sum(g['tons'] for g in a['credit_groups']), Decimal('85.760'))
+        self.assertIn('company=all', self.page().content.decode('utf-8'))
+        response = self.client.get('/exportDocument/payer/excel/', {'month': '2026-08', 'company': 'all'})
+        self.assertIn(quote('นามรวมทุกนาม'), response['Content-Disposition'])
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        self.assertEqual(wb['บันทึกรายเที่ยว']['F3'].value, 'รวมทุกนาม')
+        cells = self.trip_cells(wb)
+        self.assertEqual(set(cells), {'10', '30'})
+        self.assertIsNone(cells['10'][2])
+        self.assertIsNone(cells['30'][2])          # 20 + 21.5 = ครบแถว 41.5
+
+    def test_all_payers_file_needs_every_payer_complete(self):
+        self.save(modes={(OWN_PORT, STONE_2): self.mine},
+                  targets={(self.mine, STONE_2): '44.26', (self.creative, STONE_6): '29.5'})
+        a = self.plan()['all_payers']
+        self.assertEqual((a['show'], a['complete']), (True, False))
+        response = self.client.get('/exportDocument/payer/excel/', {'month': '2026-08', 'company': 'all'})
+        self.assertIn('ครีเอทีฟ', response.content.decode('utf-8'))
+        self.assertIn('แบ่งไม่ครบเป้า', response.content.decode('utf-8'))
+
     def test_payer_without_rows_has_no_file(self):
         self.allocate()
         response = self.download(BaseCompany.objects.get(code='STPS'))
@@ -386,11 +413,15 @@ class PayerAllocationTests(TestCase):
             views._exportDocumentRows(Weight.objects.filter(weight_id__in=[10, 30, 31])
                                       .select_related('bws', 'bws__company')))
         allocs = list(ExportDocumentPayerRowAllocation.objects.filter(month=MONTH))
-        mine = views._exportDocumentPayerShares(plan_rows, allocs, self.mine.id)
-        creative = views._exportDocumentPayerShares(plan_rows, allocs, self.creative.id)
+        mine = views._exportDocumentPayerShares(plan_rows, allocs, {self.mine.id})
+        creative = views._exportDocumentPayerShares(plan_rows, allocs, {self.creative.id})
         split_key = next(k for k, v in creative.items())
         self.assertAlmostEqual(float(mine[split_key] + creative[split_key]), 1.0)
         self.assertEqual(len([v for v in mine.values() if v is None]), 1)   # แถวท่าเรือเรา ทั้งแถว
+        # รวมทุกนาม : แถวที่แบ่ง 2 นามจนครบแถว = ทั้งแถว
+        both = views._exportDocumentPayerShares(plan_rows, allocs, {self.mine.id, self.creative.id})
+        self.assertIsNone(both[split_key])
+        self.assertEqual(set(both), set(mine) | set(creative))
 
     def test_credit_from_contract_groups_and_files(self):
         """เครดิตของทีม = เงื่อนไขการชำระเงินในสัญญาของเส้นทางนั้น (แถวทุกทีม team = None ใช้กับทีมที่ไม่มีแถวของตัวเอง)

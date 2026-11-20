@@ -12602,6 +12602,8 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
         _mineSummaryText(worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL),
                          r.get('fuel_branch') or None)
 
+    _exportDocumentRateSheetSortFilter(worksheet, rate_rows)
+
     # ตารางน้ำมันเฉลี่ยของเดือน : 1 แถว = ทีม x สาขาที่ไปเติม ตัวเลขชุดเดียวกับ sheet oil
     team_fuel = _exportDocumentTeamFuel(fuel_lines, trip_teams)
     table = sorted((team, branch[0], branch[1], branch[2])
@@ -12616,6 +12618,29 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
         worksheet.cell(row=row, column=col + 1).value = branch
         worksheet.cell(row=row, column=col + 2).value = float(litre)
         worksheet.cell(row=row, column=col + 3).value = float(amount)
+
+
+# ปุ่มกรอง / เรียงของชีตคำนวณค่าขนส่ง (A-R) : เรียงได้เพราะสูตรไม่ผูกตำแหน่งแถวแบบตายตัว
+#   AB ของบันทึกรายเที่ยว = MATCH คีย์ K ใน K5:K204 · P/Q/R นับเที่ยวที่ AB = ROW()-4 : ย้ายแถวแล้วคิดใหม่ตามตำแหน่งใหม่
+# เงื่อนไข (ลองใน Excel กับไฟล์ของนาม ต.ค. 69 แล้ว ยอดเท่าเดิมทุกคอลัมน์ที่เรียง)
+#   - แถวหลังข้อมูลต้องว่างจริง : ถ้ายังมีสูตร K / N-R ค้าง (ได้ "") Excel ขยายช่วงกรองลงไปถึงแถว 204 เอง
+#     เรียงมากไปน้อยแล้วแถวสูตรว่างขึ้นไปบนสุด ข้อมูลไปกองท้ายตาราง -> ล้างสูตรแถวที่ไม่ใช้ออก
+#   - แถวต้องอยู่ในช่วงสูตร (<= 200 แถว) : แถวที่ล้นไม่มีสูตร เรียงแล้วแถวที่มีสูตรหลุดออกนอก K5:K204 ยอดเปลี่ยน
+#   - คีย์ไม่ซ้ำ : MATCH หยิบแถวแรก คีย์ซ้ำ (ทีมเดียวมี 2 สัญญา) เรียงแล้วแถวที่ได้เที่ยวสลับกัน ยอดเปลี่ยน
+#   ไม่ครบเงื่อนไข = ไม่ใส่ปุ่ม คงแถวสูตรไว้เหมือนเดิม
+EXPORT_DOC_RATE_FORMULA_COLS = (11, 14, 15, 16, 17, 18)   # K คีย์ / N ราคาน้ำมัน / O อัตรา / P เที่ยว / Q ตัน / R เงิน
+
+
+def _exportDocumentRateSheetSortFilter(worksheet, rate_rows):
+    keys = [_exportDocumentRateRowSortKey(r) for r in rate_rows]
+    if not keys or len(keys) > EXPORT_DOC_RATE_MAX_ROWS or len(set(keys)) != len(keys):
+        return False
+    last = EXPORT_DOC_RATE_FIRST_ROW + len(keys) - 1
+    for row in range(last + 1, EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+        for col in EXPORT_DOC_RATE_FORMULA_COLS:
+            worksheet.cell(row=row, column=col).value = None
+    worksheet.auto_filter.ref = 'A%d:R%d' % (EXPORT_DOC_RATE_FIRST_ROW - 1, last)
+    return True
 
 
 # v26 ชีต "ราคาน้ำมันเฉลี่ย" (โครงทำใน Excel จริง ระบบเขียนข้อมูล / หัวกลุ่ม / สูตรของแถวทีม)
@@ -16421,8 +16446,7 @@ def _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats, fuel
 #   ไม่ใส่ : สรุปจ่ายรถร่วม / ปะหน้า (สูตรคิดจากตำแหน่งแถว) · สรุปหน้าเหมือง / อัตราค่าขนส่ง (หัวข้อซ้อน เรียงแล้วทีมหลุดจากหัวข้อ)
 #           รายการมาตรฐาน (สูตรกลุ่มจ่ายหยิบรายการแรกของคอลัมน์ G เป็นค่าเริ่มต้น เรียงแล้วกลุ่มสลับ)
 #           oil (แถวรวมติดใต้ตาราง Excel ขยายช่วงกรองไปรวมแถวรวมเอง เรียงแล้วแถวรวมหลุด ลองใน Excel แล้ว)
-#           คำนวณค่าขนส่ง (Excel ขยายช่วงกรองลงไปถึงแถว 369 เอง เรียงแล้วชุดราคาหลุดจากช่วง K5:K204
-#             ค่าขนส่งรวม ต.ค. 69 เปลี่ยนจาก 8,274,690.63 เป็น 3,142,027.58 ลองใน Excel แล้ว)
+#   คำนวณค่าขนส่ง ใส่เองตอนเขียนชีต (_exportDocumentRateSheetSortFilter) เฉพาะเมื่อเรียงแล้วยอดไม่เปลี่ยน
 # (ชีต, แถวหัวตาราง, คอลัมน์สุดท้าย, แถวสุดท้าย หรือ None = ถึงแถวสุดท้ายที่มีข้อมูล)
 EXPORT_DOC_SORT_FILTERS = (
     (EXPORT_DOC_EXPRESS_SHEET, 4, 'I', None),

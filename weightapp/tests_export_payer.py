@@ -303,9 +303,28 @@ class PayerAllocationTests(TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(self.download(self.mine).content))
         self.assertTrue(wb[views.EXPORT_DOC_EXPRESS_SHEET].auto_filter.ref.startswith('A4:I'))
         self.assertEqual(wb['บันทึกรายเที่ยว'].auto_filter.ref, 'A5:M10005')
-        for name in ('สรุปจ่ายรถร่วม', 'ปะหน้าจ่ายรถร่วม', 'สรุปหน้าเหมือง', 'รายการมาตรฐาน', 'oil',
-                     views.EXPORT_DOC_RATE_SHEET):
+        for name in ('สรุปจ่ายรถร่วม', 'ปะหน้าจ่ายรถร่วม', 'สรุปหน้าเหมือง', 'รายการมาตรฐาน', 'oil'):
             self.assertIsNone(wb[name].auto_filter.ref, name)
+        # คำนวณค่าขนส่ง : ชุดข้อมูลนี้ไม่มีชุดราคา (สัญญาไม่มีแถวทีม) -> ไม่มีปุ่ม สูตรคงเดิม
+        # กรณีมีชุดราคาดู test_rate_sheet_sort_filter_needs_unique_rows_in_formula_range
+        calc = wb[views.EXPORT_DOC_RATE_SHEET]
+        self.assertIsNone(calc.auto_filter.ref)
+        self.assertTrue(str(calc['R204'].value).startswith('='))
+
+    def test_rate_sheet_sort_filter_needs_unique_rows_in_formula_range(self):
+        """คีย์ซ้ำ / แถวเกินช่วงสูตร = เรียงแล้วยอดเปลี่ยน : ไม่ใส่ปุ่ม คงสูตรไว้"""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws['R204'] = '=1'
+        row = {'team': 'ทีม A', 'origin': 'ต้นทาง', 'destination': 'ปลายทาง', 'weight_carried': '0-35', 'stone': STONE_2}
+        self.assertFalse(views._exportDocumentRateSheetSortFilter(ws, [row, dict(row)]))
+        many = [dict(row, team='ทีม %03d' % i) for i in range(views.EXPORT_DOC_RATE_MAX_ROWS + 1)]
+        self.assertFalse(views._exportDocumentRateSheetSortFilter(ws, many))
+        self.assertIsNone(ws.auto_filter.ref)
+        self.assertEqual(ws['R204'].value, '=1')
+        self.assertTrue(views._exportDocumentRateSheetSortFilter(ws, many[:3]))
+        self.assertEqual(ws.auto_filter.ref, 'A4:R7')
+        self.assertIsNone(ws['R204'].value)
 
     def test_payer_file_keeps_real_weights(self):
         self.allocate()

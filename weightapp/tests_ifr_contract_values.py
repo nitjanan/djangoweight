@@ -336,7 +336,10 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
     def test_key_formula_is_not_overwritten(self):
         ws = self.writeSheet([self.rateRow()])[views.EXPORT_DOC_RATE_SHEET]
         self.assertTrue(ws['K5'].value.startswith('=IF(OR($A5="",$B5="",$C5="",$D5="",$E5="")'))
-        self.assertTrue(ws['K204'].value.startswith('=IF(OR($A204="",'))
+        # แถวหลังชุดราคาสุดท้ายล้างสูตรออก ให้ปุ่มเรียง (A4:R5) ไม่ถูก Excel ขยายลงไป
+        self.assertEqual(ws.auto_filter.ref, 'A4:R5')
+        self.assertIsNone(ws['K6'].value)
+        self.assertIsNone(ws['K204'].value)
 
     def test_missing_contract_values_get_a_note(self):
         """ใบเก่าที่ไม่มีค่าสัญญา : เว้นว่าง (ไม่ใช่ 0) และบอกเหตุผลไว้ในช่องหมายเหตุ"""

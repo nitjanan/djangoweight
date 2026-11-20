@@ -16419,14 +16419,29 @@ def _exportDocumentPayerTeamRows(rows):
                 'product_label': _mineSummaryProduct(r),
                 'credit': r.get('credit'), 'credit_label': _exportDocumentCreditLabel(r.get('credit')),
                 'credit_param': _exportDocumentCreditParam(r.get('credit')),
+                'origin_map_id': None,
                 'trips': 0, 'tons': Decimal('0'),
             }
+        if item['origin_map_id'] is None:
+            item['origin_map_id'] = r.get('origin_map_id')
         item['trips'] += 1
         if r.get('pay_weight') is not None:
             item['tons'] += Decimal(r['pay_weight'])
     # ในหินกลุ่มเดียวกัน ทีมเครดิตน้อยขึ้นก่อน (บัญชีจ่ายก่อน) ไม่ระบุไว้ล่างสุด แล้วค่อยเรียงชื่อทีม
     return [by_fields[f] for f in sorted(
         by_fields, key=lambda f: f[:4] + (_exportDocumentCreditSort(by_fields[f]['credit']), f[4]))]
+
+
+def _exportDocumentPayerOriginCompanies(team_rows):
+    """บริษัทเจ้าของต้นทางของแถวทีม (origin_company_id) จากแถว map ของต้นทาง แบบเดียวกับกติการาคาน้ำมัน
+    ต้นทางที่ไม่ใช่บริษัทเรา = None · ปุ่มแบ่งอัตโนมัติให้นามได้แถวจากต้นทางของตัวเองก่อน"""
+    map_ids = {item['origin_map_id'] for item in team_rows if item.get('origin_map_id')}
+    company_by_map = dict(BaseCompanyMapBaseCustomer.objects
+                          .filter(id__in=map_ids)
+                          .values_list('id', 'base_company_id')) if map_ids else {}
+    for item in team_rows:
+        item['origin_company_id'] = company_by_map.get(item.get('origin_map_id'))
+    return team_rows
 
 
 def _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies):
@@ -16752,6 +16767,7 @@ def viewExportDocumentPayer(request):
     not_approved = 0
     if rows is not None:
         targets, row_allocs = _exportDocumentPayerLoad(selected_month)
+        _exportDocumentPayerOriginCompanies(team_rows)
         plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
         # ช่องวัน × ต้นทางที่หน้าเหมืองยังไม่อนุมัติ : เตือนว่ากำลังแบ่งจากข้อมูลที่อาจยังเปลี่ยน
         carry_rows = _exportDocumentRows(filters['carry_empty_qs'], filters['own_port_bws'],

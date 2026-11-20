@@ -151,6 +151,15 @@ class PayerAllocationTests(TestCase):
         self.assertNotIn('ร้อยเกาะ', names)
         self.assertTrue(plan['can_export'])
 
+    def test_team_rows_know_origin_company(self):
+        """ปุ่มแบ่งอัตโนมัติให้นามได้แถวจากต้นทางของตัวเองก่อน : แถวต้องรู้บริษัทเจ้าของต้นทาง
+        ทั้งเที่ยวที่ชั่งที่เหมือง (W1A) และที่ท่าเรือ (P1V) ต้นทาง = ศิลาชัยสุราษฎร์ ของบริษัทศิลาชัย"""
+        page = self.page()
+        rows = self.team_rows(page.context['plan'])
+        self.assertEqual({k: r['origin_company_id'] for k, r in rows.items()},
+                         {k: self.mine.id for k in rows})
+        self.assertEqual(page.content.decode('utf-8').count('data-origin-company="%d"' % self.mine.id), 3)
+
     def test_tab_not_in_user_profile_is_refused(self):
         """ปลอมแท็บร้อยเกาะใน session (setSessionCompany รับรหัสอะไรก็ได้) : ดู / บันทึก / ออกไฟล์ไม่ได้"""
         other = User.objects.create_user('mine2', 'b@t.com', 'pw12345!')

@@ -198,9 +198,11 @@
               <i class="fa-solid fa-eraser"></i> ล้างการแบ่งทั้งหมด
             </button>
             <span class="small text-muted">
-              เติมส่วนที่ยังขาดเป้าของทุกนาม จากแถวทีมที่ยังค้าง stock เรียงทีมเครดิตน้อยไปมาก (เงินสดก่อน ไม่ระบุเครดิตท้ายสุด) ·
+              เติมส่วนที่ยังขาดเป้าของทุกนาม จากแถวทีมที่ยังค้าง stock ·
+              รอบแรก แต่ละนามได้แถวจากต้นทางของบริษัทตัวเองก่อน (เช่น ศิลาชัย ได้เส้นทางที่ออกจากศิลาชัย) ·
+              ยังไม่ครบค่อยเติมจากต้นทางอื่น · ในแต่ละรอบเรียงทีมเครดิตน้อยไปมาก (เงินสดก่อน ไม่ระบุเครดิตท้ายสุด) ·
               นามทางซ้ายได้ก่อน · แถวใหญ่กว่าที่ขาดตัดให้พอดี ส่วนที่เหลือของแถวไปนามถัดไป ·
-              แถวที่เลือกไว้เองคงไว้ · ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง" (ไม่พอใจรีเฟรชหน้าได้)
+              แถวที่เลือกไว้แล้วคงไว้ ยกเว้นแถวต้นทางอื่นของนามที่ต้นทางตัวเองยังมีหินค้าง (คืนให้ แล้วใช้หินต้นทางตัวเองแทน) ·ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง" (ไม่พอใจรีเฟรชหน้าได้)
             </span>
             <div class="w-100 small d-none" id="payer-auto-result"></div>
           </div>
@@ -268,7 +270,7 @@
                 {% for r in p.rows %}
                 <tr class="payer-team{% if not r.mode %} is-stock{% endif %}" data-product="{{ p.index }}"
                     data-stone="{{ r.stone }}" data-tons="{{ r.tons }}" data-route="{{ g.label }}"
-                    data-credit="{{ r.credit_param }}">
+                    data-credit="{{ r.credit_param }}" data-origin-company="{{ r.origin_company_id|default_if_none:'' }}">
                   <td>
                     {{ r.team }}
                     <span class="badge {% if r.credit is None %}bg-light-secondary{% else %}bg-light-info{% endif %} ms-1 fw-normal">{{ r.credit_label }}</span>
@@ -610,10 +612,13 @@
 
     // แบ่งอัตโนมัติ : ต่อหิน ไล่แถวทีมที่ยังมีส่วนค้าง stock จากเครดิตน้อยไปมาก (เครดิตเท่ากันเรียงตามจอ)
     // เติมให้นามที่ติ๊กไว้และตั้งเป้าแล้ว จากซ้ายไปขวา จนครบเป้า · ไม่แตะแถว / ตันที่เลือกไว้แล้ว
+    // 2 รอบ : รอบแรกนามได้เฉพาะแถวที่ต้นทางเป็นบริษัทตัวเอง (data-origin-company) · รอบสองเติมจากแถวไหนก็ได้
+    // ก่อนรอบแรก : นามที่ได้แถวต้นทางอื่นไว้ ทั้งที่ต้นทางตัวเองยังค้าง stock -> คืนแถวต้นทางอื่นนั้นก่อน
     function autoAllocate() {
       const teamRows = [...form.querySelectorAll('tr.payer-team')];
       const result = [];
-      let changed = 0;
+      const notes = [];
+      const touchedRows = new Set();
       form.querySelectorAll('tr.payer-stone').forEach(function (stoneTr) {
         const stone = stoneTr.dataset.stone;
         const rows = teamRows.filter(function (r) { return r.dataset.stone === stone; });
@@ -627,26 +632,60 @@
           const name = document.querySelector('label[for="payer-' + id + '"]').textContent.trim();
           need.push({ id: id, name: name, left: round3(num(target.value) - got) });
         });
+
+        const ordered = rows.map(function (r, i) { return { row: r, i: i }; })
+          .sort(function (a, b) { return creditRank(a.row) - creditRank(b.row) || a.i - b.i; })
+          .map(function (item) { return item.row; });
+        const freeOf = function (row) {
+          const taken = takenOf(row);
+          const tons = parseFloat(row.getAttribute('data-tons')) || 0;
+          return round3(tons - Object.keys(taken).reduce(function (s, id) { return s + taken[id]; }, 0));
+        };
+        // ต้นทางตัวเองยังมีหินค้าง stock แต่นามไปได้แถวจากต้นทางอื่นไว้แล้ว (เลือกไว้ก่อน / กดอัตโนมัติรอบก่อน) :
+        // คืนแถวต้นทางอื่นของนามนั้นเท่าที่ต้นทางตัวเองรับแทนได้ (คืนจากแถวท้ายลำดับก่อน) แล้วค่อยเติมจากต้นทางตัวเอง
+        // ไม่ยุ่งแถวต้นทางตัวเองที่เลือกให้นามอื่นไว้
+        need.forEach(function (n) {
+          let ownFree = 0;
+          ordered.forEach(function (row) { if (row.dataset.originCompany === n.id) ownFree += Math.max(freeOf(row), 0); });
+          let release = round3(ownFree - Math.max(n.left, 0));
+          if (release < TON) return;
+          let moved = 0;
+          ordered.slice().reverse().forEach(function (row) {
+            if (release < TON || row.dataset.originCompany === n.id) return;
+            const taken = takenOf(row);
+            const back = round3(Math.min(taken[n.id] || 0, release));
+            if (back < TON) return;
+            taken[n.id] = round3(taken[n.id] - back);
+            setRow(row, taken);
+            touchedRows.add(row);
+            release = round3(release - back);
+            moved = round3(moved + back);
+          });
+          if (moved >= TON) {
+            n.left = round3(n.left + moved);
+            notes.push(n.name + ' · ' + (stone || '(ไม่ระบุชนิดหิน)') + ' คืนแถวจากต้นทางอื่น ' + fmt(moved) + ' ตัน มาใช้หินจากต้นทางตัวเองแทน');
+          }
+        });
         if (!need.some(function (n) { return n.left >= TON; })) return;
 
-        rows.map(function (r, i) { return { row: r, i: i }; })
-          .sort(function (a, b) { return creditRank(a.row) - creditRank(b.row) || a.i - b.i; })
-          .forEach(function (item) {
-            const row = item.row;
+        [true, false].forEach(function (ownOriginOnly) {
+          ordered.forEach(function (row) {
             const taken = takenOf(row);
             const tons = parseFloat(row.getAttribute('data-tons')) || 0;
             let free = round3(tons - Object.keys(taken).reduce(function (s, id) { return s + taken[id]; }, 0));
             let touched = false;
             need.forEach(function (n) {
               if (free < TON || n.left < TON) return;
+              if (ownOriginOnly && row.dataset.originCompany !== n.id) return;
               const give = round3(Math.min(free, n.left));
               taken[n.id] = round3((taken[n.id] || 0) + give);
               n.left = round3(n.left - give);
               free = round3(free - give);
               touched = true;
             });
-            if (touched) { setRow(row, taken); changed += 1; }
+            if (touched) { setRow(row, taken); touchedRows.add(row); }
           });
+        });
         need.forEach(function (n) {
           if (n.left >= TON) result.push(n.name + ' · ' + (stone || '(ไม่ระบุชนิดหิน)') + ' ยังขาด ' + fmt(n.left) + ' ตัน');
         });
@@ -654,6 +693,7 @@
       applyToggles();
       recalc();
       applyFilter();
+      const changed = touchedRows.size;
       const box = document.getElementById('payer-auto-result');
       box.classList.remove('d-none');
       // ข้อความประกอบจากชื่อบน label / ชื่อหิน : ใส่ด้วย textContent เท่านั้น
@@ -664,6 +704,12 @@
         ? 'แบ่งแล้ว ' + changed + ' แถวทีม : ตรวจดูแล้วกด "บันทึกการแบ่ง"'
         : 'ไม่มีอะไรให้แบ่งเพิ่ม (ครบเป้าแล้ว / ยังไม่ได้ตั้งเป้า / ไม่มีแถวค้าง stock)';
       box.appendChild(head);
+      notes.forEach(function (t) {
+        const d = document.createElement('div');
+        d.className = 'text-muted';
+        d.textContent = t;
+        box.appendChild(d);
+      });
       result.forEach(function (t) {
         const d = document.createElement('div');
         d.className = 'payer-short';

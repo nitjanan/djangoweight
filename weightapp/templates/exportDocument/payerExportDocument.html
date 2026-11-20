@@ -687,11 +687,35 @@
       box.addEventListener('change', function () { applyToggles(); recalc(); });
     });
     form.addEventListener('input', recalc);
+    // ลบเป้า (ว่าง / 0) ของนามที่ยังมีแถวเลือกไว้ : ถามแล้วคืนแถวของนามนั้นในหินนั้นเป็นค้าง stock
+    // ไม่งั้นบันทึกไม่ผ่าน (เลือกหินให้นามโดยไม่มีเป้าไม่ได้) และต้องไปไล่แก้ทีละแถวเอง
+    function onTargetCleared(inp) {
+      if (num(inp.value) > 0) return;
+      const id = inp.closest('td.payer-col').getAttribute('data-company');
+      const stone = inp.closest('tr.payer-stone').dataset.stone;
+      const rows = [...form.querySelectorAll('tr.payer-team')].filter(function (r) {
+        return r.dataset.stone === stone && (takenOf(r)[id] || 0) >= TON;
+      });
+      if (!rows.length) return;
+      const tons = rows.reduce(function (s, r) { return s + takenOf(r)[id]; }, 0);
+      const name = document.querySelector('label[for="payer-' + id + '"]').textContent.trim();
+      if (!confirm(name + ' · ' + stone + ' ไม่มีเป้าแล้ว\nคืนแถวที่เลือกให้ ' + name + ' ไว้ ' + rows.length +
+                   ' แถว (' + fmt(tons) + ' ตัน) เป็นค้าง stock เลยไหม ?\n(ยังไม่บันทึกจนกว่าจะกด "บันทึกการแบ่ง")')) return;
+      rows.forEach(function (r) {
+        const taken = takenOf(r);
+        delete taken[id];
+        setRow(r, taken);
+      });
+      applyToggles();
+      applyFilter();
+    }
+
     form.addEventListener('change', function (e) {
       if (e.target.classList.contains('payer-mode')) {
         onModeChange(e.target);
         applyToggles();
       }
+      if (e.target.classList.contains('payer-target')) onTargetCleared(e.target);
       recalc();
     });
     applyToggles();

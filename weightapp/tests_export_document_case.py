@@ -829,15 +829,18 @@ class ExportDocumentFuelPricePerTripTests(TestCase):
 
 
 class ExportDocumentMonthlyFuelPriceTests(TestCase):
-    """ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม = เงินรวม ÷ ลิตรรวม ของบิล Express
-    ใช้ของสาขาที่ตรงกับบริษัทต้นทาง ไม่ได้เติมที่นั่น = รวมทุกสาขาของทีม ไม่มีบิลเลย = ว่าง"""
+    """ราคาน้ำมันเฉลี่ยทั้งเดือน = เงินรวม ÷ ลิตรรวม ของบิล Express ยึดสาขาของบริษัทต้นทางเสมอ
+    ทีมเติมที่สาขานั้น = ราคาของทีม · ไม่ได้เติม = ราคาเฉลี่ยของสาขา (บิลทุกทีม) · ไม่มี "รวมทุกสาขา" แล้ว
+    สาขาไม่มีบิล / ต้นทางไม่ใช่บริษัทเรา = ไม่มีราคา (กรอกเองในไฟล์)"""
 
     @classmethod
     def setUpTestData(cls):
         cls.mine = BaseCompany.objects.create(name='เหมืองทดสอบ', code='TMIN')
         cls.other = BaseCompany.objects.create(name='สาขาอื่นทดสอบ', code='TOTH')
+        cls.kongtak = BaseCompany.objects.create(name='กงตากทดสอบ', code='TKTK')   # ไม่มีบิลเลย
         cls.origin = BaseCompanyMapBaseCustomer.objects.create(name='เหมือง', base_company=cls.mine)
         cls.origin_no_branch = BaseCompanyMapBaseCustomer.objects.create(name='เหมืองไม่มีปั๊ม')
+        cls.origin_no_bill = BaseCompanyMapBaseCustomer.objects.create(name='กงตาก', base_company=cls.kongtak)
 
     def lines(self):
         return [
@@ -869,23 +872,50 @@ class ExportDocumentMonthlyFuelPriceTests(TestCase):
         self.assertEqual((rates[0]['fuel_branch'], rates[0]['fuel_price']), ('ปั๊มเหมือง', Decimal('40.67')))
         self.assertFalse(trips[0]['fuel_missing'])
 
-    def test_other_origin_uses_all_branches_of_the_team(self):
-        trips = [self.trip(self.origin_no_branch)]
-        views._exportDocumentAssignMonthlyFuelPrice(trips, [self.rateRow(self.origin_no_branch)], self.lines())
-        # 10,000 ÷ 250 = 40.00
-        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']),
-                         (views.EXPORT_DOC_FUEL_ALL_BRANCHES, Decimal('40.00')))
+    def test_team_that_did_not_fill_there_uses_the_branch_average(self):
+        """ทีม B เติมแต่ที่สาขาอื่น / ทีม D ไม่มีบิลเลย : วิ่งจากเหมือง = ราคาเฉลี่ยของสาขาเหมือง (บิลทุกทีม)
+        ไม่ใช่รวมทุกสาขาของทีมแบบเดิม"""
+        lines = self.lines() + [
+            {'team': 'ทีม C', 'branch': 'ปั๊มเหมือง', 'company_id': self.mine.id,
+             'litre': Decimal('50'), 'amount': Decimal('1900')},
+            {'team': 'ทีม B', 'branch': 'ปั๊มอื่น', 'company_id': self.other.id,
+             'litre': Decimal('100'), 'amount': Decimal('3000')},
+        ]
+        trips = [self.trip(self.origin, team='ทีม B'), self.trip(self.origin, team='ทีม D')]
+        rates = [self.rateRow(self.origin, team='ทีม B'), self.rateRow(self.origin, team='ทีม D')]
+        summary = views._exportDocumentAssignMonthlyFuelPrice(trips, rates, lines)
+        # สาขาเหมือง ทีม A 6,100 / 150 ลิตร + ทีม C 1,900 / 50 ลิตร = 8,000 ÷ 200 = 40.00
+        for r in trips + rates:
+            self.assertEqual((r['fuel_branch'], r['fuel_price'], r['fuel_source']),
+                             ('ปั๊มเหมือง', Decimal('40.00'), views.EXPORT_DOC_FUEL_SOURCE_BRANCH))
+        self.assertFalse(any(t['fuel_missing'] for t in trips))
+        self.assertEqual(summary['trips'], 0)
+        self.assertIn('ใช้ราคาเฉลี่ยของสาขา', views._exportDocumentFuelNote(rates[0]))
 
-    def test_team_without_bills_is_flagged_only_when_contract_needs_fuel(self):
-        trips = [self.trip(self.origin, team='ทีม B'), self.trip(self.origin, team='ทีม B'),
-                 self.trip(self.origin, team='ทีม C')]
-        rates = [self.rateRow(self.origin, team='ทีม B'),
-                 self.rateRow(self.origin, team='ทีม C', contract_base_fuel_price=None)]
+    def test_origin_outside_our_companies_has_no_price(self):
+        """ต้นทางไม่ใช่บริษัทเรา : ไม่ใช้ราคาทีมรวมทุกสาขาแล้ว ไม่มีราคา ให้กรอกเองในไฟล์ (ชื่อต้นทางเป็นแถว)"""
+        trips = [self.trip(self.origin_no_branch)]
+        rates = [self.rateRow(self.origin_no_branch)]
         summary = views._exportDocumentAssignMonthlyFuelPrice(trips, rates, self.lines())
-        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']), ('', None))
+        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']), ('เหมืองไม่มีปั๊ม', None))
         self.assertTrue(trips[0]['fuel_missing'])
+        self.assertEqual(summary['branches'], [{'branch': 'เหมืองไม่มีปั๊ม', 'trips': 1}])
+
+    def test_branch_without_bills_is_flagged_only_when_contract_needs_fuel(self):
+        """สาขาไม่มีบิลเลย (กงตาก) : ไม่มีราคา ชื่อสาขา = ชื่อบริษัท ให้มีแถวกรอกราคาในไฟล์"""
+        trips = [self.trip(self.origin_no_bill, team='ทีม A'), self.trip(self.origin_no_bill, team='ทีม B'),
+                 self.trip(self.origin_no_bill, team='ทีม C')]
+        rates = [self.rateRow(self.origin_no_bill, team='ทีม A'), self.rateRow(self.origin_no_bill, team='ทีม B'),
+                 self.rateRow(self.origin_no_bill, team='ทีม C', contract_base_fuel_price=None)]
+        summary = views._exportDocumentAssignMonthlyFuelPrice(trips, rates, self.lines())
+        self.assertEqual((trips[0]['fuel_branch'], trips[0]['fuel_price']), ('กงตากทดสอบ', None))
+        self.assertTrue(trips[0]['fuel_missing'])           # ทีม A มีบิลที่อื่น ก็ไม่เอามาใช้แล้ว
         self.assertFalse(trips[2]['fuel_missing'])          # สัญญาไม่ปรับตามน้ำมัน
-        self.assertEqual(summary, {'trips': 2, 'teams': [{'team': 'ทีม B', 'trips': 2}]})
+        self.assertEqual(summary, {'trips': 2,
+                                   'teams': [{'team': 'ทีม A', 'trips': 1}, {'team': 'ทีม B', 'trips': 1}],
+                                   'branches': [{'branch': 'กงตากทดสอบ', 'trips': 2}]})
+        self.assertIn('กรอกราคาเอง', views._exportDocumentFuelNote(rates[0]))
+        self.assertIsNone(views._exportDocumentFuelNote(rates[2]))
 
     def test_rate_matches_contract_formula(self):
         """ราคาเฉลี่ย 40.67 เทียบน้ำมันฐาน 30 ปรับ 1 บาท/ตัน = 100 + 10.67"""

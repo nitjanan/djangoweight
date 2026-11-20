@@ -11700,11 +11700,14 @@ def _exportDocumentAssignFuelPrice(trip_rows, rate_rows):
 
 # ---------- ราคาน้ำมันเฉลี่ยรายเดือนของทีม (หน้า /exportDocument/ และไฟล์ export) ----------
 # ราคา = เงินรวม ÷ ลิตรรวม ของบิลเติมน้ำมันจริงใน Express (ชุดเดียวกับ sheet oil / express)
-# แยกตามทีม และสาขาที่ไปเติม เที่ยวใช้ราคาของสาขาที่ตรงกับบริษัทต้นทางของเที่ยว
-# ทีมไม่ได้เติมที่สาขานั้นแต่มีบิลที่สาขาอื่น = ใช้ราคาเฉลี่ยรวมทุกสาขาของทีมนั้น
-# ไม่มีบิลเลย = ไม่มีราคา (สัญญาที่ปรับตามน้ำมัน อัตราจะว่าง)
+# ยึดสาขาของบริษัทต้นทางของเที่ยวเสมอ (ไปวิ่งที่ไหนใช้ราคาที่นั่น ไม่มีราคา "รวมทุกสาขา")
+#   1) ทีมมีบิลที่สาขานั้น = ราคาเฉลี่ยของทีมที่สาขานั้น
+#   2) ทีมไม่ได้เติมที่สาขานั้น = ราคาเฉลี่ยของสาขานั้น (บิลทุกทีมที่เติมที่สาขานั้นในเดือนนั้น)
+#   3) สาขาไม่มีบิลเลย (เช่น กงตาก) / ต้นทางไม่ใช่บริษัทเรา = ไม่มีราคา ผู้ใช้กรอกเองในไฟล์
+#      (ชีต ราคาน้ำมันเฉลี่ย ช่องกรอกเอง) ส่วนใหญ่ต้นทางนอกบริษัทรวมค่าขนส่งในราคาหินแล้ว
 # หน้ารายงานค่าขนส่ง (_freightReportTrips) ยังใช้ราคารายวัน _exportDocumentAssignFuelPrice อยู่
-EXPORT_DOC_FUEL_ALL_BRANCHES = 'รวมทุกสาขา'
+EXPORT_DOC_FUEL_SOURCE_TEAM = 'team'       # ราคาของทีมเองที่สาขาต้นทาง
+EXPORT_DOC_FUEL_SOURCE_BRANCH = 'branch'   # ทีมไม่ได้เติมที่นั่น ใช้ราคาเฉลี่ยของสาขา
 
 
 def _exportDocumentFuelAverage(litre, amount):
@@ -11722,51 +11725,80 @@ def _exportDocumentTeamFuel(lines, teams=None):
 
     teams = ชุดชื่อทีมที่ต้องการ (None = ทุกทีม)
     คืน {ทีม: {'by_company': {id บริษัท: [ชื่อสาขา, ลิตร, เงิน]}, 'litre': ลิตรรวม, 'amount': เงินรวม}}
+    ชื่อสาขาคิดจากบิลทุกบรรทัดเสมอ (ไม่กรองทีม) จะได้ตรงกับช่อง M ของแถวอัตราที่คิดจากบิลทั้งหมด
     """
-    names = defaultdict(set)
+    labels = _exportDocumentFuelBranchLabels(lines)
     team_fuel = {}
     for ln in lines or []:
         if teams is not None and ln['team'] not in teams:
             continue
         fuel = team_fuel.setdefault(ln['team'], {'by_company': {}, 'litre': Decimal(0), 'amount': Decimal(0)})
-        branch = fuel['by_company'].setdefault(ln['company_id'], [None, Decimal(0), Decimal(0)])
+        branch = fuel['by_company'].setdefault(ln['company_id'], [labels[ln['company_id']], Decimal(0), Decimal(0)])
         branch[1] += ln['litre']
         branch[2] += ln['amount']
         fuel['litre'] += ln['litre']
         fuel['amount'] += ln['amount']
-        names[ln['company_id']].add(ln['branch'])
-    for fuel in team_fuel.values():
-        for company_id, branch in fuel['by_company'].items():
-            branch[0] = ' / '.join(sorted(names[company_id]))
     return team_fuel
 
 
-def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
-    """ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม ใส่ให้ทั้งแถวเที่ยวและแถวอัตรา (fuel_price, fuel_branch)
+def _exportDocumentFuelBranchLabels(lines):
+    """ชื่อสาขาของบริษัท = ชื่อสาขาในบิลต่อกันด้วย ' / ' (บริษัทเดียวมีหลายแถว map ที่กรอกโค้ดขายเชื่อไว้)"""
+    names = defaultdict(set)
+    for ln in lines or []:
+        names[ln['company_id']].add(ln['branch'])
+    return {company_id: ' / '.join(sorted(n)) for company_id, n in names.items()}
 
-    fuel_branch = ชื่อสาขาที่ใช้ราคา / 'รวมทุกสาขา' / '' (ทีมไม่มีบิลเดือนนี้)
-    ชีตคำนวณค่าขนส่งใช้ fuel_branch ของแถวอัตราเป็นช่อง M แล้วสูตร N หาราคาจากตารางน้ำมันในชีตเดียวกัน
+
+def _exportDocumentBranchFuel(lines):
+    """ยอดบิลของแต่ละสาขา รวมทุกทีม (ราคาเฉลี่ยของสาขา ใช้กับทีมที่ไม่ได้เติมที่นั่น)
+    คืน {id บริษัท: [ชื่อสาขา, ลิตร, เงิน]}"""
+    labels = _exportDocumentFuelBranchLabels(lines)
+    branches = {}
+    for ln in lines or []:
+        branch = branches.setdefault(ln['company_id'], [labels[ln['company_id']], Decimal(0), Decimal(0)])
+        branch[1] += ln['litre']
+        branch[2] += ln['amount']
+    return branches
+
+
+def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
+    """ราคาน้ำมันเฉลี่ยทั้งเดือน ยึดสาขาของบริษัทต้นทาง ใส่ให้ทั้งแถวเที่ยวและแถวอัตรา
+    (fuel_price, fuel_branch, fuel_source) กติกาอยู่ที่หัวหมวดนี้
+
+    fuel_branch = ชื่อสาขาของต้นทาง (ต้นทางไม่ใช่บริษัทเรา = ชื่อต้นทาง) มีค่าเสมอเมื่อรู้ต้นทาง
+    ชีตคำนวณค่าขนส่งใช้เป็นช่อง M : สูตร N หาราคาของทีมที่สาขานี้ (ตาราง T-W) ผ่านชีต ราคาน้ำมันเฉลี่ย ไม่มี = ราคาของสาขา
+    fuel_source = 'team' / 'branch' / None (ไม่มีราคา ต้องกรอกเองในไฟล์)
 
     เที่ยวที่ "ต้องใช้" ราคา คือเที่ยวที่มีแถวอัตรา และสัญญามีเงื่อนไขน้ำมันครบ (ค่าสัญญา + น้ำมันฐาน + ปรับ)
-    เที่ยวแบบนี้ที่ไม่มีราคา ติดธง fuel_missing (อัตราในไฟล์จะว่าง)
+    เที่ยวแบบนี้ที่ไม่มีราคา ติดธง fuel_missing (อัตราในไฟล์จะว่างจนกว่าจะกรอกราคาของสาขา)
 
-    คืน {'trips': จำนวนเที่ยวที่ขาดราคา, 'teams': [{team, trips}]} เรียงตามจำนวนเที่ยว
+    คืน {'trips': จำนวนเที่ยวที่ขาดราคา, 'teams': [{team, trips}], 'branches': [{branch, trips}]}
+    เรียงตามจำนวนเที่ยว
     """
     team_fuel = _exportDocumentTeamFuel(lines)
+    branch_fuel = _exportDocumentBranchFuel(lines)
     map_ids = {r.get('origin_map_id') for r in list(trip_rows) + list(rate_rows) if r.get('origin_map_id')}
     company_by_map = dict(BaseCompanyMapBaseCustomer.objects
                           .filter(id__in=map_ids)
                           .values_list('id', 'base_company_id')) if map_ids else {}
+    # สาขาที่ไม่มีบิลเลย (เช่น กงตาก) ไม่มีชื่อจากบิล ใช้ชื่อบริษัทแทน จะได้มีแถวในชีต ราคาน้ำมันเฉลี่ย ให้กรอกราคา
+    no_bill = {cid for cid in company_by_map.values() if cid and cid not in branch_fuel}
+    company_names = dict(BaseCompany.objects.filter(id__in=no_bill).values_list('id', 'name')) if no_bill else {}
 
-    def pick(team, origin_map_id):
-        fuel = team_fuel.get(team)
-        if not fuel or not fuel['litre']:
-            return '', None
+    def pick(team, origin_map_id, origin):
         company_id = company_by_map.get(origin_map_id)
-        branch = fuel['by_company'].get(company_id) if company_id else None
+        if not company_id:
+            # ต้นทางไม่ใช่บริษัทเรา : ไม่มีสาขาให้ยึด ใช้ชื่อต้นทางเป็นแถวให้กรอกราคาเอง
+            return origin or '', None, None
+        branch = branch_fuel.get(company_id)
+        label = branch[0] if branch else company_names.get(company_id, '')
+        fuel = team_fuel.get(team)
+        mine = fuel['by_company'].get(company_id) if fuel else None
+        if mine and mine[1]:
+            return label, _exportDocumentFuelAverage(mine[1], mine[2]), EXPORT_DOC_FUEL_SOURCE_TEAM
         if branch and branch[1]:
-            return branch[0], _exportDocumentFuelAverage(branch[1], branch[2])
-        return EXPORT_DOC_FUEL_ALL_BRANCHES, _exportDocumentFuelAverage(fuel['litre'], fuel['amount'])
+            return label, _exportDocumentFuelAverage(branch[1], branch[2]), EXPORT_DOC_FUEL_SOURCE_BRANCH
+        return label, None, None
 
     needs_fuel = {
         (r['team'], r['origin'], r['destination'], r['weight_carried'], r['stone']):
@@ -11775,19 +11807,25 @@ def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
         for r in rate_rows}
 
     for r in rate_rows:
-        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+        r['fuel_branch'], r['fuel_price'], r['fuel_source'] = pick(r['team'], r.get('origin_map_id'), r['origin'])
+        r['fuel_needed'] = needs_fuel.get(
+            (r['team'], r['origin'], r['destination'], r['weight_carried'], r['stone']), False)
 
     missing = defaultdict(int)
+    missing_branch = defaultdict(int)
     for r in trip_rows:
-        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+        r['fuel_branch'], r['fuel_price'], r['fuel_source'] = pick(r['team'], r.get('origin_map_id'), r['origin'])
         key = (r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
         r['fuel_missing'] = r['fuel_price'] is None and needs_fuel.get(key, False)
         if r['fuel_missing']:
             missing[r['team']] += 1
+            missing_branch[r['fuel_branch'] or r['origin'] or '-'] += 1
 
     teams = [{'team': team, 'trips': n}
              for team, n in sorted(missing.items(), key=lambda x: (-x[1], x[0]))]
-    return {'trips': sum(missing.values()), 'teams': teams}
+    branches = [{'branch': branch, 'trips': n}
+                for branch, n in sorted(missing_branch.items(), key=lambda x: (-x[1], x[0]))]
+    return {'trips': sum(missing.values()), 'teams': teams, 'branches': branches}
 
 
 def _exportDocumentTripRate(trip, rate_row):
@@ -12507,6 +12545,8 @@ EXPORT_DOC_RATE_NOTE_COL = 12
 EXPORT_DOC_RATE_FUEL_BRANCH_COL = 13   # M
 EXPORT_DOC_FUEL_TABLE_FIRST_COL = 20   # T ทีม / U สาขา / V ลิตร / W เงิน
 EXPORT_DOC_FUEL_TABLE_MAX_ROWS = 200   # แถว 5-204 ตามช่วงที่สูตร N อ้างถึง
+# v26 : N = ราคาที่ใช้ของ (ทีม, สาขา M) จากชีต ราคาน้ำมันเฉลี่ย (ดู _exportDocumentWriteFuelSheet)
+#   ตาราง T-W ยังอยู่ เป็นข้อมูลดิบให้คอลัมน์ "ราคาจากบิล" ของชีตนั้นอ่าน
 
 
 def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lines=None, trip_teams=None):
@@ -12555,9 +12595,12 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
             worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
         # ใบเก่าที่ไม่มีค่าสัญญา : G ว่าง = อัตรา 0 ทุกเที่ยว / H ว่าง = ไม่ปรับตามน้ำมัน (สูตร O ในชีตคำนวณค่าขนส่ง)
         # ห้ามเขียนข้อความลงช่องตัวเลข สูตรรายเที่ยวอ่านช่องพวกนี้ จะพังทั้งคอลัมน์
-        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = _exportDocumentContractNote(r)
-        # สาขาที่ใช้ราคาน้ำมัน : สูตร N หาเงิน/ลิตรของ (ทีม, สาขานี้) จากตาราง Q-T
-        worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL).value = r.get('fuel_branch') or None
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = (
+            _exportDocumentContractNote(r) or _exportDocumentFuelNote(r))
+        # สาขาต้นทาง : สูตร N หาราคาที่ใช้ของ (ทีม, สาขานี้) จากชีต ราคาน้ำมันเฉลี่ย
+        # ชื่อมาจากข้อมูล (ชื่อสาขา / ชื่อต้นทาง) : กันขึ้นต้นด้วย = แล้วกลายเป็นสูตร
+        _mineSummaryText(worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL),
+                         r.get('fuel_branch') or None)
 
     # ตารางน้ำมันเฉลี่ยของเดือน : 1 แถว = ทีม x สาขาที่ไปเติม ตัวเลขชุดเดียวกับ sheet oil
     team_fuel = _exportDocumentTeamFuel(fuel_lines, trip_teams)
@@ -12573,6 +12616,197 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
         worksheet.cell(row=row, column=col + 1).value = branch
         worksheet.cell(row=row, column=col + 2).value = float(litre)
         worksheet.cell(row=row, column=col + 3).value = float(amount)
+
+
+# v26 ชีต "ราคาน้ำมันเฉลี่ย" (โครงทำใน Excel จริง ระบบเขียนข้อมูล / หัวกลุ่ม / สูตรของแถวทีม)
+#   ส่วนบน แถว 6-25 ราคาของสาขาต้นทาง : B สาขา / C ลิตรรวม / D เงินรวม (ระบบ บิลทุกทีม)
+#     E เฉลี่ยจากบิล / F กรอกเอง / G ราคาที่ใช้ เป็นของ template
+#   ส่วนล่าง แถว 30-229 : A ลำดับ / B ทีม / กลุ่มละ 5 คอลัมน์ต่อสาขา เริ่ม C
+#     เที่ยว / ตันที่แบก / ราคาจากบิล (สูตร อ่านตาราง T-W ของชีตคำนวณ) / กรอกเอง / ราคาที่ใช้ (สูตร)
+#   แถว 4 (ซ่อน) = ชื่อสาขาเหนือคอลัมน์ "ราคาที่ใช้" : N ของชีตคำนวณหา (ทีม, สาขา) ด้วย MATCH แถวนี้
+EXPORT_DOC_FUEL_SHEET = 'ราคาน้ำมันเฉลี่ย'
+EXPORT_DOC_FUEL_KEY_ROW = 4
+EXPORT_DOC_FUEL_BRANCH_FIRST_ROW = 6
+EXPORT_DOC_FUEL_BRANCH_MAX_ROWS = 20
+EXPORT_DOC_FUEL_HEAD_ROW = 28
+EXPORT_DOC_FUEL_TEAM_FIRST_ROW = 30
+EXPORT_DOC_FUEL_TEAM_MAX_ROWS = 200      # แถว 30-229 ตามช่วงที่ N อ้าง
+EXPORT_DOC_FUEL_GROUP_FIRST_COL = 3      # C
+EXPORT_DOC_FUEL_GROUP_WIDTH = 5
+EXPORT_DOC_FUEL_MAX_GROUPS = 15          # ถึง BW (N อ้างถึง BZ)
+EXPORT_DOC_FUEL_SPARE_ROWS = 10          # แถวเปล่าที่มีกรอบ / ช่องเหลือง ต่อท้ายทีมสุดท้าย ให้บัญชีเพิ่มทีมเอง
+EXPORT_DOC_FUEL_TEAM_LIST_COL = 82       # CD (ซ่อน) รายชื่อทีมของ dropdown คอลัมน์ B · นอกช่วง A:BZ ที่ N อ้าง
+# v27 : N ของชีตคำนวณ = ราคาที่ใช้ของ (ทีม, สาขา) · ไม่มีแถวทีม / ช่องว่าง = ราคาของสาขา (ส่วนบน G) · ไม่มีอีก = ว่าง
+#   (เดิมช่องว่างถูก Excel อ่านเป็น 0 อัตราลดผิดแบบเงียบ)
+
+
+def _exportDocumentWriteFuelSheet(workbook, trip_rows, fuel_lines, rate_stats=None):
+    """ชีต ราคาน้ำมันเฉลี่ย : สรุปราคาน้ำมันที่ใช้คิดค่าขนส่ง แยกสาขาต้นทาง และแต่ละทีม (กรอกเองได้ทั้งสองส่วน)
+
+    ทีม x สาขา = ทีมที่มีเที่ยวออกจากสาขานั้นในไฟล์นี้ · เที่ยว / ตันที่แบก = ส่วนที่นามนี้จ่าย (ไฟล์นาม)
+    ราคาที่ใช้ของทีม = กรอกเอง > ราคาจากบิลของทีมที่สาขานั้น > ราคาที่ใช้ของสาขา (ส่วนบน)
+    ส่วนบนใช้บิลทุกทีม (ไม่กรองเฉพาะทีมในไฟล์) ไฟล์ของนามจะได้ราคาสาขาเท่ากับไฟล์รวม
+    """
+    from openpyxl.formatting.rule import FormulaRule
+
+    if EXPORT_DOC_FUEL_SHEET not in workbook.sheetnames:
+        return
+    ws = workbook[EXPORT_DOC_FUEL_SHEET]
+    calc = "'%s'!" % EXPORT_DOC_RATE_SHEET
+
+    usage = {}
+    for r in trip_rows:
+        label = r.get('fuel_branch')
+        if not label:
+            continue
+        share = r.get('payer_share')
+        share = Decimal(1) if share is None else Decimal(share)
+        u = usage.setdefault((r['team'], label), [Decimal(0), Decimal(0)])
+        u[0] += share
+        u[1] += (r.get('pay_weight') or Decimal(0)) * share
+    labels = sorted({label for _, label in usage}, key=_mineSummaryThaiSortKey)
+    teams = sorted({team for team, _ in usage}, key=_mineSummaryThaiSortKey)
+    if rate_stats is not None:
+        rate_stats['fuel_sheet_truncated'] = (max(0, len(labels) - EXPORT_DOC_FUEL_MAX_GROUPS) +
+                                              max(0, len(teams) - EXPORT_DOC_FUEL_TEAM_MAX_ROWS))
+
+    # ---- ส่วนบน : ราคาของสาขาต้นทาง ----
+    branch_totals = {label: (litre, amount) for label, litre, amount in _exportDocumentBranchFuel(fuel_lines).values()}
+    for i, label in enumerate(labels[:EXPORT_DOC_FUEL_BRANCH_MAX_ROWS]):
+        row = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW + i
+        _mineSummaryText(ws.cell(row=row, column=2), label)
+        litre, amount = branch_totals.get(label, (None, None))
+        if litre:
+            ws.cell(row=row, column=3).value = float(litre)
+            ws.cell(row=row, column=4).value = float(amount)
+
+    # ---- ส่วนล่าง : หัวกลุ่มต่อสาขา ----
+    thin = Side(style='thin')
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    head_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+    head_font = Font(bold=True, color='FFFFFF', size=14)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    input_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+    subheads = ('เที่ยว', 'ตันที่แบก', 'ราคาจากบิล\n(ทีม)', 'กรอกเอง', 'ราคาที่ใช้')
+    groups = labels[:EXPORT_DOC_FUEL_MAX_GROUPS]
+    first = EXPORT_DOC_FUEL_TEAM_FIRST_ROW
+    team_rows = teams[:EXPORT_DOC_FUEL_TEAM_MAX_ROWS]
+    # แถวเปล่าต่อท้ายให้บัญชีเพิ่มทีมเอง (มีกรอบ / ช่องเหลือง / อยู่ในพื้นที่พิมพ์) · สูตรใส่ไว้ทุกแถวถึงแถว 229
+    last = first + min(max(len(team_rows), 1) + EXPORT_DOC_FUEL_SPARE_ROWS, EXPORT_DOC_FUEL_TEAM_MAX_ROWS) - 1
+    formula_last = first + EXPORT_DOC_FUEL_TEAM_MAX_ROWS - 1
+    for g, label in enumerate(groups):
+        col = EXPORT_DOC_FUEL_GROUP_FIRST_COL + g * EXPORT_DOC_FUEL_GROUP_WIDTH
+        price_col = col + EXPORT_DOC_FUEL_GROUP_WIDTH - 1
+        _mineSummaryText(ws.cell(row=EXPORT_DOC_FUEL_KEY_ROW, column=price_col), label)
+        ws.merge_cells(start_row=EXPORT_DOC_FUEL_HEAD_ROW, start_column=col,
+                       end_row=EXPORT_DOC_FUEL_HEAD_ROW, end_column=price_col)
+        _mineSummaryText(ws.cell(row=EXPORT_DOC_FUEL_HEAD_ROW, column=col), label)
+        for i in range(EXPORT_DOC_FUEL_GROUP_WIDTH):
+            for row, text in ((EXPORT_DOC_FUEL_HEAD_ROW, None), (EXPORT_DOC_FUEL_HEAD_ROW + 1, subheads[i])):
+                cell = ws.cell(row=row, column=col + i)
+                if text:
+                    cell.value = text
+                cell.fill, cell.font, cell.alignment, cell.border = head_fill, head_font, center, box
+            # C-G ใช้ร่วมกับตารางสาขาส่วนบน (ลิตรรวมหลักแสน) ต้องกว้างพอทั้งสองตาราง
+            width = (8, 12, 12, 11, 12)[i]
+            ws.column_dimensions[get_column_letter(col + i)].width = max(width, 15) if col + i <= 7 else width
+        # ราคาที่ใช้ : เอียง = ใช้ราคาของสาขา (ทีมไม่ได้เติมเอง และไม่ได้กรอก) · แดง = มีเที่ยวแต่ยังไม่มีราคา
+        cnt, bill, inp, used = (get_column_letter(col + k) for k in (0, 2, 3, 4))
+        ref = '%s%d:%s%d' % (used, first, used, formula_last)
+        ws.conditional_formatting.add(ref, FormulaRule(
+            formula=['AND(N($%s%d)>0,$%s%d="")' % (cnt, first, used, first)],
+            fill=PatternFill(bgColor='FFC7CE'), stopIfTrue=True))
+        ws.conditional_formatting.add(ref, FormulaRule(
+            formula=['AND($%s%d="",N($%s%d)=0,$%s%d<>"")' % (bill, first, inp, first, used, first)],
+            font=Font(italic=True, color='1F4E79')))
+    ws.row_dimensions[EXPORT_DOC_FUEL_HEAD_ROW + 1].height = 40
+
+    # ---- ส่วนล่าง : แถวทีม ----
+    # ทุกแถว x ทุกสาขามีสูตร (ว่างถ้า B ว่าง) : ทีมที่ไม่ได้วิ่งสาขานั้น / ทีมที่บัญชีพิมพ์เพิ่มเอง กรอกราคาได้เหมือนกัน
+    # ราคาที่ใช้ของช่องที่ไม่มีบิลและไม่ได้กรอก = ราคาของสาขา (ส่วนบน) แบบเดียวกับที่ N ของชีตคำนวณใช้
+    branch_first = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW
+    branch_last = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW + EXPORT_DOC_FUEL_BRANCH_MAX_ROWS - 1
+    for i in range(EXPORT_DOC_FUEL_TEAM_MAX_ROWS):
+        row = first + i
+        team = team_rows[i] if i < len(team_rows) else None
+        framed = row <= last
+        if team is not None:
+            ws.cell(row=row, column=1).value = i + 1
+            _mineSummaryText(ws.cell(row=row, column=2), team)
+        if framed:
+            for c in (1, 2):
+                ws.cell(row=row, column=c).border = box
+        for g, label in enumerate(groups):
+            col = EXPORT_DOC_FUEL_GROUP_FIRST_COL + g * EXPORT_DOC_FUEL_GROUP_WIDTH
+            cnt_col, ton_col, bill_col, in_col, used_col = range(col, col + EXPORT_DOC_FUEL_GROUP_WIDTH)
+            key = '%s$%d' % (get_column_letter(used_col), EXPORT_DOC_FUEL_KEY_ROW)
+            bill, inp = get_column_letter(bill_col), get_column_letter(in_col)
+            team_sum = '%s$%%s$5:$%%s$204,%s$T$5:$T$204,$B%d,%s$U$5:$U$204,%s' % (calc, calc, row, calc, key)
+            ws.cell(row=row, column=bill_col).value = (
+                '=IF($B%d="","",IFERROR(ROUND(SUMIFS(%s)/SUMIFS(%s),2),""))'
+                % (row, team_sum % ('W', 'W'), team_sum % ('V', 'V')))
+            ws.cell(row=row, column=used_col).value = (
+                '=IF($B%d="","",IF(N(%s%d)>0,ROUND(%s%d,2),IF(%s%d<>"",%s%d,'
+                'IFERROR(INDEX($G$%d:$G$%d,MATCH(%s,$B$%d:$B$%d,0)),""))))'
+                % (row, inp, row, inp, row, bill, row, bill, row,
+                   branch_first, branch_last, key, branch_first, branch_last))
+            for c in (bill_col, in_col, used_col):
+                ws.cell(row=row, column=c).number_format = '#,##0.00'
+            ws.cell(row=row, column=used_col).font = Font(bold=True, size=14)
+            if not framed:
+                continue
+            for c in range(col, col + EXPORT_DOC_FUEL_GROUP_WIDTH):
+                ws.cell(row=row, column=c).border = box
+            ws.cell(row=row, column=in_col).fill = input_fill
+            ws.cell(row=row, column=cnt_col).number_format = '#,##0'
+            ws.cell(row=row, column=ton_col).number_format = '#,##0.00'
+            u = usage.get((team, label)) if team is not None else None
+            if u:
+                ws.cell(row=row, column=cnt_col).value = float(round(u[0], 2))
+                ws.cell(row=row, column=ton_col).value = float(round(u[1], 3))
+
+    _exportDocumentFuelTeamDropdown(workbook, ws, team_rows)
+
+    last_col = get_column_letter(max(EXPORT_DOC_FUEL_GROUP_FIRST_COL + len(groups) * EXPORT_DOC_FUEL_GROUP_WIDTH - 1, 7))
+    # ตรึงแค่คอลัมน์ลำดับ / ทีม : ส่วนบน + หัวตารางสูงเกือบ 30 แถว ถ้าตรึงแถวด้วยจะเต็มจอจนเลื่อนลงไปดูทีมไม่ได้
+    ws.freeze_panes = 'C1'
+    ws.print_area = 'A1:%s%d' % (last_col, last)
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _exportDocumentFuelTeamDropdown(workbook, ws, team_rows):
+    """dropdown ชื่อทีมในคอลัมน์ B ของแถวทีม (30-229) : บัญชีเลือกทีมที่จะเพิ่ม แทนพิมพ์เอง
+    รายการ = ทีมในชีตคำนวณค่าขนส่ง (ชื่อต้องตรงกับคอลัมน์ A ของชีตนั้น N ถึงจะหาเจอ) + ทีมในชีตนี้ ไม่ซ้ำ เรียงแบบพจนานุกรม
+    เก็บในคอลัมน์ซ่อน (นอกช่วง A:BZ ที่ N อ้าง) · ไม่ใช้รายการมาตรฐาน : ชื่อทีมในนั้นสะกดไม่ตรงกับชีตคำนวณ
+    ทีมที่ไม่อยู่ในรายการ (บัญชีเพิ่มชุดราคาเองในชีตคำนวณ) ยังพิมพ์ได้ แค่ขึ้นเตือน"""
+    names = set(team_rows)
+    if EXPORT_DOC_RATE_SHEET in workbook.sheetnames:
+        calc = workbook[EXPORT_DOC_RATE_SHEET]
+        for row in range(EXPORT_DOC_RATE_FIRST_ROW, EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+            value = calc.cell(row=row, column=1).value
+            if isinstance(value, str) and value.strip():
+                names.add(value)
+    names = sorted(names, key=_mineSummaryThaiSortKey)
+    if not names:
+        return
+    first = EXPORT_DOC_FUEL_TEAM_FIRST_ROW
+    col = EXPORT_DOC_FUEL_TEAM_LIST_COL
+    for i, name in enumerate(names):
+        _mineSummaryText(ws.cell(row=first + i, column=col), name)
+    letter = get_column_letter(col)
+    ws.column_dimensions[letter].hidden = True
+    dv = DataValidation(type='list', formula1='$%s$%d:$%s$%d' % (letter, first, letter, first + len(names) - 1),
+                        allow_blank=True, errorStyle='warning', showErrorMessage=True,
+                        errorTitle='ทีมไม่อยู่ในรายการ',
+                        error='ชื่อทีมต้องตรงกับชีต %s ถึงจะหาราคาเจอ ควรเลือกจาก dropdown' % EXPORT_DOC_RATE_SHEET,
+                        showInputMessage=True, promptTitle='เลือกทีม',
+                        prompt='เลือกทีมจาก dropdown แล้วกรอกราคาในช่องกรอกเองของสาขา')
+    ws.add_data_validation(dv)
+    dv.add('B%d:B%d' % (first, first + EXPORT_DOC_FUEL_TEAM_MAX_ROWS - 1))
 
 
 def _exportDocumentWriteRateViewSheet(workbook, trip_rows, selected_month):
@@ -12603,6 +12837,17 @@ def _exportDocumentWriteRateViewSheet(workbook, trip_rows, selected_month):
     previous_rates, previous_labels, _ = _ifrExportPreviousRates(rates)
     _ifrExportWriteTable(worksheet, rates, _baseCompanyMapDisplayNameById(),
                          _ifrExportLayout(rates), previous_rates, previous_labels)
+
+
+def _exportDocumentFuelNote(rate_row):
+    """หมายเหตุที่มาของราคาน้ำมัน (เฉพาะแถวที่สัญญาปรับตามน้ำมัน) : บอกว่าทีมไม่ได้เติมเอง / ต้องกรอกราคา"""
+    if not rate_row.get('fuel_needed'):
+        return None
+    if rate_row.get('fuel_source') == EXPORT_DOC_FUEL_SOURCE_BRANCH:
+        return 'ทีมไม่ได้เติมน้ำมันที่สาขานี้ ใช้ราคาเฉลี่ยของสาขา (ชีต %s)' % EXPORT_DOC_FUEL_SHEET
+    if rate_row.get('fuel_price') is None:
+        return 'สาขาต้นทางไม่มีบิลเติมน้ำมันเดือนนี้ กรอกราคาเองที่ชีต %s' % EXPORT_DOC_FUEL_SHEET
+    return None
 
 
 def _exportDocumentContractNote(rate_row):
@@ -13797,7 +14042,7 @@ EXPORT_DOC_PROBLEM_FILTERS = {
     'no_team': ('ตอนชั่งไม่ได้เลือกทีมรถ', lambda r: r.get('team_missing')),
     'no_dest_weight': ('ยังไม่ได้กรอก นน.ปลายทาง', lambda r: r.get('dest_weight') is None),
     'no_origin_weight': ('ยังไม่มี นน.ต้นทาง', lambda r: r.get('origin_weight') is None),
-    'no_fuel': ('ทีมไม่มีบิลเติมน้ำมันเดือนนี้ (อัตราว่าง)', lambda r: r.get('fuel_missing')),
+    'no_fuel': ('สาขาต้นทางไม่มีบิลเติมน้ำมัน (ต้องกรอกราคาเองในไฟล์)', lambda r: r.get('fuel_missing')),
     # ส่วนอนุมัติรายวัน : ขาดอย่างใดอย่างหนึ่งที่ทำให้กดอนุมัติวันนั้นไม่ได้ (ดู _exportDocumentApprovalReasons)
     'approval': ('เที่ยวที่ยังอนุมัติไม่ได้ (ข้อมูลไม่ครบ)',
                  lambda r: bool(_exportDocumentApprovalReasons(r))),
@@ -16145,6 +16390,7 @@ def _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats, fuel
     _exportDocumentReplaceMineSheet(workbook, rows, selected_month)
     trip_teams = {r['team'] for r in rows}
     _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats, fuel_lines, trip_teams)
+    _exportDocumentWriteFuelSheet(workbook, rows, fuel_lines, rate_stats)
     _exportDocumentWriteRateViewSheet(workbook, rows, selected_month)
 
     # บิลน้ำมันจาก Express ชุดเดียวกับราคาเฉลี่ย : sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)

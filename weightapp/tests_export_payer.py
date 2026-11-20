@@ -330,7 +330,8 @@ class PayerAllocationTests(TestCase):
         self.assertIn('บันทึกรายเที่ยว!$AE$6:$AE$10005', pay['AR5'].value)
         calc = wb['คำนวณค่าขนส่ง']
         self.assertIn('บันทึกรายเที่ยว!$AF$6:$AF$10005', calc['R5'].value)
-        self.assertEqual(calc.max_column, views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4)
+        self.assertFalse([c.coordinate for row in calc.iter_rows(min_col=views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 5)
+                          for c in row if c.value is not None])   # ไม่มีอะไรต่อท้ายตารางน้ำมัน X
         self.assertIn('oil', wb.sheetnames)
         self.assertEqual(pay.cell(row=views.EXPORT_DOC_PAY_FIRST_ROW, column=views.EXPORT_DOC_PAY_OIL_COL).value, 0)
         self.assertEqual(pay.cell(row=views.EXPORT_DOC_PAY_LAST_ROW, column=views.EXPORT_DOC_PAY_OIL_COL).value, 0)

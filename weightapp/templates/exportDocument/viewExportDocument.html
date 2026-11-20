@@ -607,26 +607,27 @@
         {% endif %}
 
         {% comment %}
-          ราคาน้ำมันเฉลี่ยของทีม (เงินรวม ÷ ลิตรรวม จากบิล Express ทั้งเดือน) : สัญญาปรับตามน้ำมัน
-          แต่ทีมไม่มีบิลเติมน้ำมันเลยในเดือนนี้ อัตราของเที่ยวในไฟล์จะว่าง
-          จนกว่าจะกรอกลิตร/เงินของทีมนั้นในตารางน้ำมัน (ชีตคำนวณค่าขนส่ง Q-T) หรือพิมพ์สาขาในช่อง M
+          ราคาน้ำมันเฉลี่ยยึดสาขาต้นทาง (เงินรวม ÷ ลิตรรวม จากบิล Express ทั้งเดือน) :
+          ทีมเติมที่สาขานั้น = ราคาของทีม · ไม่ได้เติม = ราคาเฉลี่ยของสาขา (บิลทุกทีม)
+          สาขาไม่มีบิลเลย (เช่น กงตาก) / ต้นทางไม่ใช่บริษัทเรา = ไม่มีราคา อัตราของเที่ยวในไฟล์จะว่าง
+          จนกว่าจะกรอกราคาของสาขาในชีต ราคาน้ำมันเฉลี่ย (ช่องกรอกเอง)
           อยู่นอกแถบ "คิดเงินได้ครบ / ไม่ครบ" เพราะแถบนั้นดูแค่สัญญากับช่วงน้ำหนัก
         {% endcomment %}
         {% if rate_stats.fuel_missing.trips %}
         <div class="ifr-issue ifr-issue-bad mb-3">
           <div class="ifr-issue-num">{{ rate_stats.fuel_missing.trips|intcomma }} เที่ยว</div>
           <div class="ifr-issue-body">
-            <div class="ifr-issue-title">ทีมไม่มีบิลเติมน้ำมันใน Express เดือนนี้ — เที่ยวเหล่านี้ยังคิดค่าขนส่งไม่ได้</div>
+            <div class="ifr-issue-title">สาขาต้นทางไม่มีบิลเติมน้ำมันใน Express เดือนนี้ — ต้องกรอกราคาน้ำมันเองในไฟล์</div>
             <div class="ifr-issue-text">
-              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่ทีมไม่มีบิลเติมน้ำมันเลย จึงไม่มีราคาน้ำมันเฉลี่ย
-              ในไฟล์ช่องอัตรา (O) จะว่างเป็นสีเหลือง<br />
-              <strong>ต้องทำ:</strong> เช็กรหัสลูกค้าน้ำมันของทีม (oil_customer_id) ว่าตรงกับใน Express
-              หรือกรอกลิตร/เงินของทีมนั้นเองในชีตคำนวณค่าขนส่ง (ตาราง Q-T)
+              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่ต้นทางไม่มีราคาน้ำมันของสาขา
+              (สาขาไม่มีบิลเลย หรือต้นทางไม่ใช่บริษัทเรา) ในไฟล์ช่องอัตรา (O) จะว่าง<br />
+              <strong>ต้องทำ:</strong> กรอกราคาน้ำมันของสาขาในชีต <strong>ราคาน้ำมันเฉลี่ย</strong> ช่องสีเหลือง (ทั้งสาขา หรือรายทีม)
+              อัตราทุกเที่ยวของสาขานั้นจะคิดให้เอง
               <ul class="ifr-missing-list">
-                {% for t in rate_stats.fuel_missing.teams %}
+                {% for b in rate_stats.fuel_missing.branches %}
                 <li>
-                  <span class="fw-semibold">{{ t.team }}</span>
-                  <span class="text-muted small">— {{ t.trips|intcomma }} เที่ยว</span>
+                  <span class="fw-semibold">{{ b.branch }}</span>
+                  <span class="text-muted small">— {{ b.trips|intcomma }} เที่ยว</span>
                 </li>
                 {% endfor %}
               </ul>
@@ -974,9 +975,11 @@
                 <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
-                {# ราคาเฉลี่ยทั้งเดือนของทีม ที่สาขาของบริษัทต้นทาง (ไม่ได้เติมที่นั่น = รวมทุกสาขา) · แดง = สัญญาปรับตามน้ำมันแต่ทีมไม่มีบิล #}
+                {# ราคาเฉลี่ยทั้งเดือนที่สาขาต้นทาง : ของทีม / ทีมไม่ได้เติม = เฉลี่ยของสาขา (ตัวเอียง) · แดง = สาขาไม่มีบิล ต้องกรอกเองในไฟล์ #}
                 {% if r.fuel_missing %}
-                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่ทีมนี้ไม่มีบิลเติมน้ำมันใน Express เดือนนี้">ไม่มีราคา</td>
+                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่สาขาต้นทาง {{ r.fuel_branch }} ไม่มีบิลเติมน้ำมันเดือนนี้ กรอกราคาเองในไฟล์">ไม่มีราคา</td>
+                {% elif r.fuel_source == 'branch' %}
+                <td class="trip-num fst-italic" title="ทีมไม่ได้เติมที่ {{ r.fuel_branch }} ใช้ราคาเฉลี่ยของสาขา">{{ r.fuel_price|floatformat:2|default:"" }}</td>
                 {% else %}
                 <td class="trip-num" title="{{ r.fuel_branch }}">{{ r.fuel_price|floatformat:2|default:"" }}</td>
                 {% endif %}

@@ -394,7 +394,9 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertEqual([header(c) for c in (16, 17, 18)],
                          ['เที่ยว (ทั้งเดือน)', 'นน.จ่ายค่าบรรทุก (ตัน ทั้งเดือน)', 'ค่าขนส่งทั้งเดือน (บาท)'])
         self.assertEqual(header(views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4), 'ราคาน้ำมันเฉลี่ย (บาท/ลิตร)')
-        self.assertEqual(ws.max_column, views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 4)   # ไม่มีตารางรายเที่ยวต่อท้ายแล้ว
+        # ไม่มีอะไรต่อท้ายตารางน้ำมัน X แล้ว (v26 ตาราง Z-AE ย้ายไปชีต ราคาน้ำมันเฉลี่ย)
+        self.assertFalse([c.coordinate for row in ws.iter_rows(min_col=views.EXPORT_DOC_FUEL_TABLE_FIRST_COL + 5)
+                          for c in row if c.value is not None])
 
     def test_trip_rate_formula_reads_the_calc_sheet(self):
         """ค่าขนส่งต่อชุดราคาทั้งเดือน : R = อัตรา O x นน.จ่ายรวมของเที่ยวที่ตรงชุดราคานั้น (บันทึกรายเที่ยว AB = ลำดับชุดราคา)
@@ -411,8 +413,24 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertEqual(trip['AE6'].value, '=IF($A6="","",IF($AD6="",1,N($AD6)))')
         self.assertIn('MATCH($V6,คำนวณค่าขนส่ง!$K$5:$K$204,0)', trip['AB6'].value)
         self.assertEqual(trip['O12'].value, '=COUNTIF($AC$6:$AC$10005,"*|-")')   # เที่ยวที่ยังไม่มีราคาน้ำมัน
-        self.assertIn('$M5="%s"' % views.EXPORT_DOC_FUEL_ALL_BRANCHES, calc['N5'].value)
-        self.assertIn('SUMIFS($W$5:$W$204,$T$5:$T$204,$A5,$U$5:$U$204,$M5)', calc['N5'].value)
+        # v26 : N = ราคาที่ใช้ของ (ทีม, สาขา M) จากชีต ราคาน้ำมันเฉลี่ย · ไม่มี "รวมทุกสาขา" แล้ว
+        self.assertNotIn('รวมทุกสาขา', calc['N5'].value)
+        self.assertIn('INDEX(ราคาน้ำมันเฉลี่ย!$A$30:$BZ$229,MATCH($A5,ราคาน้ำมันเฉลี่ย!$B$30:$B$229,0),'
+                      'MATCH($M5,ราคาน้ำมันเฉลี่ย!$A$4:$BZ$4,0))', calc['N5'].value)
+        # v27 : ช่องว่าง (Excel อ่านเป็น 0) / ไม่มีแถวทีม -> ราคาของสาขาส่วนบน · ไม่มีอีก = ว่าง
+        self.assertEqual(calc['N5'].value,
+                         '=IF(OR($A5="",$M5=""),"",IFERROR(ROUND(1/(1/INDEX(ราคาน้ำมันเฉลี่ย!$A$30:$BZ$229,'
+                         'MATCH($A5,ราคาน้ำมันเฉลี่ย!$B$30:$B$229,0),MATCH($M5,ราคาน้ำมันเฉลี่ย!$A$4:$BZ$4,0))),2),'
+                         'IFERROR(ROUND(1/(1/INDEX(ราคาน้ำมันเฉลี่ย!$G$6:$G$25,'
+                         'MATCH($M5,ราคาน้ำมันเฉลี่ย!$B$6:$B$25,0))),2),"")))')
+        self.assertTrue(calc['N204'].value.startswith('=IF(OR($A204="",$M204=""),"",IFERROR(ROUND(1/(1/'))
+        self.assertIsNone(calc['AE5'].value)                   # ตาราง Z-AE ของ v25 ย้ายไปชีตใหม่แล้ว
+        fuel = workbook[views.EXPORT_DOC_FUEL_SHEET]
+        self.assertEqual(workbook.sheetnames.index(views.EXPORT_DOC_FUEL_SHEET),
+                         workbook.sheetnames.index(views.EXPORT_DOC_RATE_SHEET) + 1)
+        self.assertEqual(fuel['E6'].value, '=IF(OR($B6="",N($C6)=0),"",ROUND($D6/$C6,2))')
+        self.assertEqual(fuel['G25'].value, '=IF($B25="","",IF(N($F25)>0,ROUND($F25,2),$E25))')
+        self.assertTrue(fuel.row_dimensions[4].hidden)
         self.assertIn('IF($N5="","",', calc['O5'].value)      # ไม่มีราคาน้ำมัน = อัตราว่าง
         self.assertNotIn('วิธีกรอก', workbook.sheetnames)
 
@@ -431,6 +449,68 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertEqual([ws['%s5' % c].value for c in 'TUVW'], ['ทีมทดสอบ', 'ศิลาชัย', 150.0, 6100.0])
         self.assertIsNone(ws['T6'].value)
         self.assertTrue(ws['N5'].value.startswith('=IF(OR($A5="",$M5="")'))   # สูตรยังอยู่
+
+    def test_fuel_sheet_lists_branches_and_teams(self):
+        """ชีต ราคาน้ำมันเฉลี่ย : ส่วนบน = สาขาต้นทางที่มีเที่ยว (บิลทุกทีม รวมทีมที่ไม่อยู่ในไฟล์ / ไม่มีบิล = ว่างให้กรอก)
+        ส่วนล่าง = ทีม x กลุ่มสาขา เที่ยว / ตันที่แบก / ราคาจากบิล / กรอกเอง / ราคาที่ใช้"""
+        lines = [
+            {'team': 'ทีมทดสอบ', 'branch': 'ศิลาชัย', 'company_id': 1, 'litre': Decimal('150'), 'amount': Decimal('6100')},
+            {'team': 'ทีมอื่น', 'branch': 'ศิลาชัย', 'company_id': 1, 'litre': Decimal('10'), 'amount': Decimal('400')},
+        ]
+        trips = [{'team': 'ทีมทดสอบ', 'fuel_branch': 'ศิลาชัย', 'pay_weight': Decimal('30.5')},
+                 {'team': 'ทีมทดสอบ', 'fuel_branch': 'ศิลาชัย', 'pay_weight': Decimal('20'), 'payer_share': Decimal('0.5')},
+                 {'team': 'ทีม ข', 'fuel_branch': 'กงตาก', 'pay_weight': Decimal('40')}]
+        workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+        views._exportDocumentWriteFuelSheet(workbook, trips, lines)
+        ws = workbook[views.EXPORT_DOC_FUEL_SHEET]
+        # ส่วนบน เรียงแบบพจนานุกรม : กงตาก (ไม่มีบิล) / ศิลาชัย (160 ลิตร 6,500 บาท)
+        self.assertEqual([[ws.cell(r, c).value for c in (2, 3, 4, 6)] for r in (6, 7)],
+                         [['กงตาก', None, None, None], ['ศิลาชัย', 160.0, 6500.0, None]])
+        # กลุ่ม C-G = กงตาก / H-L = ศิลาชัย · แถว 4 = คีย์สาขาเหนือคอลัมน์ราคาที่ใช้
+        self.assertEqual((ws['C28'].value, ws['H28'].value, ws['G4'].value, ws['L4'].value),
+                         ('กงตาก', 'ศิลาชัย', 'กงตาก', 'ศิลาชัย'))
+        self.assertEqual((ws['B30'].value, ws['B31'].value), ('ทีม ข', 'ทีมทดสอบ'))
+        self.assertEqual((ws['C30'].value, ws['D30'].value, ws['H30'].value), (1.0, 40.0, None))
+        self.assertEqual((ws['H31'].value, ws['I31'].value), (1.5, 40.5))      # ครึ่งเที่ยวที่นามนี้จ่าย
+        self.assertIn("SUMIFS('คำนวณค่าขนส่ง'!$W$5:$W$204,'คำนวณค่าขนส่ง'!$T$5:$T$204,$B31,"
+                      "'คำนวณค่าขนส่ง'!$U$5:$U$204,L$4)", ws['J31'].value)
+        self.assertEqual(ws['L31'].value,
+                         '=IF($B31="","",IF(N(K31)>0,ROUND(K31,2),IF(J31<>"",J31,'
+                         'IFERROR(INDEX($G$6:$G$25,MATCH(L$4,$B$6:$B$25,0)),""))))')
+        self.assertEqual(ws['K31'].fill.start_color.rgb[-6:], 'FFF2CC')   # ช่องกรอกเอง
+        # ทีมทดสอบไม่ได้วิ่งกงตาก : ไม่มีเที่ยว แต่มีสูตร / ช่องกรอก (กรอกเองได้)
+        self.assertIsNone(ws['C31'].value)
+        self.assertTrue(ws['G31'].value.startswith('=IF($B31="","",'))
+        self.assertEqual(ws['F31'].fill.start_color.rgb[-6:], 'FFF2CC')
+        # เพิ่มทีมเองได้ : แถวเปล่าต่อท้ายมีกรอบ + ช่องเหลือง (10 แถว ถึงแถว 41) · สูตรมีถึงแถว 229 · พิมพ์ถึงแถว 41
+        self.assertIsNone(ws['B32'].value)
+        self.assertTrue(ws['L32'].value.startswith('=IF($B32="","",'))
+        self.assertEqual(ws['K41'].fill.start_color.rgb[-6:], 'FFF2CC')
+        self.assertNotEqual(ws['K42'].fill.start_color.rgb[-6:], 'FFF2CC')
+        self.assertTrue(ws['L229'].value.startswith('=IF($B229="","",'))
+        self.assertEqual(ws.print_area, ['$A$1:$L$41'])
+
+    def test_fuel_sheet_team_dropdown_lists_calc_teams(self):
+        """เพิ่มทีมเองด้วย dropdown : รายการ = ทีมในชีตคำนวณ (มีชุดราคาแต่ไม่มีเที่ยวก็อยู่) + ทีมในชีตนี้ ไม่ซ้ำ"""
+        workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+        views._exportDocumentWriteRateSheet(workbook, [self.rateRow(team='ทีมมีราคาไม่มีเที่ยว'),
+                                                       self.rateRow(team='ทีม ข', stone='หินฝุ่น')], None, [], set())
+        trips = [{'team': 'ทีม ข', 'fuel_branch': 'กงตาก', 'pay_weight': Decimal('40')}]
+        views._exportDocumentWriteFuelSheet(workbook, trips, [])
+        ws = workbook[views.EXPORT_DOC_FUEL_SHEET]
+        self.assertEqual([ws.cell(row=r, column=views.EXPORT_DOC_FUEL_TEAM_LIST_COL).value for r in (30, 31, 32)],
+                         ['ทีม ข', 'ทีมมีราคาไม่มีเที่ยว', None])
+        self.assertTrue(ws.column_dimensions['CD'].hidden)
+        [dv] = ws.data_validations.dataValidation
+        self.assertEqual((dv.type, dv.formula1, str(dv.sqref), dv.errorStyle), ('list', '$CD$30:$CD$31', 'B30:B229', 'warning'))
+
+    def test_branch_without_bills_note_says_type_the_price(self):
+        workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
+        views._exportDocumentWriteRateSheet(
+            workbook, [self.rateRow(fuel_branch='กงตาก', fuel_needed=True, fuel_price=None)], None, [], set())
+        ws = workbook[views.EXPORT_DOC_RATE_SHEET]
+        self.assertEqual(ws['M5'].value, 'กงตาก')
+        self.assertIn('กรอกราคาเองที่ชีต ราคาน้ำมันเฉลี่ย', ws['L5'].value)
 
     def test_payment_group_tables_are_gone(self):
         """v20 : ไม่มีตารางกลุ่มจ่าย / ข้อความแถวรวมในชีตคำนวณแล้ว สรุปจ่ายใส่ค่าตายตัวในสูตรแทน

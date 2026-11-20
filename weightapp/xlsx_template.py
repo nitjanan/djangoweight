@@ -29,7 +29,11 @@ _EXTLST_RE = re.compile(r'<extLst>.*?</extLst>\s*</worksheet>\s*$', re.S)
 _XR_UID_RE = re.compile(r'\s+xr:uid="[^"]*"')
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exceltemplate')
-TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v23.xlsx')
+TRIP_REPORT_TEMPLATE = os.path.join(TEMPLATE_DIR, 'trip_report_template_v24.xlsx')
+# v24 =v23 ที่ปะหน้าจ่ายรถร่วมแสดงร้อยเกาะแยกจากทีมรถร่วม ทำใน Excel จริง (COM)
+#   เดิมตารางมีแต่กลุ่มจ่าย "ปกติ" (สรุปจ่ายรถร่วม AN = 1) ทีมที่ชื่อมี "ร้อยเกาะ" (AN = 2) ไม่ขึ้นเลย
+#   แถว 20 ร้อยเกาะ (ยอดกลุ่ม 2 ที่ M11-M16) · แถว 21 ทีมรถร่วม รวม (M5-M10 เดิม)
+#   แถว 22-61 ทีมรถร่วมทีละทีม (ย่อหน้า) · แถว 62 รวมทั้งสิ้น = ร้อยเกาะ + ทีมรถร่วม
 # v23 = v22 ที่สรุปจ่ายรถร่วมแยกระดับให้เห็น ทำใน Excel จริง (COM)
 #   สีตามประเภทแถว (ทีม H ฟ้า / รวมทีม T เขียว / รวมกลุ่ม B + รวมทั้งสิ้น Z เหลือง) เดิมอ้าง $AA ซึ่งเป็นตัวนับไปแล้ว
 #     สีจึงไม่เคยขึ้น -> อ้าง $AD (ประเภทแถว) · กฎ "แถวที่มีข้อมูล" (เส้นขอบ) ย้ายไปท้ายสุด เพราะทุกกฎ stop if true

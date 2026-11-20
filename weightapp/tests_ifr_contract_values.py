@@ -478,6 +478,22 @@ class TripReportRateSheetColumnTests(SimpleTestCase):
         self.assertIn('IF($AD5="T","รวม "&$AF5,', pay['A5'].value)
         self.assertIn('"      "&INDEX($AY$5:$AY$404,$AC5)', pay['A5'].value)
 
+    def test_pay_cover_shows_roikoh_apart_from_partner_teams(self):
+        """v24 : ปะหน้าจ่ายรถร่วม แถว 20 ร้อยเกาะ (กลุ่มจ่าย 2) · แถว 21 ทีมรถร่วม รวม (กลุ่ม 1)
+        แถว 22-61 ทีมรถร่วมทีละทีม · รวมทั้งสิ้น = สองกลุ่มรวมกัน (ตรงกับรวมจ่ายทั้งสิ้นของสรุปจ่ายรถร่วม)"""
+        cover = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)['ปะหน้าจ่ายรถร่วม']
+        self.assertEqual((cover['B20'].value, cover['C20'].value, cover['H20'].value), ('ร้อยเกาะ', '=$M$11', '=$M$16'))
+        self.assertEqual((cover['B21'].value, cover['C21'].value, cover['H21'].value),
+                         ('ทีมรถร่วม รวม', '=$M$5', '=$M$10'))
+        self.assertIn('สรุปจ่ายรถร่วม!$AN$5:$AN$404,2,', cover['M11'].value)
+        self.assertIn('สรุปจ่ายรถร่วม!$AQ$5:$AQ$704,2,', cover['M15'].value)
+        self.assertEqual(cover['A22'].value, '=IF($M22="","",1)')
+        self.assertEqual(cover['M22'].value, '=IFERROR(MATCH(1,สรุปจ่ายรถร่วม!$AZ$5:$AZ$704,0),"")')
+        self.assertEqual(cover['M61'].value, '=IFERROR(MATCH(40,สรุปจ่ายรถร่วม!$AZ$5:$AZ$704,0),"")')
+        self.assertEqual((cover['B62'].value, cover['C62'].value, cover['H62'].value),
+                         ('รวมทั้งสิ้น', '=$M$5+$M$11', '=ROUND($M$10+$M$16,2)'))
+        self.assertEqual(cover.print_area, ['$A$1:$H$77'])
+
     def test_summary_headers_follow_accounting_layout(self):
         """หัวตารางหน้าสรุปเหมือนไฟล์บัญชีเดิม (ส่งออก ด.5-69)
         สรุปจ่าย ซ่อนตามสัญญา/ส่วนปรับ เหลือ อัตราค่าขนส่ง (บาท/ตัน) คู่ (บาท/กม.)

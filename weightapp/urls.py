@@ -75,6 +75,7 @@ urlpatterns = [
     path('searchNumCalQ', views.searchNumCalQ, name="searchNumCalQ"),
     path('searchDataCustomer/',views.searchDataCustomer,name="searchDataCustomer"),
     path('setDataCustomer/',views.setDataCustomer,name="setDataCustomer"),
+    path('searchDeliveryOrderForWeight/',views.searchDeliveryOrderForWeight,name="searchDeliveryOrderForWeight"),
     path('setDataSite/',views.setDataSite,name="setDataSite"),
     path('setDataCarryType/',views.setDataCarryType,name="setDataCarryType"),
     path('searchTeamFromCar/',views.searchTeamFromCar,name="searchTeamFromCar"),

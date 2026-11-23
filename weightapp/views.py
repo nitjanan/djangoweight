@@ -46,7 +46,8 @@ from django.utils import timezone as dj_timezone
 
 logger = logging.getLogger(__name__)
 from django.urls import reverse
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit, parse_qsl, urlencode
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone as django_timezone
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -1666,6 +1667,23 @@ def exportExcelWeightTable(request):
     workbook.save(response)
     return response
 
+def weightTableReturnUrl(request, weight_id):
+    '''
+    url กลับหน้า weight/table หลังแก้ไขรายการชั่ง
+    ใช้ ?next= ที่หน้า weight/table ส่งมากับปุ่มแก้ไข (ตัวกรอง/หน้าเดิม) ถ้าไม่มีหรือไม่ปลอดภัยใช้ weight/table เปล่า
+    แล้วเติม edited=<weight_id> ให้หน้า weight/table ไฮไลต์และเลื่อนไปที่รายการนั้น
+    '''
+    base = reverse('weightTable')
+    next_url = request.GET.get('next') or ''
+    if not (next_url.startswith(base) and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())):
+        next_url = base
+
+    parts = urlsplit(next_url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != 'edited']
+    query.append(('edited', str(weight_id)))
+    return urlunsplit(('', '', parts.path, urlencode(query), ''))
+
 @login_required(login_url='login')
 def weightTable(request):
     ''' old บริษัทเดียว
@@ -1700,6 +1718,20 @@ def weightTable(request):
     #สร้าง page
     p = Paginator(data, 10)
     page = request.GET.get('page')
+
+    #กลับมาจากหน้าแก้ไข (?edited=<weight_id>) : ถ้าไม่ได้ระบุหน้า ให้เปิดหน้าที่มีรายการนั้น
+    #เรียง -date, weight_id -> รายการที่อยู่ก่อน = วันที่ใหม่กว่า หรือ วันเดียวกันแต่ weight_id น้อยกว่า
+    edited_weight = None
+    edited_id = request.GET.get('edited')
+    if edited_id and edited_id.isdigit():
+        edited_weight = data.filter(weight_id=int(edited_id)).first()
+        if edited_weight and not page and edited_weight.get('date'):
+            before = data.filter(
+                Q(date__gt=edited_weight['date']) |
+                Q(date=edited_weight['date'], weight_id__lt=edited_weight['weight_id'])
+            ).count()
+            page = before // p.per_page + 1
+
     weight = p.get_page(page)
 
     #ธุรกิจท่าเรือ (biz = 2) แสดงคอลัมน์ทีมและน้ำหนักสุทธิต้นทางเพิ่ม
@@ -1708,7 +1740,7 @@ def weightTable(request):
     #แผงเที่ยวส่งออกที่กรอกข้อมูลไม่ครบ : โหลดแยกทีหลังผ่าน weightTableIncomplete
     show_incomplete_panel = _weightTableHasExportScope(active)
 
-    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), 'is_port_biz' : is_port_biz, 'show_incomplete_panel' : show_incomplete_panel, active :"active",}
+    context = {'weight':weight,'filter':myFilter, 'weightTable_page':'active', 'is_view_weight' : is_view_weight(request.user), 'is_approve_weight' : is_approve_weight(request.user), 'is_scale' : is_scale(request.user), 'is_account' :is_account(request.user), 'is_port_biz' : is_port_biz, 'show_incomplete_panel' : show_incomplete_panel, 'edited_weight' : edited_weight, active :"active",}
     return render(request, "weight/weightTable.html",context)
 
 @login_required(login_url='login')
@@ -1855,14 +1887,38 @@ def editWeight(request, mode, weight_id):
             #ยกเลิกการอ้างใบส่งของ (ปุ่ม X หน้า editWeightSell / editWeightPort)
             unlink_do = request.POST.get('unlink_do') == '1' and bool(original_do_doc_no)
 
-            do_doc_no = None if unlink_do else form.cleaned_data.get('do_doc_no')
+            if 'do_doc_no' in form.fields:
+                do_doc_no = None if unlink_do else form.cleaned_data.get('do_doc_no')
+            else:
+                #WeightPortForm ไม่มีช่อง do_doc_no : หน้า editWeightPort ส่งเลขที่ใบส่งของที่เลือกใหม่มาทาง link_do_doc_no
+                #ถ้าไม่ได้เลือกใหม่ = None เหมือนเดิม (ไม่ไปยุ่งกับใบส่งของเดิม)
+                do_doc_no = None if unlink_do else ((request.POST.get('link_do_doc_no') or '').strip() or None)
             new_transport = form.cleaned_data.get('transport')
             new_transport_name = new_transport.base_transport_name if new_transport else None
 
-            if do_doc_no and ( original_transport != new_transport_name or original_weight_total != form.cleaned_data.get('weight_total')):
+            #อ้างอิงใบส่งของใหม่ (ปุ่ม "ดึงใบส่งของ" หน้า editWeightSell) เหมือนเลือก DO ในโปรแกรมตาชั่ง
+            link_new_do = bool(do_doc_no) and do_doc_no != original_do_doc_no
+            previous_do_key = None
+            #ใบส่งของผูกกับเหมืองของรายการชั่ง ไม่ใช่แท็ปบริษัทที่เลือกอยู่
+            weight_comp_code = (weight_data.bws.company.code
+                                if weight_data.bws and weight_data.bws.company else company.code)
+            if link_new_do:
+                if not DeliveryOrder.objects.filter(
+                    doc_no=do_doc_no,
+                    comp_code=weight_comp_code,
+                    delivery_date=form.cleaned_data.get('date') or weight_data.date
+                ).exists():
+                    alert_message = "ไม่พบใบส่งของ " + do_doc_no + " ของวันที่ชั่งนี้"
+                else:
+                    #จำ DO เดิมไว้ คำนวณยอดใหม่หลังย้ายรายการไป DO ใหม่
+                    previous_do_key = WeightDelivery.objects.filter(
+                        weight_id=weight_data.weight_id
+                    ).values('do_doc_no', 'comp_code', 'delivery_date').first()
+
+            if not alert_message and do_doc_no and (link_new_do or original_transport != new_transport_name or original_weight_total != form.cleaned_data.get('weight_total')):
                 weight_id = weight_data.weight_id
                 delivery_date = form.cleaned_data.get('date') or weight_data.date
-                comp_code = company.code
+                comp_code = weight_comp_code
                 weight_ton = form.cleaned_data.get('weight_total') or weight_data.weight_total
                 weight_q = form.cleaned_data.get('q') or weight_data.q
                 is_cancel = form.cleaned_data.get('is_cancel') or weight_data.is_cancel
@@ -1890,6 +1946,17 @@ def editWeight(request, mode, weight_id):
 
                 if not success:
                     alert_message = error_msg
+                elif previous_do_key and previous_do_key['do_doc_no'] and (
+                    previous_do_key['do_doc_no'] != do_doc_no
+                    or str(previous_do_key['delivery_date']) != str(delivery_date)
+                    or previous_do_key['comp_code'] != comp_code
+                ):
+                    #รายการถูกย้ายออกจาก DO เดิม -> คำนวณ DO เดิมใหม่
+                    uc_delivery_order({
+                        'do_doc_no': previous_do_key['do_doc_no'],
+                        'comp_code': previous_do_key['comp_code'],
+                        'delivery_date': previous_do_key['delivery_date'],
+                    })
 
             if not alert_message:
                 if new_transport and new_transport.base_carry_type:
@@ -1897,6 +1964,9 @@ def editWeight(request, mode, weight_id):
 
                 if unlink_do:
                     form.instance.do_doc_no = None
+                elif link_new_do:
+                    #หน้า editWeightPort ไม่มีช่อง do_doc_no ในฟอร์ม ต้องตั้งเอง
+                    form.instance.do_doc_no = do_doc_no
 
                 # log history เก็บข้อมูลก่อนแก้
                 weight_form = form.save()
@@ -1940,7 +2010,8 @@ def editWeight(request, mode, weight_id):
                         updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, original_weight_cus, original_weight_stone)
                         updatePortStockStoneItem(weight_form.bws.company.id, weight_form.date, weight_form.customer.customer_id, weight_form.stone_type.base_stone_type_id)
 
-                return redirect('weightTable')
+                #กลับไปหน้า weight/table (ตัวกรอง/หน้าเดิม) แล้ว focus รายการที่เพิ่งแก้ไข
+                return redirect(weightTableReturnUrl(request, weight_form.weight_id))
     else:
         form = tmp_form
 
@@ -2360,6 +2431,88 @@ def setDataCustomer(request):
         'val': val,
     }
     return JsonResponse(data)
+
+@login_required(login_url='login')
+def searchDeliveryOrderForWeight(request):
+    '''
+    รายการใบส่งของ (delivery_order) สำหรับปุ่ม "ดึงใบส่งของ" หน้า editWeightSell
+    เงื่อนไขเหมือนหน้า TableDeliveryOrder ในโปรแกรมตาชั่ง: เหมืองตัวเอง (comp_code) + วันที่ชั่ง
+    status: 0 = ทั้งหมด, 1 = ยังไม่สำเร็จ, 2 = สำเร็จแล้ว, 3 = ยกเลิก
+    ชื่อลูกค้า / ชื่อหิน / ชื่อปลายทาง get จาก base table ในระบบ (อ้างอิงด้วยรหัสจากใบส่งของ)
+    '''
+    status = request.GET.get('status', '1')
+
+    #ใช้เหมืองและวันที่ของรายการชั่งเอง ไม่ใช้แท็ปบริษัทที่เลือกอยู่ (เปิดหน้าแก้ไขจากแท็ปอื่นได้)
+    weight_id = request.GET.get('weight_id')
+    if weight_id and weight_id.isdigit():
+        w = Weight.objects.filter(weight_id=int(weight_id)).values('date', 'bws__company__code').first()
+        if not w:
+            return JsonResponse({'do_list': []})
+        comp_code = w['bws__company__code']
+        date = w['date']
+    else:
+        comp_code = request.session.get('company_code')
+        date = request.GET.get('date')
+
+    if not comp_code or not date:
+        return JsonResponse({'do_list': [], 'comp_code': comp_code})
+
+    qs = DeliveryOrder.objects.filter(delivery_date=date, comp_code=comp_code)
+    if status == '1':
+        qs = qs.filter(Q(car_company_rem__gt=0) | Q(car_customer_rem__gt=0), status='open')
+    elif status == '2':
+        qs = qs.filter(car_company_rem__lte=0, car_customer_rem__lte=0, status='open')
+    elif status == '3':
+        qs = qs.filter(status='cancel')
+    qs = qs.order_by('doc_no')
+
+    do_list = list(qs.values(
+        'id', 'doc_no', 'delivery_date', 'car_company', 'car_customer',
+        'car_company_tot', 'car_customer_tot', 'car_company_rem', 'car_customer_rem',
+        'customer_code', 'customer_name', 'site_id', 'site_name', 'product_code', 'product_name',
+        'qty', 'qty_tot', 'unit_name', 'sale_name', 'status', 'note',
+    ))
+
+    # DO ของวันนี้ใน Django ยังไม่มี ลูกค้า/สินค้า/หน้างาน จนกว่า job k2m ตี 3:30 ของวันถัดไปจะเติมให้
+    # (ระหว่างวันแถว DO ถูกสร้างจากตาชั่งส่ง WeightDelivery มา มีแค่จำนวนรถ/ยอด)
+    # -> เติมจากรายการชั่งที่อ้างใบส่งของนั้นแล้วแทน
+    missing_docs = [d['doc_no'] for d in do_list if not d['customer_code'] or not d['product_code']]
+    if missing_docs:
+        from_weight = {}
+        for w in Weight.objects.filter(
+            date=date, do_doc_no__in=missing_docs, bws__company__code=comp_code, is_cancel=False
+        ).exclude(customer_id='09-V-001').order_by('-weight_id').values(
+            'do_doc_no', 'customer_id', 'customer_name', 'stone_type_id', 'stone_type_name', 'site_id', 'site_name'
+        ):
+            from_weight.setdefault(w['do_doc_no'], w)
+        for d in do_list:
+            w = from_weight.get(d['doc_no'])
+            if not w:
+                continue
+            if not d['customer_code']:
+                d['customer_code'], d['customer_name'] = w['customer_id'], w['customer_name']
+            if not d['product_code']:
+                d['product_code'], d['product_name'] = w['stone_type_id'], w['stone_type_name']
+            if not d['site_id'] and not d['site_name']:
+                d['site_id'], d['site_name'] = w['site_id'], w['site_name']
+
+    customer_codes = {(d['customer_code'] or '').strip() for d in do_list}
+    stone_codes = {(d['product_code'] or '').strip() for d in do_list}
+    site_ids = {(d['site_id'] or '').strip() for d in do_list}
+    customer_map = dict(BaseCustomer.objects.filter(customer_id__in=customer_codes).values_list('customer_id', 'customer_name'))
+    stone_map = dict(BaseStoneType.objects.filter(base_stone_type_id__in=stone_codes).values_list('base_stone_type_id', 'base_stone_type_name'))
+    site_map = dict(BaseSite.objects.filter(base_site_id__in=site_ids).values_list('base_site_id', 'base_site_name'))
+
+    for d in do_list:
+        d['customer_code'] = (d['customer_code'] or '').strip()
+        d['product_code'] = (d['product_code'] or '').strip()
+        d['site_id'] = (d['site_id'] or '').strip()
+        d['base_customer_name'] = customer_map.get(d['customer_code'])
+        d['base_stone_type_name'] = stone_map.get(d['product_code'])
+        d['base_site_name'] = site_map.get(d['site_id'])
+        d['qty_rem'] = (d['qty'] or 0) - (d['qty_tot'] or 0)
+
+    return JsonResponse({'do_list': do_list, 'comp_code': comp_code})
 
 def setDataSite(request):
     if 'site_id' in request.GET:

@@ -2,6 +2,7 @@ from django.urls import path
 from weightapp import views
 from weightapp import views_company_map
 from weightapp import views_similar_base
+from weightapp import views_weight_mirror
 from django.contrib.auth import views as auth_views
 from weightapp.views import BaseScoopView, BaseScoopViewById, CreateBaseScoop, BaseStoneTypeList, LoginApiView, SignUpApiView
 from rest_framework_simplejwt.views import(
@@ -303,6 +304,12 @@ urlpatterns = [
       ),
 
       path('get_api_delivery_order_3_30am/', views.get_api_delivery_order_3_30am, name="get_api_delivery_order_3_30am"),
+
+      # สำเนาข้อมูลชั่งจากตาชั่ง ไว้กู้ local DB ที่เสีย ดู views_weight_mirror.py
+      path('weightmirror/api/bulk/', views_weight_mirror.weightMirrorBulk, name="weightMirrorBulk"),
+      path('weightmirror/api/list/', views_weight_mirror.weightMirrorList, name="weightMirrorList"),
+      path('weightmirror/api/stations/', views_weight_mirror.weightMirrorStations, name="weightMirrorStations"),
+      path('weightmirror/api/weight/', views_weight_mirror.weightMirrorWeightByIds, name="weightMirrorWeightByIds"),
 
       path('api/updates/latest/', views.appReleaseLatest, name="appReleaseLatest"),
       path('api/updates/log/', views.appUpdateLog, name="appUpdateLog"),

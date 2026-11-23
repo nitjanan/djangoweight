@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('weightapp', '0311_export_document_payer_allocation'),
+        ('weightapp', '0315_export_document_payer_allocation'),
     ]
 
     operations = [

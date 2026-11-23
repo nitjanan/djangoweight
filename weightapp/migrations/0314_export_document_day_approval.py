@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('weightapp', '0309_ifr_contract_fuel_range'),
+        ('weightapp', '0313_weightmirror'),
     ]
 
     operations = [

@@ -2026,6 +2026,102 @@ class ExpressFuelBillSync(models.Model):
         return '%s @ %s' % (self.month, self.synced_at)
 
 
+class ExportDocumentDayApproval(models.Model):
+    """หน้าเหมืองอนุมัติว่าเที่ยวส่งออกของ "วันหนึ่ง × ต้นทางหนึ่ง" ตรวจแล้วถูกต้อง (หน้า /exportDocument/)
+
+    เก็บแค่การตัดสินใจของคน สถานะ "มีปัญหา / พร้อมอนุมัติ" ไม่เก็บ ระบบคำนวณสดทุกครั้งที่เปิดหน้า
+    จะได้ไม่มีวันค้างไม่ตรงกับข้อมูลจริง
+
+    fingerprint = ค่าย่อของเที่ยวทั้งชุดตอนกดอนุมัติ (เลขที่ใบ / น้ำหนัก / ทีม / หิน / ทะเบียน)
+    เปิดหน้าครั้งต่อไปคำนวณใหม่แล้วเทียบ ถ้าไม่ตรง = มีคนแก้หลังอนุมัติ -> ต้องตรวจใหม่
+    ไม่ต้องไปดักทุกทางที่แก้ใบชั่งได้ (หน้าแก้ใบชั่ง / อัปโหลดไฟล์ นน.ปลายทาง / ...) ซึ่งหลุดง่าย
+
+    ไม่ใช้ Weight.is_apw เพราะนั่นคือ "ตรวจรายการชั่ง" ของหน้า weight table คนละเรื่องกัน
+    """
+    id = models.AutoField(primary_key=True)
+    date = models.DateField(verbose_name="วันที่ของเที่ยว")
+    # แถว map ของต้นทาง (ตัวเดียวกับ origin_map_id ในแถวรายเที่ยว) ชื่อในตาราง map ไม่ unique จึงผูกด้วย id
+    origin = models.ForeignKey(BaseCompanyMapBaseCustomer, on_delete=models.CASCADE,
+                               related_name='export_day_approvals', verbose_name="ต้นทาง")
+    trip_count = models.PositiveIntegerField(default=0, verbose_name="จำนวนเที่ยวตอนอนุมัติ")
+    fingerprint = models.CharField(max_length=64, verbose_name="ค่าย่อของข้อมูลตอนอนุมัติ")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                    related_name='export_day_approvals', verbose_name="ผู้อนุมัติ")
+    approved_at = models.DateTimeField(default=timezone.now, verbose_name="อนุมัติเมื่อ")
+
+    class Meta:
+        db_table = 'export_document_day_approval'
+        unique_together = ('date', 'origin')
+        verbose_name = 'อนุมัติเที่ยวส่งออกรายวัน'
+        verbose_name_plural = 'อนุมัติเที่ยวส่งออกรายวัน'
+
+    def __str__(self):
+        return '%s %s' % (self.date, self.origin_id)
+
+
+class ExportDocumentPayerAllocation(models.Model):
+    """เป้าตัน : เดือนนี้บริษัทไหน (นามที่จ่าย) ต้องจ่ายค่าขนส่งของหินชนิดไหนประมาณกี่ตัน (issue #137)
+
+    นามไม่ได้ติดมากับเที่ยว บัญชีตัดสินเองทุกเดือน จึงต้องให้กรอกแล้วเก็บไว้ แก้ได้
+    1 แถว = 1 เดือน × 1 บริษัท × 1 ชนิดหิน · เป็นแค่เป้าให้เทียบ ตัวที่ใช้ออกไฟล์จริงคือ
+    ExportDocumentPayerRowAllocation (บัญชีหยิบแถวทีมของใบปะหน้าเหมืองให้ใกล้เป้า)
+    ชนิดหินเก็บเป็นชื่อ (Weight.stone_type_name) เพราะรายงานส่งออกจับหินด้วยชื่อทั้งหมด
+    """
+    id = models.AutoField(primary_key=True)
+    month = models.DateField(verbose_name="เดือน (วันที่ 1)")
+    company = models.ForeignKey(BaseCompany, on_delete=models.CASCADE,
+                                related_name='export_payer_allocations', verbose_name="นามที่จ่าย")
+    stone_type_name = models.CharField(max_length=255, blank=True, default='', verbose_name="ชนิดหิน")
+    tons = models.DecimalField(max_digits=12, decimal_places=3, verbose_name="ตันที่รับผิดชอบ")
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                   related_name='export_payer_allocations', verbose_name="แก้ไขโดย")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="แก้ไขเมื่อ")
+
+    class Meta:
+        db_table = 'export_document_payer_allocation'
+        unique_together = ('month', 'company', 'stone_type_name')
+        verbose_name = 'แบ่งตันหินให้นามที่จ่าย'
+        verbose_name_plural = 'แบ่งตันหินให้นามที่จ่าย'
+
+    def __str__(self):
+        return '%s %s %s %s' % (self.month, self.company_id, self.stone_type_name, self.tons)
+
+
+class ExportDocumentPayerRowAllocation(models.Model):
+    """นามที่จ่ายของ "แถวทีม" ในใบปะหน้าเหมือง (เส้นทาง × ชนิดหิน + ช่วงน้ำหนัก × ทีม) ของเดือนหนึ่ง (issue #137)
+
+    บัญชีไม่ได้แบ่งรายเที่ยว : หยิบทั้งแถวทีมให้นามหนึ่ง (tons = None) หรือแบ่งแถวเดียวให้หลายนาม
+    โดยกรอกตันของแต่ละนาม (tons = ตันที่นามนี้รับจากแถวนั้น) · แถวที่ไม่มีใครรับ = ค้าง stock
+
+    row_key = sha256 ของ (ต้นทาง, ปลายทาง, ชนิดหิน, ช่วงน้ำหนัก, ทีม) : ชื่อทั้ง 5 ช่องยาวเกินกว่าจะทำ unique index
+    บน utf8mb3 ได้ ส่วนชื่อจริงเก็บไว้แสดงผล (เช่น แถวที่เดือนนี้หายไปแล้วหลังแก้ข้อมูล)
+    """
+    id = models.AutoField(primary_key=True)
+    month = models.DateField(verbose_name="เดือน (วันที่ 1)")
+    row_key = models.CharField(max_length=64, verbose_name="คีย์แถวทีม")
+    origin = models.CharField(max_length=255, blank=True, default='', verbose_name="ต้นทาง")
+    destination = models.CharField(max_length=255, blank=True, default='', verbose_name="ปลายทาง")
+    stone_type_name = models.CharField(max_length=255, blank=True, default='', verbose_name="ชนิดหิน")
+    weight_carried = models.CharField(max_length=255, blank=True, default='', verbose_name="ช่วงน้ำหนักที่แบก")
+    team = models.CharField(max_length=255, blank=True, default='', verbose_name="ทีม")
+    company = models.ForeignKey(BaseCompany, on_delete=models.CASCADE,
+                                related_name='export_payer_row_allocations', verbose_name="นามที่จ่าย")
+    tons = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True,
+                               verbose_name="ตันที่รับ (ว่าง = ทั้งแถว)")
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                   related_name='export_payer_row_allocations', verbose_name="แก้ไขโดย")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="แก้ไขเมื่อ")
+
+    class Meta:
+        db_table = 'export_document_payer_row_allocation'
+        unique_together = ('month', 'row_key', 'company')
+        verbose_name = 'นามที่จ่ายของแถวทีม'
+        verbose_name_plural = 'นามที่จ่ายของแถวทีม'
+
+    def __str__(self):
+        return '%s %s %s %s' % (self.month, self.team, self.company_id, self.tons)
+
+
 class WeightMirror(models.Model):
     """สำเนาข้อมูลชั่งที่ตาชั่งส่งขึ้นมาตลอดวัน ไว้กู้ local DB ของตาชั่งที่เสีย (ฟ้าผ่า/ไฟดับ)
 

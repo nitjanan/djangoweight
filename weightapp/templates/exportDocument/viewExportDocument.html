@@ -309,6 +309,12 @@
                href="{% url 'exportExcelExportDocument' %}?{{ request.GET.urlencode }}">
               <i class="fa-solid fa-file-excel"></i> ไฟล์บัญชี (สรุปจ่าย / ปะหน้า)
             </a>
+            {# issue #137 : แบ่งตันหินให้นามที่จ่าย แล้วออกไฟล์ทีละนาม (ใช้ยอดทุกต้นทาง จึงมีเฉพาะแท็บที่เห็นทุกต้นทาง) #}
+            {% if tab_sees_all %}
+            <a class="btn btn-outline-success" href="{% url 'viewExportDocumentPayer' %}?month={{ selected_month }}">
+              <i class="fa-solid fa-scale-balanced"></i> แบ่งนามที่จ่าย
+            </a>
+            {% endif %}
           </div>
         </form>
       </div>
@@ -345,7 +351,7 @@
       <div class="card-header">
         <h5 class="card-title mb-0">หน้าเหมือง : กรอกน้ำหนักปลายทาง แล้วออกใบสรุป</h5>
         <p class="text-muted mb-0 mt-1" style="font-size: 0.85rem;">
-          ① โหลดไฟล์กรอก นน.ปลายทาง → ② อัปโหลด แล้วกดยืนยัน → ③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี
+          ① โหลดไฟล์กรอก นน.ปลายทาง → ② อัปโหลด แล้วกดยืนยัน → ③ ตรวจและอนุมัติเที่ยวรายวัน → ④ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี
         </p>
       </div>
       <div class="card-body">
@@ -510,7 +516,19 @@
 
         <hr>
         <div class="d-flex flex-wrap align-items-center gap-2">
-          <div class="small text-muted w-100">③ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี (ต่อเหมือง : หนังสือสรุปยอด · ต่อเส้นทาง : รายเที่ยว + ใบปะหน้า)</div>
+          <div class="small text-muted w-100">③ ตรวจเที่ยวทีละวัน แยกต้นทาง แล้วกดอนุมัติ (เปิดเป็นหน้าแยก)</div>
+          {% if approval_available %}
+          <a class="btn btn-primary" href="{% url 'viewExportDocumentApproval' %}?month={{ selected_month }}">
+            <i class="fa-solid fa-clipboard-check"></i> ตรวจและอนุมัติเที่ยวรายวัน
+          </a>
+          {% else %}
+          <span class="small text-muted">แท็บนี้อนุมัติไม่ได้ (แท็บท่าเรือเห็นเที่ยวไม่ครบทั้งต้นทาง) ให้อนุมัติจากแท็บเหมือง</span>
+          {% endif %}
+        </div>
+
+        <hr>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="small text-muted w-100">④ ออกใบสรุปหน้าเหมือง ส่งให้บัญชี (ต่อเหมือง : หนังสือสรุปยอด · ต่อเส้นทาง : รายเที่ยว + ใบปะหน้า)</div>
           <a class="btn btn-success" data-busy-download="กำลังทำใบสรุปหน้าเหมือง..."
              href="{% url 'exportExcelMineSummary' %}?{{ route_query }}">
             <i class="fa-solid fa-file-excel"></i> ใบสรุปหน้าเหมือง
@@ -589,26 +607,27 @@
         {% endif %}
 
         {% comment %}
-          ราคาน้ำมันเฉลี่ยของทีม (เงินรวม ÷ ลิตรรวม จากบิล Express ทั้งเดือน) : สัญญาปรับตามน้ำมัน
-          แต่ทีมไม่มีบิลเติมน้ำมันเลยในเดือนนี้ อัตราของเที่ยวในไฟล์จะว่าง
-          จนกว่าจะกรอกลิตร/เงินของทีมนั้นในตารางน้ำมัน (ชีตคำนวณค่าขนส่ง Q-T) หรือพิมพ์สาขาในช่อง M
+          ราคาน้ำมันเฉลี่ยยึดสาขาต้นทาง (เงินรวม ÷ ลิตรรวม จากบิล Express ทั้งเดือน) :
+          ทีมเติมที่สาขานั้น = ราคาของทีม · ไม่ได้เติม = ราคาเฉลี่ยของสาขา (บิลทุกทีม)
+          สาขาไม่มีบิลเลย (เช่น กงตาก) / ต้นทางไม่ใช่บริษัทเรา = ไม่มีราคา อัตราของเที่ยวในไฟล์จะว่าง
+          จนกว่าจะกรอกราคาของสาขาในชีต ราคาน้ำมันเฉลี่ย (ช่องกรอกเอง)
           อยู่นอกแถบ "คิดเงินได้ครบ / ไม่ครบ" เพราะแถบนั้นดูแค่สัญญากับช่วงน้ำหนัก
         {% endcomment %}
         {% if rate_stats.fuel_missing.trips %}
         <div class="ifr-issue ifr-issue-bad mb-3">
           <div class="ifr-issue-num">{{ rate_stats.fuel_missing.trips|intcomma }} เที่ยว</div>
           <div class="ifr-issue-body">
-            <div class="ifr-issue-title">ทีมไม่มีบิลเติมน้ำมันใน Express เดือนนี้ — เที่ยวเหล่านี้ยังคิดค่าขนส่งไม่ได้</div>
+            <div class="ifr-issue-title">สาขาต้นทางไม่มีบิลเติมน้ำมันใน Express เดือนนี้ — ต้องกรอกราคาน้ำมันเองในไฟล์</div>
             <div class="ifr-issue-text">
-              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่ทีมไม่มีบิลเติมน้ำมันเลย จึงไม่มีราคาน้ำมันเฉลี่ย
-              ในไฟล์ช่องอัตรา (O) จะว่างเป็นสีเหลือง<br />
-              <strong>ต้องทำ:</strong> เช็กรหัสลูกค้าน้ำมันของทีม (oil_customer_id) ว่าตรงกับใน Express
-              หรือกรอกลิตร/เงินของทีมนั้นเองในชีตคำนวณค่าขนส่ง (ตาราง Q-T)
+              สัญญาปรับค่าขนส่งตามราคาน้ำมัน แต่ต้นทางไม่มีราคาน้ำมันของสาขา
+              (สาขาไม่มีบิลเลย หรือต้นทางไม่ใช่บริษัทเรา) ในไฟล์ช่องอัตรา (O) จะว่าง<br />
+              <strong>ต้องทำ:</strong> กรอกราคาน้ำมันของสาขาในชีต <strong>ราคาน้ำมันเฉลี่ย</strong> ช่องสีเหลือง (ทั้งสาขา หรือรายทีม)
+              อัตราทุกเที่ยวของสาขานั้นจะคิดให้เอง
               <ul class="ifr-missing-list">
-                {% for t in rate_stats.fuel_missing.teams %}
+                {% for b in rate_stats.fuel_missing.branches %}
                 <li>
-                  <span class="fw-semibold">{{ t.team }}</span>
-                  <span class="text-muted small">— {{ t.trips|intcomma }} เที่ยว</span>
+                  <span class="fw-semibold">{{ b.branch }}</span>
+                  <span class="text-muted small">— {{ b.trips|intcomma }} เที่ยว</span>
                 </li>
                 {% endfor %}
               </ul>
@@ -880,11 +899,12 @@
     <div class="card" id="trips">
       <div class="card-header">
         <h5 class="card-title mb-0">รายเที่ยว</h5>
-        {% if problem or selected_route %}
+        {% if problem or selected_route or selected_origin %}
         <div class="alert alert-secondary d-flex flex-wrap align-items-center gap-2 py-2 mt-2 mb-0">
           <span>
             กำลังดูเฉพาะ:
-            {% if route_label %}<strong>{{ route_label }}</strong>{% if problem %} · {% endif %}{% endif %}
+            {% if route_label %}<strong>{{ route_label }}</strong>{% if problem or origin_label %} · {% endif %}{% endif %}
+            {% if origin_label %}<strong>ต้นทาง {{ origin_label }}</strong>{% if selected_date_from %} วันที่ {{ selected_date_from }}{% if selected_date_to and selected_date_to != selected_date_from %} ถึง {{ selected_date_to }}{% endif %}{% endif %}{% if problem %} · {% endif %}{% endif %}
             {% if problem %}<strong>{{ problem_label }}</strong>{% endif %}
             ({{ problem_count|intcomma }} เที่ยว)
             <span class="small text-muted d-block">ตัวเลขสรุปด้านบนและไฟล์ที่กด Export ยังเป็นข้อมูลทั้งชุดตามตัวกรอง</span>
@@ -955,9 +975,11 @@
                 <td class="trip-num">{{ r.dest_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.diff_weight|floatformat:2|default:"" }}</td>
                 <td class="trip-num">{{ r.pay_weight|floatformat:2|default:"" }}</td>
-                {# ราคาเฉลี่ยทั้งเดือนของทีม ที่สาขาของบริษัทต้นทาง (ไม่ได้เติมที่นั่น = รวมทุกสาขา) · แดง = สัญญาปรับตามน้ำมันแต่ทีมไม่มีบิล #}
+                {# ราคาเฉลี่ยทั้งเดือนที่สาขาต้นทาง : ของทีม / ทีมไม่ได้เติม = เฉลี่ยของสาขา (ตัวเอียง) · แดง = สาขาไม่มีบิล ต้องกรอกเองในไฟล์ #}
                 {% if r.fuel_missing %}
-                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่ทีมนี้ไม่มีบิลเติมน้ำมันใน Express เดือนนี้">ไม่มีราคา</td>
+                <td class="trip-out-of-range" title="สัญญาปรับตามน้ำมัน แต่สาขาต้นทาง {{ r.fuel_branch }} ไม่มีบิลเติมน้ำมันเดือนนี้ กรอกราคาเองในไฟล์">ไม่มีราคา</td>
+                {% elif r.fuel_source == 'branch' %}
+                <td class="trip-num fst-italic" title="ทีมไม่ได้เติมที่ {{ r.fuel_branch }} ใช้ราคาเฉลี่ยของสาขา">{{ r.fuel_price|floatformat:2|default:"" }}</td>
                 {% else %}
                 <td class="trip-num" title="{{ r.fuel_branch }}">{{ r.fuel_price|floatformat:2|default:"" }}</td>
                 {% endif %}

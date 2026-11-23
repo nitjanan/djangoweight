@@ -783,8 +783,9 @@
                 '<option value="cash">เงินสด</option>' +
                 '<option value="credit">เครดิต</option>' +
               '</select>' +
-              '<input type="number" min="1" max="365" step="1" inputmode="numeric" list="ifr_credit_days_list" ' +
-                     'class="form-control ifr-credit-days d-none" placeholder="วัน" style="width: 80px;" />' +
+              '<select class="form-select ifr-credit-days d-none" style="width: 7rem;" title="เครดิตกี่วัน">' +
+                creditDayOptions() +
+              '</select>' +
             '</div>') +
           // หมายเหตุเป็นข้อความอิสระ ให้กินที่ที่เหลือของบรรทัด
           bandField('col-12 col-md', 'หมายเหตุ', false,
@@ -850,7 +851,7 @@
       }
       syncTeamPayment(tr);
     });
-    tr.querySelector('.ifr-credit-days').addEventListener('input', function () {
+    tr.querySelector('.ifr-credit-days').addEventListener('change', function () {
       syncTeamPayment(tr);
     });
 
@@ -958,18 +959,14 @@
   // เก็บลง db ช่องเดียวแบบ paytrm ของ Express : null = ยังไม่ระบุ / 0 = เงินสด / 1+ = เครดิตกี่วัน
   // บนหน้าจอแยกเป็นตัวเลือก + ช่องวัน ให้คนกรอกเข้าใจง่าย แล้วค่อยแปลงตอนส่ง
 
-  // ค่าวันที่บัญชีใช้บ่อย (จากใบตั้งหนี้จริง) ให้เลือกได้เร็ว ยังพิมพ์เลขอื่นได้
-  (function ensureCreditDaysList() {
-    if (document.getElementById('ifr_credit_days_list')) return;
-    const list = document.createElement('datalist');
-    list.id = 'ifr_credit_days_list';
-    [15, 30, 45, 60].forEach(function (d) {
-      const opt = document.createElement('option');
-      opt.value = d;
-      list.appendChild(opt);
-    });
-    document.body.appendChild(list);
-  })();
+  // จำนวนวันเครดิตให้เลือกจากรายการเท่านั้น (ไม่ให้พิมพ์เอง กันพิมพ์ผิด)
+  // 0 วัน = จ่ายทันที เก็บเป็น 0 ซึ่งในระบบคือ "เงินสด" (โหลดกลับมาจะขึ้นเป็นเงินสด)
+  // รายการอยู่ในฟังก์ชัน (ไม่ใช่ const ข้างนอก) เพราะแถวทีมบางแถวถูกสร้างก่อนสคริปต์วิ่งมาถึงบรรทัดนี้
+  function creditDayOptions() {
+    return '<option value="">เลือกวัน</option>' + [0, 15, 30, 60, 90, 120].map(function (d) {
+      return '<option value="' + d + '">' + d + ' วัน</option>';
+    }).join('');
+  }
 
   function toggleCreditDays(tr) {
     const isCredit = tr.querySelector('.ifr-pay-type').value === 'credit';
@@ -989,7 +986,17 @@
       type.value = 'credit';
     }
     toggleCreditDays(tr);
-    if (type.value === 'credit') days.value = creditDays;
+    if (type.value === 'credit') {
+      // ค่าเก่าที่เคยพิมพ์เองและไม่อยู่ในรายการ (เช่น 45) : เพิ่มเป็นตัวเลือกให้แถวนั้น ค่าเดิมจะได้ไม่หาย
+      const value = String(Number(creditDays));
+      if (![...days.options].some(function (o) { return o.value === value; })) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value + ' วัน';
+        days.appendChild(opt);
+      }
+      days.value = value;
+    }
   }
 
   // คืนค่าที่จะส่งให้ backend  เลือกเครดิตแต่ยังไม่กรอกวัน = '' ให้ findRowsCreditWithoutDays ดักไว้ก่อนส่ง

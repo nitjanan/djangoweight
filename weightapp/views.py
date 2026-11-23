@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.views.decorators.cache import cache_page
-from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY
+from weightapp.models import Weight, Production, BaseLossType, ProductionLossItem, BaseMill, BaseLineType, ProductionGoal, StoneEstimate, StoneEstimateItem, BaseStoneType, BaseTimeEstimate, BaseCustomer, BaseSite, WeightHistory, BaseTransport, BaseCar, BaseScoop, BaseCarTeam, BaseCar, BaseDriver, BaseCarRegistration, BaseJobType, BaseCustomerSite, UserScale, BaseMachineType, BaseCompany, UserProfile, BaseSEC, SetWeightOY, SetCompStone, SetPatternCode, Stock, StockStone, StockStoneItem, BaseStockSource, ApproveWeight, SetLineMessaging, GasPrice, BaseSiteStore, PortStock, PortStockStone, PortStockStoneItem, ProductionMachineItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, WeightDelivery, BaseWeightStation, DeliveryOrder, BaseAPI, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer , InternationalFreightRate, InternationalFreightRateTeam, InternationalFreightRateFuelPrice, CarryingweightRate, InternationalFreightRateStatus, INTERNATIONAL_FREIGHT_RATE_FIRST_DATE, InternationalFreightRateApproval, ExOEINVH, ExOEINVD, ExpressFuelBillLine, ExpressFuelBillSync, BaseCompanyMapCustomerAlias, EXPORT_DOC_OWN_PORT_CUSTOMERS_CACHE_KEY, ExportDocumentDayApproval, ExportDocumentPayerAllocation, ExportDocumentPayerRowAllocation
 from django.db.models import Sum, Q, Max, Min, Value
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.views.decorators.cache import cache_control
@@ -91,6 +91,8 @@ from openpyxl.workbook.protection import WorkbookProtection
 from openpyxl.styles import Protection
 import time
 import re
+import hashlib
+from django.utils.http import url_has_allowed_host_and_scheme
 
 line_bot_api = LineBotApi(settings.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
@@ -12004,11 +12006,14 @@ def _exportDocumentAssignFuelPrice(trip_rows, rate_rows):
 
 # ---------- ราคาน้ำมันเฉลี่ยรายเดือนของทีม (หน้า /exportDocument/ และไฟล์ export) ----------
 # ราคา = เงินรวม ÷ ลิตรรวม ของบิลเติมน้ำมันจริงใน Express (ชุดเดียวกับ sheet oil / express)
-# แยกตามทีม และสาขาที่ไปเติม เที่ยวใช้ราคาของสาขาที่ตรงกับบริษัทต้นทางของเที่ยว
-# ทีมไม่ได้เติมที่สาขานั้นแต่มีบิลที่สาขาอื่น = ใช้ราคาเฉลี่ยรวมทุกสาขาของทีมนั้น
-# ไม่มีบิลเลย = ไม่มีราคา (สัญญาที่ปรับตามน้ำมัน อัตราจะว่าง)
+# ยึดสาขาของบริษัทต้นทางของเที่ยวเสมอ (ไปวิ่งที่ไหนใช้ราคาที่นั่น ไม่มีราคา "รวมทุกสาขา")
+#   1) ทีมมีบิลที่สาขานั้น = ราคาเฉลี่ยของทีมที่สาขานั้น
+#   2) ทีมไม่ได้เติมที่สาขานั้น = ราคาเฉลี่ยของสาขานั้น (บิลทุกทีมที่เติมที่สาขานั้นในเดือนนั้น)
+#   3) สาขาไม่มีบิลเลย (เช่น กงตาก) / ต้นทางไม่ใช่บริษัทเรา = ไม่มีราคา ผู้ใช้กรอกเองในไฟล์
+#      (ชีต ราคาน้ำมันเฉลี่ย ช่องกรอกเอง) ส่วนใหญ่ต้นทางนอกบริษัทรวมค่าขนส่งในราคาหินแล้ว
 # หน้ารายงานค่าขนส่ง (_freightReportTrips) ยังใช้ราคารายวัน _exportDocumentAssignFuelPrice อยู่
-EXPORT_DOC_FUEL_ALL_BRANCHES = 'รวมทุกสาขา'
+EXPORT_DOC_FUEL_SOURCE_TEAM = 'team'       # ราคาของทีมเองที่สาขาต้นทาง
+EXPORT_DOC_FUEL_SOURCE_BRANCH = 'branch'   # ทีมไม่ได้เติมที่นั่น ใช้ราคาเฉลี่ยของสาขา
 
 
 def _exportDocumentFuelAverage(litre, amount):
@@ -12026,51 +12031,80 @@ def _exportDocumentTeamFuel(lines, teams=None):
 
     teams = ชุดชื่อทีมที่ต้องการ (None = ทุกทีม)
     คืน {ทีม: {'by_company': {id บริษัท: [ชื่อสาขา, ลิตร, เงิน]}, 'litre': ลิตรรวม, 'amount': เงินรวม}}
+    ชื่อสาขาคิดจากบิลทุกบรรทัดเสมอ (ไม่กรองทีม) จะได้ตรงกับช่อง M ของแถวอัตราที่คิดจากบิลทั้งหมด
     """
-    names = defaultdict(set)
+    labels = _exportDocumentFuelBranchLabels(lines)
     team_fuel = {}
     for ln in lines or []:
         if teams is not None and ln['team'] not in teams:
             continue
         fuel = team_fuel.setdefault(ln['team'], {'by_company': {}, 'litre': Decimal(0), 'amount': Decimal(0)})
-        branch = fuel['by_company'].setdefault(ln['company_id'], [None, Decimal(0), Decimal(0)])
+        branch = fuel['by_company'].setdefault(ln['company_id'], [labels[ln['company_id']], Decimal(0), Decimal(0)])
         branch[1] += ln['litre']
         branch[2] += ln['amount']
         fuel['litre'] += ln['litre']
         fuel['amount'] += ln['amount']
-        names[ln['company_id']].add(ln['branch'])
-    for fuel in team_fuel.values():
-        for company_id, branch in fuel['by_company'].items():
-            branch[0] = ' / '.join(sorted(names[company_id]))
     return team_fuel
 
 
-def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
-    """ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม ใส่ให้ทั้งแถวเที่ยวและแถวอัตรา (fuel_price, fuel_branch)
+def _exportDocumentFuelBranchLabels(lines):
+    """ชื่อสาขาของบริษัท = ชื่อสาขาในบิลต่อกันด้วย ' / ' (บริษัทเดียวมีหลายแถว map ที่กรอกโค้ดขายเชื่อไว้)"""
+    names = defaultdict(set)
+    for ln in lines or []:
+        names[ln['company_id']].add(ln['branch'])
+    return {company_id: ' / '.join(sorted(n)) for company_id, n in names.items()}
 
-    fuel_branch = ชื่อสาขาที่ใช้ราคา / 'รวมทุกสาขา' / '' (ทีมไม่มีบิลเดือนนี้)
-    ชีตคำนวณค่าขนส่งใช้ fuel_branch ของแถวอัตราเป็นช่อง M แล้วสูตร N หาราคาจากตารางน้ำมันในชีตเดียวกัน
+
+def _exportDocumentBranchFuel(lines):
+    """ยอดบิลของแต่ละสาขา รวมทุกทีม (ราคาเฉลี่ยของสาขา ใช้กับทีมที่ไม่ได้เติมที่นั่น)
+    คืน {id บริษัท: [ชื่อสาขา, ลิตร, เงิน]}"""
+    labels = _exportDocumentFuelBranchLabels(lines)
+    branches = {}
+    for ln in lines or []:
+        branch = branches.setdefault(ln['company_id'], [labels[ln['company_id']], Decimal(0), Decimal(0)])
+        branch[1] += ln['litre']
+        branch[2] += ln['amount']
+    return branches
+
+
+def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
+    """ราคาน้ำมันเฉลี่ยทั้งเดือน ยึดสาขาของบริษัทต้นทาง ใส่ให้ทั้งแถวเที่ยวและแถวอัตรา
+    (fuel_price, fuel_branch, fuel_source) กติกาอยู่ที่หัวหมวดนี้
+
+    fuel_branch = ชื่อสาขาของต้นทาง (ต้นทางไม่ใช่บริษัทเรา = ชื่อต้นทาง) มีค่าเสมอเมื่อรู้ต้นทาง
+    ชีตคำนวณค่าขนส่งใช้เป็นช่อง M : สูตร N หาราคาของทีมที่สาขานี้ (ตาราง T-W) ผ่านชีต ราคาน้ำมันเฉลี่ย ไม่มี = ราคาของสาขา
+    fuel_source = 'team' / 'branch' / None (ไม่มีราคา ต้องกรอกเองในไฟล์)
 
     เที่ยวที่ "ต้องใช้" ราคา คือเที่ยวที่มีแถวอัตรา และสัญญามีเงื่อนไขน้ำมันครบ (ค่าสัญญา + น้ำมันฐาน + ปรับ)
-    เที่ยวแบบนี้ที่ไม่มีราคา ติดธง fuel_missing (อัตราในไฟล์จะว่าง)
+    เที่ยวแบบนี้ที่ไม่มีราคา ติดธง fuel_missing (อัตราในไฟล์จะว่างจนกว่าจะกรอกราคาของสาขา)
 
-    คืน {'trips': จำนวนเที่ยวที่ขาดราคา, 'teams': [{team, trips}]} เรียงตามจำนวนเที่ยว
+    คืน {'trips': จำนวนเที่ยวที่ขาดราคา, 'teams': [{team, trips}], 'branches': [{branch, trips}]}
+    เรียงตามจำนวนเที่ยว
     """
     team_fuel = _exportDocumentTeamFuel(lines)
+    branch_fuel = _exportDocumentBranchFuel(lines)
     map_ids = {r.get('origin_map_id') for r in list(trip_rows) + list(rate_rows) if r.get('origin_map_id')}
     company_by_map = dict(BaseCompanyMapBaseCustomer.objects
                           .filter(id__in=map_ids)
                           .values_list('id', 'base_company_id')) if map_ids else {}
+    # สาขาที่ไม่มีบิลเลย (เช่น กงตาก) ไม่มีชื่อจากบิล ใช้ชื่อบริษัทแทน จะได้มีแถวในชีต ราคาน้ำมันเฉลี่ย ให้กรอกราคา
+    no_bill = {cid for cid in company_by_map.values() if cid and cid not in branch_fuel}
+    company_names = dict(BaseCompany.objects.filter(id__in=no_bill).values_list('id', 'name')) if no_bill else {}
 
-    def pick(team, origin_map_id):
-        fuel = team_fuel.get(team)
-        if not fuel or not fuel['litre']:
-            return '', None
+    def pick(team, origin_map_id, origin):
         company_id = company_by_map.get(origin_map_id)
-        branch = fuel['by_company'].get(company_id) if company_id else None
+        if not company_id:
+            # ต้นทางไม่ใช่บริษัทเรา : ไม่มีสาขาให้ยึด ใช้ชื่อต้นทางเป็นแถวให้กรอกราคาเอง
+            return origin or '', None, None
+        branch = branch_fuel.get(company_id)
+        label = branch[0] if branch else company_names.get(company_id, '')
+        fuel = team_fuel.get(team)
+        mine = fuel['by_company'].get(company_id) if fuel else None
+        if mine and mine[1]:
+            return label, _exportDocumentFuelAverage(mine[1], mine[2]), EXPORT_DOC_FUEL_SOURCE_TEAM
         if branch and branch[1]:
-            return branch[0], _exportDocumentFuelAverage(branch[1], branch[2])
-        return EXPORT_DOC_FUEL_ALL_BRANCHES, _exportDocumentFuelAverage(fuel['litre'], fuel['amount'])
+            return label, _exportDocumentFuelAverage(branch[1], branch[2]), EXPORT_DOC_FUEL_SOURCE_BRANCH
+        return label, None, None
 
     needs_fuel = {
         (r['team'], r['origin'], r['destination'], r['weight_carried'], r['stone']):
@@ -12079,19 +12113,25 @@ def _exportDocumentAssignMonthlyFuelPrice(trip_rows, rate_rows, lines):
         for r in rate_rows}
 
     for r in rate_rows:
-        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+        r['fuel_branch'], r['fuel_price'], r['fuel_source'] = pick(r['team'], r.get('origin_map_id'), r['origin'])
+        r['fuel_needed'] = needs_fuel.get(
+            (r['team'], r['origin'], r['destination'], r['weight_carried'], r['stone']), False)
 
     missing = defaultdict(int)
+    missing_branch = defaultdict(int)
     for r in trip_rows:
-        r['fuel_branch'], r['fuel_price'] = pick(r['team'], r.get('origin_map_id'))
+        r['fuel_branch'], r['fuel_price'], r['fuel_source'] = pick(r['team'], r.get('origin_map_id'), r['origin'])
         key = (r['team'], r['origin'], r['destination'], r.get('weight_carried'), r['stone'])
         r['fuel_missing'] = r['fuel_price'] is None and needs_fuel.get(key, False)
         if r['fuel_missing']:
             missing[r['team']] += 1
+            missing_branch[r['fuel_branch'] or r['origin'] or '-'] += 1
 
     teams = [{'team': team, 'trips': n}
              for team, n in sorted(missing.items(), key=lambda x: (-x[1], x[0]))]
-    return {'trips': sum(missing.values()), 'teams': teams}
+    branches = [{'branch': branch, 'trips': n}
+                for branch, n in sorted(missing_branch.items(), key=lambda x: (-x[1], x[0]))]
+    return {'trips': sum(missing.values()), 'teams': teams, 'branches': branches}
 
 
 def _exportDocumentTripRate(trip, rate_row):
@@ -12803,14 +12843,16 @@ EXPORT_DOC_RATE_ADJUST_COL = 10             # J ปรับค่าขนส�
 # ใช้เขียนข้อความบอกว่าแถวไหนไม่มีค่าสัญญา / ไม่ปรับตามน้ำมัน จะได้ไม่ต้องเดาว่าทำไมช่องว่าง
 EXPORT_DOC_RATE_NOTE_COL = 12
 
-# v20 ชีตคำนวณค่าขนส่ง (ทำด้วย Excel จริง : ลบคอลัมน์ M-R ของตารางกลุ่มจ่ายเดิม แล้วส่วนนี้ขยับมาแทน)
+# v21 ชีตคำนวณค่าขนส่ง (ทำด้วย Excel จริง) : คิดเงินต่อชุดราคาทั้งเดือน ไม่มีตารางรายเที่ยวแล้ว
 #   M สาขาที่ใช้ราคาน้ำมัน (ระบบเติม) / N ราคาน้ำมันเฉลี่ย (สูตร) / O อัตรา บาท/ตัน (สูตร)
-#   Q-T ตารางน้ำมันของเดือน ทีม / สาขาที่ไปเติม / ลิตรรวม / เงินรวม (ระบบเติม) / U เฉลี่ย (สูตร)
-#   W-AE ตารางค่าขนส่งรายเที่ยว (สูตรล้วน แถว 5 = แถว 6 ของบันทึกรายเที่ยว) AD อัตรา / AE ค่าขนส่ง
-#   (ย้ายมาจาก O/P ของบันทึกรายเที่ยวด้วย Cut ของ Excel · บันทึกรายเที่ยวเหลือ A-M + ช่องตรวจ N-O)
+#   P เที่ยว / Q นน.จ่ายค่าบรรทุกรวมทั้งเดือน / R ค่าขนส่งทั้งเดือน = O x Q (สูตร นับจากบันทึกรายเที่ยว AB)
+#   T-W ตารางน้ำมันของเดือน ทีม / สาขาที่ไปเติม / ลิตรรวม / เงินรวม (ระบบเติม) / X เฉลี่ย (สูตร)
+#   สรุปจ่ายรถร่วมดึงอัตรา O ตรง ๆ และคิดรายได้ = อัตรา x ตันรวมของกลุ่ม
 EXPORT_DOC_RATE_FUEL_BRANCH_COL = 13   # M
-EXPORT_DOC_FUEL_TABLE_FIRST_COL = 17   # Q ทีม / R สาขา / S ลิตร / T เงิน
+EXPORT_DOC_FUEL_TABLE_FIRST_COL = 20   # T ทีม / U สาขา / V ลิตร / W เงิน
 EXPORT_DOC_FUEL_TABLE_MAX_ROWS = 200   # แถว 5-204 ตามช่วงที่สูตร N อ้างถึง
+# v26 : N = ราคาที่ใช้ของ (ทีม, สาขา M) จากชีต ราคาน้ำมันเฉลี่ย (ดู _exportDocumentWriteFuelSheet)
+#   ตาราง T-W ยังอยู่ เป็นข้อมูลดิบให้คอลัมน์ "ราคาจากบิล" ของชีตนั้นอ่าน
 
 
 def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lines=None, trip_teams=None):
@@ -12859,9 +12901,14 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
             worksheet.cell(row=row, column=col).value = float(value) if value is not None else None
         # ใบเก่าที่ไม่มีค่าสัญญา : G ว่าง = อัตรา 0 ทุกเที่ยว / H ว่าง = ไม่ปรับตามน้ำมัน (สูตร O ในชีตคำนวณค่าขนส่ง)
         # ห้ามเขียนข้อความลงช่องตัวเลข สูตรรายเที่ยวอ่านช่องพวกนี้ จะพังทั้งคอลัมน์
-        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = _exportDocumentContractNote(r)
-        # สาขาที่ใช้ราคาน้ำมัน : สูตร N หาเงิน/ลิตรของ (ทีม, สาขานี้) จากตาราง Q-T
-        worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL).value = r.get('fuel_branch') or None
+        worksheet.cell(row=row, column=EXPORT_DOC_RATE_NOTE_COL).value = (
+            _exportDocumentContractNote(r) or _exportDocumentFuelNote(r))
+        # สาขาต้นทาง : สูตร N หาราคาที่ใช้ของ (ทีม, สาขานี้) จากชีต ราคาน้ำมันเฉลี่ย
+        # ชื่อมาจากข้อมูล (ชื่อสาขา / ชื่อต้นทาง) : กันขึ้นต้นด้วย = แล้วกลายเป็นสูตร
+        _mineSummaryText(worksheet.cell(row=row, column=EXPORT_DOC_RATE_FUEL_BRANCH_COL),
+                         r.get('fuel_branch') or None)
+
+    _exportDocumentRateSheetSortFilter(worksheet, rate_rows)
 
     # ตารางน้ำมันเฉลี่ยของเดือน : 1 แถว = ทีม x สาขาที่ไปเติม ตัวเลขชุดเดียวกับ sheet oil
     team_fuel = _exportDocumentTeamFuel(fuel_lines, trip_teams)
@@ -12877,6 +12924,220 @@ def _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats=None, fuel_lin
         worksheet.cell(row=row, column=col + 1).value = branch
         worksheet.cell(row=row, column=col + 2).value = float(litre)
         worksheet.cell(row=row, column=col + 3).value = float(amount)
+
+
+# ปุ่มกรอง / เรียงของชีตคำนวณค่าขนส่ง (A-R) : เรียงได้เพราะสูตรไม่ผูกตำแหน่งแถวแบบตายตัว
+#   AB ของบันทึกรายเที่ยว = MATCH คีย์ K ใน K5:K204 · P/Q/R นับเที่ยวที่ AB = ROW()-4 : ย้ายแถวแล้วคิดใหม่ตามตำแหน่งใหม่
+# เงื่อนไข (ลองใน Excel กับไฟล์ของนาม ต.ค. 69 แล้ว ยอดเท่าเดิมทุกคอลัมน์ที่เรียง)
+#   - แถวหลังข้อมูลต้องว่างจริง : ถ้ายังมีสูตร K / N-R ค้าง (ได้ "") Excel ขยายช่วงกรองลงไปถึงแถว 204 เอง
+#     เรียงมากไปน้อยแล้วแถวสูตรว่างขึ้นไปบนสุด ข้อมูลไปกองท้ายตาราง -> ล้างสูตรแถวที่ไม่ใช้ออก
+#   - แถวต้องอยู่ในช่วงสูตร (<= 200 แถว) : แถวที่ล้นไม่มีสูตร เรียงแล้วแถวที่มีสูตรหลุดออกนอก K5:K204 ยอดเปลี่ยน
+#   - คีย์ไม่ซ้ำ : MATCH หยิบแถวแรก คีย์ซ้ำ (ทีมเดียวมี 2 สัญญา) เรียงแล้วแถวที่ได้เที่ยวสลับกัน ยอดเปลี่ยน
+#   ไม่ครบเงื่อนไข = ไม่ใส่ปุ่ม คงแถวสูตรไว้เหมือนเดิม
+EXPORT_DOC_RATE_FORMULA_COLS = (11, 14, 15, 16, 17, 18)   # K คีย์ / N ราคาน้ำมัน / O อัตรา / P เที่ยว / Q ตัน / R เงิน
+
+
+def _exportDocumentRateSheetSortFilter(worksheet, rate_rows):
+    keys = [_exportDocumentRateRowSortKey(r) for r in rate_rows]
+    if not keys or len(keys) > EXPORT_DOC_RATE_MAX_ROWS or len(set(keys)) != len(keys):
+        return False
+    last = EXPORT_DOC_RATE_FIRST_ROW + len(keys) - 1
+    for row in range(last + 1, EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+        for col in EXPORT_DOC_RATE_FORMULA_COLS:
+            worksheet.cell(row=row, column=col).value = None
+    worksheet.auto_filter.ref = 'A%d:R%d' % (EXPORT_DOC_RATE_FIRST_ROW - 1, last)
+    return True
+
+
+# v26 ชีต "ราคาน้ำมันเฉลี่ย" (โครงทำใน Excel จริง ระบบเขียนข้อมูล / หัวกลุ่ม / สูตรของแถวทีม)
+#   ส่วนบน แถว 6-25 ราคาของสาขาต้นทาง : B สาขา / C ลิตรรวม / D เงินรวม (ระบบ บิลทุกทีม)
+#     E เฉลี่ยจากบิล / F กรอกเอง / G ราคาที่ใช้ เป็นของ template
+#   ส่วนล่าง แถว 30-229 : A ลำดับ / B ทีม / กลุ่มละ 5 คอลัมน์ต่อสาขา เริ่ม C
+#     เที่ยว / ตันที่แบก / ราคาจากบิล (สูตร อ่านตาราง T-W ของชีตคำนวณ) / กรอกเอง / ราคาที่ใช้ (สูตร)
+#   แถว 4 (ซ่อน) = ชื่อสาขาเหนือคอลัมน์ "ราคาที่ใช้" : N ของชีตคำนวณหา (ทีม, สาขา) ด้วย MATCH แถวนี้
+EXPORT_DOC_FUEL_SHEET = 'ราคาน้ำมันเฉลี่ย'
+EXPORT_DOC_FUEL_KEY_ROW = 4
+EXPORT_DOC_FUEL_BRANCH_FIRST_ROW = 6
+EXPORT_DOC_FUEL_BRANCH_MAX_ROWS = 20
+EXPORT_DOC_FUEL_HEAD_ROW = 28
+EXPORT_DOC_FUEL_TEAM_FIRST_ROW = 30
+EXPORT_DOC_FUEL_TEAM_MAX_ROWS = 200      # แถว 30-229 ตามช่วงที่ N อ้าง
+EXPORT_DOC_FUEL_GROUP_FIRST_COL = 3      # C
+EXPORT_DOC_FUEL_GROUP_WIDTH = 5
+EXPORT_DOC_FUEL_MAX_GROUPS = 15          # ถึง BW (N อ้างถึง BZ)
+EXPORT_DOC_FUEL_SPARE_ROWS = 10          # แถวเปล่าที่มีกรอบ / ช่องเหลือง ต่อท้ายทีมสุดท้าย ให้บัญชีเพิ่มทีมเอง
+EXPORT_DOC_FUEL_TEAM_LIST_COL = 82       # CD (ซ่อน) รายชื่อทีมของ dropdown คอลัมน์ B · นอกช่วง A:BZ ที่ N อ้าง
+# v27 : N ของชีตคำนวณ = ราคาที่ใช้ของ (ทีม, สาขา) · ไม่มีแถวทีม / ช่องว่าง = ราคาของสาขา (ส่วนบน G) · ไม่มีอีก = ว่าง
+#   (เดิมช่องว่างถูก Excel อ่านเป็น 0 อัตราลดผิดแบบเงียบ)
+
+
+def _exportDocumentWriteFuelSheet(workbook, trip_rows, fuel_lines, rate_stats=None):
+    """ชีต ราคาน้ำมันเฉลี่ย : สรุปราคาน้ำมันที่ใช้คิดค่าขนส่ง แยกสาขาต้นทาง และแต่ละทีม (กรอกเองได้ทั้งสองส่วน)
+
+    ทีม x สาขา = ทีมที่มีเที่ยวออกจากสาขานั้นในไฟล์นี้ · เที่ยว / ตันที่แบก = ส่วนที่นามนี้จ่าย (ไฟล์นาม)
+    ราคาที่ใช้ของทีม = กรอกเอง > ราคาจากบิลของทีมที่สาขานั้น > ราคาที่ใช้ของสาขา (ส่วนบน)
+    ส่วนบนใช้บิลทุกทีม (ไม่กรองเฉพาะทีมในไฟล์) ไฟล์ของนามจะได้ราคาสาขาเท่ากับไฟล์รวม
+    """
+    from openpyxl.formatting.rule import FormulaRule
+
+    if EXPORT_DOC_FUEL_SHEET not in workbook.sheetnames:
+        return
+    ws = workbook[EXPORT_DOC_FUEL_SHEET]
+    calc = "'%s'!" % EXPORT_DOC_RATE_SHEET
+
+    usage = {}
+    for r in trip_rows:
+        label = r.get('fuel_branch')
+        if not label:
+            continue
+        share = r.get('payer_share')
+        share = Decimal(1) if share is None else Decimal(share)
+        u = usage.setdefault((r['team'], label), [Decimal(0), Decimal(0)])
+        u[0] += share
+        u[1] += (r.get('pay_weight') or Decimal(0)) * share
+    labels = sorted({label for _, label in usage}, key=_mineSummaryThaiSortKey)
+    teams = sorted({team for team, _ in usage}, key=_mineSummaryThaiSortKey)
+    if rate_stats is not None:
+        rate_stats['fuel_sheet_truncated'] = (max(0, len(labels) - EXPORT_DOC_FUEL_MAX_GROUPS) +
+                                              max(0, len(teams) - EXPORT_DOC_FUEL_TEAM_MAX_ROWS))
+
+    # ---- ส่วนบน : ราคาของสาขาต้นทาง ----
+    branch_totals = {label: (litre, amount) for label, litre, amount in _exportDocumentBranchFuel(fuel_lines).values()}
+    for i, label in enumerate(labels[:EXPORT_DOC_FUEL_BRANCH_MAX_ROWS]):
+        row = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW + i
+        _mineSummaryText(ws.cell(row=row, column=2), label)
+        litre, amount = branch_totals.get(label, (None, None))
+        if litre:
+            ws.cell(row=row, column=3).value = float(litre)
+            ws.cell(row=row, column=4).value = float(amount)
+
+    # ---- ส่วนล่าง : หัวกลุ่มต่อสาขา ----
+    thin = Side(style='thin')
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    head_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+    head_font = Font(bold=True, color='FFFFFF', size=14)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    input_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+    subheads = ('เที่ยว', 'ตันที่แบก', 'ราคาจากบิล\n(ทีม)', 'กรอกเอง', 'ราคาที่ใช้')
+    groups = labels[:EXPORT_DOC_FUEL_MAX_GROUPS]
+    first = EXPORT_DOC_FUEL_TEAM_FIRST_ROW
+    team_rows = teams[:EXPORT_DOC_FUEL_TEAM_MAX_ROWS]
+    # แถวเปล่าต่อท้ายให้บัญชีเพิ่มทีมเอง (มีกรอบ / ช่องเหลือง / อยู่ในพื้นที่พิมพ์) · สูตรใส่ไว้ทุกแถวถึงแถว 229
+    last = first + min(max(len(team_rows), 1) + EXPORT_DOC_FUEL_SPARE_ROWS, EXPORT_DOC_FUEL_TEAM_MAX_ROWS) - 1
+    formula_last = first + EXPORT_DOC_FUEL_TEAM_MAX_ROWS - 1
+    for g, label in enumerate(groups):
+        col = EXPORT_DOC_FUEL_GROUP_FIRST_COL + g * EXPORT_DOC_FUEL_GROUP_WIDTH
+        price_col = col + EXPORT_DOC_FUEL_GROUP_WIDTH - 1
+        _mineSummaryText(ws.cell(row=EXPORT_DOC_FUEL_KEY_ROW, column=price_col), label)
+        ws.merge_cells(start_row=EXPORT_DOC_FUEL_HEAD_ROW, start_column=col,
+                       end_row=EXPORT_DOC_FUEL_HEAD_ROW, end_column=price_col)
+        _mineSummaryText(ws.cell(row=EXPORT_DOC_FUEL_HEAD_ROW, column=col), label)
+        for i in range(EXPORT_DOC_FUEL_GROUP_WIDTH):
+            for row, text in ((EXPORT_DOC_FUEL_HEAD_ROW, None), (EXPORT_DOC_FUEL_HEAD_ROW + 1, subheads[i])):
+                cell = ws.cell(row=row, column=col + i)
+                if text:
+                    cell.value = text
+                cell.fill, cell.font, cell.alignment, cell.border = head_fill, head_font, center, box
+            # C-G ใช้ร่วมกับตารางสาขาส่วนบน (ลิตรรวมหลักแสน) ต้องกว้างพอทั้งสองตาราง
+            width = (8, 12, 12, 11, 12)[i]
+            ws.column_dimensions[get_column_letter(col + i)].width = max(width, 15) if col + i <= 7 else width
+        # ราคาที่ใช้ : เอียง = ใช้ราคาของสาขา (ทีมไม่ได้เติมเอง และไม่ได้กรอก) · แดง = มีเที่ยวแต่ยังไม่มีราคา
+        cnt, bill, inp, used = (get_column_letter(col + k) for k in (0, 2, 3, 4))
+        ref = '%s%d:%s%d' % (used, first, used, formula_last)
+        ws.conditional_formatting.add(ref, FormulaRule(
+            formula=['AND(N($%s%d)>0,$%s%d="")' % (cnt, first, used, first)],
+            fill=PatternFill(bgColor='FFC7CE'), stopIfTrue=True))
+        ws.conditional_formatting.add(ref, FormulaRule(
+            formula=['AND($%s%d="",N($%s%d)=0,$%s%d<>"")' % (bill, first, inp, first, used, first)],
+            font=Font(italic=True, color='1F4E79')))
+    ws.row_dimensions[EXPORT_DOC_FUEL_HEAD_ROW + 1].height = 40
+
+    # ---- ส่วนล่าง : แถวทีม ----
+    # ทุกแถว x ทุกสาขามีสูตร (ว่างถ้า B ว่าง) : ทีมที่ไม่ได้วิ่งสาขานั้น / ทีมที่บัญชีพิมพ์เพิ่มเอง กรอกราคาได้เหมือนกัน
+    # ราคาที่ใช้ของช่องที่ไม่มีบิลและไม่ได้กรอก = ราคาของสาขา (ส่วนบน) แบบเดียวกับที่ N ของชีตคำนวณใช้
+    branch_first = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW
+    branch_last = EXPORT_DOC_FUEL_BRANCH_FIRST_ROW + EXPORT_DOC_FUEL_BRANCH_MAX_ROWS - 1
+    for i in range(EXPORT_DOC_FUEL_TEAM_MAX_ROWS):
+        row = first + i
+        team = team_rows[i] if i < len(team_rows) else None
+        framed = row <= last
+        if team is not None:
+            ws.cell(row=row, column=1).value = i + 1
+            _mineSummaryText(ws.cell(row=row, column=2), team)
+        if framed:
+            for c in (1, 2):
+                ws.cell(row=row, column=c).border = box
+        for g, label in enumerate(groups):
+            col = EXPORT_DOC_FUEL_GROUP_FIRST_COL + g * EXPORT_DOC_FUEL_GROUP_WIDTH
+            cnt_col, ton_col, bill_col, in_col, used_col = range(col, col + EXPORT_DOC_FUEL_GROUP_WIDTH)
+            key = '%s$%d' % (get_column_letter(used_col), EXPORT_DOC_FUEL_KEY_ROW)
+            bill, inp = get_column_letter(bill_col), get_column_letter(in_col)
+            team_sum = '%s$%%s$5:$%%s$204,%s$T$5:$T$204,$B%d,%s$U$5:$U$204,%s' % (calc, calc, row, calc, key)
+            ws.cell(row=row, column=bill_col).value = (
+                '=IF($B%d="","",IFERROR(ROUND(SUMIFS(%s)/SUMIFS(%s),2),""))'
+                % (row, team_sum % ('W', 'W'), team_sum % ('V', 'V')))
+            ws.cell(row=row, column=used_col).value = (
+                '=IF($B%d="","",IF(N(%s%d)>0,ROUND(%s%d,2),IF(%s%d<>"",%s%d,'
+                'IFERROR(INDEX($G$%d:$G$%d,MATCH(%s,$B$%d:$B$%d,0)),""))))'
+                % (row, inp, row, inp, row, bill, row, bill, row,
+                   branch_first, branch_last, key, branch_first, branch_last))
+            for c in (bill_col, in_col, used_col):
+                ws.cell(row=row, column=c).number_format = '#,##0.00'
+            ws.cell(row=row, column=used_col).font = Font(bold=True, size=14)
+            if not framed:
+                continue
+            for c in range(col, col + EXPORT_DOC_FUEL_GROUP_WIDTH):
+                ws.cell(row=row, column=c).border = box
+            ws.cell(row=row, column=in_col).fill = input_fill
+            ws.cell(row=row, column=cnt_col).number_format = '#,##0'
+            ws.cell(row=row, column=ton_col).number_format = '#,##0.00'
+            u = usage.get((team, label)) if team is not None else None
+            if u:
+                ws.cell(row=row, column=cnt_col).value = float(round(u[0], 2))
+                ws.cell(row=row, column=ton_col).value = float(round(u[1], 3))
+
+    _exportDocumentFuelTeamDropdown(workbook, ws, team_rows)
+
+    last_col = get_column_letter(max(EXPORT_DOC_FUEL_GROUP_FIRST_COL + len(groups) * EXPORT_DOC_FUEL_GROUP_WIDTH - 1, 7))
+    # ตรึงแค่คอลัมน์ลำดับ / ทีม : ส่วนบน + หัวตารางสูงเกือบ 30 แถว ถ้าตรึงแถวด้วยจะเต็มจอจนเลื่อนลงไปดูทีมไม่ได้
+    ws.freeze_panes = 'C1'
+    ws.print_area = 'A1:%s%d' % (last_col, last)
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _exportDocumentFuelTeamDropdown(workbook, ws, team_rows):
+    """dropdown ชื่อทีมในคอลัมน์ B ของแถวทีม (30-229) : บัญชีเลือกทีมที่จะเพิ่ม แทนพิมพ์เอง
+    รายการ = ทีมในชีตคำนวณค่าขนส่ง (ชื่อต้องตรงกับคอลัมน์ A ของชีตนั้น N ถึงจะหาเจอ) + ทีมในชีตนี้ ไม่ซ้ำ เรียงแบบพจนานุกรม
+    เก็บในคอลัมน์ซ่อน (นอกช่วง A:BZ ที่ N อ้าง) · ไม่ใช้รายการมาตรฐาน : ชื่อทีมในนั้นสะกดไม่ตรงกับชีตคำนวณ
+    ทีมที่ไม่อยู่ในรายการ (บัญชีเพิ่มชุดราคาเองในชีตคำนวณ) ยังพิมพ์ได้ แค่ขึ้นเตือน"""
+    names = set(team_rows)
+    if EXPORT_DOC_RATE_SHEET in workbook.sheetnames:
+        calc = workbook[EXPORT_DOC_RATE_SHEET]
+        for row in range(EXPORT_DOC_RATE_FIRST_ROW, EXPORT_DOC_RATE_FIRST_ROW + EXPORT_DOC_RATE_MAX_ROWS):
+            value = calc.cell(row=row, column=1).value
+            if isinstance(value, str) and value.strip():
+                names.add(value)
+    names = sorted(names, key=_mineSummaryThaiSortKey)
+    if not names:
+        return
+    first = EXPORT_DOC_FUEL_TEAM_FIRST_ROW
+    col = EXPORT_DOC_FUEL_TEAM_LIST_COL
+    for i, name in enumerate(names):
+        _mineSummaryText(ws.cell(row=first + i, column=col), name)
+    letter = get_column_letter(col)
+    ws.column_dimensions[letter].hidden = True
+    dv = DataValidation(type='list', formula1='$%s$%d:$%s$%d' % (letter, first, letter, first + len(names) - 1),
+                        allow_blank=True, errorStyle='warning', showErrorMessage=True,
+                        errorTitle='ทีมไม่อยู่ในรายการ',
+                        error='ชื่อทีมต้องตรงกับชีต %s ถึงจะหาราคาเจอ ควรเลือกจาก dropdown' % EXPORT_DOC_RATE_SHEET,
+                        showInputMessage=True, promptTitle='เลือกทีม',
+                        prompt='เลือกทีมจาก dropdown แล้วกรอกราคาในช่องกรอกเองของสาขา')
+    ws.add_data_validation(dv)
+    dv.add('B%d:B%d' % (first, first + EXPORT_DOC_FUEL_TEAM_MAX_ROWS - 1))
 
 
 def _exportDocumentWriteRateViewSheet(workbook, trip_rows, selected_month):
@@ -12907,6 +13168,17 @@ def _exportDocumentWriteRateViewSheet(workbook, trip_rows, selected_month):
     previous_rates, previous_labels, _ = _ifrExportPreviousRates(rates)
     _ifrExportWriteTable(worksheet, rates, _baseCompanyMapDisplayNameById(),
                          _ifrExportLayout(rates), previous_rates, previous_labels)
+
+
+def _exportDocumentFuelNote(rate_row):
+    """หมายเหตุที่มาของราคาน้ำมัน (เฉพาะแถวที่สัญญาปรับตามน้ำมัน) : บอกว่าทีมไม่ได้เติมเอง / ต้องกรอกราคา"""
+    if not rate_row.get('fuel_needed'):
+        return None
+    if rate_row.get('fuel_source') == EXPORT_DOC_FUEL_SOURCE_BRANCH:
+        return 'ทีมไม่ได้เติมน้ำมันที่สาขานี้ ใช้ราคาเฉลี่ยของสาขา (ชีต %s)' % EXPORT_DOC_FUEL_SHEET
+    if rate_row.get('fuel_price') is None:
+        return 'สาขาต้นทางไม่มีบิลเติมน้ำมันเดือนนี้ กรอกราคาเองที่ชีต %s' % EXPORT_DOC_FUEL_SHEET
+    return None
 
 
 def _exportDocumentContractNote(rate_row):
@@ -13599,6 +13871,15 @@ def _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws):
     return condition, not origins
 
 
+def _exportDocumentTabIsPort(company_code, own_port_bws):
+    """แท็บนี้เป็นแท็บท่าเรือเราไหม (กติกาเดียวกับ _exportDocumentTabOriginQ)
+    แท็บท่าเรือเห็นเฉพาะเที่ยวที่ชั่งที่ท่าเรือนั้น = เห็นเที่ยวของต้นทางไม่ครบ จึงอนุมัติรายวันไม่ได้"""
+    if not company_code or company_code in COMPANY_TAB_SEES_ALL:
+        return False
+    return BaseWeightStation.objects.filter(id__in=list(own_port_bws),
+                                            company__code=company_code).exists()
+
+
 def _exportDocumentStationOptions(qs):
     """ตัวเลือกช่อง "ชั่งที่ (ตาชั่ง)" = ตาชั่งที่มีเที่ยวอยู่จริงในขอบเขตของแท็บ+เดือนนี้
     คืน [{'id', 'company', 'label'}] เรียงตามรหัสตาชั่ง"""
@@ -13783,9 +14064,15 @@ def _exportDocumentBaseQuerySet(own_port_bws, other_bws, export_customers, own_p
     return base_qs
 
 
-def _exportDocumentQuerySet(request):
+def _exportDocumentQuerySet(request, params=None):
     """อ่านตัวกรองจาก query string แล้วคืน (queryset, ตัวกรองที่ใช้จริง, รายชื่อเดือน)
-    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน"""
+    ใช้ร่วมกันทั้งหน้าเว็บและปุ่ม export จะได้ไม่มีทางที่ไฟล์กับหน้าจอไม่ตรงกัน
+
+    params : ใส่เมื่ออยากได้ขอบเขตด้วยตัวกรองชุดอื่นที่ไม่ใช่ของหน้าจอ (ค่าเริ่มต้น = request.GET)
+    เช่น ส่วนอนุมัติรายวันส่ง {'month': ...} อย่างเดียว เพื่อให้ได้เที่ยวครบทั้งวันเสมอ
+    ไม่ว่าบนจอจะกรองทีม / ตาชั่ง / หินไว้หรือไม่ (แท็บบริษัทยังมาจาก session เหมือนเดิม)"""
+    if params is None:
+        params = request.GET
     _exportProgressSet(request, 3, 'กำลังตรวจรายชื่อตาชั่งและลูกค้าส่งออก')
     own_port_bws = _exportDocumentOwnPortBwsIds()
     other_bws = _exportDocumentOtherBwsIds()
@@ -13819,21 +14106,21 @@ def _exportDocumentQuerySet(request):
 
     _exportProgressSet(request, 26, 'กำลังกรองรายการชั่งตามเงื่อนไข')
 
-    selected_month = request.GET.get('month') or (month_list[0] if month_list else '')
+    selected_month = params.get('month') or (month_list[0] if month_list else '')
     # ตัวกรองเคสกับตาชั่งยุบเป็น dropdown เดียว เพราะตาชั่ง 1 ตัวอยู่ได้เคสเดียวอยู่แล้ว
     # ค่าที่ส่งมาเป็นได้ 3 แบบ : ว่าง = ทั้งหมด | 'case:1'/'case:2' = ทุกตาชั่งของเคสนั้น | รหัสตาชั่ง
     # ยังรับพารามิเตอร์ case แยกอยู่ เผื่อลิงก์เก่าที่ bookmark ไว้
-    raw_bws = request.GET.get('bws') or ''
-    selected_team = request.GET.get('team') or ''
+    raw_bws = params.get('bws') or ''
+    selected_team = params.get('team') or ''
     # ชนิดหินเก็บเป็นชื่อใน Weight ไม่มีตารางอ้างอิง จึงกรองด้วยชื่อตรง ๆ
-    selected_stone = request.GET.get('stone') or ''
+    selected_stone = params.get('stone') or ''
     # ขอบเขตของแท็บบริษัท (ดู _exportDocumentTabOriginQ) : แท็บเหมือง = ตามต้นทาง · แท็บท่าเรือเรา = ตามที่ชั่ง
     # แท็บร้อยเกาะ / ทั้งหมด เห็นทุกเที่ยว · ช่อง "ชั่งที่ (ตาชั่ง)" กรองต่อจากนี้ด้วย bws_id
     company_code = request.session.get('company_code')
     tab_sees_all = company_code in COMPANY_TAB_SEES_ALL
     tab_q, tab_no_origin = _exportDocumentTabOriginQ(company_code, own_port_bws, other_bws)
     # ค่าว่าง = แสดงทั้งสองเคสรวมกัน
-    selected_case = request.GET.get('case') or ''
+    selected_case = params.get('case') or ''
     selected_bws = ''
     if raw_bws.startswith('case:'):
         selected_case = raw_bws.split(':', 1)[1]
@@ -13845,7 +14132,7 @@ def _exportDocumentQuerySet(request):
     # และเที่ยวลงท่าเรือบริษัทอื่น เลือกตาชั่งอย่างเดียวจึงเห็นทุกเที่ยวของตาชั่งนั้น
 
     # ค่าเริ่มต้นคือไม่เอารายการที่ยกเลิก เพราะไฟล์ excel นับ 1 แถว = 1 เที่ยวที่วิ่งจริง
-    include_cancel = request.GET.get('include_cancel') == '1'
+    include_cancel = params.get('include_cancel') == '1'
 
     qs = base_qs
     if selected_month:
@@ -13859,8 +14146,8 @@ def _exportDocumentQuerySet(request):
     # เพราะราคาที่ใช้คิดเงิน (ดู _exportDocumentRateAsOf) อิงกับ "เดือน" ทั้งเดือนอยู่แล้ว
     # เลือกวันที่ได้แค่เพื่อ "ดูย่อยลงไป" ในเดือนนั้น ไม่ได้เปลี่ยนราคาที่ใช้
     # วันที่นอกเดือนที่เลือกจะไม่มีผล เพราะ qs ถูกกรองด้วยเดือนไปก่อนหน้านี้แล้ว
-    selected_date_from = request.GET.get('date_from') or ''
-    selected_date_to = request.GET.get('date_to') or ''
+    selected_date_from = params.get('date_from') or ''
+    selected_date_to = params.get('date_to') or ''
     try:
         if selected_date_from:
             datetime.strptime(selected_date_from, '%Y-%m-%d')
@@ -13950,6 +14237,7 @@ def _exportDocumentQuerySet(request):
         'selected_team': selected_team,
         'selected_stone': selected_stone,
         'tab_no_origin': tab_no_origin,
+        'tab_is_port': _exportDocumentTabIsPort(company_code, own_port_bws),
         # ส่งรายการออกไปด้วย ไม่ให้หน้าเว็บไปคำนวณเองซ้ำ ไม่งั้นมีโอกาสที่ตัวเลือกบนจอ
         # กับตัวที่ใช้กรองจริงไม่ตรงกัน เวลาแก้กติกาแล้วลืมแก้อีกฝั่ง
         'bws_options': bws_options,
@@ -14085,7 +14373,10 @@ EXPORT_DOC_PROBLEM_FILTERS = {
     'no_team': ('ตอนชั่งไม่ได้เลือกทีมรถ', lambda r: r.get('team_missing')),
     'no_dest_weight': ('ยังไม่ได้กรอก นน.ปลายทาง', lambda r: r.get('dest_weight') is None),
     'no_origin_weight': ('ยังไม่มี นน.ต้นทาง', lambda r: r.get('origin_weight') is None),
-    'no_fuel': ('ทีมไม่มีบิลเติมน้ำมันเดือนนี้ (อัตราว่าง)', lambda r: r.get('fuel_missing')),
+    'no_fuel': ('สาขาต้นทางไม่มีบิลเติมน้ำมัน (ต้องกรอกราคาเองในไฟล์)', lambda r: r.get('fuel_missing')),
+    # ส่วนอนุมัติรายวัน : ขาดอย่างใดอย่างหนึ่งที่ทำให้กดอนุมัติวันนั้นไม่ได้ (ดู _exportDocumentApprovalReasons)
+    'approval': ('เที่ยวที่ยังอนุมัติไม่ได้ (ข้อมูลไม่ครบ)',
+                 lambda r: bool(_exportDocumentApprovalReasons(r))),
     'off_route': ('เส้นทางยังไม่มีในหน้าค่าขนส่ง (ไม่นับในรายงาน)', None),
     'carry_empty': ('ประเภทการบรรทุกว่าง (ไม่นับในรายงาน)', None),
 }
@@ -14202,6 +14493,16 @@ def viewExportDocument(request):
                 r['weight_id'] for r in all_rows if _exportDocumentRouteKey(r) == selected_route])
     else:
         selected_route = ''
+    # ?origin= : กรองตารางรายเที่ยวเหลือต้นทางเดียว (กดจากช่องในตารางอนุมัติรายวัน คู่กับ date_from/date_to)
+    selected_origin = request.GET.get('origin') or ''
+    origin_label = ''
+    if selected_origin.isdigit() and problem not in ('off_route', 'carry_empty'):
+        origin_id = int(selected_origin)
+        origin_rows = [r for r in all_rows if r.get('origin_map_id') == origin_id]
+        origin_label = origin_rows[0]['origin'] if origin_rows else ''
+        table_qs = table_qs.filter(weight_id__in=[r['weight_id'] for r in origin_rows])
+    else:
+        selected_origin = ''
     # ลิงก์ของปุ่มต้องกลับไปหน้า 1 เสมอ ไม่งั้นกดจากหน้า 5 ของทั้งเดือนจะไปตกหน้าที่ไม่มีอยู่
     problem_query = request.GET.copy()
     problem_query.pop('page', None)
@@ -14209,6 +14510,7 @@ def viewExportDocument(request):
     # ลิงก์ของตารางเส้นทาง / ปุ่มของหน้าเหมือง : ตัวกรองหลักชุดเดียวกับหน้าจอ ไม่ติด route / problem ค้าง
     route_query = problem_query.copy()
     route_query.pop('route', None)
+    route_query.pop('origin', None)
 
     p = Paginator(table_qs, 100)
     page = request.GET.get('page')
@@ -14272,6 +14574,10 @@ def viewExportDocument(request):
         'route_totals': route_totals,
         'selected_route': selected_route,
         'route_label': route_label,
+        'selected_origin': selected_origin,
+        'origin_label': origin_label,
+        # ปุ่มไปหน้าตรวจและอนุมัติเที่ยวรายวัน (แท็บท่าเรือ / แท็บไม่มีต้นทาง อนุมัติไม่ได้)
+        'approval_available': not filters['tab_no_origin'] and not filters['tab_is_port'],
         # รายการที่อัปโหลดมารอยืนยัน (ยังไม่เขียน db)
         'pending_edit': request.session.get(EXPORT_DOC_EDIT_SESSION_KEY),
     }
@@ -15251,8 +15557,11 @@ def confirmTripEdit(request):
                 setattr(weight, attr, value)
             weight.save()
 
-            history = (WeightHistory.objects.filter(weight_id=weight.pk)
-                       .order_by('-update').first())
+            # ค้นด้วย weight_table_id (FK มี index) ไม่ใช่ weight_id ซึ่งไม่มี index
+            # ค่าเท่ากันเสมอ (signal ใส่ทั้งคู่จากใบเดียวกัน) แต่ weight_id ต้องไล่ทั้งตาราง ~2.8 แสนแถวทีละเที่ยว
+            # ไฟล์ 1,096 เที่ยวเคยค้างใน transaction นี้ 20+ นาที กดซ้ำแล้วเจอ Lock wait timeout (1205)
+            history = (WeightHistory.objects.filter(weight_table_id=weight.pk)
+                       .order_by('-update', '-id').first())
             if history:
                 history.user_update = request.user
                 history.save()
@@ -15305,6 +15614,357 @@ def _exportDocumentRouteSummary(trip_rows):
     return result, totals
 
 
+# ---------- อนุมัติเที่ยวรายวันของหน้าเหมือง (วันที่ × ต้นทาง) ----------
+# หน้าเหมืองตรวจเที่ยวของวันหนึ่งแล้วกดอนุมัติ เก็บใน ExportDocumentDayApproval (1 แถว = 1 วัน × 1 ต้นทาง)
+# หน้าเหมืองแต่ละเหมืองมีคนดูแลแยกกัน (บางคนดูหลายที่) จึงอนุมัติแยกต้นทาง ใครเปิดหน้านี้ได้ก็กดได้ บันทึกชื่อคนกดไว้
+#
+# ระบบตรวจเองได้ 4 เรื่องตามด้านล่าง + ใบที่ประเภทการบรรทุกว่าง (เที่ยวที่ควรอยู่ในรายงานแต่หลุด)
+# ส่วน "เที่ยวครบไหม" ระบบไม่รู้ว่าวันนั้นควรมีกี่เที่ยว คนกดต้องเทียบกับหน้างานเอง (กล่องยืนยันตอนกดบอกจำนวนเที่ยว)
+EXPORT_DOC_APPROVAL_REASONS = (
+    ('no_team', 'ไม่ระบุทีม'),
+    ('no_origin_weight', 'ขาด นน.ต้นทาง'),
+    ('no_dest_weight', 'ขาด นน.ปลายทาง'),
+    ('no_weight_band', 'ไม่มีช่วงน้ำหนักที่แบก'),
+)
+EXPORT_DOC_APPROVAL_PROBLEM = 'problem'        # มีเที่ยวข้อมูลไม่ครบ กดอนุมัติไม่ได้
+EXPORT_DOC_APPROVAL_READY = 'ready'            # ระบบตรวจผ่าน รอคนอนุมัติ
+EXPORT_DOC_APPROVAL_APPROVED = 'approved'      # อนุมัติแล้ว และข้อมูลยังตรงกับตอนอนุมัติ
+EXPORT_DOC_APPROVAL_CHANGED = 'changed'        # เคยอนุมัติ แต่มีคนแก้ข้อมูลหลังจากนั้น ต้องตรวจใหม่
+EXPORT_DOC_APPROVAL_NO_ORIGIN = 'no_origin'    # หาแถวต้นทางในตาราง map ไม่เจอ ผูกการอนุมัติไม่ได้
+
+
+def _exportDocumentApprovalReasons(row):
+    """เหตุที่ทำให้เที่ยวนี้อนุมัติไม่ได้ (list ว่าง = ผ่าน)
+    ต้องผ่าน _exportDocumentAssignWeightCarried มาก่อน ถึงจะมี wc_status"""
+    reasons = []
+    if row.get('team_missing'):
+        reasons.append('no_team')
+    if row.get('origin_weight') is None:
+        reasons.append('no_origin_weight')
+    if row.get('dest_weight') is None:
+        reasons.append('no_dest_weight')
+    # ไม่มีสัญญา / น้ำหนักไม่เข้าช่วง = คอลัมน์ "ช่วงน้ำหนักที่แบก" ว่าง เที่ยวนี้คิดเงินไม่ได้
+    if row.get('wc_status') in ('no_contract', 'out_of_range'):
+        reasons.append('no_weight_band')
+    return reasons
+
+
+def _exportDocumentDayFingerprint(rows):
+    """ค่าย่อของเที่ยวทั้งชุด เปลี่ยนเมื่อเที่ยวเพิ่ม / หาย (รวมยกเลิกใบ) หรือแก้ช่องที่หน้าเหมืองรับผิดชอบ
+
+    ไม่รวมช่วงน้ำหนักที่แบก เพราะคิดจากสัญญาค่าขนส่งของบัญชี บัญชีแก้สัญญาแล้วไม่ควรทำให้ทุกวันกลายเป็น
+    "แก้หลังอนุมัติ" (ถ้าแก้สัญญาแล้วเที่ยวไม่มีช่วง สถานะจะขึ้น "มีปัญหา" ให้เองอยู่แล้ว)
+    """
+    parts = sorted(
+        (r['weight_id'], r.get('doc_id') or '', str(r.get('origin_weight')), str(r.get('dest_weight')),
+         r.get('team_id') or '', r.get('stone') or '', r.get('car_registration') or '')
+        for r in rows)
+    return hashlib.sha256(repr(parts).encode('utf-8')).hexdigest()
+
+
+def _exportDocumentDayApprovals(trip_rows, carry_empty_rows=()):
+    """จัดเที่ยวเป็นกลุ่ม วันที่ × ต้นทาง พร้อมสถานะอนุมัติ (อ่าน db อย่างเดียว ไม่เขียน)
+
+    trip_rows        : แถวรายเที่ยวในรายงาน ผ่าน _exportDocumentAssignWeightCarried แล้ว
+    carry_empty_rows : ใบที่ประเภทการบรรทุกว่างแต่เส้นทางมีราคาแล้ว = เที่ยวที่หลุดจากรายงาน
+                       นับเป็นปัญหาของวันนั้นด้วย ไม่งั้นจะอนุมัติไปทั้งที่เที่ยวไม่ครบ
+    คืน list ของ dict เรียงวันที่ล่าสุดก่อน แล้วตามชื่อต้นทาง
+    """
+    groups = OrderedDict()
+
+    def group_of(r):
+        key = (r['date'], r.get('origin_map_id'))
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {'date': r['date'], 'origin_id': r.get('origin_map_id'),
+                               'origin': r.get('origin') or '-', 'rows': [], 'carry_empty': 0,
+                               'carry_rows': []}
+        return g
+
+    for r in trip_rows:
+        if r.get('date') is not None:
+            group_of(r)['rows'].append(r)
+    for r in carry_empty_rows:
+        if r.get('date') is not None:
+            g = group_of(r)
+            g['carry_empty'] += 1
+            g['carry_rows'].append(r)
+
+    keys = [k for k in groups if k[1] is not None]
+    approvals = {}
+    if keys:
+        for a in (ExportDocumentDayApproval.objects
+                  .filter(date__in={k[0] for k in keys}, origin_id__in={k[1] for k in keys})
+                  .select_related('approved_by')):
+            approvals[(a.date, a.origin_id)] = a
+
+    items = []
+    for key, g in groups.items():
+        counts = OrderedDict((code, 0) for code, _label in EXPORT_DOC_APPROVAL_REASONS)
+        problem_trips = 0
+        for r in g['rows']:
+            reasons = _exportDocumentApprovalReasons(r)
+            r['approval_problems'] = [dict(EXPORT_DOC_APPROVAL_REASONS)[code] for code in reasons]
+            if reasons:
+                problem_trips += 1
+            for code in reasons:
+                counts[code] += 1
+        fingerprint = _exportDocumentDayFingerprint(g['rows'])
+        approval = approvals.get(key)
+        if g['origin_id'] is None:
+            status = EXPORT_DOC_APPROVAL_NO_ORIGIN
+        elif problem_trips or g['carry_empty'] or not g['rows']:
+            status = EXPORT_DOC_APPROVAL_PROBLEM
+        elif approval is None:
+            status = EXPORT_DOC_APPROVAL_READY
+        elif approval.fingerprint == fingerprint:
+            status = EXPORT_DOC_APPROVAL_APPROVED
+        else:
+            status = EXPORT_DOC_APPROVAL_CHANGED
+        # รายการเที่ยวทั้งวัน โชว์ในหน้าต่างยืนยันอนุมัติ (ตารางรายเที่ยวของหน้าเว็บแบ่งหน้า / กรองได้ ใช้แทนไม่ได้)
+        trip_list = sorted(g['rows'], key=lambda r: (str(r.get('doc_id') or ''), r['weight_id']))
+        items.append({
+            'date': g['date'],
+            'origin_id': g['origin_id'],
+            'origin': g['origin'],
+            'trips': len(g['rows']),
+            'trip_list': trip_list,
+            'totals': {k: sum(r[k] for r in g['rows'] if r.get(k) is not None)
+                       for k in ('origin_weight', 'dest_weight', 'pay_weight')},
+            'problem_trips': problem_trips,
+            'problems': [(label, counts[code]) for code, label in EXPORT_DOC_APPROVAL_REASONS if counts[code]],
+            'carry_empty': g['carry_empty'],
+            # ใบที่หลุดจากรายงานเพราะประเภทการบรรทุกว่าง โชว์ในหน้าดูรายวันเลย ไม่ต้องข้ามไปหน้า export
+            'carry_list': sorted(g['carry_rows'], key=lambda r: (str(r.get('doc_id') or ''), r['weight_id'])),
+            'fingerprint': fingerprint,
+            'approval': approval,
+            'status': status,
+        })
+    items.sort(key=lambda i: (-i['date'].toordinal(), str(i['origin'])))
+    return items
+
+
+def _exportDocumentApprovalBoard(items):
+    """จัดเป็นตาราง แถว = วันที่ (ล่าสุดก่อน) · คอลัมน์ = ต้นทาง
+    คนที่ดูหลายเหมืองเห็นทุกเหมืองของวันเดียวกันในแถวเดียว ช่องที่ไม่มีเที่ยวเป็น None"""
+    if not items:
+        return None
+    origins = OrderedDict()
+    for i in sorted(items, key=lambda i: str(i['origin'])):
+        origins.setdefault(i['origin_id'], i['origin'])
+    by_key = {(i['date'], i['origin_id']): i for i in items}
+    dates = sorted({i['date'] for i in items}, reverse=True)
+    counts = {s: 0 for s in (EXPORT_DOC_APPROVAL_PROBLEM, EXPORT_DOC_APPROVAL_READY,
+                             EXPORT_DOC_APPROVAL_APPROVED, EXPORT_DOC_APPROVAL_CHANGED,
+                             EXPORT_DOC_APPROVAL_NO_ORIGIN)}
+    for i in items:
+        counts[i['status']] += 1
+    return {
+        'origins': [{'id': k, 'name': v} for k, v in origins.items()],
+        'rows': [{'date': d, 'cells': [by_key.get((d, oid)) for oid in origins]} for d in dates],
+        'counts': counts,
+        'total': len(items),
+    }
+
+
+def _exportDocumentApprovalMonth(request, selected_month):
+    """เที่ยวทั้งเดือนของแท็บที่เปิดอยู่ จัดเป็น วันที่ × ต้นทาง พร้อมสถานะ (หน้า /exportDocument/approval/)
+
+    คืน (items, filters, month_list) · items ว่างถ้าแท็บนี้อนุมัติไม่ได้ (แท็บท่าเรือ / ไม่มีต้นทาง)
+    แท็บท่าเรือเห็นเฉพาะเที่ยวที่ชั่งที่ท่าเรือนั้น (ไม่ครบทั้งต้นทาง) จึงอนุมัติจากแท็บท่าเรือไม่ได้
+    ใช้ขอบเขตของ _exportDocumentQuerySet ชุดเดียวกับหน้า export (ส่งแค่เดือน ไม่มีตัวกรองอื่น)
+    """
+    qs, filters, month_list = _exportDocumentQuerySet(request, params={'month': selected_month})
+    if not filters['selected_month'] or filters['tab_no_origin'] or filters['tab_is_port']:
+        return [], filters, month_list
+    own_port_bws = filters['own_port_bws']
+    own_port_customers = filters['own_port_customers']
+    rows = _exportDocumentRows(qs, own_port_bws, own_port_customers)
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, filters['selected_month'])
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    carry_rows = _exportDocumentRows(filters['carry_empty_qs'], own_port_bws, own_port_customers)
+    return _exportDocumentDayApprovals(rows, carry_rows), filters, month_list
+
+
+def _userHasCompanyTab(user, company_code):
+    """แท็บใน session เป็นบริษัทที่ผูกกับ UserProfile ของผู้ใช้จริงไหม
+    setSessionCompany ใส่รหัสอะไรลง session ก็ได้ งานที่เขียนข้อมูลแทนเหมือง (อนุมัติ / ยกเลิก)
+    จึงเชื่อแท็บใน session อย่างเดียวไม่ได้ · ALL ไม่มีแถวใน BaseCompany : ให้เฉพาะคนที่มีแท็บร้อยเกาะ"""
+    codes = set(BaseCompany.objects.filter(userprofile__user=user).values_list('code', flat=True))
+    return company_code in codes or (company_code == 'ALL' and 'ROI' in codes)
+
+
+def _plainText(message, status=200):
+    """ข้อความตอบกลับแบบ text ธรรมดา : ข้อความมีชื่อนาม / ชื่อหินจากข้อมูล ห้ามให้เบราว์เซอร์ตีความเป็น HTML"""
+    return HttpResponse(message, content_type='text/plain; charset=utf-8', status=status)
+
+
+def _exportDocumentTabOwnsOrigin(company_code, origin_id):
+    """แท็บนี้ดูแลต้นทางนี้ไหม : แท็บร้อยเกาะ / ทั้งหมด = ทุกต้นทาง · แท็บเหมือง = แถว map ที่ผูกกับบริษัทนั้น
+    แท็บท่าเรือไม่ดูแลต้นทางไหนเลย (กติกาเดียวกับ _exportDocumentTabOriginQ)
+    ใช้กันทั้งปุ่มอนุมัติและยกเลิก ไม่ให้แท็บหนึ่งไปแตะการอนุมัติของเหมืองที่ไม่ใช่ของตัวเอง"""
+    if company_code in COMPANY_TAB_SEES_ALL:
+        return True
+    if _exportDocumentTabIsPort(company_code, _exportDocumentOwnPortBwsIds()):
+        return False
+    return BaseCompanyMapBaseCustomer.objects.filter(id=origin_id, base_company__code=company_code).exists()
+
+
+def _exportDocumentApprovalDayCell(board, selected_origin, date_from, date_to):
+    """ช่องของตารางอนุมัติที่ตรงกับหน้าดูรายวัน (วันเดียว + ต้นทางเดียว) หรือ None"""
+    if not board or not selected_origin or not date_from or date_from != date_to:
+        return None
+    day = datetime.strptime(date_from, '%Y-%m-%d').date()
+    origin_id = int(selected_origin)
+    for row in board['rows']:
+        if row['date'] == day:
+            return next((c for c in row['cells'] if c and c['origin_id'] == origin_id), None)
+    return None
+
+
+def _exportDocumentApprovalItem(request, day, origin_id):
+    """สถานะของ วันที่ × ต้นทาง คำนวณใหม่จาก db (ไม่เชื่อค่าที่หน้าเว็บส่งมา)
+    คืน None ถ้าแท็บนี้ไม่เห็นเที่ยวของต้นทางนั้นในวันนั้นเลย"""
+    month = day.strftime('%Y-%m')
+    qs, filters, _months = _exportDocumentQuerySet(request, params={'month': month})
+    if filters['tab_no_origin'] or filters['tab_is_port']:
+        return None
+    own_port_bws = filters['own_port_bws']
+    own_port_customers = filters['own_port_customers']
+    rows = [r for r in _exportDocumentRows(qs.filter(date=day), own_port_bws, own_port_customers)
+            if r.get('origin_map_id') == origin_id]
+    carry_rows = [r for r in _exportDocumentRows(filters['carry_empty_qs'].filter(date=day),
+                                                 own_port_bws, own_port_customers)
+                  if r.get('origin_map_id') == origin_id]
+    if not rows and not carry_rows:
+        return None
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    return _exportDocumentDayApprovals(rows, carry_rows)[0]
+
+
+@login_required(login_url='login')
+def exportDocumentApproveDay(request):
+    """กดอนุมัติ / ยกเลิกอนุมัติ ของ วันที่ × ต้นทาง จากตารางอนุมัติรายวันบนหน้า /exportDocument/
+
+    ตอนอนุมัติ ตรวจใหม่จาก db ทุกครั้ง : ต้องไม่มีเที่ยวที่ข้อมูลไม่ครบ และข้อมูลต้องตรงกับที่คนกดเห็นบนจอ
+    (fingerprint ที่หน้าเว็บส่งมา) ไม่งั้นจะเป็นการอนุมัติของที่ไม่ได้ดูจริง เช่น มีคนแก้ระหว่างที่เปิดหน้าค้างไว้
+    """
+    if request.method != 'POST':
+        return redirect('viewExportDocumentApproval')
+    if 'company_code' not in request.session:
+        return redirect('logout')
+    next_url = request.POST.get('next') or ''
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        next_url = reverse('viewExportDocumentApproval')
+    try:
+        day = datetime.strptime(request.POST.get('date') or '', '%Y-%m-%d').date()
+        origin_id = int(request.POST.get('origin') or '')
+    except ValueError:
+        messages.error(request, 'ข้อมูลที่ส่งมาไม่ถูกต้อง (วันที่ / ต้นทาง)')
+        return redirect(next_url)
+    day_label = day.strftime('%d/%m/%Y')
+    action = request.POST.get('action')
+    code = request.session['company_code']
+    if not _userHasCompanyTab(request.user, code) or not _exportDocumentTabOwnsOrigin(code, origin_id):
+        messages.error(request, 'ต้นทางนี้ไม่ได้อยู่ในแท็บบริษัทที่เปิดอยู่ อนุมัติ / ยกเลิกจากแท็บนี้ไม่ได้')
+        return redirect(next_url)
+
+    if action == 'revoke':
+        # ลบแถวเดียวด้วยคีย์ unique (วันที่, ต้นทาง)
+        deleted, _detail = ExportDocumentDayApproval.objects.filter(date=day, origin_id=origin_id).delete()
+        if deleted:
+            messages.success(request, 'ยกเลิกการอนุมัติวันที่ %s แล้ว' % day_label)
+        else:
+            messages.error(request, 'วันที่ %s ยังไม่ได้อนุมัติอยู่แล้ว' % day_label)
+        return redirect(next_url)
+    if action != 'approve':
+        messages.error(request, 'ไม่รู้จักคำสั่งนี้')
+        return redirect(next_url)
+
+    item = _exportDocumentApprovalItem(request, day, origin_id)
+    if item is None:
+        messages.error(request, 'ไม่พบเที่ยวของวันที่ %s ต้นทางนี้ในแท็บที่เปิดอยู่' % day_label)
+        return redirect(next_url)
+    name = item['origin']
+    if item['status'] == EXPORT_DOC_APPROVAL_PROBLEM:
+        detail = ', '.join('%s %d' % (label, n) for label, n in item['problems'])
+        if item['carry_empty']:
+            detail = ', '.join(filter(None, [detail, 'ประเภทการบรรทุกว่าง %d' % item['carry_empty']]))
+        messages.error(request, 'วันที่ %s %s ยังมีเที่ยวที่ข้อมูลไม่ครบ (%s) แก้ก่อนแล้วค่อยอนุมัติ'
+                       % (day_label, name, detail))
+        return redirect(next_url)
+    if request.POST.get('fingerprint') != item['fingerprint']:
+        messages.error(request, 'ข้อมูลวันที่ %s %s เปลี่ยนไประหว่างที่เปิดหน้านี้อยู่ (ตอนนี้มี %d เที่ยว) '
+                                'กรุณาตรวจอีกครั้งแล้วค่อยกดอนุมัติ' % (day_label, name, item['trips']))
+        return redirect(next_url)
+    ExportDocumentDayApproval.objects.update_or_create(
+        date=day, origin_id=origin_id,
+        defaults={'trip_count': item['trips'], 'fingerprint': item['fingerprint'],
+                  'approved_by': request.user, 'approved_at': dj_timezone.now()})
+    messages.success(request, 'อนุมัติวันที่ %s %s (%d เที่ยว) แล้ว' % (day_label, name, item['trips']))
+    return redirect(next_url)
+
+
+def _exportDocumentApprovalNeighbours(board, day_item):
+    """วันก่อนหน้า / ถัดไปของต้นทางเดียวกันที่มีเที่ยว (ปุ่มเลื่อนวันในหน้าดูรายวัน) คืน (ก่อนหน้า, ถัดไป)"""
+    days = sorted(c['date'] for row in board['rows'] for c in row['cells']
+                  if c and c['origin_id'] == day_item['origin_id'])
+    i = days.index(day_item['date'])
+    return (days[i - 1] if i > 0 else None), (days[i + 1] if i + 1 < len(days) else None)
+
+
+@login_required(login_url='login')
+def viewExportDocumentApproval(request):
+    """หน้าเหมือง : ตรวจและอนุมัติเที่ยวรายวัน (แยกจากหน้า /exportDocument/ ที่ข้อมูลเยอะอยู่แล้ว)
+
+    ไม่มี ?date= : ตารางรวม แถว = วันที่ · คอลัมน์ = ต้นทาง · ช่อง = สถานะ
+    มี ?date= & ?origin= : หน้าดูรายวัน รายเที่ยวของวันนั้น ต้นทางนั้น + ปุ่มอนุมัติ / ยกเลิก
+      ?problems=1 : เหลือเฉพาะเที่ยวที่ทำให้อนุมัติไม่ได้
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    items, filters, month_list = _exportDocumentApprovalMonth(request, request.GET.get('month') or '')
+    selected_month = filters['selected_month']
+    board = _exportDocumentApprovalBoard(items)
+
+    selected_date = request.GET.get('date') or ''
+    selected_origin = request.GET.get('origin') or ''
+    day = None
+    if board and selected_origin.isdigit():
+        try:
+            day = _exportDocumentApprovalDayCell(board, selected_origin, selected_date, selected_date)
+        except ValueError:
+            day = None
+    only_problems = request.GET.get('problems') == '1'
+    day_trips = []
+    prev_day = next_day = None
+    if day:
+        day_trips = [t for t in day['trip_list'] if t['approval_problems']] if only_problems else day['trip_list']
+        prev_day, next_day = _exportDocumentApprovalNeighbours(board, day)
+
+    context = {
+        'export_document_page': 'active',
+        active: 'active',
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'tab_no_origin': filters['tab_no_origin'],
+        'tab_is_port': filters['tab_is_port'],
+        'board': board,
+        'day': day,
+        'day_trips': day_trips,
+        'only_problems': only_problems,
+        'prev_day': prev_day,
+        'next_day': next_day,
+        'carry_type': EXPORT_DOC_CARRY_TYPE,
+    }
+    return render(request, 'exportDocument/approvalExportDocument.html', context)
+
+
 # ใบสรุปหน้าเหมือง : ทำตามไฟล์ที่หน้างานทำจริง (ตัวอย่าง "กงตาก3-ปัญจะใหม่ ต.ค69 แร่ยิปซั่ม6นิ้ว.xlsx")
 #   สรุป <เหมือง>           : หนังสือสรุปยอดของเหมืองนั้นทุกท่าเรือ (แบบ Sheet1 ของตัวอย่าง)
 #   <เหมือง>-<ท่า>          : รายเที่ยวด้านซ้าย + ตารางสรุป เส้นทาง -> สินค้า -> ทีม ด้านขวา (แบบ sheet สินค้าของตัวอย่าง)
@@ -15317,10 +15977,17 @@ MINE_SUMMARY_MISSING_FILL = 'FFF2CC'
 MINE_SUMMARY_NUM = '_-* #,##0.00_-;\-* #,##0.00_-;_-* "-"??_-;_-@_-'
 MINE_SUMMARY_TRIP_COLUMNS = [   # (หัว, ความกว้าง) แถว 1 = หัว ข้อมูลเริ่มแถว 2 เหมือนตัวอย่าง
     ('ลำดับที่ใบชั่ง', 13), ('ทะเบียนรถ', 12), ('วันที่', 11), ('ทีม', 26), ('ชื่อเหมือง', 30),
-    ('ชื่อสินค้า', 26), ('นน.ต้นทาง', 12), ('นน.ปลายทาง', 12), ('นน.ส่วนต่าง', 12),
+    ('ชื่อสินค้า', 22), ('น้ำหนักที่แบก', 14), ('นน.ต้นทาง', 12), ('นน.ปลายทาง', 12), ('นน.ส่วนต่าง', 12),
     ('นน.จ่ายค่าบรรทุก', 14), ('หมายเหตุ', 22),
 ]
-MINE_SUMMARY_PIVOT_COL = 13      # M : ตารางสรุปด้านขวาของรายเที่ยว (ตัวอย่างอยู่ S ถัดจากคอลัมน์ที่ซ่อน)
+# คอลัมน์ของชีตรายเที่ยว : D ทีม / F ชนิดหิน / G น้ำหนักที่แบก (แยกจากชื่อสินค้า) / H-K น้ำหนัก
+MINE_SUMMARY_COL_TEAM = 'D'
+MINE_SUMMARY_COL_STONE = 'F'
+MINE_SUMMARY_COL_BAND = 'G'
+MINE_SUMMARY_COL_ORIGIN_W = 'H'
+MINE_SUMMARY_COL_DEST_W = 'I'
+MINE_SUMMARY_WEIGHT_COLS = 'HIJK'   # นน.ต้นทาง / ปลายทาง / ส่วนต่าง / จ่ายค่าบรรทุก
+MINE_SUMMARY_PIVOT_COL = 14      # N : ตารางสรุปด้านขวาของรายเที่ยว (เว้น M หนึ่งคอลัมน์)
 MINE_SUMMARY_PIVOT_ROW = 3       # หัวตารางสรุปแถว 3 เหมือนตัวอย่าง
 MINE_SUMMARY_COVER_ROW = 11      # ใบปะหน้า : หัวตารางสรุปแถว 11 เหมือนตัวอย่าง
 # คำที่ตัดออกตอนตั้งชื่อ sheet (ชื่อ sheet ยาวได้ 31 ตัว ชื่อเต็มอยู่ในตัว sheet แล้ว)
@@ -15405,15 +16072,38 @@ def _mineSummaryRouteLabel(origin, destination):
     return '%s-%s' % (origin, destination)
 
 
+def _mineSummaryBandSortKey(band):
+    """เรียงช่วงน้ำหนักที่แบกจากน้อยไปมาก ตามตัวเลขแรกในข้อความ ('0-35' < '35.01 ขึ้นไป')
+    ไม่มีช่วง ขึ้นก่อน · ช่วงที่ไม่มีตัวเลข ไว้ท้าย"""
+    if not band:
+        return (0, 0.0, '')
+    match = re.search(r'\d+(?:\.\d+)?', band)
+    return (1, float(match.group()), band) if match else (2, 0.0, band)
+
+
+def _mineSummaryThaiSortKey(text):
+    """เรียงชื่อภาษาไทยแบบพจนานุกรมคร่าว ๆ : สระหน้า (เ แ โ ใ ไ) ไม่นับเป็นตัวแรก ให้ไปเรียงตามพยัญชนะที่ตามมา
+    ('แร่' อยู่ในหมวด ร ไม่ใช่ไปต่อท้าย ฮ ตามรหัสตัวอักษร)"""
+    text = text or ''
+    leading = ''
+    while text and text[0] in 'เแโใไ':
+        leading += text[0]
+        text = text[1:]
+    return (text, leading)
+
+
 def _mineSummaryGroups(trips):
-    """ลำดับแถวของตารางสรุป : สินค้า -> ทีม ตามลำดับที่โผล่ครั้งแรกในรายเที่ยว (เหมือน pivot ของหน้างาน)
-    คืน [(สินค้า, [ทีม, ...]), ...]"""
-    groups = OrderedDict()
+    """ลำดับแถวของตารางสรุป : (ชนิดหิน, น้ำหนักที่แบก) -> ทีม
+    เรียงตามชนิดหิน แล้วตามช่วงน้ำหนักที่แบก · ทีมตามลำดับที่โผล่ครั้งแรกในรายเที่ยว
+    คืน [((ชนิดหิน, น้ำหนักที่แบก), [ทีม, ...]), ...]"""
+    groups = {}
     for r in trips:
-        teams = groups.setdefault(_mineSummaryProduct(r), [])
+        key = (r['stone'] or '-', r.get('weight_carried') or '')
+        teams = groups.setdefault(key, [])
         if r['team'] not in teams:
             teams.append(r['team'])
-    return list(groups.items())
+    return sorted(groups.items(), key=lambda item: (_mineSummaryThaiSortKey(item[0][0]),
+                                                    _mineSummaryBandSortKey(item[0][1])))
 
 
 def _mineSummaryCriteria(text):
@@ -15436,21 +16126,28 @@ def _mineSummaryFont(cell, size=14, bold=False, color=None, fmt=None, align=None
 
 def _mineSummaryPivotFormulas(sheet_ref, last_row, product=None, team=None):
     """สูตร [เที่ยว, นน.ต้นทาง, นน.ปลายทาง, นน.ส่วนต่าง, นน.จ่าย] ของแถวสรุปหนึ่งแถว
-    อ้างรายเที่ยวในช่วงแถว 2..last_row : F สินค้า / D ทีม / G-J น้ำหนัก
-    sheet_ref = '' (sheet เดียวกัน) หรือ "'ชื่อ sheet'!" (อ้างข้าม sheet)"""
+    อ้างรายเที่ยวในช่วงแถว 2..last_row : F ชนิดหิน + G น้ำหนักที่แบก / D ทีม / H-K น้ำหนัก
+    product = (ชนิดหิน, น้ำหนักที่แบก) · sheet_ref = '' (sheet เดียวกัน) หรือ "'ชื่อ sheet'!" (อ้างข้าม sheet)"""
     def rng(col):
         return '%s$%s$2:$%s$%d' % (sheet_ref, col, col, last_row)
     conditions = []
     if product is not None:
-        conditions.append('%s,%s' % (rng('F'), _mineSummaryCriteria(product)))
+        conditions.append(_mineSummaryProductCriteria(rng, product))
     if team is not None:
-        conditions.append('%s,%s' % (rng('D'), _mineSummaryCriteria(team)))
+        conditions.append('%s,%s' % (rng(MINE_SUMMARY_COL_TEAM), _mineSummaryCriteria(team)))
     if not conditions:
-        return (['=COUNTA(%s)' % rng('F')] +
-                ['=SUM(%s)' % rng(col) for col in 'GHIJ'])
+        return (['=COUNTA(%s)' % rng(MINE_SUMMARY_COL_STONE)] +
+                ['=SUM(%s)' % rng(col) for col in MINE_SUMMARY_WEIGHT_COLS])
     cond = ','.join(conditions)
     return (['=COUNTIFS(%s)' % cond] +
-            ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in 'GHIJ'])
+            ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in MINE_SUMMARY_WEIGHT_COLS])
+
+
+def _mineSummaryProductCriteria(rng, product):
+    """เงื่อนไข COUNTIFS / SUMIFS ของสินค้า = ชนิดหิน และน้ำหนักที่แบก (ช่วงว่าง = เงื่อนไข "" ตรงกับช่องว่าง)"""
+    stone, band = product
+    return '%s,%s,%s,%s' % (rng(MINE_SUMMARY_COL_STONE), _mineSummaryCriteria(stone),
+                            rng(MINE_SUMMARY_COL_BAND), _mineSummaryCriteria(band))
 
 
 # สีของตารางสรุป แยกระดับให้อ่านง่าย (ทำ PivotTable จริงจากโค้ดไม่ได้ Excel ตัดทิ้งตอนเปิดไฟล์)
@@ -15464,9 +16161,12 @@ MINE_SUMMARY_LEVEL_STYLE = {
 }
 
 
-def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, source_ref, last_row, size=14):
+def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, source_ref, last_row, size=14,
+                           total_on_top=False):
     """ตารางสรุป เส้นทาง -> สินค้า -> ทีม + ผลรวมทั้งหมด (ลำดับเดียวกับ pivot ของหน้างาน)
     แต่ละระดับคนละสี ทีมย่อหน้าเข้าไป จะได้ดูออกว่าแถวไหนเป็นหัวข้อ แถวไหนเป็นรายละเอียด
+    total_on_top (ใบปะหน้า / ตารางข้างรายเที่ยว) : แถวแรกใต้หัวตาราง = ผลรวมทั้งหมด แทนแถวชื่อเส้นทาง และไม่มีแถวผลรวมท้ายตาราง
+    (ยอดเดียวกัน ไม่ต้องขึ้นสองที่ ชื่อเส้นทางอยู่บนหัวตารางแล้ว)
     คืนแถวสุดท้ายของตาราง"""
     thin = Side(style='thin')
     hair = Side(style='hair')
@@ -15477,32 +16177,41 @@ def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, sou
         style = MINE_SUMMARY_LEVEL_STYLE[level]
         for i, value in enumerate(labels):
             cell = worksheet.cell(row, left + i)
-            if i == 0 or level == 'head':
-                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / สินค้า / ทีม มาจากข้อมูลชั่ง
+            if i <= 1 or level == 'head':
+                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / หิน / ช่วงน้ำหนัก / ทีม มาจากข้อมูล
             else:
                 cell.value = value                   # สูตรนับ / รวมที่เราสร้างเอง
             if i == 0:
                 align = Alignment(horizontal='left', indent=style['indent'], vertical='center')
                 fmt = None
+            elif i == 1 or level == 'head':
+                align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                fmt = None
             else:
-                align = Alignment(horizontal='center', vertical='center', wrap_text=True) if level == 'head' else None
-                fmt = None if level == 'head' else ('#,##0' if i == 1 else '#,##0.00')
+                align = None
+                fmt = '#,##0' if i == 2 else '#,##0.00'
             _mineSummaryFont(cell, size=size, bold=style['bold'], color=style['color'], fill=style['fill'],
                              fmt=fmt, align=align, border=border)
 
-    paint(top, [route, 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง', 'นน.จ่ายค่าบรรทุก'], 'head',
+    paint(top, [route, 'น้ำหนักที่แบก', 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง', 'นน.จ่ายค่าบรรทุก'], 'head',
           Border(left=thin, right=thin, top=thin, bottom=thin))
     worksheet.row_dimensions[top].height = 24
 
-    rows = [('route', route, _mineSummaryPivotFormulas(source_ref, last_row))]
+    # แถวสินค้า = ชนิดหิน + คอลัมน์น้ำหนักที่แบกแยก (ไม่ต่อท้ายชื่อหินแล้ว) · แถวทีมเว้นช่องน้ำหนักที่แบกไว้
+    grand = ('total', 'ผลรวมทั้งหมด', None, _mineSummaryPivotFormulas(source_ref, last_row))
+    rows = [grand if total_on_top else ('route', route, None, _mineSummaryPivotFormulas(source_ref, last_row))]
     for product, teams in _mineSummaryGroups(trips):
-        rows.append(('product', product, _mineSummaryPivotFormulas(source_ref, last_row, product=product)))
+        stone, band = product
+        rows.append(('product', stone, band or None,
+                     _mineSummaryPivotFormulas(source_ref, last_row, product=product)))
         for team in teams:
-            rows.append(('team', team, _mineSummaryPivotFormulas(source_ref, last_row, product=product, team=team)))
-    rows.append(('total', 'ผลรวมทั้งหมด', _mineSummaryPivotFormulas(source_ref, last_row)))
+            rows.append(('team', team, None,
+                         _mineSummaryPivotFormulas(source_ref, last_row, product=product, team=team)))
+    if not total_on_top:
+        rows.append(grand)
 
     row = top
-    for level, label, formulas in rows:
+    for level, label, band, formulas in rows:
         row += 1
         if level == 'team':
             border = Border(left=thin, right=thin, top=hair, bottom=hair)
@@ -15510,7 +16219,7 @@ def _mineSummaryWritePivot(worksheet, top, left, origin, destination, trips, sou
             border = Border(left=thin, right=thin, top=medium, bottom=medium)
         else:
             border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        paint(row, [label] + formulas, level, border)
+        paint(row, [label, band] + formulas, level, border)
     return row
 
 
@@ -15536,22 +16245,23 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
     for i, r in enumerate(ordered):
         row = 2 + i
         fill = MINE_SUMMARY_MISSING_FILL if r['dest_weight'] is None else None
-        values = [r['doc_id'], r['car_registration'], r['date'], r['team'], route, _mineSummaryProduct(r),
+        values = [r['doc_id'], r['car_registration'], r['date'], r['team'], route, r['stone'] or '-',
+                  r.get('weight_carried') or None,     # ช่วงว่าง = ช่องว่าง (สูตรสรุปจับด้วยเงื่อนไข "")
                   float(r['origin_weight']) if r['origin_weight'] is not None else None,
                   float(r['dest_weight']) if r['dest_weight'] is not None else None,
                   # ส่วนต่าง / จ่ายค่าบรรทุก เป็นสูตรเหมือนตัวอย่าง กรอก นน.ปลายทางในไฟล์แล้วคิดใหม่เอง
-                  '=IF(OR(G{0}="",H{0}=""),"",G{0}-H{0})'.format(row),
-                  '=IF(AND(G{0}="",H{0}=""),"",MIN(G{0},H{0}))'.format(row),
+                  '=IF(OR(H{0}="",I{0}=""),"",H{0}-I{0})'.format(row),
+                  '=IF(AND(H{0}="",I{0}=""),"",MIN(H{0},I{0}))'.format(row),
                   _mineSummaryStatus(r) or None]
         for col, value in enumerate(values, start=1):
             cell = worksheet.cell(row, col)
-            if col in (9, 10):
+            if col in (10, 11):
                 cell.value = value                   # สูตรส่วนต่าง / จ่ายค่าบรรทุก ที่เราสร้างเอง
             else:
                 _mineSummaryText(cell, value)
-            fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 7 <= col <= 10 else '@' if col in (1, 2) else None)
+            fmt = 'DD/MM/YYYY' if col == 3 else ('#,##0.00' if 8 <= col <= 11 else '@' if col in (1, 2, 7) else None)
             _mineSummaryFont(cell, fmt=fmt, border=cell_border, fill=fill,
-                             align=center if col in (1, 2, 3, 5, 6) else None)
+                             align=center if col in (1, 2, 3, 5, 6, 7) else None)
     last_row = 1 + len(ordered)
     if ordered:
         table = Table(displayName=table_name,
@@ -15565,8 +16275,10 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
         note = worksheet.cell(1, left)
         note.value = 'ยังขาด นน.ปลายทาง %s เที่ยว (แถวสีเหลือง) กรอกให้ครบก่อนส่งบัญชี' % missing
         _mineSummaryFont(note, bold=True, color='C00000')
-    _mineSummaryWritePivot(worksheet, MINE_SUMMARY_PIVOT_ROW, left, origin, destination, trips, '', last_row)
-    for i, width in enumerate((30, 8, 13, 13, 13, 15)):
+    # รูปแบบเดียวกับใบปะหน้า : ผลรวมทั้งหมดบนสุดแถวเดียว
+    _mineSummaryWritePivot(worksheet, MINE_SUMMARY_PIVOT_ROW, left, origin, destination, trips, '', last_row,
+                           total_on_top=True)
+    for i, width in enumerate((30, 14, 8, 13, 13, 13, 15)):
         worksheet.column_dimensions[get_column_letter(left + i)].width = width
     worksheet.column_dimensions[get_column_letter(left - 1)].width = 3
     worksheet.freeze_panes = 'A2'
@@ -15576,13 +16288,15 @@ def _mineSummaryWriteTripSheet(worksheet, origin, destination, trips, table_name
 def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, trip_sheet, last_row):
     """ใบปะหน้าของคู่หนึ่ง : บันทึกถึงผู้อำนวยการฝ่ายผลิต (ตามใบปะหน้าของตัวอย่าง)
     เลขที่หนังสือ / วันที่ / ผู้ลงนาม / สำเนาเรียน เว้นให้หน้างานกรอกเอง"""
-    for col, width in enumerate((28.3, 13.3, 15.3, 18.9, 20.9, 15.7), start=1):
+    # A ชื่อ / B น้ำหนักที่แบก / C เที่ยว / D-G น้ำหนัก
+    for col, width in enumerate((28.3, 14, 9, 15.3, 16, 14, 15.7), start=1):
         worksheet.column_dimensions[get_column_letter(col)].width = width
-    products = ', '.join(OrderedDict((r['stone'] or '-', None) for r in trips))
+    products =', '.join(OrderedDict((r['stone'] or '-', None) for r in trips))
     lines = [
         (5, 1, 'ที่ ........................................'),
         (6, 4, 'วันที่ ........................................'),
-        (7, 1, 'เรื่อง        รายงานผลการขนส่ง%s %s ไป%s ประจำเดือน %s' % (products, origin, destination, month_label)),
+        # หัวเรื่องไม่ใส่ชนิดหิน (อยู่ในตารางสรุปแล้ว) : รายงานผลการขนส่ง จาก <เหมือง> ไป<ท่าเรือ>
+        (7, 1, 'เรื่อง        รายงานผลการขนส่ง จาก %s ไป%s ประจำเดือน %s' % (origin, destination, month_label)),
         (8, 1, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ'),
         (9, 1, '               ด้วย ทางหน่วยงาน%s ขอส่งรายงานขนส่ง%s จาก %s ไป%s' % (origin, products, origin, destination)),
         (10, 1, 'ประจำเดือน %s ตามรายละเอียดดังนี้' % month_label),
@@ -15592,7 +16306,7 @@ def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, t
         _mineSummaryFont(worksheet.cell(row, col), size=16)
     worksheet.merge_cells('D6:F6')
     end = _mineSummaryWritePivot(worksheet, MINE_SUMMARY_COVER_ROW, 1, origin, destination, trips,
-                                 "'%s'!" % trip_sheet, last_row, size=16)
+                                 "'%s'!" % trip_sheet, last_row, size=16, total_on_top=True)
     tail = [
         (end + 1, 1, '             จึงเรียนมาเพื่อโปรดทราบ', None),
         (end + 2, 4, 'ขอแสดงความนับถือ', 'center'),
@@ -15614,7 +16328,7 @@ def _mineSummaryWriteCover(worksheet, origin, destination, trips, month_label, t
         _mineSummaryFont(note, bold=True, color='C00000')
     for row in range(5, end + 14):
         worksheet.row_dimensions[row].height = 23.25
-    worksheet.print_area = 'A1:F%d' % (end + 13)
+    worksheet.print_area = 'A1:G%d' % (end + 13)
     worksheet.page_setup.orientation = 'portrait'
     worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
     worksheet.page_setup.fitToWidth = 1
@@ -15629,13 +16343,15 @@ def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
     medium = Side(style='medium')
     box = Border(left=medium, right=medium, top=medium, bottom=medium)
     center = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    for col, width in enumerate((9.1, 34, 13, 17, 12.7, 17, 14.6), start=1):
+    # A ท่าเรือ + ชนิดหิน / B น้ำหนักที่แบก (แยกจากชื่อสินค้า) / C-G เที่ยว ตัน
+    for col, width in enumerate((34, 14, 13, 17, 12.7, 17, 14.6), start=1):
         worksheet.column_dimensions[get_column_letter(col)].width = width
     for row, text in ((7, 'ประจำเดือน %s' % month_label), (8, origin), (9, 'สรุปยอดการขนส่งไปท่าเรือ')):
         worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
         worksheet.cell(row, 1).value = text
         _mineSummaryFont(worksheet.cell(row, 1), size=16, bold=True, align=center)
-    heads = [('A10:B11', 'ท่าเรือ'), ('C10:D10', 'ต้นทาง (%s)' % _mineSummaryShortName(origin)),
+    heads = [('A10:A11', 'ท่าเรือ'), ('B10:B11', 'น้ำหนักที่แบก'),
+             ('C10:D10', 'ต้นทาง (%s)' % _mineSummaryShortName(origin)),
              ('E10:F10', 'ปลายทาง (ท่าเรือ)'), ('G10', 'ส่วนต่าง'),
              ('C11', 'เที่ยว'), ('D11', 'ตัน'), ('E11', 'เที่ยว'), ('F11', 'ตัน'), ('G11', 'ตัน')]
     for ref, text in heads:
@@ -15656,19 +16372,20 @@ def _mineSummaryWriteOriginSummary(worksheet, origin, pairs, month_label):
 
             def rng(col):
                 return '%s$%s$2:$%s$%d' % (ref, col, col, last_row)
-            crit = '%s,%s' % (rng('F'), _mineSummaryCriteria(product))
-            worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-            _mineSummaryText(worksheet.cell(row, 1), '%s %s' % (destination, product))
-            worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('G'))
-            worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (rng('G'), crit)
-            worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, rng('H'))
-            worksheet.cell(row, 6).value = '=SUMIFS(%s,%s)' % (rng('H'), crit)
+            crit = _mineSummaryProductCriteria(rng, product)
+            origin_w, dest_w = rng(MINE_SUMMARY_COL_ORIGIN_W), rng(MINE_SUMMARY_COL_DEST_W)
+            _mineSummaryText(worksheet.cell(row, 1), '%s %s' % (destination, product[0]))
+            _mineSummaryText(worksheet.cell(row, 2), product[1] or None)
+            worksheet.cell(row, 3).value = '=COUNTIFS(%s,%s,"<>")' % (crit, origin_w)
+            worksheet.cell(row, 4).value = '=SUMIFS(%s,%s)' % (origin_w, crit)
+            worksheet.cell(row, 5).value = '=COUNTIFS(%s,%s,"<>")' % (crit, dest_w)
+            worksheet.cell(row, 6).value = '=SUMIFS(%s,%s)' % (dest_w, crit)
             worksheet.cell(row, 7).value = '=D%d-F%d' % (row, row)
             for col in range(1, 8):
                 _mineSummaryFont(worksheet.cell(row, col), size=16, border=box,
                                  fmt=MINE_SUMMARY_NUM if col >= 3 else None,
                                  align=Alignment(horizontal='left', vertical='center', wrap_text=True)
-                                 if col == 1 else None)
+                                 if col == 1 else center if col == 2 else None)
     first, last = 12, row
     row += 1
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
@@ -15800,52 +16517,158 @@ def exportExcelMineSummary(request):
     return _exportDocumentMarkDownloadDone(request, response)
 
 
-@login_required(login_url='login')
-def exportExcelExportDocument(request):
-    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+# ชีตสรุปหน้าเหมืองของไฟล์บัญชี : หน้าตาแบบใบปะหน้าของปุ่ม "ใบสรุปหน้าเหมือง" (ดู _mineSummaryWriteCover)
+# แทนชีต "สรุปเหมือง" เดิมของ template ที่เป็นสูตร INDEX ซ้อนหลายชั้น + ตัวกรอง dropdown อ่านยาก
+# ไม่มีสูตรชีตไหนอ้างชีตเดิม (มีแค่ข้อความแนะนำใน A4 ของบันทึกรายเที่ยว) จึงลบทิ้งได้
+# ตั้งชื่อใหม่ไม่ซ้ำชื่อเดิม : save_with_template_extensions ก๊อป dropdown (x14) ของชีตตามชื่อ
+# ถ้าใช้ชื่อเดิม dropdown ตัวกรองของชีตเก่าจะติดมากับชีตใหม่
+EXPORT_DOC_MINE_SHEET_OLD = 'สรุปเหมือง'
+EXPORT_DOC_MINE_SHEET = 'สรุปหน้าเหมือง'
+EXPORT_DOC_TRIP_SHEET_REF = "'บันทึกรายเที่ยว'!"
 
-    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
-    ถ้าเขียนทับจะเสียสูตรถาวร
+
+def _exportDocumentMineCoverFormulas(conditions):
+    """สูตร [เที่ยว, นน.ต้นทาง, นน.ปลายทาง, นน.ส่วนต่าง, นน.จ่ายค่าบรรทุก] ของแถวสรุปหนึ่งแถว
+    นับ / รวมจากชีตบันทึกรายเที่ยวทั้งช่วงของ template (บัญชีแก้น้ำหนักในไฟล์แล้วยอดตามเอง)
+    conditions = [(คอลัมน์, ค่า)] ของบันทึกรายเที่ยว : B ต้นทาง / C ปลายทาง / D หิน / E ช่วงน้ำหนัก / F ทีม
+    ค่าว่าง = เงื่อนไข "" ซึ่ง COUNTIFS / SUMIFS ตีความว่าช่องว่าง
+
+    รวมจากคอลัมน์ช่วยของ template v22 (= ค่าจริง x สัดส่วนที่นามนี้จ่าย AD) ไม่ใช่ J-M ตรง ๆ
+    ไฟล์ของนามที่รับแถวทีมแค่บางส่วนจึงได้ยอดตามส่วนที่รับ · ไฟล์รวม (AD ว่าง) ได้ยอดเท่าค่าจริง
+    เที่ยว = ผลรวมสัดส่วน ปัดเป็นจำนวนเต็ม"""
+    last = EXPORT_DOC_FIRST_DATA_ROW + EXPORT_DOC_MAX_TRIPS - 1
+    trip_col = 'AE'
+    sum_cols = ('AG', 'AH', 'AI', 'AF')   # นน.ต้นทาง / ปลายทาง / ส่วนต่าง / จ่ายค่าบรรทุก
+
+    def rng(col):
+        return '%s$%s$%d:$%s$%d' % (EXPORT_DOC_TRIP_SHEET_REF, col, EXPORT_DOC_FIRST_DATA_ROW, col, last)
+    if not conditions:
+        return ['=ROUND(SUM(%s),0)' % rng(trip_col)] + ['=SUM(%s)' % rng(col) for col in sum_cols]
+    cond = ','.join('%s,%s' % (rng(col), _mineSummaryCriteria(value)) for col, value in conditions)
+    return (['=ROUND(SUMIFS(%s,%s),0)' % (rng(trip_col), cond)]
+            + ['=SUMIFS(%s,%s)' % (rng(col), cond) for col in sum_cols])
+
+
+def _exportDocumentWriteMineCover(worksheet, rows, selected_month):
+    """บันทึกถึงผู้อำนวยการฝ่ายผลิต + ตารางสรุป เส้นทาง -> สินค้า -> ทีม ทุกเส้นทางต่อกันในชีตเดียว + ผลรวมทั้งหมด
+    สีแต่ละระดับชุดเดียวกับใบสรุปหน้าเหมือง (MINE_SUMMARY_LEVEL_STYLE) เลขที่ / วันที่ / ผู้ลงนาม เว้นให้กรอกเอง"""
+    month_label = _exportDocumentThaiMonth(selected_month) if selected_month else ''
+    thin = Side(style='thin')
+    hair = Side(style='hair')
+    medium = Side(style='medium')
+    for col, width in enumerate((40, 10, 15, 15, 15, 17), start=1):
+        worksheet.column_dimensions[get_column_letter(col)].width = width
+
+    lines = [
+        (1, 1, 'ที่ ........................................'),
+        (2, 4, 'วันที่ ........................................'),
+        (3, 1, 'เรื่อง        รายงานผลการขนส่งหินจากเหมืองไปท่าเรือ ประจำเดือน %s' % month_label),
+        (4, 1, 'เรียน        ผู้อำนวยการฝ่ายผลิตฯ'),
+        (5, 1, '               ขอส่งรายงานผลการขนส่งหิน ประจำเดือน %s ตามรายละเอียดดังนี้' % month_label),
+    ]
+    for row, col, text in lines:
+        worksheet.cell(row, col).value = text
+        _mineSummaryFont(worksheet.cell(row, col), size=16)
+    worksheet.merge_cells('D2:F2')
+
+    # เส้นทาง -> สินค้า (หิน + ช่วงน้ำหนัก) -> ทีม เรียงตามชื่อทุกระดับ (ไล่หาง่ายกว่าเรียงตามที่โผล่ในรายเที่ยว)
+    pairs = OrderedDict()
+    for r in rows:
+        pair = pairs.setdefault((r['origin'] or '', r['destination'] or ''), OrderedDict())
+        product = pair.setdefault((r['stone'] or '', r['weight_carried'] or ''),
+                                  {'label': _mineSummaryProduct(r), 'teams': []})
+        if r['team'] not in product['teams']:
+            product['teams'].append(r['team'])
+
+    def paint(row, labels, level, border):
+        style = MINE_SUMMARY_LEVEL_STYLE[level]
+        for i, value in enumerate(labels):
+            cell = worksheet.cell(row, 1 + i)
+            if i == 0 or level == 'head':
+                _mineSummaryText(cell, value)        # ชื่อเส้นทาง / สินค้า / ทีม มาจากข้อมูลชั่ง
+            else:
+                cell.value = value                   # สูตรนับ / รวมที่เราสร้างเอง
+            if i == 0:
+                align = Alignment(horizontal='left', indent=style['indent'], vertical='center', wrap_text=True)
+                fmt = None
+            else:
+                align = Alignment(horizontal='center', vertical='center', wrap_text=True) if level == 'head' else None
+                fmt = None if level == 'head' else ('#,##0' if i == 1 else '#,##0.00')
+            _mineSummaryFont(cell, size=16, bold=style['bold'], color=style['color'], fill=style['fill'],
+                             fmt=fmt, align=align, border=border)
+
+    top = 7
+    paint(top, ['ต้นทาง - ปลายทาง / สินค้า / ทีม', 'เที่ยว', 'นน.ต้นทาง', 'นน.ปลายทาง', 'นน.ส่วนต่าง',
+                'นน.จ่ายค่าบรรทุก'], 'head', Border(left=thin, right=thin, top=thin, bottom=thin))
+    worksheet.row_dimensions[top].height = 24
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    row = top
+    for (origin, destination) in sorted(pairs):
+        products = pairs[(origin, destination)]
+        route = [('B', origin), ('C', destination)]
+        row += 1
+        paint(row, [_mineSummaryRouteLabel(origin or '-', destination or '-')]
+              + _exportDocumentMineCoverFormulas(route), 'route', box)
+        for (stone, band) in sorted(products):
+            product = products[(stone, band)]
+            product_cond = route + [('D', stone), ('E', band)]
+            row += 1
+            paint(row, [product['label']] + _exportDocumentMineCoverFormulas(product_cond), 'product', box)
+            for team in sorted(product['teams'], key=str):
+                row += 1
+                paint(row, [team] + _exportDocumentMineCoverFormulas(product_cond + [('F', team)]), 'team',
+                      Border(left=thin, right=thin, top=hair, bottom=hair))
+    row += 1
+    paint(row, ['ผลรวมทั้งหมด'] + _exportDocumentMineCoverFormulas([]), 'total',
+          Border(left=thin, right=thin, top=medium, bottom=medium))
+    end = row
+
+    tail = [
+        (end + 2, 1, '             จึงเรียนมาเพื่อโปรดทราบ', None),
+        (end + 3, 4, 'ขอแสดงความนับถือ', 'center'),
+        (end + 5, 4, '(                                        )', 'center'),
+        (end + 6, 4, 'เจ้าหน้าที่ธุรการฝ่ายผลิต', 'center'),
+        (end + 7, 1, 'สำเนาเรียน', None),
+    ]
+    for row, col, text, align in tail:
+        cell = worksheet.cell(row, col)
+        cell.value = text
+        _mineSummaryFont(cell, size=16, align=Alignment(horizontal=align) if align else None)
+        if col == 4:
+            worksheet.merge_cells(start_row=row, start_column=4, end_row=row, end_column=6)
+    worksheet.freeze_panes = 'A8'
+    worksheet.print_area = 'A1:F%d' % (end + 10)
+    worksheet.print_title_rows = '7:7'
+    worksheet.page_setup.orientation = 'portrait'
+    worksheet.page_setup.paperSize = worksheet.PAPERSIZE_A4
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def _exportDocumentReplaceMineSheet(workbook, rows, selected_month):
+    """ลบชีต สรุปเหมือง เดิมของ template แล้วใส่ชีต สรุปหน้าเหมือง แบบใบปะหน้าไว้ตำแหน่งเดิม"""
+    index = (workbook.sheetnames.index('oil') + 1 if 'oil' in workbook.sheetnames
+             else len(workbook.sheetnames))
+    if EXPORT_DOC_MINE_SHEET_OLD in workbook.sheetnames:
+        index = workbook.sheetnames.index(EXPORT_DOC_MINE_SHEET_OLD)
+        workbook.remove(workbook[EXPORT_DOC_MINE_SHEET_OLD])
+    _exportDocumentWriteMineCover(workbook.create_sheet(EXPORT_DOC_MINE_SHEET, index), rows, selected_month)
+    # ข้อความแนะนำขั้นตอนบนหัวบันทึกรายเที่ยว ยังพูดถึงชีตเดิม
+    guide = workbook['บันทึกรายเที่ยว']['A4']
+    if isinstance(guide.value, str):
+        guide.value = guide.value.replace(
+            'เปิด sheet "สรุปเหมือง" ตรวจให้ถูกต้อง (ช่อง K11 ต้องขึ้นว่า ยอดตรงกับรายเที่ยว)',
+            'เปิด sheet "%s" ตรวจยอดให้ถูกต้อง' % EXPORT_DOC_MINE_SHEET)
+
+
+def _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats, fuel_lines, fuel_stats,
+                                      selected_month):
+    """เปิด template ไฟล์บัญชี แล้วเขียนรายเที่ยว + ชีตคำนวณค่าขนส่ง / อัตรา / oil / express
+    คืน workbook ที่ยังไม่ได้ save (ใช้ร่วมกันระหว่างไฟล์บัญชีรวม กับไฟล์ของแต่ละนามที่จ่าย)
+
+    rows ต้องผ่าน _exportDocumentAssignWeightCarried + _exportDocumentAssignMonthlyFuelPrice มาแล้ว
     """
-    try:
-        active = request.session['company_code']
-    except KeyError:
-        return redirect('logout')
-
-    _exportProgressSweep()
-    # ตัวเลข % ตั้งจากสัดส่วนเวลาจริงของแต่ละขั้น วัดกับเดือนที่เที่ยวเยอะสุด
-    # (3,595 เที่ยว รวม ~31 วินาที) : เตรียมข้อมูล 26% · ดึงรายเที่ยว 3% · เปิด template 40%
-    # · เขียน 4% · บันทึกไฟล์ 27%
-    # ไม่ได้แบ่งเท่า ๆ กัน เพราะจะทำให้แถบค้างอยู่ที่เดียวนานแล้วกระโดดทีเดียวจบ
-    # และเวลาที่เหลือที่หน้าเว็บคำนวณจะเพี้ยนไปด้วย
-    _exportProgressSet(request, 2, 'กำลังอ่านเงื่อนไขที่เลือก')
-    qs, filters, _ = _exportDocumentQuerySet(request)
-    selected_month = filters['selected_month']
-
-    _exportProgressSet(request, 27, 'กำลังนับจำนวนเที่ยว')
-    trip_count = qs.count()
-    if trip_count == 0:
-        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
-    if trip_count > EXPORT_DOC_MAX_TRIPS:
-        return HttpResponse(
-            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
-            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
-            % (trip_count, EXPORT_DOC_MAX_TRIPS)
-        )
-
-    _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
-    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
-
-    # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
-    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
-    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
-        rows, selected_month)
-    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
-    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) ลงชีตคำนวณค่าขนส่ง ช่อง M + ตาราง Q-T
-    # อัตรา / ค่าขนส่งรายเที่ยวเป็นสูตรในตาราง W-AE ของชีตเดียวกัน
-    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
-    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
-
     _exportProgressSet(request, 33, 'กำลังเปิดไฟล์ต้นแบบ')
     workbook = openpyxl.load_workbook(xlsx_template.TRIP_REPORT_TEMPLATE)
     worksheet = workbook['บันทึกรายเที่ยว']
@@ -15892,9 +16715,13 @@ def exportExcelExportDocument(request):
             float(r['origin_weight']) if r['origin_weight'] is not None else None)   # J นน.ต้นทาง
         worksheet.cell(row=excel_row, column=11).value = (
             float(r['dest_weight']) if r['dest_weight'] is not None else None)       # K นน.ปลายทาง
+    # AD สัดส่วนที่นามนี้จ่าย : เฉพาะไฟล์ของนามที่มีแถวทีมแบ่งหลายนาม
+    _exportDocumentWritePayerShares(workbook, worksheet, rows)
 
+    _exportDocumentReplaceMineSheet(workbook, rows, selected_month)
     trip_teams = {r['team'] for r in rows}
     _exportDocumentWriteRateSheet(workbook, rate_rows, rate_stats, fuel_lines, trip_teams)
+    _exportDocumentWriteFuelSheet(workbook, rows, fuel_lines, rate_stats)
     _exportDocumentWriteRateViewSheet(workbook, rows, selected_month)
 
     # บิลน้ำมันจาก Express ชุดเดียวกับราคาเฉลี่ย : sheet oil (ยอดหักของทีม) และ sheet express (ไว้ตรวจ)
@@ -15916,6 +16743,111 @@ def exportExcelExportDocument(request):
                     std.cell(row=row, column=col).value = EXPORT_DOC_NO_TEAM
                     break
 
+    _exportDocumentAddSortFilters(workbook)
+    return workbook
+
+
+# ปุ่มกรอง / เรียง (AutoFilter) : ใส่เฉพาะชีตที่ 1 แถว = 1 รายการ เรียงแล้วไม่เสีย
+#   บันทึกรายเที่ยว มีของ template อยู่แล้ว (A5:M)
+#   ไม่ใส่ : สรุปจ่ายรถร่วม / ปะหน้า (สูตรคิดจากตำแหน่งแถว) · สรุปหน้าเหมือง / อัตราค่าขนส่ง (หัวข้อซ้อน เรียงแล้วทีมหลุดจากหัวข้อ)
+#           รายการมาตรฐาน (สูตรกลุ่มจ่ายหยิบรายการแรกของคอลัมน์ G เป็นค่าเริ่มต้น เรียงแล้วกลุ่มสลับ)
+#           oil (แถวรวมติดใต้ตาราง Excel ขยายช่วงกรองไปรวมแถวรวมเอง เรียงแล้วแถวรวมหลุด ลองใน Excel แล้ว)
+#   คำนวณค่าขนส่ง ใส่เองตอนเขียนชีต (_exportDocumentRateSheetSortFilter) เฉพาะเมื่อเรียงแล้วยอดไม่เปลี่ยน
+# (ชีต, แถวหัวตาราง, คอลัมน์สุดท้าย, แถวสุดท้าย หรือ None = ถึงแถวสุดท้ายที่มีข้อมูล)
+EXPORT_DOC_SORT_FILTERS = (
+    (EXPORT_DOC_EXPRESS_SHEET, 4, 'I', None),
+)
+
+
+def _exportDocumentAddSortFilters(workbook):
+    for name, header, last_col, last_row in EXPORT_DOC_SORT_FILTERS:
+        if name not in workbook.sheetnames:
+            continue
+        ws = workbook[name]
+        end = last_row or max(ws.max_row, header + 1)
+        ws.auto_filter.ref = 'A%d:%s%d' % (header, last_col, end)
+
+
+# ไฟล์ของนาม : สัดส่วนของเที่ยวที่อยู่ในแถวทีมที่แบ่งหลายนาม เก็บในชีตซ่อน แล้ว AD ของบันทึกรายเที่ยวเป็นสูตรหา
+# จากคีย์ของแถวตัวเอง (เลขที่ชั่ง|ต้นทาง|ทีม) : บัญชีกดเรียงชีตบันทึกรายเที่ยว (ปุ่มกรองครอบแค่ A-M) สัดส่วนก็ยังตามเที่ยวถูก
+# ถ้าเขียนเป็นตัวเลขตรง ๆ เรียงแล้วตัวเลขค้างอยู่แถวเดิม ไปคูณกับเที่ยวอื่น
+EXPORT_DOC_PAYER_SHARE_SHEET = 'สัดส่วนนาม'
+
+
+def _exportDocumentPayerShareKey(doc_id, origin, team):
+    return '%s|%s|%s' % (doc_id or '', origin or '', team or '')
+
+
+def _exportDocumentWritePayerShares(workbook, worksheet, rows):
+    shares = [(r, r['payer_share']) for r in rows if r.get('payer_share') is not None]
+    if not shares:
+        return
+    table = workbook.create_sheet(EXPORT_DOC_PAYER_SHARE_SHEET)
+    table.sheet_state = 'hidden'
+    table['A1'] = 'คีย์ (เลขที่ชั่ง|ต้นทาง|ทีม)'
+    table['B1'] = 'สัดส่วนที่นามนี้จ่าย'
+    for i, (r, share) in enumerate(shares, start=2):
+        key = table.cell(row=i, column=1)
+        key.value = _exportDocumentPayerShareKey(r['doc_id'], r['origin'], r['team'])
+        key.data_type = 's'   # มาจากข้อมูลชั่ง : บังคับเป็นข้อความ กัน formula injection
+        table.cell(row=i, column=2).value = float(share)
+    last = len(shares) + 1
+    for i in range(len(rows)):
+        row = EXPORT_DOC_FIRST_DATA_ROW + i
+        worksheet.cell(row=row, column=EXPORT_DOC_PAYER_SHARE_COL).value = (
+            "=IFERROR(VLOOKUP($I{r}&\"|\"&$B{r}&\"|\"&$F{r},'{s}'!$A$2:$B${n},2,FALSE),\"\")".format(
+                r=row, s=EXPORT_DOC_PAYER_SHARE_SHEET, n=last))
+
+
+@login_required(login_url='login')
+def exportExcelExportDocument(request):
+    """เติมข้อมูลรายเที่ยวลงไฟล์ template แล้วส่งกลับเป็นไฟล์ให้โหลด
+
+    เขียนแค่คอลัมน์ A-K เท่านั้น คอลัมน์ L/M กับ sheet สรุปทั้งหมดเป็นสูตรที่มีอยู่ในไฟล์แล้ว
+    ถ้าเขียนทับจะเสียสูตรถาวร
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+
+    _exportProgressSweep()
+    # ตัวเลข % ตั้งจากสัดส่วนเวลาจริงของแต่ละขั้น วัดกับเดือนที่เที่ยวเยอะสุด
+    # (3,595 เที่ยว รวม ~31 วินาที) : เตรียมข้อมูล 26% · ดึงรายเที่ยว 3% · เปิด template 40%
+    # · เขียน 4% · บันทึกไฟล์ 27%
+    # ไม่ได้แบ่งเท่า ๆ กัน เพราะจะทำให้แถบค้างอยู่ที่เดียวนานแล้วกระโดดทีเดียวจบ
+    # และเวลาที่เหลือที่หน้าเว็บคำนวณจะเพี้ยนไปด้วย
+    _exportProgressSet(request, 2, 'กำลังอ่านเงื่อนไขที่เลือก')
+    qs, filters, _ = _exportDocumentQuerySet(request)
+    selected_month = filters['selected_month']
+
+    _exportProgressSet(request, 27, 'กำลังนับจำนวนเที่ยว')
+    trip_count = qs.count()
+    if trip_count == 0:
+        return HttpResponse("ไม่พบข้อมูลตามเงื่อนไขที่เลือก จึงยังไม่มีอะไรให้ export")
+    if trip_count > EXPORT_DOC_MAX_TRIPS:
+        return HttpResponse(
+            "มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว) "
+            "กรุณาเลือกท่าปลายทางหรือทีมรถร่วมเพิ่มเพื่อลดจำนวนแถวก่อน"
+            % (trip_count, EXPORT_DOC_MAX_TRIPS)
+        )
+
+    _exportProgressSet(request, 29, 'กำลังดึงข้อมูลรายเที่ยว %s เที่ยว' % trip_count)
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+
+    # ต้องหาช่วงจากสัญญาก่อน แล้วค่อยเติมคอลัมน์ E เพราะ E มาจากสัญญาของทีมนั้น
+    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(
+        rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    # ราคาน้ำมันเฉลี่ยทั้งเดือนของทีม (บิล Express) ลงชีตคำนวณค่าขนส่ง ช่อง N + ตาราง T-X
+    # อัตรา (O) / ค่าขนส่งทั้งเดือนของชุดราคา (R) เป็นสูตรในชีตเดียวกัน
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
+
+    workbook = _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats,
+                                                 fuel_lines, fuel_stats, selected_month)
+
     _exportProgressSet(request, 77, 'กำลังบันทึกไฟล์')
     content = xlsx_template.save_with_template_extensions(
         workbook, xlsx_template.TRIP_REPORT_TEMPLATE)
@@ -15934,6 +16866,634 @@ def exportExcelExportDocument(request):
         date_part = ' %sถึง%s' % (filters['selected_date_from'] or 'ต้นเดือน',
                                   filters['selected_date_to'] or 'สิ้นเดือน')
     filename = 'trip_report_%s_%s%s%s.xlsx' % (active, selected_month or 'all', date_part, origin_part)
+    response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
+    return _exportDocumentMarkDownloadDone(request, response)
+
+
+# ---------- issue #137 : บัญชีแบ่งนามที่จ่าย แล้วออกไฟล์บัญชีทีละนาม ----------
+# นามไม่ได้ติดมากับเที่ยว บัญชีตัดสินเองทุกเดือน โดยดูจากใบปะหน้าเหมือง (ไม่ได้ดูรายเที่ยว) :
+#   1. เป้า : แต่ละนามจ่ายหินชนิดไหนกี่ตัน (ได้มาก่อน · ExportDocumentPayerAllocation)
+#   2. แบ่งหินจากกองกลาง = หยิบ "แถวทีม" ของใบปะหน้า (เส้นทาง × หิน + ช่วงน้ำหนัก × ทีม) ให้นามจนครบเป้าพอดี
+#      (ExportDocumentPayerRowAllocation) ปกติหยิบทั้งแถว · แถวสุดท้ายตัดเอาเท่าที่ขาด (แบ่งแถวให้หลายนาม)
+#      แถว / ส่วนที่ไม่มีใครรับ = ค้าง stock · ห้ามเกินเป้า ห้ามเลือกหินที่ไม่มีเป้า · นามที่ยังไม่ครบเป้าออกไฟล์ไม่ได้
+#   เช่น 40-80 แบกนน. 8,044 ตัน : ร้อยเกาะขนส่ง + ฟ้าหลังฝน (3,033 ตัน) ให้ยูนิ ทีมที่เหลือ (5,011 ตัน) ให้โชคพนา
+# ทำได้จากแท็บร้อยเกาะ / ทั้งหมดเท่านั้น (ต้องเห็นเที่ยวทุกต้นทาง)
+#
+# ไฟล์ของนาม = เที่ยวของแถวที่นามนี้รับ น้ำหนักจริง · แถวที่แบ่งหลายนาม เขียนสัดส่วน (ตันที่รับ ÷ ตันของแถว)
+# ลงคอลัมน์ AD ของบันทึกรายเที่ยว แล้วชีตสรุปของ template v22 คูณสัดส่วนเอง : ค่าขนส่ง = อัตรา × ตันที่รับ
+# oil : ยังไม่แบ่งตามนาม (บัญชีหักเองตอนจ่าย) ไฟล์ของนามติดชีต oil ไว้ดู แต่สรุปจ่ายรถร่วมไม่หัก
+
+# ไม่ใช่นามที่จ่าย : แท็บรวมทุกบริษัท กับร้อยเกาะ (ผู้รับเงิน)
+EXPORT_DOC_PAYER_EXCLUDED_COMPANIES = ('ALL', 'ROI')
+EXPORT_DOC_PAYER_NO_STONE = '(ไม่ระบุชนิดหิน)'
+EXPORT_DOC_PAYER_TON = Decimal('0.001')
+# สรุปจ่ายรถร่วม คอลัมน์ AJ = ยอดหัก oil ของทีม (สูตร SUMIF จากชีต oil) แถว 5-704
+EXPORT_DOC_PAY_OIL_COL = 36
+EXPORT_DOC_PAY_FIRST_ROW = 5
+EXPORT_DOC_PAY_LAST_ROW = 704
+# บันทึกรายเที่ยว คอลัมน์ AD = สัดส่วนที่นามนี้จ่าย (template v22 · ว่าง = ทั้งเที่ยว)
+EXPORT_DOC_PAYER_SHARE_COL = 30
+# กันฟอร์มที่ส่งมาผิดรูปไม่ให้วนไม่จบ (หินในเดือนหนึ่งมีไม่กี่สิบชนิด แถวทีมไม่กี่ร้อย)
+EXPORT_DOC_PAYER_MAX_STONES = 500
+EXPORT_DOC_PAYER_MAX_ROWS = 5000
+# ปุ่มไฟล์รวมทุกนาม : company=all · ชื่อที่ขึ้นหัวเอกสาร (นาม ...) และชื่อไฟล์
+EXPORT_DOC_PAYER_ALL = 'all'
+EXPORT_DOC_PAYER_ALL_LABEL = 'รวมทุกนาม'
+# ค่าในช่องเลือกนามของแถวทีม : '' = ค้าง stock · id บริษัท = ทั้งแถว · split = แบ่งหลายนาม (กรอกตัน)
+EXPORT_DOC_PAYER_SPLIT = 'split'
+
+
+def _exportDocumentPayerCompanies():
+    """บริษัทที่เลือกเป็นนามที่จ่ายได้ = ทุกบริษัท ยกเว้นแท็บรวม กับร้อยเกาะ"""
+    return list(BaseCompany.objects.exclude(code__in=EXPORT_DOC_PAYER_EXCLUDED_COMPANIES).order_by('id'))
+
+
+def _exportDocumentMonthStart(selected_month):
+    year, month = selected_month.split('-')
+    return date(int(year), int(month), 1)
+
+
+def _exportDocumentPayerScope(request, selected_month):
+    """เที่ยวทั้งเดือนทุกต้นทาง คืน (rows, filters, month_list)
+    rows = None ถ้าแท็บนี้ไม่ได้เห็นทุกต้นทาง (ยอดที่แบ่งต้องเป็นยอดของทั้งเดือน ไม่ใช่ของเหมืองเดียว)
+    rows เติมช่วงน้ำหนักที่แบกแล้ว เพราะช่วงเป็นส่วนหนึ่งของแถวทีม (สินค้า = หิน(ช่วง) แบบใบปะหน้า)"""
+    qs, filters, month_list = _exportDocumentQuerySet(request, params={'month': selected_month})
+    if not filters['tab_sees_all'] or not filters['selected_month']:
+        return None, filters, month_list
+    rows = _exportDocumentRows(qs, filters['own_port_bws'], filters['own_port_customers'])
+    _rate_rows, weight_carried_by_key, _stats = _exportDocumentRatePlan(rows, filters['selected_month'])
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    credits = _exportDocumentTeamCredits(filters['selected_month'])
+    for r in rows:
+        r['credit'] = _exportDocumentTripCredit(r, credits)
+    return rows, filters, month_list
+
+
+def _exportDocumentTeamCredits(selected_month):
+    """เครดิตของทีมจากเงื่อนไขการชำระเงินในสัญญาค่าขนส่งที่มีผลเดือนนั้น
+    คืน {(map id ต้นทาง, map id ปลายทาง, id ทีม หรือ None = ทุกทีม/ทีมที่เหลือ): วัน | None}
+    0 = เงินสด · None = ยังไม่ระบุ · ทีมเดียวกันในสัญญาเดียวกันเป็นค่าเดียวเสมอ (serializer บังคับ)"""
+    rates = InternationalFreightRate.effectiveOn(
+        _exportDocumentRateAsOf(selected_month),
+        InternationalFreightRate.objects.prefetch_related('teams'))
+    credits = {}
+    for rate in rates:
+        for team_rate in rate.teams.all():
+            key = (rate.origin_id, rate.destination_id, team_rate.team_id)
+            if credits.get(key) is None:
+                credits[key] = team_rate.credit_days
+    return credits
+
+
+def _exportDocumentTripCredit(r, credits):
+    """เครดิตของเที่ยว : แถวของทีมนั้นในสัญญาเส้นทางนั้น ไม่มีแถวของทีม = แถวทุกทีม/ทีมที่เหลือ"""
+    route = (r['origin_map_id'], r['destination_map_id'])
+    key = route + (r['team_id'],)
+    if key in credits:
+        return credits[key]
+    return credits.get(route + (None,))
+
+
+def _exportDocumentCreditSort(credit):
+    """เครดิตน้อยมาก่อน (เงินสด 0 วัน ก่อนสุด) · ยังไม่ระบุไว้ล่างสุด"""
+    return (credit is None, credit or 0)
+
+
+def _exportDocumentCreditLabel(credit):
+    if credit is None:
+        return 'ไม่ระบุเครดิต'
+    if credit == 0:
+        return 'เงินสด'
+    return 'เครดิต %d วัน' % credit
+
+
+def _exportDocumentCreditParam(credit):
+    """ค่าใน URL ของปุ่มออกไฟล์ : none = ไม่ระบุ / ตัวเลข = วัน"""
+    return 'none' if credit is None else str(credit)
+
+
+def _exportDocumentPayerRowFields(r):
+    """แถวทีม = (ต้นทาง, ปลายทาง, ชนิดหิน, ช่วงน้ำหนักที่แบก, ทีม) ตรงกับแถวทีมของชีตสรุปหน้าเหมือง"""
+    return (r['origin'] or '', r['destination'] or '', r['stone'] or '', r['weight_carried'] or '', r['team'] or '')
+
+
+def _exportDocumentPayerRowKey(fields):
+    return hashlib.sha256('\x1f'.join(fields).encode('utf-8')).hexdigest()
+
+
+def _exportDocumentPayerTeamRows(rows):
+    """แถวทีมของเดือน เรียง เส้นทาง -> สินค้า ตามชื่อ (ลำดับเดียวกับชีตสรุปหน้าเหมือง) -> ทีมเครดิตน้อยก่อน
+    ตัน = นน.จ่ายค่าบรรทุก รวม (เที่ยวที่ไม่มีน้ำหนักนับเที่ยวแต่ไม่นับตัน)
+    เครดิตของแถว = ของเที่ยวแรก (rows ต้องผ่าน _exportDocumentPayerScope ที่เติม credit ไว้)"""
+    by_fields = {}
+    for r in rows:
+        fields = _exportDocumentPayerRowFields(r)
+        item = by_fields.get(fields)
+        if item is None:
+            item = by_fields[fields] = {
+                'key': _exportDocumentPayerRowKey(fields),
+                'origin': fields[0], 'destination': fields[1], 'stone': fields[2],
+                'weight_carried': fields[3], 'team': fields[4],
+                'route_label': _mineSummaryRouteLabel(fields[0] or '-', fields[1] or '-'),
+                'product_label': _mineSummaryProduct(r),
+                'credit': r.get('credit'), 'credit_label': _exportDocumentCreditLabel(r.get('credit')),
+                'credit_param': _exportDocumentCreditParam(r.get('credit')),
+                'origin_map_id': None,
+                'trips': 0, 'tons': Decimal('0'),
+            }
+        if item['origin_map_id'] is None:
+            item['origin_map_id'] = r.get('origin_map_id')
+        item['trips'] += 1
+        if r.get('pay_weight') is not None:
+            item['tons'] += Decimal(r['pay_weight'])
+    # ในหินกลุ่มเดียวกัน ทีมเครดิตน้อยขึ้นก่อน (บัญชีจ่ายก่อน) ไม่ระบุไว้ล่างสุด แล้วค่อยเรียงชื่อทีม
+    return [by_fields[f] for f in sorted(
+        by_fields, key=lambda f: f[:4] + (_exportDocumentCreditSort(by_fields[f]['credit']), f[4]))]
+
+
+def _exportDocumentPayerOriginCompanies(team_rows):
+    """บริษัทเจ้าของต้นทางของแถวทีม (origin_company_id) จากแถว map ของต้นทาง แบบเดียวกับกติการาคาน้ำมัน
+    ต้นทางที่ไม่ใช่บริษัทเรา = None · ปุ่มแบ่งอัตโนมัติให้นามได้แถวจากต้นทางของตัวเองก่อน"""
+    map_ids = {item['origin_map_id'] for item in team_rows if item.get('origin_map_id')}
+    company_by_map = dict(BaseCompanyMapBaseCustomer.objects
+                          .filter(id__in=map_ids)
+                          .values_list('id', 'base_company_id')) if map_ids else {}
+    for item in team_rows:
+        item['origin_company_id'] = company_by_map.get(item.get('origin_map_id'))
+    return team_rows
+
+
+def _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies):
+    """เทียบนามที่บัญชีเลือกไว้กับแถวทีมจริงของเดือน (ไม่เขียน db)
+
+    คืน
+      groups    : เส้นทาง -> สินค้า -> แถวทีม แบบใบปะหน้า · แถวมี mode ('' ค้าง / id บริษัท ทั้งแถว / split)
+                  splits (ตันของแต่ละบริษัท เรียงตาม companies) assigned / stock / is_over
+      stones    : ต่อชนิดหิน + cells ต่อบริษัท (target เป้า / chosen ที่เลือกแล้ว / diff) + chosen / stock
+      companies : ต่อบริษัท + tons (ที่เลือกแล้วรวม) / target / selected
+      orphans   : นามที่เลือกไว้ แต่เดือนนี้ไม่มีแถวทีมนั้นแล้ว (ข้อมูลเปลี่ยนหลังเลือก) · เป้าของหินที่ไม่มีแล้ว
+      can_export: ไม่มีแถวไหนแบ่งตันเกินยอดของแถว (แบ่งไม่ครบได้ ส่วนที่เหลือ = ค้าง stock)
+    """
+    names = {c.id: c.name for c in companies}
+    allocs_by_key = {}
+    for a in row_allocs:
+        if a.company_id in names:
+            allocs_by_key.setdefault(a.row_key, []).append(a)
+    target_by = {(a.company_id, a.stone_type_name): Decimal(a.tons) for a in targets if a.company_id in names}
+    chosen = {}
+    credit_tons = {}   # (บริษัท, เครดิต) -> ตัน : ปุ่มออกไฟล์แยกตามเครดิต
+    groups = []
+    stone_totals = {}
+    over_rows = 0
+    product_count = 0
+    for index, item in enumerate(team_rows):
+        allocs = allocs_by_key.get(item['key'], [])
+        whole = next((a for a in allocs if a.tons is None), None)
+        if whole is not None:
+            mode = str(whole.company_id)
+            taken = {whole.company_id: item['tons']}
+        elif allocs:
+            mode = EXPORT_DOC_PAYER_SPLIT
+            taken = {a.company_id: Decimal(a.tons) for a in allocs}
+        else:
+            mode = ''
+            taken = {}
+        assigned = sum(taken.values(), Decimal('0'))
+        left = item['tons'] - assigned
+        is_over = left <= -EXPORT_DOC_PAYER_TON
+        over_rows += is_over
+        for cid, tons in taken.items():
+            chosen[(cid, item['stone'])] = chosen.get((cid, item['stone']), Decimal('0')) + tons
+            credit_tons[(cid, item.get('credit'))] = credit_tons.get((cid, item.get('credit')), Decimal('0')) + tons
+        # index = ลำดับช่องกรอกของแถว (row-<index> / mode-<index> / split-<บริษัท>-<index>)
+        row = dict(item, index=index, mode=mode, assigned=assigned, stock=max(left, Decimal('0')),
+                   over=-left if is_over else Decimal('0'), is_over=is_over,
+                   splits=[{'company_id': c.id, 'company_name': c.name,
+                            'tons': taken.get(c.id) if mode == EXPORT_DOC_PAYER_SPLIT else None}
+                           for c in companies])
+
+        route_id = (item['origin'], item['destination'])
+        if not groups or groups[-1]['id'] != route_id:
+            groups.append({'id': route_id, 'label': item['route_label'], 'products': []})
+        products = groups[-1]['products']
+        product_id = (item['stone'], item['weight_carried'])
+        if not products or products[-1]['id'] != product_id:
+            product_count += 1
+            products.append({'id': product_id, 'index': product_count, 'label': item['product_label'],
+                             'stone': item['stone'],
+                             'trips': 0, 'tons': Decimal('0'), 'stock': Decimal('0'), 'rows': []})
+        product = products[-1]
+        product['trips'] += item['trips']
+        product['tons'] += item['tons']
+        product['stock'] += row['stock']
+        product['rows'].append(row)
+
+        s = stone_totals.setdefault(item['stone'], {'trips': 0, 'tons': Decimal('0')})
+        s['trips'] += item['trips']
+        s['tons'] += item['tons']
+
+    stones = []
+    target_errors = 0
+    problems_by_company = {}
+    for stone in sorted(stone_totals):
+        cells = []
+        label = stone or EXPORT_DOC_PAYER_NO_STONE
+        for c in companies:
+            target = target_by.get((c.id, stone))
+            got = chosen.get((c.id, stone), Decimal('0'))
+            status = _exportDocumentPayerTargetStatus(target, got)
+            if status in ('no_target', 'over'):
+                target_errors += 1
+            if status in ('no_target', 'over', 'short'):
+                problems_by_company.setdefault(c.id, []).append(label)
+            cells.append({'company_id': c.id, 'company_name': c.name, 'target': target, 'chosen': got,
+                          'status': status, 'gap': abs(got - target) if target is not None else got})
+        chosen_total = sum((x['chosen'] for x in cells), Decimal('0'))
+        target_total = sum((x['target'] for x in cells if x['target']), Decimal('0'))
+        stones.append({'stone': stone, 'label': label,
+                       'trips': stone_totals[stone]['trips'], 'tons': stone_totals[stone]['tons'],
+                       'cells': cells, 'chosen': chosen_total, 'target': target_total,
+                       # เป้ารวมทุกนามมากกว่าหินในกองกลาง : แบ่งให้ครบเป้าทุกนามไม่ได้
+                       'target_over_pool': target_total - stone_totals[stone]['tons'] >= EXPORT_DOC_PAYER_TON,
+                       'stock': stone_totals[stone]['tons'] - chosen_total})
+
+    company_rows = []
+    for c in companies:
+        tons = sum((t for (cid, _stone), t in chosen.items() if cid == c.id), Decimal('0'))
+        target = sum((t for (cid, _stone), t in target_by.items() if cid == c.id), Decimal('0'))
+        problems = problems_by_company.get(c.id, [])
+        company_rows.append({'id': c.id, 'code': c.code, 'name': c.name, 'tons': tons, 'target': target,
+                             'selected': any(cid == c.id for (cid, _stone) in chosen)
+                             or any(cid == c.id for (cid, _stone) in target_by),
+                             # ออกไฟล์ได้เมื่อทุกหินที่มีเป้า แบ่งครบเป้าพอดี
+                             'complete': bool(target) and not problems,
+                             'problems': problems,
+                             # ไฟล์แยกตามเครดิตของทีม (เครดิตน้อยก่อน ไม่ระบุท้ายสุด) นอกจากไฟล์รวม
+                             'credit_groups': [
+                                 {'credit': credit, 'label': _exportDocumentCreditLabel(credit),
+                                  'param': _exportDocumentCreditParam(credit), 'tons': t}
+                                 for (cid, credit), t in sorted(
+                                     credit_tons.items(), key=lambda kv: _exportDocumentCreditSort(kv[0][1]))
+                                 if cid == c.id]})
+
+    # ไฟล์รวมทุกนาม : ขึ้นเมื่อมีตั้งแต่ 2 นาม (นามเดียวก็คือไฟล์ของนามนั้น) · กดได้เมื่อทุกนามครบเป้า
+    payers = [c for c in company_rows if c['selected']]
+    payer_ids = {c['id'] for c in payers}
+    all_credit = {}
+    for (cid, credit), t in credit_tons.items():
+        if cid in payer_ids:
+            all_credit[credit] = all_credit.get(credit, Decimal('0')) + t
+    all_payers = {
+        'show': len(payers) >= 2,
+        'complete': bool(payers) and all(c['complete'] for c in payers),
+        'tons': sum((c['tons'] for c in payers), Decimal('0')),
+        'target': sum((c['target'] for c in payers), Decimal('0')),
+        'names': [c['name'] for c in payers],
+        'credit_groups': [{'credit': credit, 'label': _exportDocumentCreditLabel(credit),
+                           'param': _exportDocumentCreditParam(credit), 'tons': t}
+                          for credit, t in sorted(all_credit.items(),
+                                                  key=lambda kv: _exportDocumentCreditSort(kv[0]))],
+    }
+
+    keys = {item['key'] for item in team_rows}
+    orphans = []
+    for a in sorted(row_allocs, key=lambda a: (a.origin, a.destination, a.stone_type_name, a.team, a.company_id)):
+        if a.row_key not in keys and a.company_id in names:
+            orphans.append({'company': names[a.company_id], 'tons': a.tons,
+                            'label': '%s %s %s' % (_mineSummaryRouteLabel(a.origin or '-', a.destination or '-'),
+                                                   a.stone_type_name or EXPORT_DOC_PAYER_NO_STONE, a.team)})
+    for (cid, stone), tons in sorted(target_by.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        if stone not in stone_totals:
+            orphans.append({'company': names[cid], 'tons': tons,
+                            'label': 'เป้า %s' % (stone or EXPORT_DOC_PAYER_NO_STONE)})
+    return {
+        'groups': groups,
+        'stones': stones,
+        'companies': company_rows,
+        'all_payers': all_payers,
+        'all_payers_param': EXPORT_DOC_PAYER_ALL,
+        'orphans': orphans,
+        'over_rows': over_rows,
+        'target_errors': target_errors,
+        'row_count': len(team_rows),
+        # ตัวเลือกของแถบกรองข้อ ③
+        'filter_credits': [{'param': _exportDocumentCreditParam(c), 'label': _exportDocumentCreditLabel(c)}
+                           for c in sorted({item.get('credit') for item in team_rows},
+                                           key=_exportDocumentCreditSort)],
+        'filter_routes': [g['label'] for g in groups],
+        'filter_stones': sorted({item['stone'] for item in team_rows}),
+        # แบ่งเกินตันของแถวไม่ได้ (จ่ายค่าขนส่งให้ตันที่ไม่ได้วิ่งจริง) · เกินเป้า / ไม่มีเป้าไม่ได้
+        # นามที่ยังไม่ครบเป้าดูที่ companies[].complete
+        'can_export': bool(team_rows) and not over_rows and not target_errors,
+    }
+
+
+def _exportDocumentPayerTargetStatus(target, chosen):
+    """สถานะของนาม × ชนิดหิน : None (ไม่มีเป้า ไม่ได้เลือก) / no_target (เลือกแถวแต่ไม่ได้ตั้งเป้า)
+    over (เกินเป้า) / short (ยังไม่ครบเป้า) / ok (ครบเป้าพอดี)"""
+    if target is None:
+        return 'no_target' if chosen >= EXPORT_DOC_PAYER_TON else None
+    if chosen - target >= EXPORT_DOC_PAYER_TON:
+        return 'over'
+    if target - chosen >= EXPORT_DOC_PAYER_TON:
+        return 'short'
+    return 'ok'
+
+
+def _exportDocumentPayerShares(team_rows, row_allocs, company_ids):
+    """คีย์แถวทีมที่นามเหล่านี้รับ -> สัดส่วน (None = ทั้งแถว · Decimal = ตันที่รับรวม ÷ ตันของแถว)
+    company_ids หลายนาม = ไฟล์รวมทุกนาม : แถวที่แบ่งให้หลายนามรวมตันของทุกนามเข้าด้วยกัน"""
+    tons_by_key = {item['key']: item['tons'] for item in team_rows}
+    whole = set()
+    taken = {}
+    for a in row_allocs:
+        if a.company_id not in company_ids or a.row_key not in tons_by_key:
+            continue
+        if a.tons is None:
+            whole.add(a.row_key)
+        elif a.tons > 0 and tons_by_key[a.row_key] > 0:
+            taken[a.row_key] = taken.get(a.row_key, Decimal('0')) + Decimal(a.tons)
+    shares = {key: None for key in whole}
+    for key, tons in taken.items():
+        if key in whole:
+            continue
+        share = tons / tons_by_key[key]
+        # กรอกเท่ายอดของแถวพอดี = ทั้งแถว (ไม่ต้องมีสัดส่วนในไฟล์)
+        shares[key] = None if share >= 1 else share
+    return shares
+
+
+def _exportDocumentPayerParseTons(raw):
+    """ช่องกรอกตัน คืน (ตัน หรือ None ถ้าว่าง / 0, ข้อความ error หรือ None)"""
+    raw = (raw or '').replace(',', '').strip()
+    if not raw:
+        return None, None
+    try:
+        tons = Decimal(raw).quantize(EXPORT_DOC_PAYER_TON)
+    except (InvalidOperation, ValueError):
+        return None, '"%s" ไม่ใช่ตัวเลข' % raw
+    if tons < 0:
+        return None, 'ติดลบ (%s)' % raw
+    return (tons if tons > 0 else None), None
+
+
+def _exportDocumentPayerSave(request, month_start, companies, team_rows):
+    """บันทึกเป้าตัน (target-<id บริษัท>-<ลำดับหิน> คู่กับ stone-<ลำดับ>) และนามของแถวทีม
+    (row-<ลำดับ> = คีย์แถว · mode-<ลำดับ> = '' / id บริษัท / split · split-<id บริษัท>-<ลำดับ> = ตัน)
+    เขียนทับของเดือนนั้นทั้งชุด · ช่องว่าง / 0 = ไม่มี · ช่องของบริษัทที่ไม่ได้เลือก (ไม่ได้ส่งมา) ก็เช่นกัน
+    ติดลบ / ไม่ใช่ตัวเลข / แบ่งรวมเกินยอดของแถว = แจ้ง error แล้วไม่บันทึกอะไรเลย คืน True ถ้าบันทึกแล้ว
+    """
+    company_ids = [c.id for c in companies]
+    rows_by_key = {item['key']: item for item in team_rows}
+    errors = []
+
+    targets = {}
+    for i in range(EXPORT_DOC_PAYER_MAX_STONES):
+        stone_field = 'stone-%d' % i
+        if stone_field not in request.POST:
+            break
+        stone = request.POST[stone_field]
+        for cid in company_ids:
+            tons, error = _exportDocumentPayerParseTons(request.POST.get('target-%d-%d' % (cid, i)))
+            if error:
+                errors.append('เป้า %s : %s' % (stone or EXPORT_DOC_PAYER_NO_STONE, error))
+            elif tons:
+                targets[(cid, stone)] = tons
+
+    wanted = {}
+    for i in range(EXPORT_DOC_PAYER_MAX_ROWS):
+        row_field = 'row-%d' % i
+        if row_field not in request.POST:
+            break
+        item = rows_by_key.get(request.POST[row_field])
+        if item is None:
+            continue   # แถวที่หายไประหว่างเปิดหน้า (ข้อมูลชั่งเปลี่ยน) : ไม่มีอะไรให้บันทึก
+        label = '%s %s %s' % (item['route_label'], item['product_label'], item['team'])
+        mode = request.POST.get('mode-%d' % i) or ''
+        if mode == EXPORT_DOC_PAYER_SPLIT:
+            total = Decimal('0')
+            for cid in company_ids:
+                tons, error = _exportDocumentPayerParseTons(request.POST.get('split-%d-%d' % (cid, i)))
+                if error:
+                    errors.append('%s : %s' % (label, error))
+                elif tons:
+                    wanted[(item['key'], cid)] = tons
+                    total += tons
+            if total - item['tons'] >= EXPORT_DOC_PAYER_TON:
+                errors.append('%s : แบ่งรวม %s ตัน เกินยอดของแถว %s ตัน' % (label, total, item['tons']))
+        elif mode:
+            cid = int(mode) if mode.isdigit() else None
+            if cid not in company_ids:
+                errors.append('%s : ไม่พบนามที่เลือก' % label)
+            else:
+                wanted[(item['key'], cid)] = None
+    # เป้าคุมการแบ่ง : หินที่เลือกให้นามต้องมีเป้าของนามนั้น และรวมแล้วไม่เกินเป้า (ยังไม่ครบบันทึกได้ ทำต่อทีหลัง)
+    names = {c.id: c.name for c in companies}
+    chosen = {}
+    for (key, cid), tons in wanted.items():
+        item = rows_by_key[key]
+        chosen[(cid, item['stone'])] = chosen.get((cid, item['stone']), Decimal('0')) + (
+            item['tons'] if tons is None else tons)
+    for (cid, stone), got in sorted(chosen.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        status = _exportDocumentPayerTargetStatus(targets.get((cid, stone)), got)
+        label = '%s %s' % (names[cid], stone or EXPORT_DOC_PAYER_NO_STONE)
+        if status == 'no_target':
+            errors.append('%s : ยังไม่ได้ตั้งเป้า (เลือกแถวไว้ %s ตัน)' % (label, got))
+        elif status == 'over':
+            errors.append('%s : เลือก %s ตัน เกินเป้า %s ตัน' % (label, got, targets[(cid, stone)]))
+    if errors:
+        messages.error(request, 'ยังไม่ได้บันทึก : ' + ' · '.join(errors))
+        return False
+
+    with transaction.atomic():
+        existing = {(a.company_id, a.stone_type_name): a
+                    for a in ExportDocumentPayerAllocation.objects.select_for_update().filter(month=month_start)}
+        for (cid, stone), tons in targets.items():
+            row = existing.get((cid, stone))
+            if row is None:
+                ExportDocumentPayerAllocation.objects.create(month=month_start, company_id=cid,
+                                                             stone_type_name=stone, tons=tons,
+                                                             updated_by=request.user)
+            elif row.tons != tons:
+                row.tons = tons
+                row.updated_by = request.user
+                row.save()
+        # ลบเฉพาะแถวของเดือนนี้ ทีละ pk
+        stale = [row.pk for key, row in existing.items() if key not in targets]
+        if stale:
+            ExportDocumentPayerAllocation.objects.filter(month=month_start, pk__in=stale).delete()
+
+        existing = {(a.row_key, a.company_id): a
+                    for a in ExportDocumentPayerRowAllocation.objects.select_for_update().filter(month=month_start)}
+        for (key, cid), tons in wanted.items():
+            row = existing.get((key, cid))
+            if row is None:
+                item = rows_by_key[key]
+                ExportDocumentPayerRowAllocation.objects.create(
+                    month=month_start, row_key=key, origin=item['origin'], destination=item['destination'],
+                    stone_type_name=item['stone'], weight_carried=item['weight_carried'], team=item['team'],
+                    company_id=cid, tons=tons, updated_by=request.user)
+            elif row.tons != tons:
+                row.tons = tons
+                row.updated_by = request.user
+                row.save()
+        stale = [row.pk for key, row in existing.items() if key not in wanted]
+        if stale:
+            ExportDocumentPayerRowAllocation.objects.filter(month=month_start, pk__in=stale).delete()
+    messages.success(request, 'บันทึกการแบ่งนามของเดือนนี้แล้ว')
+    return True
+
+
+def _exportDocumentPayerLoad(selected_month):
+    month_start = _exportDocumentMonthStart(selected_month)
+    return (list(ExportDocumentPayerAllocation.objects.filter(month=month_start)),
+            list(ExportDocumentPayerRowAllocation.objects.filter(month=month_start)))
+
+
+@login_required(login_url='login')
+def viewExportDocumentPayer(request):
+    """บัญชีแบ่งนามที่จ่าย (issue #137) : เป้าตันต่อชนิดหิน + เลือกนามให้แถวทีมแบบใบปะหน้า + ปุ่มออกไฟล์ทีละนาม"""
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+    if not _userHasCompanyTab(request.user, active):
+        return _plainText('แท็บบริษัทที่เปิดอยู่ไม่ได้อยู่ในสิทธิ์ของผู้ใช้นี้', status=403)
+
+    month_param = request.POST.get('month') or request.GET.get('month') or ''
+    rows, filters, month_list = _exportDocumentPayerScope(request, month_param)
+    selected_month = filters['selected_month']
+    companies = _exportDocumentPayerCompanies()
+    team_rows = _exportDocumentPayerTeamRows(rows) if rows is not None else []
+
+    if request.method == 'POST' and rows is not None:
+        _exportDocumentPayerSave(request, _exportDocumentMonthStart(selected_month), companies, team_rows)
+        return redirect('%s?month=%s' % (reverse('viewExportDocumentPayer'), selected_month))
+
+    plan = None
+    not_approved = 0
+    if rows is not None:
+        targets, row_allocs = _exportDocumentPayerLoad(selected_month)
+        _exportDocumentPayerOriginCompanies(team_rows)
+        plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
+        # ช่องวัน × ต้นทางที่หน้าเหมืองยังไม่อนุมัติ : เตือนว่ากำลังแบ่งจากข้อมูลที่อาจยังเปลี่ยน
+        carry_rows = _exportDocumentRows(filters['carry_empty_qs'], filters['own_port_bws'],
+                                         filters['own_port_customers'])
+        not_approved = sum(1 for i in _exportDocumentDayApprovals(rows, carry_rows)
+                           if i['status'] != EXPORT_DOC_APPROVAL_APPROVED)
+
+    context = {
+        'export_document_page': 'active',
+        active: 'active',
+        'month_list': month_list,
+        'selected_month': selected_month,
+        'tab_sees_all': filters['tab_sees_all'],
+        'plan': plan,
+        'split_mode': EXPORT_DOC_PAYER_SPLIT,
+        'not_approved': not_approved,
+        'trip_count': len(rows) if rows is not None else 0,
+    }
+    return render(request, 'exportDocument/payerExportDocument.html', context)
+
+
+@login_required(login_url='login')
+def exportExcelPayerDocument(request):
+    """ไฟล์บัญชี (ปะหน้า / สรุปจ่ายรถร่วม) ของนามที่จ่ายหนึ่งนาม ตามแถวทีมที่บัญชีเลือกให้นามนี้
+
+    เที่ยว = ทุกเที่ยวของแถวทีมที่นามนี้รับ น้ำหนักจริง · แถวที่แบ่งหลายนามเขียนสัดส่วนลงคอลัมน์ AD
+    แบ่งไม่ครบก็ออกได้ (ส่วนที่เหลือ = ค้าง stock) แต่ถ้ามีแถวที่แบ่งเกินยอดจริง ไม่ให้ออก
+    """
+    try:
+        active = request.session['company_code']
+    except KeyError:
+        return redirect('logout')
+    if not _userHasCompanyTab(request.user, active):
+        return _plainText('แท็บบริษัทที่เปิดอยู่ไม่ได้อยู่ในสิทธิ์ของผู้ใช้นี้', status=403)
+
+    _exportProgressSweep()
+    _exportProgressSet(request, 2, 'กำลังอ่านการแบ่งนาม')
+    rows, filters, _months = _exportDocumentPayerScope(request, request.GET.get('month') or '')
+    if rows is None:
+        return _plainText('ต้องออกไฟล์ของนามจากแท็บร้อยเกาะ / ทั้งหมด (แท็บที่เห็นเที่ยวทุกต้นทาง)')
+    selected_month = filters['selected_month']
+    companies = _exportDocumentPayerCompanies()
+    company_param = request.GET.get('company') or ''
+    all_payers = company_param == EXPORT_DOC_PAYER_ALL
+    company = next((c for c in companies if str(c.id) == company_param), None)
+    if company is None and not all_payers:
+        return _plainText('ไม่พบนามที่จ่ายที่เลือก')
+
+    team_rows = _exportDocumentPayerTeamRows(rows)
+    targets, row_allocs = _exportDocumentPayerLoad(selected_month)
+    plan = _exportDocumentPayerPlan(team_rows, targets, row_allocs, companies)
+    if not plan['can_export']:
+        return _plainText('มีแถวทีมที่แบ่งตันเกินยอดจริง หรือนามที่เลือกเกินเป้า / ยังไม่ได้ตั้งเป้า '
+                            'กรุณากลับไปแก้ที่หน้าแบ่งนามที่จ่ายก่อนออกไฟล์')
+    if all_payers:
+        # รวมทุกนาม : ทุกนามที่ตั้งเป้า / เลือกแถวไว้ต้องครบเป้า ไม่งั้นยอดรวมไม่ใช่ยอดที่จะจ่ายจริง
+        payers = [c for c in plan['companies'] if c['selected']]
+        if not payers:
+            return _plainText('เดือนนี้ยังไม่มีนามไหนได้รับแถวทีม')
+        short = ['%s (%s)' % (c['name'], ', '.join(c['problems']) or 'ยังไม่ได้ตั้งเป้า')
+                 for c in payers if not c['complete']]
+        if short:
+            return _plainText('ออกไฟล์รวมทุกนามไม่ได้ ยังมีนามที่แบ่งไม่ครบเป้า : %s' % ' · '.join(short))
+        payer_ids = {c['id'] for c in payers}
+        payer_name = EXPORT_DOC_PAYER_ALL_LABEL
+    else:
+        payer = next(c for c in plan['companies'] if c['id'] == company.id)
+        if not payer['complete']:
+            return _plainText('นาม %s ยังแบ่งไม่ครบเป้า (%s) กรุณาเลือกแถวทีมให้ครบเป้าก่อนออกไฟล์'
+                                % (company.name, ', '.join(payer['problems']) or 'ยังไม่ได้ตั้งเป้า'))
+        payer_ids = {company.id}
+        payer_name = company.name
+    # credit = ไฟล์เฉพาะทีมเครดิตนั้น (none = ไม่ระบุ / ตัวเลข = วัน) · ไม่ส่ง = รวมทุกเครดิต
+    credit_param = request.GET.get('credit') or ''
+    if credit_param and credit_param != 'none' and not credit_param.isdigit():
+        return _plainText('เครดิตที่เลือกไม่ถูกต้อง')
+    shares = _exportDocumentPayerShares(team_rows, row_allocs, payer_ids)
+    picked = []
+    for r in rows:
+        if credit_param and _exportDocumentCreditParam(r.get('credit')) != credit_param:
+            continue
+        key = _exportDocumentPayerRowKey(_exportDocumentPayerRowFields(r))
+        if key in shares:
+            r['payer_share'] = shares[key]
+            picked.append(r)
+    rows = picked
+    credit_part = ''
+    if credit_param:
+        credit_part = '_%s' % _exportDocumentCreditLabel(None if credit_param == 'none' else int(credit_param))
+    if not rows:
+        return _plainText('นาม %s ยังไม่ได้รับแถวทีมไหนในเดือนนี้%s'
+                            % (payer_name, (' (%s)' % credit_part[1:]) if credit_part else ''))
+    if len(rows) > EXPORT_DOC_MAX_TRIPS:
+        return _plainText('มี %s เที่ยว เกินที่ไฟล์ template รองรับ (%s เที่ยว)'
+                            % (len(rows), EXPORT_DOC_MAX_TRIPS))
+
+    # ชุดราคาของไฟล์ = เฉพาะเที่ยวของนามนี้ (ช่วงน้ำหนักที่แบกเติมไว้แล้วตอนดึง ได้ค่าเดิม)
+    _exportProgressSet(request, 32, 'กำลังคิดอัตราค่าขนส่ง')
+    rate_rows, weight_carried_by_key, rate_stats = _exportDocumentRatePlan(rows, selected_month)
+    _exportDocumentAssignWeightCarried(rows, weight_carried_by_key)
+    fuel_lines, fuel_stats = _exportDocumentFuelRefills(selected_month)
+    _exportDocumentAssignMonthlyFuelPrice(rows, rate_rows, fuel_lines)
+
+    workbook = _exportDocumentAccountingWorkbook(request, rows, rate_rows, rate_stats,
+                                                 fuel_lines, fuel_stats, selected_month)
+    # หัวเอกสารทุกชีต (ปะหน้า / สรุปจ่าย) ดึงชื่อนามจากช่องนี้
+    workbook['บันทึกรายเที่ยว']['F3'] = payer_name
+    # ยังไม่หัก oil ตามนาม : เขียน 0 ทับสูตรหัก oil ของสรุปจ่ายรถร่วม ชีต oil ยังติดไว้ให้ดู
+    pay_sheet = workbook['สรุปจ่ายรถร่วม']
+    for row in range(EXPORT_DOC_PAY_FIRST_ROW, EXPORT_DOC_PAY_LAST_ROW + 1):
+        pay_sheet.cell(row=row, column=EXPORT_DOC_PAY_OIL_COL).value = 0
+
+    _exportProgressSet(request, 77, 'กำลังบันทึกไฟล์')
+    content = xlsx_template.save_with_template_extensions(workbook, xlsx_template.TRIP_REPORT_TEMPLATE)
+    _exportProgressSet(request, 100, 'ไฟล์พร้อมแล้ว กำลังส่งให้เบราว์เซอร์', done=True)
+    response = HttpResponse(
+        content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = 'trip_report_%s_%s_นาม%s%s.xlsx' % (active, selected_month, payer_name,
+                                                  credit_part.replace(' ', ''))
     response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % quote(filename)
     return _exportDocumentMarkDownloadDone(request, response)
 

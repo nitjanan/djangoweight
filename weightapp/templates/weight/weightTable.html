@@ -11,6 +11,12 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
 />
 <link rel="stylesheet" href="{% static 'compiled/css/table-datatable-jquery.css' %}"/>
 <style>
+  /* รายการที่เพิ่งแก้ไข (กลับมาจากหน้าแก้ไข ?edited=) */
+  /* ขึ้นเส้นขอบสีเหลืองแปปนึง แล้วจางหายไป */
+  .wt-table tbody tr.wt-edited { outline: 2px solid transparent; outline-offset: -2px; }
+  .wt-table tbody tr.wt-edited.wt-flash { animation: wtEditedFlash 2.5s ease-in forwards; }
+  @keyframes wtEditedFlash { 0%, 50% { outline-color: #ffc107; } 100% { outline-color: transparent; } }
+
   /* ===== Weight Table : layout ===== */
   .wt-card { border-radius: .75rem; }
   .wt-section-title { font-size: .875rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--bs-secondary-color, #6c757d); margin-bottom: .5rem; }
@@ -322,6 +328,16 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
           </div>
           {% endif %}
 
+          {% if edited_weight %}
+          {# กลับมาจากหน้าแก้ไข : แจ้งว่าแก้รายการไหน แล้วเลื่อนไปที่แถวนั้น (ดู script ท้ายไฟล์) #}
+          <div id="wt-edited-alert" class="alert alert-light-warning alert-dismissible fade show d-flex align-items-center gap-2 mt-3 mb-0" role="alert">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>แก้ไขรายการชั่ง เลขที่ <a href="#wt-edited-row" class="fw-bold" onclick="focusEditedRow(); return false;">{{ edited_weight.doc_id }}</a>
+              วันที่ {{ edited_weight.date|date:"d/m/Y" }}{% if edited_weight.car_registration_name %} ทะเบียน {{ edited_weight.car_registration_name }}{% endif %} เรียบร้อยแล้ว</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+          {% endif %}
+
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
             <div class="fw-semibold">รายการชั่ง <span class="wt-count">{{ weight.paginator.count|intcomma }} รายการ</span></div>
             <div class="small text-muted d-none d-md-flex align-items-center gap-1">
@@ -359,7 +375,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
               </thead>
               <tbody>
                 {% for i in weight %}
-                <tr>
+                <tr{% if edited_weight and i.weight_id == edited_weight.weight_id %} id="wt-edited-row" class="wt-edited"{% endif %}>
                   <td class="text-md-center wt-col-status" data-label="สถานะตรวจสอบ">
                     {% if i.is_apw == True %}
                     <span class="wt-status ok" title="ตรวจสอบแล้ว"><i class="fa-solid fa-check"></i><span class="visually-hidden">ตรวจสอบแล้ว</span></span>
@@ -404,7 +420,7 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
                   <td class="nowrap wt-col-lc" data-label="lc.">{{i.base_weight_station_name}}</td>
                   <td class="nowrap wt-scale" data-label="ผู้ชั่ง">{{i.scale_name}}<span class="wt-compact-only wt-sub">{{i.base_weight_station_name}}</span></td>
                   {# superuser, ผู้ชั่งรายการชั่งนั้นๆ และ group = account สามารถแก้ไขได้ #}
-                  <td class="text-center wt-edit">{% if is_scale and request.user.first_name == i.scale_name or request.user.is_superuser or is_account %}<a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}" class="btn btn-outline-secondary btn-sm nowrap" title="แก้ไข"><i class="fas fa-pen-to-square"></i><span class="wt-edit-text"> แก้ไข</span></a>{% endif %}</td>
+                  <td class="text-center wt-edit">{% if is_scale and request.user.first_name == i.scale_name or request.user.is_superuser or is_account %}<a href="{% url 'editWeight' i.bws__weight_type__id i.weight_id %}?next={{ request.get_full_path|urlencode:'' }}" class="btn btn-outline-secondary btn-sm nowrap" title="แก้ไข"><i class="fas fa-pen-to-square"></i><span class="wt-edit-text"> แก้ไข</span></a>{% endif %}</td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -668,6 +684,45 @@ href="{% static 'extensions/datatables.net-bs5/css/dataTables.bootstrap5.min.css
     });
 
     load();
+  })();
+
+  // ===== กลับมาจากหน้าแก้ไข : เลื่อนไปที่รายการที่เพิ่งแก้ไข แล้วกระพริบแถว =====
+  function focusEditedRow(instant) {
+    var row = document.getElementById('wt-edited-row');
+    if (!row) return;
+    row.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'center' });
+    row.classList.remove('wt-flash');
+    void row.offsetWidth; // restart animation
+    row.classList.add('wt-flash');
+  }
+  (function () {
+    if (!document.getElementById('wt-edited-alert')) return;
+    // เอา edited= ออกจาก url และลิงก์เปลี่ยนหน้า (refresh / เปลี่ยนหน้าแล้วจะไม่แจ้งซ้ำ)
+    var stripEdited = function (href) {
+      var u = new URL(href, window.location.href);
+      u.searchParams.delete('edited');
+      return u.pathname + u.search + u.hash;
+    };
+    try { history.replaceState(null, '', stripEdited(window.location.href)); } catch (e) {}
+    document.querySelectorAll('.pagination a.page-link[href]').forEach(function (a) {
+      if (a.getAttribute('href') !== '#') a.setAttribute('href', stripEdited(a.getAttribute('href')));
+    });
+    // เลื่อนไปที่แถวทันที และเลื่อนซ้ำหลังหน้าโหลดเสร็จ / แผงเที่ยวส่งออก (โหลดแยกทีหลัง) ดันตารางลง
+    // ถ้าผู้ใช้เลื่อนหน้าเองแล้วจะไม่เลื่อนให้อีก
+    var userScrolled = false;
+    ['wheel', 'touchmove', 'keydown', 'mousedown'].forEach(function (ev) {
+      window.addEventListener(ev, function () { userScrolled = true; }, { once: true, passive: true });
+    });
+    var refocus = function () { if (!userScrolled) focusEditedRow(true); };
+    refocus();
+    if (document.readyState === 'complete') setTimeout(refocus, 300);
+    else window.addEventListener('load', function () { setTimeout(refocus, 300); });
+    var panel = document.getElementById('incomplete-panel');
+    if (panel && window.MutationObserver) {
+      var mo = new MutationObserver(function () { mo.disconnect(); setTimeout(refocus, 100); });
+      mo.observe(panel, { childList: true, subtree: true });
+      setTimeout(function () { mo.disconnect(); }, 10000);
+    }
   })();
 
 </script>

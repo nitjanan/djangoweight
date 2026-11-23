@@ -36,6 +36,30 @@
       max-width: 100%;
     }
   }
+
+  /* ตารางใบส่งของ: ให้เห็นถึงช่อง "หน่วย" โดยไม่ต้องเลื่อน (เหมือน editWeightSell) */
+  /* ความกว้างช่องชื่อ (--name-w) คำนวณใน fitDeliveryOrderColumns() ให้ช่อง "หน่วย" อยู่พอดีขอบขวา */
+  #tableDeliveryOrder { font-size: 0.875rem; --name-w: 160px; }
+  #tableDeliveryOrder th,
+  #tableDeliveryOrder td { padding: 0.5rem 0.5rem; }
+  #tableDeliveryOrder th {
+    white-space: normal;
+    vertical-align: bottom;
+    line-height: 1.25;
+  }
+  #tableDeliveryOrder td { white-space: nowrap; vertical-align: middle; }
+  #tableDeliveryOrder .w-btn  { width: 64px; min-width: 64px; }
+  #tableDeliveryOrder .w-doc  { width: 120px; min-width: 120px; }
+  #tableDeliveryOrder .w-num  { width: 95px; min-width: 95px; }
+  #tableDeliveryOrder .w-code { width: 85px; min-width: 85px; }
+  #tableDeliveryOrder .w-unit { width: 64px; min-width: 64px; }
+  #tableDeliveryOrder td.do-name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #tableDeliveryOrder .w-name,
+  #tableDeliveryOrder td.do-name.w-name { width: var(--name-w); min-width: var(--name-w); max-width: var(--name-w); }
 </style>
 {% endblock %}
 
@@ -98,15 +122,21 @@
                   <label for="id_do_doc_no">เลขที่ใบส่งของ</label>
                 </div>
                 <div class="col-md-2-5 form-group">
-                  <div class="input-group">
-                    <input type="text" id="id_do_doc_no" class="form-control text-primary" readonly
-                      value="{{ weight.do_doc_no|default_if_none:'' }}">
-                    {% if weight.do_doc_no %}
-                    <button type="button" class="btn btn-outline-danger" id="btUnlinkDO" title="ยกเลิกการอ้างใบส่งของ"
-                      onclick="unlinkDeliveryOrder()"><i class="bi bi-x-lg"></i></button>
-                    {% endif %}
+                  <div class="d-flex gap-2">
+                    <div class="input-group">
+                      <input type="text" id="id_do_doc_no" class="form-control text-primary" readonly
+                        value="{{ weight.do_doc_no|default_if_none:'' }}">
+                      {% if weight.do_doc_no %}
+                      <button type="button" class="btn btn-outline-danger" id="btUnlinkDO" title="ยกเลิกการอ้างใบส่งของ"
+                        onclick="unlinkDeliveryOrder()"><i class="bi bi-x-lg"></i></button>
+                      {% endif %}
+                    </div>
+                    <button type="button" class="btn btn-outline-primary flex-shrink-0" id="btSelectDO" title="ดึงใบส่งของ"
+                      onclick="openDeliveryOrderModal()"><i class="bi bi-box-seam"></i></button>
                   </div>
                   <input type="hidden" name="unlink_do" id="id_unlink_do" value="">
+                  {# WeightPortForm ไม่มีช่อง do_doc_no : ส่งเลขที่ใบส่งของที่เลือกใหม่ผ่านช่องนี้ #}
+                  <input type="hidden" name="link_do_doc_no" id="id_link_do_doc_no" value="">
                 </div>
 
                 <div class="col-md-2 form-group">
@@ -406,6 +436,64 @@
     </div>
   </section>
   <!-- Basic Tables end -->
+
+  <!-- ดึงใบส่งของ (เหมือนหน้า TableDeliveryOrder ในโปรแกรมตาชั่ง / หน้า editWeightSell) -->
+  <div class="modal fade" id="modalDeliveryOrder" tabindex="-1" aria-labelledby="modalDeliveryOrderLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 95vw;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalDeliveryOrderLabel">ใบส่งของ เหมือง <span id="doMineCode" class="text-primary">{{weight.bws.company.code|default_if_none:''}}</span> วันที่ {{weight.date|date:"d/m/Y"}}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row mb-3">
+            <div class="col-md-3">
+              <select id="select_do_status" class="form-select">
+                <option value="0">ทั้งหมด</option>
+                <option value="1" selected>ยังไม่สำเร็จ</option>
+                <option value="2">สำเร็จแล้ว</option>
+                <option value="3">ยกเลิก</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <button type="button" class="btn btn-primary" onclick="loadDeliveryOrderList()">ค้นหา</button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover table-sm" id="tableDeliveryOrder">
+              <thead>
+                <!-- ชื่อ/ลำดับ column เหมือนหน้า TableDeliveryOrder (dgvDO) ในโปรแกรมตาชั่ง -->
+                <tr>
+                  <th class="w-btn"></th>
+                  <th class="w-doc">เลขที่ใบส่งของ</th>
+                  <th class="w-num text-end">รับเองเหลือ (เที่ยว)</th>
+                  <th class="w-num text-end">ส่งให้เหลือ (เที่ยว)</th>
+                  <th class="w-code">รหัสลูกค้า</th>
+                  <th class="w-name">ชื่อลูกค้า</th>
+                  <th class="w-name">ชื่อหน้างาน</th>
+                  <th class="w-name">ชื่อสินค้า</th>
+                  <th class="w-num text-end">ยอดใบสั่ง (หิน)</th>
+                  <th class="w-num text-end">ยอดคงเหลือ (หิน)</th>
+                  <th class="w-unit">หน่วย</th>
+                  <th>หมายเหตุ</th>
+                  <th class="w-num text-end">plan รับเอง (เที่ยว)</th>
+                  <th class="w-num text-end">ชั่งแล้ว รับเอง (เที่ยว)</th>
+                  <th class="w-num text-end">plan ส่งให้ (เที่ยว)</th>
+                  <th class="w-num text-end">ชั่งแล้ว ส่งให้ (เที่ยว)</th>
+                  <th class="w-num text-end">จำนวนหิน ชั่งแล้ว</th>
+                  <th>พนักงานขาย</th>
+                  <th>status</th>
+                  <th class="w-code">รหัสสินค้า</th>
+                  <th class="w-code">รหัสหน้างาน</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <footer>
@@ -542,7 +630,7 @@
 
     var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
     var doDocNo = isDOUnlinked() ? "" : ($('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}");
-    if (isSiteEmpty && ((doDocNo && doDocNo.trim() !== "") || (isDOUnlinked() && !$("#id_site").val()))) {
+    if (doSiteManual || (isSiteEmpty && !doSelectedFromModal && ((doDocNo && doDocNo.trim() !== "") || (isDOUnlinked() && !$("#id_site").val())))) {
       // Keep manual input of site_name, don't clear or copy from empty select/id_site
     } else {
       setDataEmptyName("#id_site", "#id_site_name");
@@ -578,6 +666,152 @@
     return $('#id_unlink_do').val() === '1';
   }
 
+  // ===== ดึงใบส่งของ (อ้างอิงใบส่งของเหมือนโปรแกรมตาชั่ง / หน้า editWeightSell) =====
+  // ใช้รหัสลูกค้า / รหัสหิน / รหัสปลายทาง จากใบส่งของ แล้วใช้ชื่อจาก base table ในระบบ
+  // ตอนบันทึก server จะผูกรายการนี้กับใบส่งของใหม่ (WeightDelivery) และคำนวณยอดของใบส่งของเดิมใหม่
+  var doSiteManual = false;        // ปลายทางของ DO ไม่มีในรายการปลายทางท่าเรือ -> เก็บชื่อจาก DO (ไม่มีรหัส)
+  var doSelectedFromModal = false; // เลือก DO ใหม่จากหน้าต่างนี้แล้ว
+  var doListCache = [];
+
+  // ปรับความกว้าง 3 ช่องชื่อ (ลูกค้า / หน้างาน / สินค้า) ให้ช่อง "หน่วย" เป็นช่องสุดท้ายที่เห็นพอดีขอบขวา
+  function fitDeliveryOrderColumns() {
+    var table = document.getElementById('tableDeliveryOrder');
+    var wrap = table.parentElement;
+    if (!wrap.clientWidth) return; // modal ยังไม่แสดง
+    var unitTh = table.querySelector('thead th.w-unit');
+    var nameCount = table.querySelectorAll('thead th.w-name').length;
+    if (!unitTh || !nameCount) return;
+    // วัดซ้ำ 2-3 รอบ เพราะ table auto layout จะกระจายความกว้างช่องอื่นใหม่หลังเปลี่ยนขนาด
+    for (var k = 0; k < 3; k++) {
+      var cur = parseFloat(getComputedStyle(table).getPropertyValue('--name-w')) || 160;
+      var diff = wrap.getBoundingClientRect().right - unitTh.getBoundingClientRect().right - 1;
+      if (Math.abs(diff) < 2) break;
+      var w = Math.floor(cur + diff / nameCount);
+      w = Math.max(84, Math.min(w, 400));
+      if (w === cur) break;
+      table.style.setProperty('--name-w', w + 'px');
+    }
+  }
+  document.getElementById('modalDeliveryOrder').addEventListener('shown.bs.modal', fitDeliveryOrderColumns);
+  window.addEventListener('resize', fitDeliveryOrderColumns);
+
+  function openDeliveryOrderModal() {
+    loadDeliveryOrderList();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDeliveryOrder')).show();
+  }
+
+  function fmtNum(v) {
+    if (v === null || v === undefined || v === '') return '';
+    var n = parseFloat(v);
+    return isNaN(n) ? v : n.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  }
+
+  function loadDeliveryOrderList() {
+    var $tbody = $('#tableDeliveryOrder tbody');
+    $tbody.empty().append($('<tr>').append($('<td colspan="21" class="text-center">').text('กำลังโหลด ...')));
+    $.ajax({
+      url: '{% url "searchDeliveryOrderForWeight" %}',
+      // server ใช้เหมือง + วันที่ ของรายการชั่งนี้ (ไม่ใช่แท็ปบริษัทที่เลือกอยู่)
+      data: { weight_id: '{{weight.weight_id}}', status: $('#select_do_status').val() },
+      dataType: 'json',
+      success: function (data) {
+        doListCache = data.do_list || [];
+        if (data.comp_code) $('#doMineCode').text(data.comp_code);
+        $tbody.empty();
+        if (doListCache.length === 0) {
+          $tbody.append($('<tr>').append($('<td colspan="21" class="text-center text-muted">').text('ไม่พบใบส่งของ')));
+          return;
+        }
+        $.each(doListCache, function (i, d) {
+          var $tr = $('<tr>').css('cursor', 'pointer').on('dblclick', function () { selectDeliveryOrder(i); });
+          if (d.doc_no === $('#id_do_doc_no').val()) $tr.addClass('table-primary');
+          // ค่าเหลือ = 0 ตัวแดง (เหมือน dgvDO_CellFormatting)
+          var remCls = function (v) { return (parseFloat(v) === 0) ? 'text-end text-danger' : 'text-end'; };
+          var txt = function (v) { return (v === null || v === undefined) ? '' : v; };
+          var nameCell = function (v, cls) {
+            return $('<td>').addClass('do-name ' + (cls || '')).text(v).attr('title', v);
+          };
+          $tr.append($('<td>').append(
+            $('<button type="button" class="btn btn-sm btn-success">').text('เลือก').on('click', function () { selectDeliveryOrder(i); })
+          ));
+          $tr.append($('<td class="fw-bold">').text(txt(d.doc_no)));
+          $tr.append($('<td>').addClass(remCls(d.car_customer_rem)).text(txt(d.car_customer_rem)));
+          $tr.append($('<td>').addClass(remCls(d.car_company_rem)).text(txt(d.car_company_rem)));
+          $tr.append($('<td>').text(txt(d.customer_code)).toggleClass('text-danger', !d.base_customer_name));
+          $tr.append(nameCell(d.base_customer_name || txt(d.customer_name), 'w-name').toggleClass('text-danger', !d.base_customer_name));
+          $tr.append(nameCell(d.base_site_name || txt(d.site_name), 'w-name'));
+          $tr.append(nameCell(d.base_stone_type_name || txt(d.product_name), 'w-name').toggleClass('text-danger', !d.base_stone_type_name));
+          $tr.append($('<td class="text-end">').text(fmtNum(d.qty)));
+          $tr.append($('<td class="text-end">').text(fmtNum(d.qty_rem)));
+          $tr.append($('<td>').text(txt(d.unit_name)));
+          $tr.append(nameCell(txt(d.note)));
+          $tr.append($('<td class="text-end">').text(txt(d.car_customer)));
+          $tr.append($('<td class="text-end">').text(txt(d.car_customer_tot)));
+          $tr.append($('<td class="text-end">').text(txt(d.car_company)));
+          $tr.append($('<td class="text-end">').text(txt(d.car_company_tot)));
+          $tr.append($('<td class="text-end">').text(fmtNum(d.qty_tot)));
+          $tr.append($('<td>').text(txt(d.sale_name)));
+          $tr.append($('<td>').text(txt(d.status)));
+          $tr.append($('<td>').text(txt(d.product_code)));
+          $tr.append($('<td>').text(txt(d.site_id)));
+          $tbody.append($tr);
+        });
+        fitDeliveryOrderColumns();
+      },
+      error: function () {
+        $tbody.empty().append($('<tr>').append($('<td colspan="21" class="text-center text-danger">').text('โหลดใบส่งของไม่สำเร็จ')));
+      }
+    });
+  }
+
+  function selectDeliveryOrder(i) {
+    var d = doListCache[i];
+    if (!d) return;
+
+    if (!d.base_customer_name) {
+      alert('ไม่พบรหัสลูกค้า ' + d.customer_code + ' ในระบบ ไม่สามารถอ้างอิงใบส่งของนี้ได้');
+      return;
+    }
+    var $stoneOpt = $('#id_stone_type option').filter(function () { return this.value === d.product_code; });
+    if (!d.base_stone_type_name || $stoneOpt.length === 0) {
+      alert('ไม่พบรหัสหิน ' + d.product_code + ' ในระบบ ไม่สามารถอ้างอิงใบส่งของนี้ได้');
+      return;
+    }
+    if (!confirm('ต้องการอ้างอิงใบส่งของ ' + d.doc_no + ' หรือไม่ ?\nลูกค้า / ปลายทาง / ชนิดหิน จะถูกแทนที่ด้วยข้อมูลจากใบส่งของ (มีผลเมื่อกดบันทึก)')) return;
+
+    doSelectedFromModal = true;
+    $('#id_unlink_do').val('');
+    $('#id_do_doc_no').val(d.doc_no);
+    $('#id_link_do_doc_no').val(d.doc_no);
+
+    // ลูกค้า
+    $('#id_customer').val(d.customer_code);
+    $('#id_customer_name').val(d.base_customer_name);
+    $('#id-form-customer').val(d.customer_code + ':' + d.base_customer_name);
+
+    // ปลายทาง (dropdown ปลายทางท่าเรือ weight_type = 4)
+    var $siteOpt = $('#id_site option').filter(function () { return d.site_id && this.value === d.site_id; });
+    if ($siteOpt.length) {
+      doSiteManual = false;
+      $('#id_site').val(d.site_id).trigger('change').prop('disabled', true).show().next('.select2-container').show();
+      $('#id_site_name').attr('type', 'hidden').prop('readonly', false).val(d.base_site_name || $siteOpt.text());
+    } else {
+      // ปลายทางของ DO ไม่มีในรายการปลายทาง: เก็บเฉพาะชื่อ (เหมือนกรณีเดิมที่ site ว่าง)
+      doSiteManual = true;
+      $('#id_site').val('').trigger('change').hide().next('.select2-container').hide();
+      $('#id_site_name').attr('type', 'text').addClass('form-control').prop('readonly', true).val(d.base_site_name || d.site_name || '');
+    }
+
+    // ชนิดหิน
+    $('#id_stone_type').val(d.product_code).trigger('change').prop('disabled', true);
+    $('#id_stone_type_name').val(d.base_stone_type_name);
+
+    // ใบส่งของ = เงินเชื่อ (เหมือนโปรแกรมตาชั่ง)
+    $('#pg_2').prop('checked', true);
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDeliveryOrder')).hide();
+  }
+
   // ยกเลิกการอ้างใบส่งของ: ล้างเลขที่ใบส่งของ ปลดล็อกหน้างาน/ชนิดหิน
   // ตอนบันทึก server จะล้าง do_doc_no ตั้งรายการนี้เป็นยกเลิกใน WeightDelivery และคำนวณยอดของใบส่งของเดิมใหม่
   function unlinkDeliveryOrder() {
@@ -587,6 +821,7 @@
 
     $('#id_unlink_do').val('1');
     $('#id_do_doc_no').val('');
+    $('#id_link_do_doc_no').val('');
     $('#btUnlinkDO').prop('disabled', true);
 
     // กรณีหน้างานของ DO ไม่มีในระบบ ช่องชื่อหน้างานถูกเปลี่ยนเป็น text readonly → กลับมาใช้ dropdown

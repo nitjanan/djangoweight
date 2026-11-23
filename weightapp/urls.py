@@ -288,6 +288,7 @@ urlpatterns = [
      path('api/uc_status_cancel_do/', views.uc_status_cancel_do),
 
      path('deliveryorder/api/by/comp/', views.deliveryOrderByComp, name="deliveryOrderByComp"),
+     path('company/aff/api/by/comp/', views.companyAffByComp, name="companyAffByComp"),
 
       path(
       'deliveryorder/api/vStamp/',

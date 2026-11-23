@@ -1,0 +1,30 @@
+{% load static humanize %}
+{# หน้าแก้ไขข้อมูลพื้นฐาน : บริษัทที่ใช้ข้อมูลนี้ในตาราง weight แล้ว  view ส่ง weight_usage มาจาก weightUsageContext() #}
+{% if weight_usage is not None %}
+<link rel="stylesheet" href="{% static 'css/weight-usage.css' %}" />
+<div class="wu-box{% if not weight_usage %} wu-empty{% endif %}">
+  <div class="wu-head">
+    <i class="bi {% if weight_usage %}bi-building-check{% else %}bi-building{% endif %} wu-head-icon"></i>
+    <div class="wu-head-text">
+      {% if weight_usage %}
+        <div class="wu-title">ข้อมูลนี้ถูกใช้ในตาชั่งแล้ว {{ weight_usage|length }} บริษัท</div>
+        <div class="wu-sub">รวม {{ weight_usage_total|intcomma }} รายการชั่ง · หากแก้ไขชื่อ ข้อมูลในตาชั่งของบริษัทเหล่านี้จะเปลี่ยนตามด้วย</div>
+      {% else %}
+        <div class="wu-title">ยังไม่มีบริษัทใดใช้ข้อมูลนี้ในตาชั่ง</div>
+      {% endif %}
+    </div>
+  </div>
+  {% if weight_usage %}
+  <ul class="wu-list">
+    {% for u in weight_usage %}
+    <li class="wu-item">
+      <span class="wu-code">{{ u.code|default:"-" }}</span>
+      <span class="wu-name">{{ u.name }}</span>
+      <span class="wu-count">{{ u.count|intcomma }} <small>รายการ</small></span>
+      {% if u.last_date %}<span class="wu-last" title="วันที่ชั่งล่าสุด"><i class="bi bi-clock-history"></i> {{ u.last_date|date:"d/m/Y" }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}

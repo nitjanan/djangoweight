@@ -352,10 +352,16 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do3.status, 'cancelled')
 
     @patch('weightapp.views.requests.get')
-    @patch('weightapp.views.get_base_api')
-    def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_get_base_api, mock_requests_get):
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_insert_delivery_from_api_k2m_insert_and_update(self, mock_token, mock_url, mock_requests_get):
         from weightapp.views import insertDeliveryFromApiK2M
+        from weightapp.models import BaseAffiliatedCompany
         from datetime import date
+
+        # k2m ดึงตามสังกัด: ผูก TEST_COMP กับสังกัดที่มีเหมืองเดียว แถวที่ไม่มี mine_code จึงลง TEST_COMP
+        self.company.aff_so = BaseAffiliatedCompany.objects.create(name="TEST_AFF")
+        self.company.save()
 
         # Setup mock responses for the first run (Insert)
         mock_response_insert_1 = MagicMock()
@@ -621,6 +627,95 @@ class UpdateWeightDeliveryAndDeliveryOrderTests(TestCase):
         self.assertEqual(self.do.car_company_tot, 1)
         self.assertEqual(self.do.car_company_rem, 0)
 
+
+
+
+class EditWeightUnlinkDeliveryOrderTests(TestCase):
+    """ปุ่มยกเลิกการอ้างใบส่งของ หน้า editWeightSell / editWeightPort (POST unlink_do=1)"""
+
+    def setUp(self):
+        from weightapp.models import UserProfile, Weight, BaseBusiness
+
+        self.client = Client()
+        self.biz_mine = BaseBusiness.objects.create(id=1, name="เหมือง")
+        self.biz_port = BaseBusiness.objects.create(id=2, name="ท่าเรือ")
+        self.company = BaseCompany.objects.create(name="Unlink Company", code="UNL_COMP", biz=self.biz_port)
+        self.bws = BaseWeightStation.objects.create(id="BWS_UNL", des="Unlink Station", company=self.company)
+
+        self.user = User.objects.create_user(username="unlinker", password="pass12345")
+        UserProfile.objects.create(user=self.user).company.add(self.company)
+
+        self.do = DeliveryOrder.objects.create(
+            delivery_date="2026-11-09", doc_no="DO_UNL", comp_code="UNL_COMP", unit_name="ตัน",
+            car_company=2, car_customer=0, car_company_tot=1, car_customer_tot=0,
+            car_company_rem=1, car_customer_rem=0, qty=100, qty_tot=6)
+
+        self.weight = Weight.objects.create(
+            weight_id=5001, bws=self.bws, date='2026-11-09', doc_id='W_UNL',
+            do_doc_no='DO_UNL', customer_name='ลูกค้า', weight_in=10, weight_out=4, weight_total=6)
+
+        WeightDelivery.objects.create(
+            weight_id=5001, delivery_date='2026-11-09', bws='BWS_UNL', comp_code='UNL_COMP',
+            do_id=self.do.id, do_doc_no='DO_UNL', carry_type_name='ส่งให้',
+            weight_ton=6, weight_q=0, unit_name='ตัน')
+
+        self.client.login(username="unlinker", password="pass12345")
+        session = self.client.session
+        session['company_code'] = 'UNL_COMP'
+        session.save()
+
+    def postEdit(self, form_class, mode, **extra):
+        form = form_class(instance=self.weight)
+        data = {}
+        for name in form.fields:
+            value = form[name].value()
+            if value is None or value is False:
+                continue
+            data[name] = str(value) if not isinstance(value, bool) else 'on'
+        data.update(extra)
+        return self.client.post(reverse('editWeight', args=[mode, self.weight.weight_id]), data)
+
+    def assertUnlinked(self, response):
+        self.assertEqual(response.status_code, 302)
+        self.weight.refresh_from_db()
+        self.assertIn(self.weight.do_doc_no, (None, ''))
+        self.assertTrue(WeightDelivery.objects.get(weight_id=5001).is_cancel)
+        self.do.refresh_from_db()
+        self.assertEqual(self.do.car_company_tot, 0)
+        self.assertEqual(self.do.car_company_rem, 2)
+        self.assertEqual(self.do.qty_tot, 0)
+
+    def test_edit_pages_show_unlink_button(self):
+        from django.test import override_settings
+        url = reverse('editWeight', args=[1, self.weight.weight_id])
+        with override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage'):
+            response = self.client.get(url)  # biz ท่าเรือ → editWeightPort
+            self.assertContains(response, 'id="btUnlinkDO"')
+            self.assertContains(response, 'DO_UNL')
+
+            self.company.biz = self.biz_mine
+            self.company.save()
+            response = self.client.get(url)  # biz เหมือง → editWeightSell
+            self.assertContains(response, 'id="btUnlinkDO"')
+
+    def test_port_unlink_do(self):
+        from weightapp.forms import WeightPortForm
+        self.assertUnlinked(self.postEdit(WeightPortForm, 1, unlink_do='1'))
+
+    def test_port_save_without_unlink_keeps_do(self):
+        from weightapp.forms import WeightPortForm
+        response = self.postEdit(WeightPortForm, 1)
+        self.assertEqual(response.status_code, 302)
+        self.weight.refresh_from_db()
+        self.assertEqual(self.weight.do_doc_no, 'DO_UNL')
+        self.assertFalse(WeightDelivery.objects.get(weight_id=5001).is_cancel)
+
+    def test_sell_unlink_do(self):
+        from weightapp.forms import WeightForm
+        self.company.biz = self.biz_mine
+        self.company.save()
+        # หน้า Sell: JS ล้างช่อง do_doc_no ก่อน submit
+        self.assertUnlinked(self.postEdit(WeightForm, 1, unlink_do='1', do_doc_no=''))
 
 
 class ExportExcelWeightTableTests(TestCase):
@@ -910,6 +1005,23 @@ class ExportExcelWeightTableTests(TestCase):
         # ยังแบ่งหน้าละ 10 เหมือนเดิม
         self.assertEqual(len(response.context['weight'].object_list), 10)
         self.assertEqual(response.context['weight'].paginator.count, 26)
+        # คอลัมน์เลขที่ใบส่งของ
+        self.assertContains(response, '<th>เลขที่ใบส่งของ</th>', html=True)
+        self.assertContains(response, 'DO000')
+
+    def test_weight_table_filter_do_doc_no(self):
+        from django.test import override_settings
+        self.login()
+        with override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage'):
+            response = self.client.get('/weight/table', {'do_doc_no': 'do012'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="do_doc_no"')
+        rows = list(response.context['weight'].object_list)
+        self.assertEqual([r['do_doc_no'] for r in rows], ['DO012'])
+
+        # export ใช้ filter เดียวกัน
+        sheet = self.loadSheet(self.client.get('/weight/table/export/', {'do_doc_no': 'DO01'}))
+        self.assertEqual(sheet.max_row - 1, 10)  # DO010 - DO019
 
 
 class BaseSettingExcelExportTests(TestCase):
@@ -1035,3 +1147,81 @@ class UserScalePasswordTests(TestCase):
         us.refresh_from_db()
         self.assertEqual(us.password, hash_password_sha1('1111'))
         self.assertEqual(us.scale_name, 'แก้ชื่อ')
+
+
+class K2MDeliveryOrderByAffTests(TestCase):
+    """k2m: company = สังกัด (BaseCompany.aff_so.name), mine_code = เหมือง (DeliveryOrder.comp_code)"""
+
+    def setUp(self):
+        from weightapp.models import BaseAffiliatedCompany
+        self.aff_multi = BaseAffiliatedCompany.objects.create(name="AFF_M")
+        self.aff_single = BaseAffiliatedCompany.objects.create(name="AFF_S")
+        BaseCompany.objects.create(name="Mine A", code="MINE_A", aff_so=self.aff_multi)
+        BaseCompany.objects.create(name="Mine B", code="MINE_B", aff_so=self.aff_multi)
+        BaseCompany.objects.create(name="Mine S", code="MINE_S", aff_so=self.aff_single)
+        BaseCompany.objects.create(name="No Aff", code="NO_AFF")
+
+    @staticmethod
+    def _resp(rows):
+        r = MagicMock()
+        r.json.return_value = {"data": rows}
+        r.raise_for_status = MagicMock()
+        return r
+
+    @staticmethod
+    def _row(doc_no, mine_code):
+        return {"docNo": doc_no, "mine_code": mine_code, "qty": 10, "carCompany": 1, "carCustomer": 0,
+                "deliveryCode": "X___SITE", "status": "open", "unitName": "ตัน"}
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_calls_k2m_per_aff_and_stores_mine_code(self, mock_token, mock_url, mock_requests_get):
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] > 1:
+                return self._resp([])
+            if params["company"] == "AFF_M":
+                return self._resp([
+                    self._row("DO_A", "MINE_A"),
+                    self._row("DO_B", "MINE_B"),
+                    self._row("DO_NULL_M", None),  # หลายเหมือง + ไม่มี mine_code → ข้าม
+                ])
+            if params["company"] == "AFF_S":
+                return self._resp([self._row("DO_NULL_S", None)])  # เหมืองเดียว → MINE_S
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+
+        result = insertDeliveryFromApiK2M(date(2026, 11, 16))
+
+        called_companies = {c.kwargs["params"]["company"] for c in mock_requests_get.call_args_list}
+        self.assertEqual(called_companies, {"AFF_M", "AFF_S"})  # ส่งสังกัด ไม่ใช่โค้ดเหมือง
+
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_A").comp_code, "MINE_A")
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_B").comp_code, "MINE_B")
+        self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_NULL_S").comp_code, "MINE_S")
+        self.assertFalse(DeliveryOrder.objects.filter(doc_no="DO_NULL_M").exists())
+        self.assertIn("Insert=3", result)
+        self.assertIn("Skip=1", result)
+        self.assertIn("Error=0", result)
+
+    def test_company_aff_api(self):
+        from rest_framework.test import APIClient
+        user = User.objects.create_user(username="api_user", password="x")
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        res = client.get('/company/aff/api/by/comp/', {'comp_code': 'MINE_B'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {'comp_code': 'MINE_B', 'aff': 'AFF_M', 'mines': ['MINE_A', 'MINE_B']})
+
+        self.assertEqual(client.get('/company/aff/api/by/comp/', {'comp_code': 'NO_AFF'}).status_code, 404)
+        self.assertEqual(client.get('/company/aff/api/by/comp/').status_code, 400)
+
+    def test_company_aff_api_requires_auth(self):
+        from rest_framework.test import APIClient
+        res = APIClient().get('/company/aff/api/by/comp/', {'comp_code': 'MINE_B'})
+        self.assertIn(res.status_code, (401, 403))

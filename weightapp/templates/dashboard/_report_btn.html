@@ -1,0 +1,11 @@
+{% comment %}
+  ปุ่มดาวน์โหลดรายงาน (มีแถบ progress) ผูก event ด้วย bindDownload(prefix, url, file) ใน _scripts.html
+  ตัวแปร : prefix, label, icon (bootstrap-icons), color (db-c-xxx)
+{% endcomment %}
+<button type="button" id="{{ prefix }}_download-btn" class="db-report {{ color }}">
+  <i class="bi {{ icon|default:'bi-file-earmark-excel' }}"></i>
+  <span id="{{ prefix }}_btn-text">{{ label }}</span>
+  <i class="bi bi-download db-report__go"></i>
+  <div id="{{ prefix }}_btn-progress" class="db-progress"></div>
+  <span id="{{ prefix }}_btn-percent" class="db-percent">0%</span>
+</button>

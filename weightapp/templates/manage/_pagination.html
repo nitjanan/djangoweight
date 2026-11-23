@@ -1,0 +1,42 @@
+{% load templatehelpers %}
+{# แบ่งหน้าของหน้ารายการข้อมูลพื้นฐาน  ใช้: include with page=page_obj (Page ของ Paginator) #}
+{% if page and page.paginator.count %}
+<div class="bl-pager">
+  <div class="bl-pager-info">
+    แสดง {{ page.start_index }}–{{ page.end_index }} จาก {{ page.paginator.count }} รายการ
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+  <nav aria-label="แบ่งหน้า">
+    <ul class="pagination pagination-primary mb-0">
+      {% if page.has_previous %}
+        <li class="page-item"><a class="page-link" href="{% my_url page.previous_page_number 'page' request.GET.urlencode %}" aria-label="ก่อนหน้า"><i class="bi bi-chevron-left"></i></a></li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+      {% endif %}
+
+      {% if page.number|add:'-4' > 1 %}
+        <li class="page-item"><a class="page-link" href="{% my_url page.number|add:'-5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+      {% endif %}
+
+      {% for i in page.paginator.page_range %}
+        {% if page.number == i %}
+          <li class="page-item active" aria-current="page"><span class="page-link">{{ i }}</span></li>
+        {% elif i > page.number|add:'-5' and i < page.number|add:'5' %}
+          <li class="page-item"><a class="page-link" href="{% my_url i 'page' request.GET.urlencode %}">{{ i }}</a></li>
+        {% endif %}
+      {% endfor %}
+
+      {% if page.paginator.num_pages > page.number|add:'4' %}
+        <li class="page-item"><a class="page-link" href="{% my_url page.number|add:'5' 'page' request.GET.urlencode %}">&hellip;</a></li>
+      {% endif %}
+
+      {% if page.has_next %}
+        <li class="page-item"><a class="page-link" href="{% my_url page.next_page_number 'page' request.GET.urlencode %}" aria-label="ถัดไป"><i class="bi bi-chevron-right"></i></a></li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endif %}

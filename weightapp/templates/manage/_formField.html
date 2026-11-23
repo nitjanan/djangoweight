@@ -1,0 +1,30 @@
+{% load widget_tweaks %}
+{# ช่องกรอกหนึ่งช่องของหน้าเพิ่ม / แก้ไขข้อมูลพื้นฐาน แบบแนวนอน : ชื่อช่องคอลัมน์ซ้าย ช่องกรอกคอลัมน์ขวา (จอแคบเรียงบน-ล่าง) #}
+{# ใช้: include with field=... extra="d-none ..." #}
+{% with input_type=field.field.widget.input_type %}
+<div class="col-12 bf-row {{ extra|default:'' }}">
+  <div class="row">
+    {% if input_type == 'checkbox' %}
+      <div class="col-md-3 col-xxl-2 bf-label-col"></div>
+      <div class="col-md-9 col-xxl-10">
+        <div class="form-check bf-check">
+          {% if field.errors %}{% render_field field class="form-check-input is-invalid" %}{% else %}{% render_field field class="form-check-input" %}{% endif %}
+          <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        </div>
+    {% else %}
+      <label class="col-md-3 col-xxl-2 col-form-label bf-label-col" for="{{ field.id_for_label }}">
+        {{ field.label }}{% if field.field.required %}<span class="text-danger ms-1">*</span>{% endif %}
+      </label>
+      <div class="col-md-9 col-xxl-10">
+        {% if input_type == 'select' %}
+          {% if field.errors %}{% render_field field class="form-select is-invalid" %}{% else %}{% render_field field class="form-select" %}{% endif %}
+        {% else %}
+          {% if field.errors %}{% render_field field class="form-control is-invalid" autocomplete="off" %}{% else %}{% render_field field class="form-control" autocomplete="off" %}{% endif %}
+        {% endif %}
+    {% endif %}
+        {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+      </div>
+  </div>
+</div>
+{% endwith %}

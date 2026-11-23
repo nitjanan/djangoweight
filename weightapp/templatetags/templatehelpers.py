@@ -42,3 +42,18 @@ def is_negative(value):
         return float(value) < 0
     except (TypeError, ValueError):
         return False
+
+@register.filter
+def do_doc_no_lines(value):
+    """เลขที่ใบส่งของ เช่น DO2606-000001 -> แยกเป็น 2 ส่วนที่ขีดแรก
+    <span class="do-head">DO2606-</span><span class="do-tail">000001</span>
+    หน้าเว็บใช้ CSS เลือกเองว่าจะแสดงบรรทัดเดียวหรือ 2 บรรทัด (จอ notebook ลงไปแสดง 2 บรรทัด)
+    ไม่มีค่า -> '-' / ไม่มีขีด -> แสดงทั้งก้อนเหมือนเดิม"""
+    from django.utils.html import format_html
+    if value is None or value == '':
+        return '-'
+    value = str(value)
+    head, sep, tail = value.partition('-')
+    if not sep or not tail:
+        return value
+    return format_html('<span class="do-head">{}{}</span><span class="do-tail">{}</span>', head, sep, tail)

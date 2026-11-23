@@ -17,6 +17,25 @@
     display: inline-block;
     margin-right: 15px;
   }
+
+  .col-md-1-5 {
+    flex: 0 0 12.5%;
+    max-width: 12.5%;
+  }
+
+  .col-md-2-5 {
+    flex: 0 0 20.833333%;
+    max-width: 20.833333%;
+  }
+
+  @media (max-width: 767px) {
+
+    .col-md-1-5,
+    .col-md-2-5 {
+      flex: 0 0 100%;
+      max-width: 100%;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -64,13 +83,30 @@
               {% csrf_token %}
               <div class="row">
                 <div class="col-md-2 form-group">
-                  <label for="first-name-horizontal">วันที่</label>
+                  <label for="id_date">วันที่</label>
                 </div>
                 <div class="col-md-2 form-group">
                   {{form.date |attr:"readonly"| add_class:"form-control" }}
                 </div>
-                <div class="col-md-8 form-group">
-                  {{form.doc_id |attr:"readonly"| add_class:"form-control" }}
+                <div class="col-md-1-5 form-group">
+                  <label for="id_doc_id">เลขที่เอกสาร</label>
+                </div>
+                <div class="col-md-2-5 form-group">
+                  {{form.doc_id |attr:"readonly"| add_class:"form-control fw-bold" }}
+                </div>
+                <div class="col-md-1-5 form-group">
+                  <label for="id_do_doc_no">เลขที่ใบส่งของ</label>
+                </div>
+                <div class="col-md-2-5 form-group">
+                  <div class="input-group">
+                    <input type="text" id="id_do_doc_no" class="form-control text-primary" readonly
+                      value="{{ weight.do_doc_no|default_if_none:'' }}">
+                    {% if weight.do_doc_no %}
+                    <button type="button" class="btn btn-outline-danger" id="btUnlinkDO" title="ยกเลิกการอ้างใบส่งของ"
+                      onclick="unlinkDeliveryOrder()"><i class="bi bi-x-lg"></i></button>
+                    {% endif %}
+                  </div>
+                  <input type="hidden" name="unlink_do" id="id_unlink_do" value="">
                 </div>
 
                 <div class="col-md-2 form-group">
@@ -505,8 +541,8 @@
     setDataEmptyName("#id_scoop", "#id_scoop_name");
 
     var isSiteEmpty = ('{{weight.site}}' === 'None' || '{{weight.site}}' === '' || !'{{weight.site}}');
-    var doDocNo = $('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}";
-    if (isSiteEmpty && doDocNo && doDocNo.trim() !== "") {
+    var doDocNo = isDOUnlinked() ? "" : ($('#id_do_doc_no').val() || "{{weight.do_doc_no|default_if_none:''}}");
+    if (isSiteEmpty && ((doDocNo && doDocNo.trim() !== "") || (isDOUnlinked() && !$("#id_site").val()))) {
       // Keep manual input of site_name, don't clear or copy from empty select/id_site
     } else {
       setDataEmptyName("#id_site", "#id_site_name");
@@ -537,6 +573,28 @@
     //vat 
     $("#id_vat_type").val($('input[name="vat_type_group"]:checked').val());
   });
+
+  function isDOUnlinked() {
+    return $('#id_unlink_do').val() === '1';
+  }
+
+  // ยกเลิกการอ้างใบส่งของ: ล้างเลขที่ใบส่งของ ปลดล็อกหน้างาน/ชนิดหิน
+  // ตอนบันทึก server จะล้าง do_doc_no ตั้งรายการนี้เป็นยกเลิกใน WeightDelivery และคำนวณยอดของใบส่งของเดิมใหม่
+  function unlinkDeliveryOrder() {
+    var doNo = $('#id_do_doc_no').val();
+    if (!doNo) return;
+    if (!confirm('ต้องการยกเลิกการอ้างใบส่งของ ' + doNo + ' หรือไม่ ?\n(มีผลเมื่อกดบันทึก)')) return;
+
+    $('#id_unlink_do').val('1');
+    $('#id_do_doc_no').val('');
+    $('#btUnlinkDO').prop('disabled', true);
+
+    // กรณีหน้างานของ DO ไม่มีในระบบ ช่องชื่อหน้างานถูกเปลี่ยนเป็น text readonly → กลับมาใช้ dropdown
+    // ถ้าไม่เลือกหน้างานใหม่ จะเก็บชื่อหน้างานเดิมไว้ (ดู submit)
+    $('#id_site_name').attr('type', 'hidden');
+    $('#id_site').prop('disabled', false).next('.select2-container').show();
+    $('#id_stone_type').prop('disabled', false);
+  }
 
   var stateP1 = false;
   function radiostateP1(element) {

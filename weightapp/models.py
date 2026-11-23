@@ -54,12 +54,31 @@ class BaseBusiness(models.Model):
 
     def __str__(self):
         return self.name
+
+# บริษัทที่ออกใบสั่งขาย (สังกัด): name = ค่าที่ส่งเป็น k2m company (ผูกกับเหมืองผ่าน BaseCompany.aff_so)
+class BaseAffiliatedCompany(models.Model):
+    name = models.CharField(max_length=255,unique=True, verbose_name="โค้ดบริษัท")
+    name_sh = models.CharField(max_length=255, blank=True, null = True, verbose_name="ชื่อบริษัทย่อ")
+    name_th = models.CharField(max_length=255, blank=True, null = True, verbose_name="ชื่อบริษัทไทย")
+    name_eng = models.CharField(max_length=255, blank=True, null = True, verbose_name="ชื่อบริษัทอังกฤษ")
+
+    class Meta:
+        db_table = 'BaseAffiliatedCompany'
+        ordering=('id',)
+        verbose_name = 'สังกัดบริษัท'
+        verbose_name_plural = 'ข้อมูลสังกัดบริษัท'
+    
+    def __str__(self):
+        return self.name
     
 class BaseCompany(models.Model):
     name = models.CharField(blank=True, null=True, max_length=120, verbose_name="ชื่อบริษัท")
     code = models.CharField(blank=True, null=True, max_length=120, verbose_name="โค้ดบริษัท")
     biz = models.ForeignKey(BaseBusiness, on_delete=models.CASCADE, blank = True, null = True, verbose_name="ประเภทธุรกิจ")
     step = models.IntegerField(blank = True, null = True, verbose_name="ลำดับแท็ปบริษัท")
+    # code   = เหมือง = k2m mine_code = DeliveryOrder.comp_code = Windows delivery_order.comp_code / base_api id=2 comp_code
+    # aff_so = บริษัทที่ออกใบสั่งขาย = k2m company (ใช้ aff_so.name) ดูตารางเต็มเหนือ insertDeliveryFromApiK2M() ใน views.py
+    aff_so = models.ForeignKey(BaseAffiliatedCompany, on_delete=models.CASCADE, blank = True, null = True,related_name='branch_affiliated', verbose_name="นามบริษัทที่ออกใบสั่งขาย")
 
     class Meta:
         db_table = 'base_comp'
@@ -1345,9 +1364,12 @@ class DeliveryOrder(models.Model):
     qty_tot = models.DecimalField(blank=True, null=True, decimal_places=3, max_digits=10)
 
     unit_name = models.CharField(max_length=20, blank=False, null=True)
+    # เหมือง = k2m mine_code = BaseCompany.code = Windows delivery_order.comp_code
+    # (บริษัทที่ออกใบสั่งขาย / k2m company ไม่เก็บที่นี่ หาได้จาก BaseCompany(code=comp_code).aff_so)
+    # column อื่นของตารางนี้ map กับ k2m / Windows อย่างไร ดูตารางเหนือ insertDeliveryFromApiK2M() ใน views.py
     comp_code = models.CharField(max_length=20, blank=False, null=True, db_index=True)
     v_stamp = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'delivery_order'
         ordering = ['id']

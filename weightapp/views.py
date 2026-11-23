@@ -11,6 +11,9 @@ from django.views.decorators.cache import cache_control
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.paginator import Paginator
 from weightapp import xlsx_template
+from weightapp.views_similar_base import similarBaseContext
+from weightapp.views_base_usage import weightUsageContext
+from weightapp.base_view_mode import blockSaveInViewMode
 from .filters import WeightFilter, ProductionFilter, StoneEstimateFilter, BaseMillFilter, BaseStoneTypeFilter, BaseScoopFilter, BaseCarTeamFilter, BaseCarFilter, BaseSiteFilter, BaseCustomerFilter, BaseDriverFilter, BaseCarRegistrationFilter, BaseJobTypeFilter, BaseCustomerSiteFilter, StockFilter, GasPriceFilter, PortStockFilter, LoadingRateFilter
 from .forms import ProductionForm, ProductionLossItemForm, ProductionModelForm, ProductionLossItemFormset, ProductionLossItemInlineFormset, ProductionGoalForm, StoneEstimateForm, StoneEstimateItemForm, StoneEstimateItemInlineFormset, WeightForm, WeightStockForm, BaseMillForm, BaseStoneTypeForm ,BaseScoopForm, BaseCarTeamForm, BaseCarForm, BaseSiteForm, BaseCustomerForm, BaseDriverForm, BaseCarRegistrationForm, BaseJobTypeForm, BaseCustomerSiteForm, StockForm, StockStoneForm, StockStoneItemForm, StockStoneItemInlineFormset, GasPriceForm, WeightPortForm, PortStockForm, PortStockStoneForm, PortStockStoneItemInlineFormset, ProductionMachineItemInlineFormset, LoadingRateForm, LoadingRateLocForm, LoadingRateItemInlineFormset
 import xlwt
@@ -223,16 +226,14 @@ def send_line_1pm(request):
     return HttpResponse("1PM summary sent (or skipped).")
 
 
-def get_base_api(mode):
-    b_api = BaseAPI.objects.get(apiname = "k2m_deliver_order")  # query เมื่อเรียกใช้งานจริง
-    if mode == 1:
-        return b_api.url
-    if mode == 2:
-        return b_api.username
-    if mode == 3:
-        return b_api.password
-    if mode == 4:
-        return b_api.token
+# แยกฟังก์ชันอ่าน url กับ token ออกจากกัน (query เมื่อเรียกใช้งานจริง)
+# อย่ารวมเป็นฟังก์ชันเดียวที่คืน password/token ได้ เพราะ CodeQL จะมองว่าข้อมูลที่ได้จาก url เป็นข้อมูลลับไปด้วย
+# แล้วแจ้ง py/clear-text-logging-sensitive-data ตอน print ข้อมูล DO
+def get_k2m_api_url():
+    return BaseAPI.objects.values_list('url', flat=True).get(apiname="k2m_deliver_order")
+
+def get_k2m_api_token():
+    return BaseAPI.objects.values_list('token', flat=True).get(apiname="k2m_deliver_order")
 
 # api delivery order from k2m 3:30am
 def get_api_delivery_order_3_30am(request):
@@ -240,19 +241,54 @@ def get_api_delivery_order_3_30am(request):
     result = insertDeliveryFromApiK2M(previous_day)
     return HttpResponse(result)
 
+# ======================================================================================================
+# ความสัมพันธ์ของ column ใบ DO ระหว่าง k2m / Django / โปรแกรมตาชั่ง Windows (Blue, Pink)  (do_database.xlsx)
+# ------------------------------------------------------------------------------------------------------
+#  ความหมาย                 | k2m API (quo01)          | Django                                   | Windows (local DB ตาชั่ง)
+# --------------------------|--------------------------|------------------------------------------|------------------------------------------
+#  บริษัทที่ออกใบสั่งขาย (สังกัด) | company (query + field)  | BaseCompany.aff_so -> BaseAffiliatedCompany.name | ไม่เก็บ: ถาม Django GET /company/aff/api/by/comp/?comp_code=<เหมือง> -> "aff"
+#  เหมือง                    | mine_code                | DeliveryOrder.comp_code (= BaseCompany.code)  | delivery_order.comp_code
+#                           |                          | WeightDelivery.comp_code                 | base_api id=2 comp_code = เหมืองของตาชั่งนี้ (กรอง TableDeliveryOrder)
+#                           |                          |                                          | base_api id=1 comp_code = เหมืองเดียวกัน (sync กับ Django)
+#  เลขที่ DO                  | docNo                    | DeliveryOrder.doc_no                     | delivery_order.doc_no
+#  วันที่ส่ง                  | deliveryDate             | DeliveryOrder.delivery_date              | delivery_order.delivery_date
+#  หน้างาน                   | deliveryCode (หลัง "___") | DeliveryOrder.site_id                    | delivery_order.site_id
+#                           | deliveryLocation         | DeliveryOrder.site_name                  | delivery_order.site_name
+#  จำนวนรถ                   | carCompany / carCustomer | DeliveryOrder.car_company / car_customer | delivery_order.car_company / car_customer
+#  ลูกค้า                     | customerCode/Name/Address| DeliveryOrder.customer_code/_name/_address | delivery_order.customer_code/_name/_address
+#  สินค้า                     | productCode / productName| DeliveryOrder.product_code / product_name | delivery_order.product_code / product_name
+#  ปริมาณ                    | qty / unitName           | DeliveryOrder.qty / unit_name            | delivery_order.qty / unit_name
+#  อื่น ๆ                     | saleName / note / status | DeliveryOrder.sale_name / note / status  | delivery_order.sale_name / note / status
+#  ประเภทการส่ง               | deliveryType             | (ไม่เก็บ)                                 | delivery_order.delivery_type
+# ------------------------------------------------------------------------------------------------------
+# k2m ส่ง DO ของทุกเหมืองที่ใช้ "บริษัทที่ออกใบสั่งขาย" เดียวกันมาพร้อมกัน จึงต้องเรียกตาม aff_so แล้วแยกด้วย mine_code
+# ฝั่ง Windows ดู DeliveryOrderMine.cs (โค้ดเดียวกันทั้ง Blue และ Pink)
+# ======================================================================================================
 def insertDeliveryFromApiK2M(delivery_date):
     headers = {
-        "Authorization": f"Bearer {get_base_api(4)}",
+        "Authorization": f"Bearer {get_k2m_api_token()}",
         "Accept": "application/json"
     }
 
     insert_count = 0
     update_count = 0
     error_count = 0
+    skip_count = 0
 
-    companies = BaseCompany.objects.values_list('code', flat=True)
+    # k2m company = BaseCompany.aff_so.name (บริษัทที่ออกใบสั่งขาย), k2m mine_code = BaseCompany.code -> DeliveryOrder.comp_code
+    # mines_by_aff: { aff_so.name: [BaseCompany.code, ...] } ใช้เดาเหมืองตอน mine_code ว่าง
+    mines_by_aff = defaultdict(list)
+    for code, aff_name in (
+        BaseCompany.objects
+        .filter(aff_so__isnull=False)
+        .exclude(aff_so__name='ALL')
+        .order_by('aff_so__id', 'id')
+        .values_list('code', 'aff_so__name')
+    ):
+        if code:
+            mines_by_aff[aff_name].append(code)
 
-    for company in companies:
+    for company, aff_mines in mines_by_aff.items():
 
         page = 1
 
@@ -261,7 +297,7 @@ def insertDeliveryFromApiK2M(delivery_date):
             try:
 
                 response = requests.get(
-                    get_base_api(1),
+                    get_k2m_api_url(),
                     headers=headers,
                     params={
                         "company": company,
@@ -284,9 +320,16 @@ def insertDeliveryFromApiK2M(delivery_date):
                 for row in rows:
                     status = row.get("status")
 
+                    mine_code = resolve_k2m_mine_code(row.get("mine_code"), aff_mines)
+                    if not mine_code:
+                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน ข้ามไป
+                        skip_count += 1
+                        print(f"SKIP Company={company} DocNo={row.get('docNo')} : no mine_code")
+                        continue
+
                     existing_do = DeliveryOrder.objects.filter(
                         doc_no=row.get("docNo"),
-                        comp_code=company,
+                        comp_code=mine_code,
                         delivery_date=delivery_date
                     ).first()
 
@@ -320,7 +363,7 @@ def insertDeliveryFromApiK2M(delivery_date):
 
                         DeliveryOrder.objects.create(
                             doc_no=row.get("docNo"),
-                            comp_code=company,
+                            comp_code=mine_code,
                             delivery_date=delivery_date,
                             qty=row.get("qty"),
                             car_company=row.get("carCompany"),
@@ -364,8 +407,18 @@ def insertDeliveryFromApiK2M(delivery_date):
     return (
         f"Insert={insert_count}, "
         f"Update={update_count}, "
+        f"Skip={skip_count}, "
         f"Error={error_count}"
     )
+
+def resolve_k2m_mine_code(mine_code, aff_mines):
+    """เหมืองของแถว DO จาก k2m: ใช้ mine_code ถ้ามี ถ้าว่างและสังกัดมีเหมืองเดียวให้ใช้เหมืองนั้น ไม่งั้นคืน None"""
+    mine_code = (mine_code or '').strip()
+    if mine_code:
+        return mine_code
+    if len(aff_mines) == 1:
+        return aff_mines[0]
+    return None
     
 '''
 # Schedule the tasks
@@ -1792,14 +1845,19 @@ def editWeight(request, mode, weight_id):
                 original_weight_site = original_weight.site.base_site_id if original_weight.site else None
                 original_weight_cus = original_weight.customer.customer_id if original_weight.customer else None
                 original_weight_stone = original_weight.stone_type.base_stone_type_id if original_weight.stone_type else None
+                original_do_doc_no = original_weight.do_doc_no
             except Weight.DoesNotExist:
                 original_weight_total = None
                 original_weight_site = None
                 original_weight_cus = None
                 original_weight_stone = None
                 original_transport = None
-        
-            do_doc_no = form.cleaned_data.get('do_doc_no')
+                original_do_doc_no = None
+
+            #ยกเลิกการอ้างใบส่งของ (ปุ่ม X หน้า editWeightSell / editWeightPort)
+            unlink_do = request.POST.get('unlink_do') == '1' and bool(original_do_doc_no)
+
+            do_doc_no = None if unlink_do else form.cleaned_data.get('do_doc_no')
             new_transport = form.cleaned_data.get('transport')
             new_transport_name = new_transport.base_transport_name if new_transport else None
 
@@ -1839,12 +1897,19 @@ def editWeight(request, mode, weight_id):
                 if new_transport and new_transport.base_carry_type:
                     form.instance.carry_type_name = new_transport.base_carry_type.base_carry_type_name
 
+                if unlink_do:
+                    form.instance.do_doc_no = None
+
                 # log history เก็บข้อมูลก่อนแก้
                 weight_form = form.save()
 
                 weight_history = WeightHistory.objects.filter(weight_id = weight_form.pk).order_by('-update')[0]
                 weight_history.user_update = request.user
                 weight_history.save()
+
+                #เอารายการนี้ออกจากใบส่งของเดิม: WeightDelivery เป็นยกเลิก แล้วคำนวณยอดคงเหลือของ DO ใหม่
+                if unlink_do:
+                    updateCancelDeliveryOrder(weight_form.weight_id)
 
                 #เครื่องขาย
                 if mode == 1 and company.biz.id == 1:
@@ -2011,7 +2076,7 @@ def updateCancelDeliveryOrder(weight_id):
         do.car_customer_tot = sum_do['car_customer'] or 0
         do.save()
 
-    except WeightDelivery.DoesNotExist:
+    except (WeightDelivery.DoesNotExist, DeliveryOrder.DoesNotExist):
         pass
 
 def updateSellStockStoneItem(weight_id):
@@ -5129,7 +5194,7 @@ def settingBaseMill(request):
     page = request.GET.get('page')
     base_mill = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_mill_page': 'active', 'base_mill': base_mill, 'page_obj': base_mill, 'table_name': 'ต้นทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseMill/baseMill.html",context)
 
 
@@ -5157,13 +5222,16 @@ def createBaseMill(request):
         'setting_base_mill_page': 'active',
         'table_name' : 'ต้นทาง',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseMill',
         'id_name' : '#id_mill_id',
+        **similarBaseContext('BaseMill'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseMill/formBaseMill.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseMill(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5189,8 +5257,11 @@ def editBaseMill(request, id):
         'setting_base_mill_page': 'active',
         'table_name' : 'ต้นทาง',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseMill',
+        **similarBaseContext('BaseMill', id),
         'id_name' : '#id_mill_id',
         'mode' : 1,
+        **weightUsageContext('BaseMill', id),
         active :"active",
     }
 
@@ -5217,7 +5288,7 @@ def settingBaseJobType(request):
     page = request.GET.get('page')
     base_job_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_job_type_page': 'active', 'base_job_type': base_job_type, 'page_obj': base_job_type, 'table_name': 'ประเภทงานของลูกค้า','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseJobType.html",context)
 
 def createBaseJobType(request):
@@ -5244,12 +5315,15 @@ def createBaseJobType(request):
         'setting_base_job_type_page': 'active',
         'table_name' : 'ประเภทงานของลูกค้า',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseJobType',
         'id_name' : '#id_base_job_type_id',
+        **similarBaseContext('BaseJobType'),
         'mode' : 0,
         active :"active",
     }
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseJobType(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)
@@ -5271,8 +5345,11 @@ def editBaseJobType(request, id):
         'setting_base_job_type_page': 'active',
         'table_name' : 'ประเภทงานของลูกค้า',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseJobType',
+        **similarBaseContext('BaseJobType', id),
         'id_name' : '#id_base_job_type_id',
         'mode' : 1,
+        **weightUsageContext('BaseJobType', id),
         active :"active",
     }
  
@@ -5299,7 +5376,7 @@ def settingBaseStoneType(request):
     page = request.GET.get('page')
     base_stone_type = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), 'is_add_stone' : is_add_stone(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_stone_type_page': 'active', 'base_stone_type': base_stone_type, 'page_obj': base_stone_type, 'table_name': 'ชนิดหิน','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), 'is_add_stone' : is_add_stone(request.user), active :"active",}
     return render(request, "manage/baseStoneType.html",context)
 
 def createBaseStoneType(request):
@@ -5326,13 +5403,16 @@ def createBaseStoneType(request):
         'setting_base_stone_type_page': 'active',
         'table_name' : 'ชนิดหิน',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseStoneType',
         'id_name' : '#id_base_stone_type_id',
+        **similarBaseContext('BaseStoneType'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseStoneType(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)            
@@ -5363,8 +5443,11 @@ def editBaseStoneType(request, id):
         'setting_base_stone_type_page': 'active',
         'table_name' : 'ชนิดหิน',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseStoneType',
+        **similarBaseContext('BaseStoneType', id),
         'id_name' : '#id_base_stone_type_id',
         'mode' : 1,
+        **weightUsageContext('BaseStoneType', id),
         active :"active",
     }
 
@@ -5391,7 +5474,7 @@ def settingBaseScoop(request):
     page = request.GET.get('page')
     base_scoop = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_scoop_page': 'active', 'base_scoop': base_scoop, 'page_obj': base_scoop, 'table_name': 'ผู้ตัก','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseScoop.html",context)
 
 def createBaseScoop(request):
@@ -5418,13 +5501,16 @@ def createBaseScoop(request):
         'setting_base_scoop_page': 'active',
         'table_name' : 'ผู้ตัก',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseScoop',
         'id_name' : '#id_scoop_id',
+        **similarBaseContext('BaseScoop'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseScoop(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request) 
@@ -5455,8 +5541,11 @@ def editBaseScoop(request, id):
         'setting_base_scoop_page': 'active',
         'table_name' : 'ผู้ตัก',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseScoop',
+        **similarBaseContext('BaseScoop', id),
         'id_name' : '#id_scoop_id',
         'mode' : 1,
+        **weightUsageContext('BaseScoop', id),
         active :"active",
     }
 
@@ -5483,7 +5572,7 @@ def settingBaseCarTeam(request):
     page = request.GET.get('page')
     base_car_team = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_team_page': 'active', 'base_car_team': base_car_team, 'page_obj': base_car_team, 'table_name': 'ทีม','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarTeam.html",context)
 
 def createBaseCarTeam(request):
@@ -5511,13 +5600,16 @@ def createBaseCarTeam(request):
         'setting_base_car_team_page': 'active',
         'table_name' : 'ทีม',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCarTeam',
         'id_name' : '#id_car_team_id',
+        **similarBaseContext('BaseCarTeam'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCarTeam(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request) 
@@ -5548,8 +5640,11 @@ def editBaseCarTeam(request, id):
         'setting_base_car_team_page': 'active',
         'table_name' : 'ทีม',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCarTeam',
+        **similarBaseContext('BaseCarTeam', id),
         'id_name' : '#id_car_team_id',
         'mode' : 1,
+        **weightUsageContext('BaseCarTeam', id),
         active :"active",
     }
 
@@ -5576,7 +5671,7 @@ def settingBaseCar(request):
     page = request.GET.get('page')
     base_car = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_page': 'active', 'base_car': base_car, 'page_obj': base_car, 'table_name': 'รถร่วม','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCar/baseCar.html",context)
 
 def createBaseCar(request):
@@ -5603,13 +5698,16 @@ def createBaseCar(request):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCar',
         'id_name' : '#id_car_id',
+        **similarBaseContext('BaseCar'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseCar/formBaseCar.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCar(request, id):
     active = request.session['company_code']
     company_in = findCompanyIn(request)         
@@ -5642,6 +5740,8 @@ def editBaseCar(request, id):
         'setting_base_car_page': 'active',
         'table_name' : 'รถร่วม',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCar',
+        **similarBaseContext('BaseCar', id),
         'id_name' : '#id_car_id',
         'mode' : 1,
         active :"active",
@@ -5670,7 +5770,7 @@ def settingBaseSite(request):
     page = request.GET.get('page')
     base_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_site_page': 'active', 'base_site': base_site, 'page_obj': base_site, 'table_name': 'ปลายทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseSite/baseSite.html",context)
 
 def createBaseSite(request):
@@ -5697,13 +5797,16 @@ def createBaseSite(request):
         'setting_base_site_page': 'active',
         'table_name' : 'ปลายทาง',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseSite',
         'id_name' : '#id_base_site_id',
+        **similarBaseContext('BaseSite'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseSite/formBaseSite.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseSite(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5729,8 +5832,11 @@ def editBaseSite(request, id):
         'setting_base_site_page': 'active',
         'table_name' : 'ปลายทาง',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseSite',
+        **similarBaseContext('BaseSite', id),
         'id_name' : '#id_base_site_id',
         'mode' : 1,
+        **weightUsageContext('BaseSite', id),
         active :"active",
     }
 
@@ -5757,7 +5863,7 @@ def settingBaseCustomer(request):
     page = request.GET.get('page')
     base_customer = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_customer_page': 'active', 'base_customer': base_customer, 'page_obj': base_customer, 'table_name': 'ลูกค้า','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomer/baseCustomer.html",context)
 
 def createBaseCustomer(request):
@@ -5784,14 +5890,17 @@ def createBaseCustomer(request):
         'setting_base_customer_page': 'active',
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCustomer',
         'id_name' : '#id_customer_id',
         'is_edit_base_id': is_edit_base_id(request.user),
+        **similarBaseContext('BaseCustomer'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/BaseCustomer/formBaseCustomer.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCustomer(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5817,9 +5926,12 @@ def editBaseCustomer(request, id):
         'setting_base_customer_page': 'active',
         'table_name' : 'ลูกค้า',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCustomer',
+        **similarBaseContext('BaseCustomer', id),
         'id_name' : '#id_customer_id',
         'is_edit_base_id': is_edit_base_id(request.user),
         'mode' : 1,
+        **weightUsageContext('BaseCustomer', id),
         active :"active",
     }
 
@@ -5846,7 +5958,7 @@ def settingBaseDriver(request):
     page = request.GET.get('page')
     base_driver = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_driver_page': 'active', 'base_driver': base_driver, 'page_obj': base_driver, 'table_name': 'ผู้ขับ','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseDriver.html",context)
 
 def createBaseDriver(request):
@@ -5873,13 +5985,16 @@ def createBaseDriver(request):
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseDriver',
         'id_name' : '#id_driver_id',
+        **similarBaseContext('BaseDriver'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseDriver(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5910,8 +6025,11 @@ def editBaseDriver(request, id):
         'setting_base_driver_page': 'active',
         'table_name' : 'ผู้ขับ',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseDriver',
+        **similarBaseContext('BaseDriver', id),
         'id_name' : '#id_driver_id',
         'mode' : 1,
+        **weightUsageContext('BaseDriver', id),
         active :"active",
     }
 
@@ -5938,7 +6056,7 @@ def settingBaseCarRegistration(request):
     page = request.GET.get('page')
     base_car_registration = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_car_registration_page': 'active', 'base_car_registration': base_car_registration, 'page_obj': base_car_registration, 'table_name': 'ทะเบียนรถ','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/baseCarRegistration.html",context)
 
 def createBaseCarRegistration(request):
@@ -5965,13 +6083,16 @@ def createBaseCarRegistration(request):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCarRegistration',
         'id_name' : '#id_car_registration_id',
+        **similarBaseContext('BaseCarRegistration'),
         'mode' : 0,
         active :"active",
     }
 
     return render(request, "manage/formBase.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCarRegistration(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -5997,8 +6118,11 @@ def editBaseCarRegistration(request, id):
         'setting_base_car_registration_page': 'active',
         'table_name' : 'ทะเบียนรถ',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCarRegistration',
+        **similarBaseContext('BaseCarRegistration', id),
         'id_name' : '#id_car_registration_id',
         'mode' : 1,
+        **weightUsageContext('BaseCarRegistration', id),
         active :"active",
     }
 
@@ -6025,7 +6149,7 @@ def settingBaseCustomerSite(request):
     page = request.GET.get('page')
     base_customer_site = p.get_page(page)
 
-    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site,'filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
+    context = {'setting_page':'active', 'setting_base_customer_site_page': 'active', 'base_customer_site': base_customer_site, 'page_obj': base_customer_site, 'table_name': 'ลูกค้าและปลายทาง','filter':myFilter, 'is_edit_setting': is_edit_setting(request.user), active :"active",}
     return render(request, "manage/BaseCustomerSite/baseCustomerSite.html",context)
 
 def createBaseCustomerSite(request):
@@ -6050,11 +6174,13 @@ def createBaseCustomerSite(request):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เพิ่ม',
+        'list_url' : 'settingBaseCustomerSite',
         active :"active",
     }
 
     return render(request, "manage/BaseCustomerSite/formBaseCustomerSite.html", context)
 
+@blockSaveInViewMode  # ?view=1 = ดูข้อมูลอย่างเดียว ห้ามบันทึก
 def editBaseCustomerSite(request, id):
     active = request.session['company_code']
     company = BaseCompany.objects.get(code = active)
@@ -6078,6 +6204,8 @@ def editBaseCustomerSite(request, id):
         'setting_base_customer_site_page': 'active',
         'table_name' : 'ลูกค้าและหน้างาน',
         'text_mode' : 'เปลี่ยน',
+        'list_url' : 'settingBaseCustomerSite',
+        **weightUsageContext('BaseCustomerSite', id),
         active :"active",
     }
 
@@ -10383,6 +10511,31 @@ def weightDeliverySummaryByComp(request):
 
     serializer = WeightDeliverySerializer(result_page, many = True)
     return paginator.get_paginated_response(serializer.data)
+
+############ api สังกัดของเหมือง ให้ตาชั่ง local ใช้เป็น company ตอนดึง DO จาก k2m ########
+# request : comp_code = เหมือง (Windows base_api id=2 comp_code = BaseCompany.code)
+# response: aff   = BaseCompany.aff_so.name  -> Windows ส่งเป็น k2m company
+#           mines = BaseCompany.code ทุกเหมืองที่ aff_so เดียวกัน -> Windows ใช้เดาเหมืองตอน k2m mine_code ว่าง
+# key "aff" และ URL นี้ Blue/Pink อ่านอยู่ (DeliveryOrderMine.AffInfo) ถ้าเปลี่ยนต้องแก้ทั้งสองฝั่ง
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def companyAffByComp(request):
+    comp_code = (request.query_params.get('comp_code') or '').strip()
+    if not comp_code:
+        return Response({'detail': 'comp_code is required'}, status=400)
+
+    company = BaseCompany.objects.select_related('aff_so').filter(code=comp_code).first()
+    if not company or not company.aff_so:
+        return Response({'detail': f'ไม่พบสังกัดของเหมือง {comp_code}'}, status=404)
+
+    mines = list(
+        BaseCompany.objects.filter(aff_so=company.aff_so).order_by('id').values_list('code', flat=True)
+    )
+    return Response({
+        'comp_code': company.code,
+        'aff': company.aff_so.name,
+        'mines': mines,
+    })
 
 ########################################################################################
 ###########################     คุณกิตติ รายการ DO จากตาชั่ง   #############################
@@ -17208,6 +17361,15 @@ BASE_SETTING_EXPORTS = OrderedDict([
     ('carRegistration', (BaseCarRegistration,'ข้อมูลทะเบียนรถ')),
 ])
 
+#คอลัมน์รหัสที่ต้องแทรกไว้หน้าคอลัมน์ FK (FK แสดงเป็นชื่อจาก __str__ อย่างเดียว ทำให้ไม่เห็นรหัส)
+#slug -> {ชื่อ FK field: หัวคอลัมน์รหัส}
+BASE_SETTING_EXPORT_CODE_COLUMNS = {
+    'customerSite': OrderedDict([
+        ('customer', 'รหัสลูกค้า'),
+        ('site',     'รหัสปลายทาง'),
+    ]),
+}
+
 #ชื่อ sheet ของ excel ห้ามเกิน 31 ตัวอักษร และห้ามมีอักขระเหล่านี้
 BASE_SETTING_EXPORT_INVALID_SHEET_CHARS = '[]:*?/\\'
 
@@ -17281,10 +17443,20 @@ def exportExcelBaseSetting(request, base):
     #write_only ต้องตั้ง freeze_panes ก่อน append แถวแรก ไม่งั้นค่าจะไม่ถูกเขียนลงไฟล์
     worksheet.freeze_panes = 'A2'
 
+    #แต่ละคอลัมน์ = (หัวคอลัมน์, ฟังก์ชันอ่านค่าจาก obj)
+    #คอลัมน์รหัสอ่านจาก attname ของ FK (เช่น customer_id) ตรง ๆ ไม่ต้อง query เพิ่ม
+    code_columns = BASE_SETTING_EXPORT_CODE_COLUMNS.get(base, {})
+    columns = []
+    for field in fields:
+        if field.name in code_columns:
+            columns.append((code_columns[field.name],
+                            lambda obj, f=field: getattr(obj, f.attname, None)))
+        title = str(field.verbose_name) if getattr(field, 'verbose_name', None) else field.name
+        columns.append((title, lambda obj, f=field: _baseSettingExportValue(obj, f)))
+
     header_row = []
     widths = []
-    for field in fields:
-        title = str(field.verbose_name) if getattr(field, 'verbose_name', None) else field.name
+    for title, _ in columns:
         cell = WriteOnlyCell(worksheet, value=title)
         cell.font = head_font
         cell.fill = head_fill
@@ -17295,8 +17467,8 @@ def exportExcelBaseSetting(request, base):
 
     for obj in data.iterator(chunk_size=2000):
         out_row = []
-        for col, field in enumerate(fields):
-            value = _baseSettingExportValue(obj, field)
+        for col, (_, get_value) in enumerate(columns):
+            value = get_value(obj)
             if isinstance(value, datetime):
                 cell = WriteOnlyCell(worksheet, value=value)
                 cell.number_format = 'dd/mm/yyyy hh:mm'

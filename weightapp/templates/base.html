@@ -40,6 +40,79 @@
     .sidebar-item.has-sub.active > .submenu:not(.submenu-closed) {
       max-height: none;
     }
+
+    /* ===== Sidebar แบบย่อ (แสดงแค่ไอคอน) =====
+       ใช้เฉพาะจอ >= 1200px (จอที่ sidebar ค้างไว้ข้างซ้าย) จอเล็กกว่านั้นยังเป็นเมนู burger เหมือนเดิม
+       ค่าเริ่มต้น : หน้าต่างกว้างน้อยกว่า 1920px (notebook ทั่วไป รวมจอที่ตั้ง scale 125%/150%) เป็นแบบย่อ
+                    กว้างตั้งแต่ 1920px ขึ้นไป (จอ monitor ใหญ่) เป็นแบบเต็ม
+       ถ้า user กดปุ่มสลับเอง จะจำไว้ใน localStorage แยกตามขนาดหน้าจอ (sidebarMode:<กว้าง>x<สูง>)
+       ใช้ 2 จอ (notebook + monitor) จึงตั้งค่าแยกกันได้ */
+    .sidebar-mini-toggle { display: none; }
+    @media screen and (min-width: 1200px) {
+      /* ทุกอย่างใช้ easing/ระยะเวลาเดียวกัน ให้ sidebar กับเนื้อหาขยับไปพร้อมกัน */
+      :root { --sb-ease: cubic-bezier(.4, 0, .2, 1); --sb-dur: .28s; }
+      .sidebar-wrapper {
+        transition: left .7s cubic-bezier(.22,1,.36,1), width var(--sb-dur) var(--sb-ease), box-shadow var(--sb-dur) var(--sb-ease);
+        will-change: width;
+      }
+      #sidebar ~ #main { transition: margin-left var(--sb-dur) var(--sb-ease); }
+      /* ปุ่มวงกลมเกาะขอบขวา sidebar : left = ความกว้าง sidebar - ครึ่งปุ่ม เลื่อนตาม sidebar ไปพร้อมกัน */
+      .sidebar-mini-toggle {
+        --sb-w: 300px;
+        position: fixed; top: 2.6rem; left: calc(var(--sb-w) - 13px); z-index: 1045;
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; padding: 0; border-radius: 50%;
+        border: 1px solid rgba(37,57,111,.12); background: #fff; color: #435ebe;
+        font-size: .8rem; cursor: pointer;
+        box-shadow: 0 2px 6px rgba(37,57,111,.18);
+        transition: left var(--sb-dur) var(--sb-ease), background-color .15s, color .15s, box-shadow .15s, transform .15s;
+      }
+      .sidebar-mini-toggle:hover { background: #435ebe; color: #fff; box-shadow: 0 3px 10px rgba(67,94,190,.4); transform: scale(1.1); }
+      .sidebar-mini-toggle:focus-visible { outline: 2px solid #435ebe; outline-offset: 2px; }
+      .sidebar-mini-toggle .bi { line-height: 1; transition: transform var(--sb-dur) var(--sb-ease); }
+      html.sidebar-mini .sidebar-mini-toggle { --sb-w: 88px; }
+      html.sidebar-mini.sidebar-peek .sidebar-mini-toggle { --sb-w: 300px; }
+      html[data-bs-theme="dark"] .sidebar-mini-toggle { background: #2b2d3c; color: #c2c6dc; border-color: rgba(255,255,255,.12); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+      html[data-bs-theme="dark"] .sidebar-mini-toggle:hover { background: #435ebe; color: #fff; }
+
+      /* ===== โหมดย่อ =====
+         หลักการให้สมูท : ไม่เปลี่ยน layout (padding/ทิศทาง flex) ระหว่างย่อกับกาง
+         ไอคอนอยู่ตำแหน่งเดิมเสมอ เปลี่ยนแค่ความกว้าง sidebar + ค่อย ๆ จาง/โผล่ข้อความ */
+      html.sidebar-mini .sidebar-wrapper { overflow-x: hidden; }
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper { width: 88px; }
+      /* theme ตั้ง #sidebar~#main{margin-left:300px} (id 2 ตัว) จึงต้องใช้ selector ที่เจาะจงกว่า
+         ตอน peek เนื้อหาไม่ขยับ sidebar กางทับเนื้อหาชั่วคราว */
+      html.sidebar-mini #sidebar ~ #main { margin-left: 88px; }
+      html.sidebar-mini.sidebar-peek .sidebar-wrapper { width: 300px; z-index: 1040; box-shadow: .5rem 0 1.5rem rgba(0,0,0,.15); }
+      html.sidebar-mini .sidebar-mini-toggle .bi { transform: rotate(180deg); }
+
+      /* ระยะขอบชุดเดียวทั้งตอนย่อและตอนกาง -> ไอคอนไม่กระโดด */
+      html.sidebar-mini .sidebar-wrapper .sidebar-header { padding: 2rem 1.25rem 1rem 1.75rem; }
+      html.sidebar-mini .sidebar-wrapper .sidebar-header > .d-flex { flex-wrap: nowrap; white-space: nowrap; }
+      html.sidebar-mini .sidebar-wrapper .menu { padding: 0 .75rem; }
+      html.sidebar-mini .sidebar-wrapper .menu .sidebar-link { padding: .7rem 1.5rem; white-space: nowrap; }
+      html.sidebar-mini .sidebar-wrapper .menu .sidebar-title { padding: 0 1.5rem; white-space: nowrap; }
+
+      /* ส่วนที่เป็นข้อความ : จางออกทันทีตอนย่อ / โผล่ตามหลังความกว้างเล็กน้อยตอนกาง */
+      html.sidebar-mini .sidebar-wrapper .logo-text,
+      html.sidebar-mini .sidebar-wrapper .theme-toggle,
+      html.sidebar-mini .sidebar-wrapper .menu .sidebar-title,
+      html.sidebar-mini .sidebar-wrapper .menu .sidebar-link > span,
+      html.sidebar-mini .sidebar-wrapper .menu .sidebar-item.has-sub > .sidebar-link::after,
+      html.sidebar-mini .sidebar-wrapper .menu .submenu {
+        transition: opacity .2s var(--sb-ease) .08s;
+      }
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .logo-text,
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .theme-toggle,
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .menu .sidebar-title,
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .menu .sidebar-link > span,
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .menu .sidebar-item.has-sub > .sidebar-link::after,
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .menu .submenu {
+        opacity: 0; pointer-events: none; transition-delay: 0s; transition-duration: .1s;
+      }
+      /* เมนูย่อยที่กางค้าง (หน้าปัจจุบัน) ยุบลงตอนย่อ ไม่ให้เหลือช่องว่างใต้ไอคอน */
+      html.sidebar-mini:not(.sidebar-peek) .sidebar-wrapper .menu .submenu { max-height: 0 !important; }
+    }
   </style>
 
     {% block css %}
@@ -52,14 +125,33 @@
       <div id="lottie-animation"></div>
     </div>
     <script src="{% static 'js/initTheme.js' %}"></script>
+    <script>
+      // เลือกโหมด sidebar (ย่อ/เต็ม) ก่อน #app วาด เพื่อไม่ให้กระพริบ
+      window.sidebarModeKey = function () {
+        return 'sidebarMode:' + window.screen.width + 'x' + window.screen.height;
+      };
+      window.applySidebarMode = function () {
+        var mode = null;
+        try { mode = localStorage.getItem(window.sidebarModeKey()); } catch (e) {}
+        if (!mode) mode = window.innerWidth < 1920 ? 'mini' : 'full';
+        document.documentElement.classList.toggle('sidebar-mini', mode === 'mini');
+      };
+      try { localStorage.removeItem('sidebarMode'); } catch (e) {} // ค่าเก่าที่จำรวมทุกจอ
+      window.applySidebarMode();
+    </script>
     <div id="app">
       <div id="sidebar">
+        <!-- ปุ่มย่อ/ขยาย sidebar : วงกลมเกาะขอบขวาของ sidebar (อยู่นอก .sidebar-wrapper เพราะ wrapper ตัดขอบ overflow) -->
+        <button type="button" class="sidebar-mini-toggle" id="sidebar-mini-toggle"
+                title="ย่อ/ขยายเมนู" aria-label="ย่อ/ขยายเมนู">
+          <i class="bi bi-chevron-left"></i>
+        </button>
         <div class="sidebar-wrapper active">
           <div class="sidebar-header position-relative">
             <div class="d-flex justify-content-between align-items-center">
               <div class="logo">
                 <a href="{% url 'home' %}">
-                  <i class="fa-solid fa-chart-simple fa-bounce"></i> Prod.
+                  <i class="fa-solid fa-chart-simple fa-bounce"></i> <span class="logo-text">Prod.</span>
                 </a>
               </div>
               <div class="theme-toggle d-flex gap-1 align-items-center mt-1">
@@ -444,6 +536,81 @@
       */
     </script>
 
+    <script>
+      // Sidebar แบบย่อ : ปุ่มสลับ ย่อ/เต็ม + tooltip ชื่อเมนูตอนย่อ
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById('sidebar-mini-toggle');
+        if (!btn) return;
+        function save(mode) { try { localStorage.setItem(window.sidebarModeKey(), mode); } catch (e) {} }
+        function sync() {
+          var mini = root.classList.contains('sidebar-mini');
+          btn.setAttribute('aria-expanded', mini ? 'false' : 'true');
+          btn.title = mini ? 'ขยายเมนู' : 'ย่อเมนู';
+        }
+        // ลากหน้าต่างข้ามจอ / ย่อขยายหน้าต่าง -> เลือกโหมดใหม่ตามจอนั้น
+        var resizeTimer;
+        window.addEventListener('resize', function () {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(function () { window.applySidebarMode(); sync(); }, 200);
+        });
+        btn.addEventListener('click', function () {
+          endPeek();
+          var mini = root.classList.toggle('sidebar-mini');
+          save(mini ? 'mini' : 'full');
+          sync();
+        });
+        // ชื่อเมนูเป็น tooltip (ตอนย่อมองไม่เห็นข้อความ)
+        document.querySelectorAll('#sidebar .sidebar-link').forEach(function (a) {
+          var span = a.querySelector('span');
+          if (span && !a.title) a.title = span.textContent.trim();
+        });
+        // ===== ตอนย่อ : ชี้เมาส์ที่ sidebar -> กางเต็มชั่วคราวทับเนื้อหา (peek) =====
+        // หน่วงเวลาเปิด/ปิดเล็กน้อย กันเปิดเองตอนแค่ลากเมาส์ผ่านขอบซ้าย
+        var wrapper = document.querySelector('#sidebar .sidebar-wrapper');
+        var peekTimer = null;
+        function canPeek() { return root.classList.contains('sidebar-mini') && window.innerWidth >= 1200; }
+        function startPeek() { clearTimeout(peekTimer); if (canPeek()) root.classList.add('sidebar-peek'); }
+        function endPeek() { clearTimeout(peekTimer); root.classList.remove('sidebar-peek'); }
+        if (wrapper) {
+          wrapper.addEventListener('mouseenter', function () {
+            clearTimeout(peekTimer);
+            if (canPeek()) peekTimer = setTimeout(startPeek, 150);
+          });
+          wrapper.addEventListener('mouseleave', function () {
+            clearTimeout(peekTimer);
+            peekTimer = setTimeout(endPeek, 250);
+          });
+          // ใช้คีย์บอร์ด (Tab) เข้ามาใน sidebar ก็กางให้
+          wrapper.addEventListener('focusin', startPeek);
+          wrapper.addEventListener('focusout', function (e) { if (!wrapper.contains(e.relatedTarget)) endPeek(); });
+        }
+        // ปุ่มย่อ/ขยายอยู่นอก wrapper : เลื่อนเมาส์จาก sidebar มาที่ปุ่มแล้วไม่ให้หุบ
+        btn.addEventListener('mouseenter', function () { clearTimeout(peekTimer); });
+        btn.addEventListener('mouseleave', function () {
+          if (root.classList.contains('sidebar-peek')) { clearTimeout(peekTimer); peekTimer = setTimeout(endPeek, 250); }
+        });
+        // จอสัมผัส (ไม่มี hover) : แตะนอก sidebar เพื่อปิด
+        document.addEventListener('click', function (e) {
+          if (root.classList.contains('sidebar-peek') && wrapper && !wrapper.contains(e.target) && !btn.contains(e.target)) endPeek();
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') endPeek(); });
+
+        // กดเมนูที่มีเมนูย่อย (Freight Rate, Setting)
+        //  - ตอนย่อแต่ยังไม่ peek (เช่นจอสัมผัส) : กาง sidebar ก่อน แล้วให้ theme กางเมนูย่อยตามปกติ
+        //  - คำนวณความสูงเมนูย่อย (--submenu-height) ใหม่ทุกครั้ง เพราะ theme คำนวณไว้ครั้งเดียวตอนโหลดหน้า
+        //    ถ้าโหลดหน้ามาตอน sidebar ย่อ (เมนูย่อยถูกซ่อน) ค่าจะเป็น 0 แล้วกดกางไม่ออก
+        //  handler นี้ผูกก่อน app.js ของ theme จึงทำงานก่อน handler ของ theme
+        document.querySelectorAll('#sidebar .sidebar-item.has-sub > .sidebar-link').forEach(function (a) {
+          a.addEventListener('click', function () {
+            if (canPeek() && !root.classList.contains('sidebar-peek')) startPeek();
+            var sub = a.parentElement.querySelector('.submenu');
+            if (sub) sub.style.setProperty('--submenu-height', sub.scrollHeight + 'px');
+          });
+        });
+        sync();
+      })();
+    </script>
     {% block script %}
 
     {% endblock %}

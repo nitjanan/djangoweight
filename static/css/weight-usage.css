@@ -1,0 +1,63 @@
+/* หน้าแก้ไขข้อมูลพื้นฐาน : บริษัทที่ใช้ข้อมูลนี้ในตาชั่ง  ดู weightapp/templates/manage/weightUsage.html
+ * ใช้ตัวแปรสีของ Bootstrap 5.3 จึงสลับ light / dark ตาม data-bs-theme ได้เอง */
+.wu-box {
+  --wu-accent-rgb: var(--bs-primary-rgb);
+  margin-bottom: 1.25rem;
+  border: 1px solid rgba(var(--wu-accent-rgb), .3);
+  border-left: 4px solid rgb(var(--wu-accent-rgb));
+  border-radius: .5rem;
+  background: rgba(var(--wu-accent-rgb), .06);
+  overflow: hidden;
+}
+.wu-box.wu-empty { --wu-accent-rgb: var(--bs-secondary-rgb); }
+
+.wu-head {
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+  padding: .65rem .85rem;
+}
+.wu-head-icon {
+  flex: none;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  color: rgb(var(--wu-accent-rgb));
+}
+.wu-head-text { flex: 1; min-width: 0; }
+.wu-title { font-weight: 600; color: var(--bs-emphasis-color); }
+.wu-sub { font-size: .8rem; color: var(--bs-secondary-color); }
+
+.wu-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  list-style: none;
+  margin: 0;
+  padding: .65rem .85rem;
+  border-top: 1px solid rgba(var(--wu-accent-rgb), .2);
+  background: var(--bs-body-bg);
+}
+.wu-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .5rem;
+  padding: .4rem .7rem .4rem .45rem;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: .6rem;
+  background: var(--bs-tertiary-bg);
+  font-size: .85rem;
+}
+.wu-code {
+  padding: .1rem .55rem;
+  border-radius: 1rem;
+  background: rgb(var(--wu-accent-rgb));
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.wu-name { font-weight: 600; color: var(--bs-emphasis-color); }
+.wu-count { color: var(--bs-body-color); font-variant-numeric: tabular-nums; }
+.wu-count small { color: var(--bs-secondary-color); }
+.wu-last { font-size: .75rem; color: var(--bs-secondary-color); white-space: nowrap; }

@@ -1,0 +1,15 @@
+{# ปุ่มด้านขวาบนของหน้ารายการ  ใช้: include with create_url='createBaseX' export_key='x' [can_create=False] #}
+<a class="btn btn-outline-success" href="{% url 'exportExcelBaseSetting' export_key %}">
+  <i class="bi bi-file-earmark-excel"></i> Excel
+</a>
+{% if can_create is False %}
+  <span class="d-inline-block" tabindex="0" title="ไม่อนุญาตให้เพิ่ม กรุณาติดต่อผู้มีสิทธิ์">
+    <button class="btn btn-primary bl-add-btn" type="button" disabled>
+      <span class="bl-add-icon"><i class="bi bi-lock-fill"></i></span> เพิ่ม{{ table_name }}
+    </button>
+  </span>
+{% else %}
+  <a class="btn btn-primary bl-add-btn" href="{% url create_url %}">
+    <span class="bl-add-icon"><i class="bi bi-plus-lg"></i></span> เพิ่ม{{ table_name }}
+  </a>
+{% endif %}

@@ -1,3 +1,4 @@
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
@@ -2119,3 +2120,41 @@ class ExportDocumentPayerRowAllocation(models.Model):
 
     def __str__(self):
         return '%s %s %s %s' % (self.month, self.team, self.company_id, self.tons)
+
+
+class WeightMirror(models.Model):
+    """สำเนาข้อมูลชั่งที่ตาชั่งส่งขึ้นมาตลอดวัน ไว้กู้ local DB ของตาชั่งที่เสีย (ฟ้าผ่า/ไฟดับ)
+
+    ไม่ใช่ข้อมูลจริง ข้อมูลจริงยังมาจากการอัพโหลดตอนเย็น (weight/api/create/) เหมือนเดิม
+    รายงานใดๆ ห้ามอ่านจากตารางนี้ ; ตัวส่งฝั่งตาชั่ง = WeightMirrorSync.cs
+    ดู views_weight_mirror.py และ docs/weight-mirror-api.md
+    """
+    ACTION_CHOICES = (('I', 'เพิ่ม'), ('U', 'แก้ไข'), ('D', 'ลบ'))
+
+    comp_code = models.CharField(max_length=20, verbose_name="บริษัท (base_api id=1)")
+    mine_code = models.CharField(max_length=20, blank=True, default='', db_index=True,
+                                 verbose_name="เหมือง (base_api id=2)")
+    # ตาชั่งหลายตัวใช้ comp_code เดียวกัน ตอนกู้ต้องเลือกให้ถูกตัว ไม่งั้นได้รายการของตาชั่งอื่นมาปน
+    station_code = models.CharField(max_length=30, blank=True, default='', db_index=True,
+                                    verbose_name="ตาชั่ง (base_weight_station id=1)")
+    table_name = models.CharField(max_length=50, verbose_name="ตาราง local")
+    row_id = models.CharField(max_length=50, verbose_name="id ของแถว (weight_id)")
+    action = models.CharField(max_length=1, choices=ACTION_CHOICES)
+    rev = models.IntegerField(default=0)
+    # ตัวเลขทศนิยมเก็บเป็น string ("12.340") ไม่ให้ศูนย์ท้ายหายตอนกู้กลับ ดู DecimalJSONParser
+    payload = models.JSONField(null=True, blank=True, encoder=DjangoJSONEncoder, verbose_name="ข้อมูลทั้งแถว")
+    is_deleted = models.BooleanField(default=False)
+    record_date = models.DateField(null=True, blank=True, db_index=True, verbose_name="วันที่ชั่ง")
+    queued_at = models.DateTimeField(null=True, blank=True, verbose_name="เข้าคิวที่ตาชั่งเมื่อ")
+    received_at = models.DateTimeField(auto_now=True, db_index=True, verbose_name="รับเข้าเมื่อ")
+
+    class Meta:
+        db_table = 'weight_mirror'
+        verbose_name = 'สำเนาข้อมูลชั่ง (กู้ข้อมูลตาชั่ง)'
+        verbose_name_plural = 'สำเนาข้อมูลชั่ง (กู้ข้อมูลตาชั่ง)'
+        constraints = [
+            models.UniqueConstraint(fields=['comp_code', 'table_name', 'row_id'], name='weight_mirror_uq'),
+        ]
+
+    def __str__(self):
+        return '%s %s:%s (%s)' % (self.comp_code, self.table_name, self.row_id, self.action)

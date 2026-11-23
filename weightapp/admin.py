@@ -773,3 +773,22 @@ class InternationalFreightRateTeamAdmin(ImportExportModelAdmin, admin.ModelAdmin
 admin.site.register(InternationalFreightRateFuelPrice, InternationalFreightRateFuelPriceAdmin)
 admin.site.register(InternationalFreightRateTeam, InternationalFreightRateTeamAdmin)
 admin.site.register(CarryingweightRate, CarryingweightRateAdmin)
+
+
+# สำเนาข้อมูลชั่งจากตาชั่ง ไว้กู้ local DB ที่เสีย ดูอย่างเดียว ตาชั่งเป็นคนเขียน
+from weightapp.models import WeightMirror
+
+
+@admin.register(WeightMirror)
+class WeightMirrorAdmin(admin.ModelAdmin):
+    list_display = ('comp_code', 'mine_code', 'table_name', 'row_id', 'action', 'record_date', 'queued_at',
+                    'received_at')
+    list_filter = ('comp_code', 'mine_code', 'table_name', 'action', 'record_date')
+    search_fields = ('row_id',)
+    date_hierarchy = 'record_date'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

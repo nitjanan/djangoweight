@@ -60,6 +60,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # คลาย gzip ของ request จากตาชั่ง (weightmirror/api/bulk/) ต้องอยู่ก่อนตัวที่อ่าน body
+    'weightapp.middleware.GzipRequestMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

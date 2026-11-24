@@ -261,6 +261,8 @@ def get_api_delivery_order_3_30am(request):
 #  ปริมาณ                    | qty / unitName           | DeliveryOrder.qty / unit_name            | delivery_order.qty / unit_name
 #  อื่น ๆ                     | saleName / note / status | DeliveryOrder.sale_name / note / status  | delivery_order.sale_name / note / status
 #  ประเภทการส่ง               | deliveryType             | (ไม่เก็บ)                                 | delivery_order.delivery_type
+#  การจ่าย                   | creditType ("cash" = เงินสด, "credit-day" = เงินเชื่อ) | DeliveryOrder.credit_type | delivery_order.credit_type
+#                           |                          | ระหว่างวันได้จากตาชั่งส่งมากับ uc_weight_delivery |
 # ------------------------------------------------------------------------------------------------------
 # k2m ส่ง DO ของทุกเหมืองที่ใช้ "บริษัทที่ออกใบสั่งขาย" เดียวกันมาพร้อมกัน จึงต้องเรียกตาม aff_so แล้วแยกด้วย mine_code
 # ฝั่ง Windows ดู DeliveryOrderMine.cs (โค้ดเดียวกันทั้ง Blue และ Pink)
@@ -347,6 +349,7 @@ def insertDeliveryFromApiK2M(delivery_date):
                         existing_do.sale_name = row.get("saleName")
                         existing_do.note = row.get("note")
                         existing_do.unit_name = row.get("unitName")
+                        existing_do.credit_type = (row.get("creditType") or "").strip() or existing_do.credit_type
                         existing_do.save()
                         update_count += 1
                     else:
@@ -381,7 +384,8 @@ def insertDeliveryFromApiK2M(delivery_date):
                             sale_name=row.get("saleName"),
                             note=row.get("note"),
                             status=status,
-                            unit_name=row.get("unitName")
+                            unit_name=row.get("unitName"),
+                            credit_type=(row.get("creditType") or "").strip() or None
                         )
                         insert_count += 1
 
@@ -2472,7 +2476,7 @@ def searchDeliveryOrderForWeight(request):
         'id', 'doc_no', 'delivery_date', 'car_company', 'car_customer',
         'car_company_tot', 'car_customer_tot', 'car_company_rem', 'car_customer_rem',
         'customer_code', 'customer_name', 'site_id', 'site_name', 'product_code', 'product_name',
-        'qty', 'qty_tot', 'unit_name', 'sale_name', 'status', 'note',
+        'qty', 'qty_tot', 'unit_name', 'sale_name', 'status', 'note', 'credit_type',
     ))
 
     # DO ของวันนี้ใน Django ยังไม่มี ลูกค้า/สินค้า/หน้างาน จนกว่า job k2m ตี 3:30 ของวันถัดไปจะเติมให้
@@ -10518,6 +10522,12 @@ def uc_delivery_order(data):
         if unit_name is None and existing_do is not None:
             unit_name = existing_do.unit_name
 
+        # credit_type มาจากตาชั่ง (k2m creditType) ส่งมาว่าง/ไม่ส่ง (ตาชั่งเวอร์ชันเก่า) ให้คงค่าเดิม
+        credit_type = (data.get('credit_type') or '').strip()
+        if not credit_type and existing_do is not None:
+            credit_type = existing_do.credit_type
+        credit_type = credit_type or None
+
         # For car_company and car_customer, if not provided, try to preserve existing values
         raw_car_company = data.get('car_company')
         if raw_car_company is None and existing_do is not None:
@@ -10577,7 +10587,8 @@ def uc_delivery_order(data):
                 'car_customer_tot': db_car_customer,
 
                 'qty': qty,
-                'status': status
+                'status': status,
+                'credit_type': credit_type,
             }
         )
     except Exception as e:

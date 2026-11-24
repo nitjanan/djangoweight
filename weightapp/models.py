@@ -1369,6 +1369,8 @@ class DeliveryOrder(models.Model):
     # (บริษัทที่ออกใบสั่งขาย / k2m company ไม่เก็บที่นี่ หาได้จาก BaseCompany(code=comp_code).aff_so)
     # column อื่นของตารางนี้ map กับ k2m / Windows อย่างไร ดูตารางเหนือ insertDeliveryFromApiK2M() ใน views.py
     comp_code = models.CharField(max_length=20, blank=False, null=True, db_index=True)
+    # k2m creditType: "cash" = เงินสด, "credit-day" = เงินเชื่อ (ใช้ติ๊ก "จ่าย" ตอนอ้างใบส่งของ ทั้งหน้าเว็บและโปรแกรมตาชั่ง)
+    credit_type = models.CharField(max_length=20, blank=True, null=True)
     v_stamp = models.DateTimeField(auto_now=True)
 
     class Meta:

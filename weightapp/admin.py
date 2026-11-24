@@ -2,12 +2,46 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from import_export import fields, resources
 from import_export.widgets import ForeignKeyWidget
-from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, BaseAffiliatedCompany,UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
+from weightapp.models import BaseWeightType, BaseWeightStation, BaseVatType, BaseLineType, BaseLossType, BaseMill, BaseJobType, BaseCustomer, BaseStoneType, BaseTimeEstimate, BaseSite, BaseStoneColor, Weight, WeightHistory, BaseCarRegistration, BaseDriver, BaseScoop, BaseCarryType, BaseTransport, BaseCarTeam, BaseCar, BaseFertilizer, BaseCustomerSite, BaseCompany, BaseAffiliatedCompany,UserScale, BaseMachineType, BaseVisible, UserProfile, BaseSEC, SetWeightOY, ProductionGoal, Production, ProductionLossItem, StoneEstimate, StoneEstimateItem, SetCompStone, SetPatternCode, BaseStockSource, Stock, StockStone, StockStoneItem, SetLineMessaging, GasPrice, BaseMillSource, BaseSiteStore, BaseBusiness, PortStock, PortStockStone, PortStockStoneItem, BaseWeightRange, LoadingRate, LoadingRateLoc, LoadingRateItem, BaseAPI, DeliveryOrder, WeightDelivery, AppRelease, AppReleaseTargetStation, ClientUpdateLog, BaseCompanyMapBaseCustomer, BaseCompanyMapCustomerAlias, InternationalFreightRate, InternationalFreightRateFuelPrice, InternationalFreightRateTeam, CarryingweightRate
 from weightapp.models import hash_password_sha1
 from django.forms import CheckboxSelectMultiple, MultipleChoiceField, widgets
 from django import forms
 from django.db.models.fields.related import ManyToManyField
 from django.db import models
+from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
+from django.contrib.auth.models import User
+from django.contrib.admin.views.autocomplete import AutocompleteJsonView
+
+
+def user_full_name(user):
+    # User.__str__ ถูกตั้งให้คืนแค่ first_name (models.py) หน้า admin ช่องเลือกผู้ใช้ให้แสดง ชื่อ + นามสกุล
+    full_name = ('%s %s' % (user.first_name or '', user.last_name or '')).strip()
+    return full_name or user.username
+
+
+class UserFullNameAutocompleteJsonView(AutocompleteJsonView):
+    # ผลลัพธ์ตอนพิมพ์ค้นหาในช่อง autocomplete ของ User ให้แสดง ชื่อ + นามสกุล
+    def serialize_result(self, obj, to_field_name):
+        result = super().serialize_result(obj, to_field_name)
+        if isinstance(obj, User):
+            result['text'] = user_full_name(obj)
+        return result
+
+
+def user_full_name_autocomplete_view(request):
+    return UserFullNameAutocompleteJsonView.as_view(admin_site=admin.site)(request)
+
+admin.site.autocomplete_view = user_full_name_autocomplete_view
+
+
+class UserFullNameFieldMixin:
+    # ค่าที่เลือกไว้แล้วในช่อง User (ตอนเปิดหน้าแก้ไข) ให้แสดง ชื่อ + นามสกุล
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if formfield is not None and db_field.remote_field.model is User:
+            formfield.label_from_instance = user_full_name
+        return formfield
 
 # Register your models here.
 class BaseVatTypeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -387,11 +421,12 @@ class UserScaleForm(forms.ModelForm):
                 raise forms.ValidationError('รหัสผ่านต้องเป็นตัวอักษรภาษาอังกฤษ ตัวเลข หรือสัญลักษณ์เท่านั้น')
         return password
 
-class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class UserScaleAdmin(UserFullNameFieldMixin, ImportExportModelAdmin, admin.ModelAdmin):
     form = UserScaleForm
     autocomplete_fields = ['user']
 
     list_display = ['user', 'scale_id', 'scale_name', 'password', 'permission'] #แสดงรายการสินค้าในรูปแบบตาราง
+    search_fields = ['scale_id', 'scale_name'] #ค้นหาตามรหัสผู้ชั่ง หรือชื่อผู้ชั่ง
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
 
     def save_model(self, request, obj, form, change):
@@ -415,15 +450,26 @@ class UserScaleAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class BaseVisibleAdmin(ImportExportModelAdmin):
     list_display = ('name','step')
 	
-class UserProfileAdmin(ImportExportModelAdmin):
+class UserProfileAdmin(UserFullNameFieldMixin, ImportExportModelAdmin):
     formfield_overrides = {
         models.ManyToManyField: {'widget': CheckboxSelectMultiple},
     }
     autocomplete_fields = ['user']
     
-    list_display = ['user'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_display = ['user', 'first_name', 'last_name'] #แสดงรายการสินค้าในรูปแบบตาราง
+    list_select_related = ['user']
     list_per_page = 20 #แสดงผล 20 รายการต่อ 1 หน้า
-    search_fields = ['user__username', 'user__first_name', 'user__last_name']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name'] #ค้นหาตาม username, ชื่อ, นามสกุล
+
+    def first_name(self, obj):
+        return obj.user.first_name if obj.user else ''
+    first_name.short_description = 'First name'
+    first_name.admin_order_field = 'user__first_name'
+
+    def last_name(self, obj):
+        return obj.user.last_name if obj.user else ''
+    last_name.short_description = 'Last name'
+    last_name.admin_order_field = 'user__last_name'
 
 class BaseSECAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     formfield_overrides = {
@@ -669,12 +715,76 @@ admin.site.register(BaseAPI, BaseAPIAdmin)
 admin.site.register(DeliveryOrder, DeliveryOrderAdmin)
 admin.site.register(WeightDelivery, WeightDeliveryAdmin)
 
+class AppReleaseTargetStationFormSet(forms.BaseInlineFormSet):
+    # กันเลือกตาชั่งผิดโปรแกรม เช่น Blue.Master ต้องเป็นตาชั่ง xxV เท่านั้น
+    # (ดรอปดาวน์กรองด้วย JS ใน admin/weightapp/apprelease/change_form.html อยู่แล้ว ตรงนี้เช็คซ้ำฝั่ง server)
+    def clean(self):
+        super().clean()
+        suffix = AppRelease.station_suffix_for(self.instance.product_code)
+        if not suffix:
+            return
+        wrong = []
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data') or form.cleaned_data.get('DELETE'):
+                continue
+            station = form.cleaned_data.get('weight_station')
+            if station and not station.id.upper().endswith(suffix):
+                wrong.append(station.id)
+        if wrong:
+            raise forms.ValidationError(
+                'รหัสโปรแกรม %s เลือกได้เฉพาะตาชั่งที่ลงท้ายด้วย %s (ไม่ถูกต้อง: %s)'
+                % (self.instance.product_code, suffix, ', '.join(wrong)))
+
+
+class AppReleaseTargetStationInline(admin.TabularInline):
+    # เลือกตาชั่งที่จะปล่อยเวอร์ชันนี้ให้ ถ้าไม่เพิ่มเลย = ปล่อยให้ทุกตาชั่ง
+    model = AppReleaseTargetStation
+    formset = AppReleaseTargetStationFormSet
+    extra = 0
+    verbose_name = 'ตาชั่งที่ปล่อยให้ (ไม่เพิ่มเลย = ทุกตาชั่ง)'
+    verbose_name_plural = 'ตาชั่งที่ปล่อยให้ (ไม่เพิ่มเลย = ทุกตาชั่ง)'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == 'weight_station' and formfield is not None:
+            # ดรอปดาวน์แสดง รหัส - ชื่อตาชั่ง (des) แทนรหัสอย่างเดียว
+            formfield.queryset = formfield.queryset.order_by('id')
+            formfield.label_from_instance = lambda s: f"{s.id} - {s.des}" if s.des else s.id
+        return formfield
+
 @admin.register(AppRelease)
 class AppReleaseAdmin(admin.ModelAdmin):
-    list_display = ('product_code', 'version', 'channel', 'is_mandatory', 'is_active', 'has_sql_script', 'released_at')
-    list_filter = ('product_code', 'channel', 'is_active')
+    list_display = ('product_code', 'version', 'channel', 'is_mandatory', 'is_active', 'has_sql_script', 'released_at', 'target_station_list', 'release_notes_short')
+    list_filter = ('product_code', 'channel', 'is_active', 'target_stations')
     ordering = ('-released_at',)
     exclude = ('created_by',)
+    inlines = [AppReleaseTargetStationInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('target_stations')
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        # ส่ง mapping รหัสโปรแกรม -> ท้ายรหัสตาชั่ง ให้ JS ใน change_form.html กรองดรอปดาวน์ตาชั่ง
+        extra_context = extra_context or {}
+        extra_context['product_station_suffix'] = AppRelease.PRODUCT_STATION_SUFFIX
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def target_station_list(self, obj):
+        # แสดง รหัส - des ทีละบรรทัด
+        stations = sorted(obj.target_stations.all(), key=lambda s: s.id)
+        if not stations:
+            return 'ทุกตาชั่ง'
+        return format_html_join(mark_safe('<br>'), '{}', ((f"{s.id} - {s.des}" if s.des else s.id,) for s in stations))
+    target_station_list.short_description = 'ปล่อยให้ตาชั่ง'
+
+    def release_notes_short(self, obj):
+        # ตัดให้สั้นในหน้ารายการ เอาเมาส์ชี้ดูข้อความเต็มได้
+        notes = (obj.release_notes or '').strip()
+        if not notes:
+            return '-'
+        short = notes if len(notes) <= 80 else notes[:80] + '…'
+        return format_html('<span title="{}">{}</span>', notes, short)
+    release_notes_short.short_description = 'รายละเอียดอัพเดท'
 
     def save_model(self, request, obj, form, change):
         if not change or not obj.created_by_id:

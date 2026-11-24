@@ -1,0 +1,39 @@
+{% extends "admin/change_form.html" %}
+
+{% block admin_change_form_document_ready %}
+{{ block.super }}
+{{ product_station_suffix|json_script:"product-station-suffix" }}
+<script>
+// ดรอปดาวน์ "ตาชั่งที่ปล่อยให้" แสดงเฉพาะตาชั่งของโปรแกรมนั้น ตามรหัสโปรแกรมที่กรอกอยู่
+// Blue.Master -> xxV, Pink.Master -> xxA, Stock.Master -> xxS (mapping มาจาก AppRelease.PRODUCT_STATION_SUFFIX)
+(function () {
+    var suffixMap = JSON.parse(document.getElementById('product-station-suffix').textContent || '{}');
+    var productInput = document.getElementById('id_product_code');
+    if (!productInput) return;
+
+    function currentSuffix() {
+        return suffixMap[(productInput.value || '').trim()] || null;
+    }
+
+    function filterSelect(select, suffix) {
+        Array.prototype.forEach.call(select.options, function (opt) {
+            if (!opt.value) return; // ตัวเลือกว่าง "---------"
+            // ซ่อนอย่างเดียว ไม่ล้างค่าที่เลือกไว้แล้ว ถ้าผิดโปรแกรม ตอนบันทึก server จะแจ้ง error ให้เห็นเอง
+            opt.hidden = !(!suffix || opt.value.toUpperCase().endsWith(suffix));
+        });
+    }
+
+    function filterAll() {
+        var suffix = currentSuffix();
+        document.querySelectorAll('select[name$="-weight_station"]').forEach(function (select) {
+            filterSelect(select, suffix);
+        });
+    }
+
+    productInput.addEventListener('input', filterAll);
+    productInput.addEventListener('change', filterAll);
+    document.addEventListener('formset:added', filterAll);
+    filterAll();
+})();
+</script>
+{% endblock %}

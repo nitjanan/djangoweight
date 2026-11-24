@@ -1406,6 +1406,17 @@ class AppRelease(models.Model):
         ('stable', 'Stable'),
         ('beta', 'Beta'),
     ]
+    # รหัสโปรแกรม -> ตัวอักษรท้ายรหัสตาชั่งที่ใช้โปรแกรมนั้น (เช่น Blue ใช้ตาชั่ง xxV)
+    # รหัสโปรแกรมที่ไม่อยู่ในนี้ เลือกได้ทุกตาชั่ง
+    PRODUCT_STATION_SUFFIX = {
+        'Blue.Master': 'V',
+        'Pink.Master': 'A',
+        'Stock.Master': 'S',
+    }
+
+    @classmethod
+    def station_suffix_for(cls, product_code):
+        return cls.PRODUCT_STATION_SUFFIX.get((product_code or '').strip())
 
     product_code = models.CharField(max_length=50, default='Blue.SLC.W1.IN.Server', verbose_name="รหัสโปรแกรม")
     version = models.CharField(max_length=20, verbose_name="เวอร์ชัน")
@@ -1418,7 +1429,12 @@ class AppRelease(models.Model):
     sql_script_hash_sha256 = models.CharField(max_length=64, blank=True, null=True, verbose_name="SHA256 ของสคริปต์ SQL")
     is_mandatory = models.BooleanField(default=False, verbose_name="บังคับอัพเดท")
     is_active = models.BooleanField(default=True, verbose_name="เปิดใช้งาน")
-    released_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่ปล่อยเวอร์ชัน")
+    # ตั้งวันเวลาล่วงหน้าได้ เครื่อง client จะเห็นเวอร์ชันนี้ก็ต่อเมื่อถึงวันเวลาที่กำหนดแล้ว
+    released_at = models.DateTimeField(default=timezone.now, verbose_name="วันที่ปล่อยเวอร์ชัน")
+    # ไม่เลือกเลย = ปล่อยให้ทุกตาชั่ง, เลือกไว้ = ปล่อยเฉพาะตาชั่งที่เลือก (อ้างอิง base_weight_station.id)
+    target_stations = models.ManyToManyField(BaseWeightStation, blank=True, related_name='app_releases',
+                                             through='AppReleaseTargetStation',
+                                             verbose_name="ปล่อยให้ตาชั่ง (ว่าง = ทุกตาชั่ง)")
     created_by = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL, verbose_name="สร้างโดย")
 
     class Meta:
@@ -1438,6 +1454,21 @@ class AppRelease(models.Model):
 
     def __str__(self):
         return f"{self.product_code} v{self.version} ({self.channel})"
+
+class AppReleaseTargetStation(models.Model):
+    # ตารางกลาง AppRelease <-> BaseWeightStation
+    # base_weight_station.id เป็น utf8 แต่ตารางใหม่เป็น utf8mb4 MySQL สร้าง FK ข้าม charset ไม่ได้ จึงปิด db_constraint ฝั่งตาชั่ง
+    app_release = models.ForeignKey(AppRelease, on_delete=models.CASCADE)
+    weight_station = models.ForeignKey(BaseWeightStation, on_delete=models.CASCADE, db_constraint=False, verbose_name="ตาชั่ง")
+
+    class Meta:
+        db_table = 'app_release_target_stations'
+        unique_together = ('app_release', 'weight_station')
+        verbose_name = 'ตาชั่งที่ปล่อยเวอร์ชัน'
+        verbose_name_plural = 'ตาชั่งที่ปล่อยเวอร์ชัน'
+
+    def __str__(self):
+        return str(self.weight_station_id)
 
 class ClientUpdateLog(models.Model):
     product_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="โปรดักส์")

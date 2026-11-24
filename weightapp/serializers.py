@@ -248,7 +248,7 @@ class AppReleaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppRelease
         fields = ['product_code', 'version', 'channel', 'release_notes', 'download_url', 'file_hash_sha256',
-                  'sql_script_url', 'sql_script_hash_sha256', 'is_mandatory', 'released_at']
+                  'sql_script_url', 'sql_script_hash_sha256', 'is_mandatory', 'released_at', 'target_stations']
 
     def get_download_url(self, obj):
         request = self.context.get('request')

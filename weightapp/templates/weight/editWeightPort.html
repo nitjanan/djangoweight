@@ -60,6 +60,40 @@
   }
   #tableDeliveryOrder .w-name,
   #tableDeliveryOrder td.do-name.w-name { width: var(--name-w); min-width: var(--name-w); max-width: var(--name-w); }
+  /* แจ้งเตือนใบส่งของที่เลือกไม่ได้ (ไม่พบรหัสลูกค้า / รหัสหินในระบบ) */
+  .do-miss {
+    --dm-bg: #fff8e8; --dm-border: #f2b544; --dm-text: #5b4510; --dm-muted: #8a6d2b;
+    --dm-code: #c0392b; --dm-chip-bg: #ffffff; --dm-chip-border: #f0dcae; --dm-item-bg: rgba(255,255,255,.65);
+    background: var(--dm-bg); color: var(--dm-text);
+    border: 1px solid var(--dm-chip-border); border-left: 4px solid var(--dm-border);
+    border-radius: 8px; padding: 10px 14px; font-size: .9rem;
+  }
+  html[data-bs-theme="dark"] .do-miss {
+    --dm-bg: rgba(242,181,68,.10); --dm-border: #f2b544; --dm-text: #f3dfb0; --dm-muted: #c9ad72;
+    --dm-code: #ff7b6b; --dm-chip-bg: rgba(255,255,255,.06); --dm-chip-border: rgba(242,181,68,.30); --dm-item-bg: rgba(255,255,255,.04);
+  }
+  .do-miss-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .do-miss-icon {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--dm-border); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem;
+  }
+  .do-miss-sub { color: var(--dm-muted); font-size: .82rem; margin: 2px 0 8px 30px; }
+  .do-miss-list { margin: 0 0 0 30px; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .do-miss-item { background: var(--dm-item-bg); border-radius: 6px; padding: 6px 10px; }
+  .do-miss-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+  .do-miss-kind {
+    font-size: .72rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+    background: var(--dm-border); color: #fff;
+  }
+  .do-miss-code { font-weight: 700; color: var(--dm-code); font-family: ui-monospace, Consolas, monospace; }
+  .do-miss-name { color: var(--dm-code); }
+  .do-miss-docs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .do-miss-doc {
+    font-size: .75rem; padding: 1px 7px; border-radius: 4px;
+    background: var(--dm-chip-bg); border: 1px solid var(--dm-chip-border); color: var(--dm-text);
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .do-miss-hint { color: var(--dm-muted); font-size: .8rem; margin: 8px 0 0 30px; }
 </style>
 {% endblock %}
 
@@ -459,6 +493,8 @@
               <button type="button" class="btn btn-primary" onclick="loadDeliveryOrderList()">ค้นหา</button>
             </div>
           </div>
+          <!-- แจ้งเตือนใบส่งของที่ตัวหนังสือสีแดง (ไม่พบรหัสลูกค้า / รหัสหินในระบบ) -->
+          <div id="doMissingWarn" class="do-miss mb-2" role="alert" style="display:none;"></div>
           <div class="table-responsive">
             <table class="table table-hover table-sm" id="tableDeliveryOrder">
               <thead>
@@ -706,8 +742,59 @@
     return isNaN(n) ? v : n.toLocaleString(undefined, { maximumFractionDigits: 3 });
   }
 
+  // ข้อความว่าใบส่งของนี้เลือกไม่ได้เพราะอะไร (ว่าง = เลือกได้) ใช้เงื่อนไขเดียวกับ selectDeliveryOrder
+  function doMissingText(d) {
+    var msgs = [];
+    if (!d.base_customer_name) msgs.push('ไม่พบรหัสลูกค้า ' + (d.customer_code || '') + ' ในระบบ');
+    if (!d.base_stone_type_name) msgs.push('ไม่พบรหัสหิน ' + (d.product_code || '') + ' ในระบบ');
+    return msgs.length ? msgs.join(', ') + ' ยังเลือกใบส่งของนี้ไม่ได้' : '';
+  }
+
+  // สรุปรหัสลูกค้า / รหัสหิน ที่ไม่มีในระบบ เหนือตาราง ให้ user รู้ว่าตัวแดงคืออะไรและต้องทำอะไร
+  function showDoMissingWarn(list) {
+    var $w = $('#doMissingWarn').hide().empty();
+    // จัดกลุ่มตามรหัสที่ไม่พบ: ใบเดียวกันขาดทั้งลูกค้าและหินจะนับเป็น 1 ใบ
+    var groups = [], byKey = {}, badDocs = {};
+    function add(kind, code, name, doc) {
+      var key = kind + '|' + (code || '');
+      if (!byKey[key]) { byKey[key] = { kind: kind, code: code || '(ว่าง)', name: name || '', docs: [] }; groups.push(byKey[key]); }
+      byKey[key].docs.push(doc);
+      badDocs[doc] = true;
+    }
+    $.each(list, function (_, d) {
+      if (!d.base_customer_name) add('ลูกค้า', d.customer_code, d.customer_name, d.doc_no);
+      if (!d.base_stone_type_name) add('ชนิดหิน', d.product_code, d.product_name, d.doc_no);
+    });
+    if (!groups.length) return;
+
+    var nDocs = Object.keys(badDocs).length;
+    $w.append(
+      $('<div class="do-miss-head">').append(
+        $('<span class="do-miss-icon" aria-hidden="true">').text('!'),
+        $('<span>').text('มี ' + nDocs + ' ใบส่งของที่ยังเลือกไม่ได้')
+      ),
+      $('<div class="do-miss-sub">').text('รหัสในใบส่งของไม่มีในระบบ (แสดงเป็นตัวหนังสือสีแดงในตาราง)')
+    );
+    var $ul = $('<ul class="do-miss-list">');
+    $.each(groups, function (_, g) {
+      var $docs = $('<div class="do-miss-docs">');
+      $.each(g.docs, function (_, doc) { $docs.append($('<span class="do-miss-doc">').text(doc)); });
+      $ul.append($('<li class="do-miss-item">').append(
+        $('<div class="do-miss-line">').append(
+          $('<span class="do-miss-kind">').text(g.kind),
+          $('<span class="do-miss-code">').text(g.code),
+          $('<span class="do-miss-name">').text(g.name)
+        ),
+        $docs
+      ));
+    });
+    $w.append($ul, $('<div class="do-miss-hint">').text('เพิ่มข้อมูลลูกค้า / ชนิดหิน ให้ตรงกับรหัสก่อน แล้วกด "ค้นหา" ใหม่'));
+    $w.show();
+  }
+
   function loadDeliveryOrderList() {
     var $tbody = $('#tableDeliveryOrder tbody');
+    $('#doMissingWarn').hide().empty();
     $tbody.empty().append($('<tr>').append($('<td colspan="21" class="text-center">').text('กำลังโหลด ...')));
     $.ajax({
       url: '{% url "searchDeliveryOrderForWeight" %}',
@@ -731,16 +818,20 @@
           var nameCell = function (v, cls) {
             return $('<td>').addClass('do-name ' + (cls || '')).text(v).attr('title', v);
           };
+          var missingMsg = doMissingText(d);
           $tr.append($('<td>').append(
-            $('<button type="button" class="btn btn-sm btn-success">').text('เลือก').on('click', function () { selectDeliveryOrder(i); })
+            $('<button type="button" class="btn btn-sm">').addClass(missingMsg ? 'btn-secondary' : 'btn-success')
+              .attr('title', missingMsg || '').text('เลือก').on('click', function () { selectDeliveryOrder(i); })
           ));
           $tr.append($('<td class="fw-bold">').text(txt(d.doc_no)));
           $tr.append($('<td>').addClass(remCls(d.car_customer_rem)).text(txt(d.car_customer_rem)));
           $tr.append($('<td>').addClass(remCls(d.car_company_rem)).text(txt(d.car_company_rem)));
-          $tr.append($('<td>').text(txt(d.customer_code)).toggleClass('text-danger', !d.base_customer_name));
-          $tr.append(nameCell(d.base_customer_name || txt(d.customer_name), 'w-name').toggleClass('text-danger', !d.base_customer_name));
+          var custMiss = 'ไม่พบรหัสลูกค้า ' + txt(d.customer_code) + ' ในระบบ';
+          $tr.append($('<td>').text(txt(d.customer_code)).toggleClass('text-danger', !d.base_customer_name).attr('title', d.base_customer_name ? null : custMiss));
+          $tr.append(nameCell(d.base_customer_name || txt(d.customer_name), 'w-name').toggleClass('text-danger', !d.base_customer_name).attr('title', d.base_customer_name ? (d.base_customer_name) : custMiss));
           $tr.append(nameCell(d.base_site_name || txt(d.site_name), 'w-name'));
-          $tr.append(nameCell(d.base_stone_type_name || txt(d.product_name), 'w-name').toggleClass('text-danger', !d.base_stone_type_name));
+          $tr.append(nameCell(d.base_stone_type_name || txt(d.product_name), 'w-name').toggleClass('text-danger', !d.base_stone_type_name)
+            .attr('title', d.base_stone_type_name ? d.base_stone_type_name : 'ไม่พบรหัสหิน ' + txt(d.product_code) + ' ในระบบ'));
           $tr.append($('<td class="text-end">').text(fmtNum(d.qty)));
           $tr.append($('<td class="text-end">').text(fmtNum(d.qty_rem)));
           $tr.append($('<td>').text(txt(d.unit_name)));
@@ -756,6 +847,7 @@
           $tr.append($('<td>').text(txt(d.site_id)));
           $tbody.append($tr);
         });
+        showDoMissingWarn(doListCache);
         fitDeliveryOrderColumns();
       },
       error: function () {
@@ -806,8 +898,12 @@
     $('#id_stone_type').val(d.product_code).trigger('change').prop('disabled', true);
     $('#id_stone_type_name').val(d.base_stone_type_name);
 
-    // ใบส่งของ = เงินเชื่อ (เหมือนโปรแกรมตาชั่ง)
-    $('#pg_2').prop('checked', true);
+    // จ่าย ตาม creditType ของใบส่งของ (เหมือนโปรแกรมตาชั่ง): "cash" = เงินสด, อื่น ๆ/ว่าง ("credit-day") = เงินเชื่อ
+    if (String(d.credit_type || '').trim().toLowerCase() === 'cash') {
+      $('#pg_1').prop('checked', true);
+    } else {
+      $('#pg_2').prop('checked', true);
+    }
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDeliveryOrder')).hide();
   }

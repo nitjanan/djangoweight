@@ -8,6 +8,25 @@ from django.contrib.auth.models import User
 from weightapp.models import BaseJobType, BaseDriver
 from weightapp.views import BASE_SETTING_EXPORTS, _baseSettingExportFields
 
+class DeliveryOrderCreditTypeTests(TestCase):
+    """credit_type (k2m creditType) ที่ตาชั่งส่งมากับ uc_weight_delivery: ส่งมา = เก็บ, ไม่ส่ง/ว่าง = คงค่าเดิม"""
+
+    def _uc(self, **extra):
+        from weightapp.views import uc_delivery_order
+        uc_delivery_order({'do_doc_no': 'DO_CT', 'comp_code': 'TEST_COMP', 'delivery_date': '2026-11-21',
+                           'unit_name': 'ตัน', 'car_company': 1, 'car_customer': 1, 'status': 'open', **extra})
+        return DeliveryOrder.objects.get(doc_no='DO_CT', comp_code='TEST_COMP').credit_type
+
+    def test_store_then_keep_when_missing_or_empty(self):
+        self.assertEqual(self._uc(credit_type='cash'), 'cash')
+        self.assertEqual(self._uc(), 'cash')
+        self.assertEqual(self._uc(credit_type=''), 'cash')
+        self.assertEqual(self._uc(credit_type='credit-day'), 'credit-day')
+
+    def test_none_when_never_sent(self):
+        self.assertIsNone(self._uc())
+
+
 class UCWeightDeliveryTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -382,7 +401,8 @@ class UCWeightDeliveryTests(TestCase):
                     "saleName": "Sale 1",
                     "note": "Note 1",
                     "status": "open",
-                    "unitName": "ตัน"
+                    "unitName": "ตัน",
+                    "creditType": "cash"
                 }
             ]
         }
@@ -411,6 +431,7 @@ class UCWeightDeliveryTests(TestCase):
         self.assertEqual(do.site_id, "SITE01")
         self.assertEqual(do.site_name, "Site Name 1")
         self.assertEqual(do.status, "open")
+        self.assertEqual(do.credit_type, "cash")
 
         # Now, setup mock responses for the second run (Update on 'open' status)
         # We simulate the API returning the same order but with updated status and other fields modified.

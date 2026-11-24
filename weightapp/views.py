@@ -10751,11 +10751,19 @@ def weightDeliveryVStamp(request):
 @permission_classes([IsAuthenticated])
 def appReleaseLatest(request):
     product_code = request.query_params.get('product', 'slcblue')
+    # รหัสตาชั่งของเครื่องที่ถาม (base_weight_station.id) ถ้าไม่ส่งมา จะได้เฉพาะเวอร์ชันที่ปล่อยให้ทุกตาชั่ง
+    station_code = (request.query_params.get('station') or '').strip()
+
+    station_filter = Q(target_stations__isnull=True)
+    if station_code:
+        station_filter |= Q(target_stations__id=station_code)
 
     release = AppRelease.objects.filter(
+        station_filter,
         product_code = product_code,
-        is_active = True
-    ).order_by('-released_at').first()
+        is_active = True,
+        released_at__lte = django_timezone.now(),
+    ).distinct().order_by('-released_at').first()
 
     if not release:
         return Response({'detail': 'No active release found'}, status=status.HTTP_404_NOT_FOUND)

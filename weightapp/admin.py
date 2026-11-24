@@ -9,7 +9,6 @@ from django import forms
 from django.db.models.fields.related import ManyToManyField
 from django.db import models
 from django.utils.html import format_html, format_html_join
-from django.utils.safestring import mark_safe
 from django.contrib.auth.models import User
 from django.contrib.admin.views.autocomplete import AutocompleteJsonView
 
@@ -774,7 +773,7 @@ class AppReleaseAdmin(admin.ModelAdmin):
         stations = sorted(obj.target_stations.all(), key=lambda s: s.id)
         if not stations:
             return 'ทุกตาชั่ง'
-        return format_html_join(mark_safe('<br>'), '{}', ((f"{s.id} - {s.des}" if s.des else s.id,) for s in stations))
+        return format_html_join('', '<div>{}</div>', ((f"{s.id} - {s.des}" if s.des else s.id,) for s in stations))
     target_station_list.short_description = 'ปล่อยให้ตาชั่ง'
 
     def release_notes_short(self, obj):

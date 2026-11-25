@@ -7275,7 +7275,8 @@ def exportWeightToExpress(request):
         truck=F('car_registration_name'),
         cuscod=F('customer_id'),
         cusname=F('customer_name'),
-        depcod=F('base_weight_station_name'),
+        # ใช้รหัสจากตาราง base_weight_station ก่อน ถ้ายังไม่ได้กรอก (NULL/ว่าง) ใช้ชื่อตาชั่งแบบเดิม
+        depcod=Coalesce(NullIf('bws__depcod', Value('')), F('base_weight_station_name'), output_field=models.CharField()),
         stkcod=F('stone_type_id'),
         stkdes=F('stone_type_name'),
         trnqty=F('weight_total'),
@@ -7286,7 +7287,7 @@ def exportWeightToExpress(request):
         oillt=F('oil_content'),
         nillnam=F('mill_name'),
         iscancle=F('is_cancel'),
-        sttcod=F('base_weight_station_name'),
+        sttcod=Coalesce(NullIf('bws__sttcod', Value('')), F('base_weight_station_name'), output_field=models.CharField()),
         scaleid=F('scale_id'),
         scalenam=F('scale_name'),
         scoopnam=F('scoop_name'),

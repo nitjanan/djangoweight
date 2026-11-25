@@ -459,6 +459,8 @@ class BaseWeightStation(models.Model):
     weight_id_max = models.IntegerField(blank = True, null = True, verbose_name="id มากสุดของตาชั่งนี้")
     vat_type = models.ForeignKey(BaseVatType,on_delete=models.CASCADE, null = True, blank=True)
     company = models.ForeignKey(BaseCompany,on_delete=models.CASCADE, null = True, blank=True)
+    depcod = models.CharField(blank=True, null=True, max_length=120)
+    sttcod = models.CharField(blank=True, null=True, max_length=120)
 
     class Meta:
         db_table = 'base_weight_station'

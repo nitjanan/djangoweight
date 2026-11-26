@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('weightapp', '0314_merge_weightmirror'),
+        ('weightapp', '0318_delivery_order_credit_type'),
     ]
 
     operations = [

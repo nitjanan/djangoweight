@@ -105,4 +105,5 @@ typing_extensions==4.16.0        # pydantic / asgiref / PyJWT ต้องใช
 # ---------------------------------------------------------------
 # ไม่มีไฟล์ deploy ในรีโป (ไม่มี Dockerfile/Procfile/CI) แต่ตั้ง whitenoise ไว้
 # แปลว่ามี deploy จริง จึงเก็บ gunicorn ไว้ ถ้า deploy ด้วยวิธีอื่นลบบรรทัดนี้ได้
-gunicorn==20.1.0
+gunicorn==23.0.0                 # 20.1.0 มีช่องโหว่ HTTP request smuggling
+packaging==26.3                  # gunicorn ต้องใช้

@@ -277,6 +277,7 @@ def insertDeliveryFromApiK2M(delivery_date):
     update_count = 0
     error_count = 0
     skip_count = 0
+    delete_count = 0
 
     # k2m company = BaseCompany.aff_so.name (บริษัทที่ออกใบสั่งขาย), k2m mine_code = BaseCompany.code -> DeliveryOrder.comp_code
     # mines_by_aff: { aff_so.name: [BaseCompany.code, ...] } ใช้เดาเหมืองตอน mine_code ว่าง
@@ -324,70 +325,45 @@ def insertDeliveryFromApiK2M(delivery_date):
                     status = row.get("status")
 
                     mine_code = resolve_k2m_mine_code(row.get("mine_code"), aff_mines)
-                    if not mine_code:
-                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน ข้ามไป
-                        skip_count += 1
-                        print(f"SKIP Company={company} DocNo={row.get('docNo')} : no mine_code")
-                        continue
-
-                    existing_do = DeliveryOrder.objects.filter(
-                        doc_no=row.get("docNo"),
-                        comp_code=mine_code,
-                        delivery_date=delivery_date
-                    ).first()
-
-                    if existing_do:
-                        existing_do.status = status
-                        existing_do.customer_code = row.get("customerCode")
-                        existing_do.customer_name = row.get("customerName")
-                        existing_do.customer_address = row.get("customerAddress")
-                        delivery_code = row.get("deliveryCode")
-                        existing_do.site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
-                        existing_do.site_name = row.get("deliveryLocation")#diff api
-                        existing_do.product_code = row.get("productCode")
-                        existing_do.product_name = row.get("productName")
-                        existing_do.sale_name = row.get("saleName")
-                        existing_do.note = row.get("note")
-                        existing_do.unit_name = row.get("unitName")
-                        existing_do.credit_type = (row.get("creditType") or "").strip() or existing_do.credit_type
-                        existing_do.save()
-                        update_count += 1
+                    if mine_code:
+                        target_mines, mine_unknown = [mine_code], False
                     else:
-                        car_company_val = row.get("carCompany") or 0
-                        car_customer_val = row.get("carCustomer") or 0
-                        if status == 'open':
-                            car_company_rem = car_company_val
-                            car_customer_rem = car_customer_val
-                        else:
-                            car_company_rem = row.get("carCompany")
-                            car_customer_rem = row.get("carCustomer")
+                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน
+                        # ลงทุกเหมืองของ aff_so นี้ (เช่น SLC, UNI, SRD) + ติดธง mine_unknown
+                        # เหมือนตาชั่งแต่ละเหมืองที่เก็บใบนี้ไว้ในเครื่องตัวเอง (DeliveryOrderMine.Classify ใน Windows)
+                        target_mines, mine_unknown = aff_mines, True
 
-                        delivery_code = row.get("deliveryCode")
-                        site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
-
-                        DeliveryOrder.objects.create(
+                    for mine in target_mines:
+                        existing_do = DeliveryOrder.objects.filter(
                             doc_no=row.get("docNo"),
-                            comp_code=mine_code,
+                            comp_code=mine,
+                            delivery_date=delivery_date
+                        ).first()
+
+                        if existing_do:
+                            _apply_k2m_do_detail(existing_do, row, status)
+                            existing_do.mine_unknown = mine_unknown
+                            existing_do.save()
+                            update_count += 1
+                        else:
+                            _create_k2m_do(row, mine, delivery_date, status, mine_unknown)
+                            insert_count += 1
+
+                    if not mine_unknown:
+                        # k2m ระบุเหมืองแล้ว: สำเนาที่เคยลงเหมืองอื่นตอนไม่ระบุเหมือง ลบทิ้งถ้ายังไม่เคยชั่ง (ชั่งแล้วเก็บไว้ ยังติดธงเหลือง)
+                        stale = DeliveryOrder.objects.filter(
+                            doc_no=row.get("docNo"),
+                            comp_code__in=aff_mines,
                             delivery_date=delivery_date,
-                            qty=row.get("qty"),
-                            car_company=row.get("carCompany"),
-                            car_customer=row.get("carCustomer"),
-                            car_company_rem=car_company_rem,
-                            car_customer_rem=car_customer_rem,
-                            customer_code=row.get("customerCode"),
-                            customer_name=row.get("customerName"),
-                            customer_address=row.get("customerAddress"),
-                            site_id=site_id,#diff api
-                            site_name=row.get("deliveryLocation"),#diff api
-                            product_code=row.get("productCode"),
-                            product_name=row.get("productName"),
-                            sale_name=row.get("saleName"),
-                            note=row.get("note"),
-                            status=status,
-                            unit_name=row.get("unitName"),
-                            credit_type=(row.get("creditType") or "").strip() or None
-                        )
-                        insert_count += 1
+                            mine_unknown=True,
+                        ).exclude(comp_code=mine_code)
+                        for do in stale:
+                            weighed = (do.car_company_tot or 0) or (do.car_customer_tot or 0) or (do.qty_tot or 0) \
+                                or WeightDelivery.objects.filter(do_doc_no=do.doc_no, comp_code=do.comp_code,
+                                                                 delivery_date=delivery_date).exists()
+                            if not weighed:
+                                do.delete()
+                                delete_count += 1
 
                 print(
                     f"Company={company} "
@@ -413,8 +389,63 @@ def insertDeliveryFromApiK2M(delivery_date):
         f"Insert={insert_count}, "
         f"Update={update_count}, "
         f"Skip={skip_count}, "
+        f"Delete={delete_count}, "
         f"Error={error_count}"
     )
+
+def _create_k2m_do(row, comp_code, delivery_date, status, mine_unknown=False):
+    """สร้าง DO ใหม่จากแถว k2m ลงเหมือง comp_code"""
+    car_company_val = row.get("carCompany") or 0
+    car_customer_val = row.get("carCustomer") or 0
+    if status == 'open':
+        car_company_rem = car_company_val
+        car_customer_rem = car_customer_val
+    else:
+        car_company_rem = row.get("carCompany")
+        car_customer_rem = row.get("carCustomer")
+
+    delivery_code = row.get("deliveryCode")
+    site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
+
+    return DeliveryOrder.objects.create(
+        doc_no=row.get("docNo"),
+        comp_code=comp_code,
+        delivery_date=delivery_date,
+        qty=row.get("qty"),
+        car_company=row.get("carCompany"),
+        car_customer=row.get("carCustomer"),
+        car_company_rem=car_company_rem,
+        car_customer_rem=car_customer_rem,
+        customer_code=row.get("customerCode"),
+        customer_name=row.get("customerName"),
+        customer_address=row.get("customerAddress"),
+        site_id=site_id,#diff api
+        site_name=row.get("deliveryLocation"),#diff api
+        product_code=row.get("productCode"),
+        product_name=row.get("productName"),
+        sale_name=row.get("saleName"),
+        note=row.get("note"),
+        status=status,
+        unit_name=row.get("unitName"),
+        credit_type=(row.get("creditType") or "").strip() or None,
+        mine_unknown=mine_unknown,
+    )
+
+def _apply_k2m_do_detail(do, row, status):
+    """เติม/แก้รายละเอียด DO ที่มีอยู่แล้วจากแถว k2m (ไม่แตะยอด *_rem / *_tot ที่คำนวณจากการชั่ง)"""
+    do.status = status
+    do.customer_code = row.get("customerCode")
+    do.customer_name = row.get("customerName")
+    do.customer_address = row.get("customerAddress")
+    delivery_code = row.get("deliveryCode")
+    do.site_id = delivery_code.split("___")[-1] if delivery_code and "___" in delivery_code else delivery_code
+    do.site_name = row.get("deliveryLocation")#diff api
+    do.product_code = row.get("productCode")
+    do.product_name = row.get("productName")
+    do.sale_name = row.get("saleName")
+    do.note = row.get("note")
+    do.unit_name = row.get("unitName")
+    do.credit_type = (row.get("creditType") or "").strip() or do.credit_type
 
 def resolve_k2m_mine_code(mine_code, aff_mines):
     """เหมืองของแถว DO จาก k2m: ใช้ mine_code ถ้ามี ถ้าว่างและสังกัดมีเหมืองเดียวให้ใช้เหมืองนั้น ไม่งั้นคืน None"""
@@ -2477,6 +2508,7 @@ def searchDeliveryOrderForWeight(request):
         'car_company_tot', 'car_customer_tot', 'car_company_rem', 'car_customer_rem',
         'customer_code', 'customer_name', 'site_id', 'site_name', 'product_code', 'product_name',
         'qty', 'qty_tot', 'unit_name', 'sale_name', 'status', 'note', 'credit_type',
+        'comp_code', 'mine_unknown',
     ))
 
     # DO ของวันนี้ใน Django ยังไม่มี ลูกค้า/สินค้า/หน้างาน จนกว่า job k2m ตี 3:30 ของวันถัดไปจะเติมให้

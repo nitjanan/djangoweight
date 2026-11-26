@@ -94,6 +94,20 @@
     font-family: ui-monospace, Consolas, monospace;
   }
   .do-miss-hint { color: var(--dm-muted); font-size: .8rem; margin: 8px 0 0 30px; }
+  /* ใบส่งของที่ k2m ไม่ระบุเหมือง (DeliveryOrder.mine_unknown) เลือกได้ แต่ไฮไลต์เหลือง + ถามยืนยัน (เหมือนโปรแกรมตาชั่ง) */
+  #tableDeliveryOrder .w-mine { width: 70px; min-width: 70px; }
+  #tableDeliveryOrder tr.do-mine-unknown > * { --bs-table-bg: #fff4b3; }
+  html[data-bs-theme="dark"] #tableDeliveryOrder tr.do-mine-unknown > * { --bs-table-bg: rgba(222,178,20,.22); }
+  #tableDeliveryOrder td.do-mine-cell { font-weight: 700; color: #966e00; }
+  html[data-bs-theme="dark"] #tableDeliveryOrder td.do-mine-cell { color: #f0cf5a; }
+  .do-mine {
+    --dm-bg: #fffbe0; --dm-border: #deb214; --dm-text: #665000; --dm-muted: #8a7328;
+    --dm-chip-bg: #ffffff; --dm-chip-border: #ebd678;
+  }
+  html[data-bs-theme="dark"] .do-mine {
+    --dm-bg: rgba(222,178,20,.10); --dm-border: #deb214; --dm-text: #f3e3a6; --dm-muted: #c9b46e;
+    --dm-chip-bg: rgba(255,255,255,.06); --dm-chip-border: rgba(222,178,20,.30);
+  }
 </style>
 {% endblock %}
 
@@ -495,6 +509,8 @@
           </div>
           <!-- แจ้งเตือนใบส่งของที่ตัวหนังสือสีแดง (ไม่พบรหัสลูกค้า / รหัสหินในระบบ) -->
           <div id="doMissingWarn" class="do-miss mb-2" role="alert" style="display:none;"></div>
+          <!-- แจ้งเตือนใบส่งของที่ k2m ไม่ระบุเหมือง (แถวสีเหลือง) -->
+          <div id="doMineWarn" class="do-miss do-mine mb-2" role="alert" style="display:none;"></div>
           <div class="table-responsive">
             <table class="table table-hover table-sm" id="tableDeliveryOrder">
               <thead>
@@ -502,6 +518,7 @@
                 <tr>
                   <th class="w-btn"></th>
                   <th class="w-doc">เลขที่ใบส่งของ</th>
+                  <th class="w-mine">เหมือง</th>
                   <th class="w-num text-end">รับเองเหลือ (เที่ยว)</th>
                   <th class="w-num text-end">ส่งให้เหลือ (เที่ยว)</th>
                   <th class="w-code">รหัสลูกค้า</th>
@@ -792,10 +809,30 @@
     $w.show();
   }
 
+  var MINE_UNKNOWN_TIP = 'k2m ไม่ได้ระบุเหมืองของใบส่งของนี้ ตรวจสอบก่อนใช้';
+
+  // สรุปใบส่งของที่ k2m ไม่ระบุเหมือง เหนือตาราง (เหมือน MineUnknownBanner ในโปรแกรมตาชั่ง)
+  function showDoMineWarn(list) {
+    var $w = $('#doMineWarn').hide().empty();
+    var docs = $.map(list, function (d) { return d.mine_unknown ? d.doc_no : null; });
+    if (!docs.length) return;
+    var $docs = $('<div class="do-miss-docs" style="margin-left:30px;">');
+    $.each(docs, function (_, doc) { $docs.append($('<span class="do-miss-doc">').text(doc)); });
+    $w.append(
+      $('<div class="do-miss-head">').append(
+        $('<span class="do-miss-icon" aria-hidden="true">').text('!'),
+        $('<span>').text('มี ' + docs.length + ' ใบส่งของที่ k2m ไม่ระบุเหมือง')
+      ),
+      $('<div class="do-miss-sub">').text('แถวสีเหลืองในตาราง · เลือกได้ แต่ตรวจสอบให้แน่ใจว่าเป็นของเหมืองนี้'),
+      $docs
+    );
+    $w.show();
+  }
+
   function loadDeliveryOrderList() {
     var $tbody = $('#tableDeliveryOrder tbody');
     $('#doMissingWarn').hide().empty();
-    $tbody.empty().append($('<tr>').append($('<td colspan="21" class="text-center">').text('กำลังโหลด ...')));
+    $tbody.empty().append($('<tr>').append($('<td colspan="22" class="text-center">').text('กำลังโหลด ...')));
     $.ajax({
       url: '{% url "searchDeliveryOrderForWeight" %}',
       // server ใช้เหมือง + วันที่ ของรายการชั่งนี้ (ไม่ใช่แท็ปบริษัทที่เลือกอยู่)
@@ -806,7 +843,7 @@
         if (data.comp_code) $('#doMineCode').text(data.comp_code);
         $tbody.empty();
         if (doListCache.length === 0) {
-          $tbody.append($('<tr>').append($('<td colspan="21" class="text-center text-muted">').text('ไม่พบใบส่งของ')));
+          $tbody.append($('<tr>').append($('<td colspan="22" class="text-center text-muted">').text('ไม่พบใบส่งของ')));
           return;
         }
         $.each(doListCache, function (i, d) {
@@ -824,6 +861,10 @@
               .attr('title', missingMsg || '').text('เลือก').on('click', function () { selectDeliveryOrder(i); })
           ));
           $tr.append($('<td class="fw-bold">').text(txt(d.doc_no)));
+          if (d.mine_unknown) $tr.addClass('do-mine-unknown').attr('title', MINE_UNKNOWN_TIP);
+          $tr.append(d.mine_unknown
+            ? $('<td class="do-mine-cell">').text('ไม่ระบุ').attr('title', MINE_UNKNOWN_TIP)
+            : $('<td>').text(txt(d.comp_code)));
           $tr.append($('<td>').addClass(remCls(d.car_customer_rem)).text(txt(d.car_customer_rem)));
           $tr.append($('<td>').addClass(remCls(d.car_company_rem)).text(txt(d.car_company_rem)));
           var custMiss = 'ไม่พบรหัสลูกค้า ' + txt(d.customer_code) + ' ในระบบ';
@@ -848,10 +889,11 @@
           $tbody.append($tr);
         });
         showDoMissingWarn(doListCache);
+        showDoMineWarn(doListCache);
         fitDeliveryOrderColumns();
       },
       error: function () {
-        $tbody.empty().append($('<tr>').append($('<td colspan="21" class="text-center text-danger">').text('โหลดใบส่งของไม่สำเร็จ')));
+        $tbody.empty().append($('<tr>').append($('<td colspan="22" class="text-center text-danger">').text('โหลดใบส่งของไม่สำเร็จ')));
       }
     });
   }
@@ -869,6 +911,8 @@
       alert('ไม่พบรหัสหิน ' + d.product_code + ' ในระบบ ไม่สามารถอ้างอิงใบส่งของนี้ได้');
       return;
     }
+    // k2m ไม่ระบุเหมือง: เลือกได้ แต่ต้องยืนยันว่าเป็นของเหมืองนี้ก่อน
+    if (d.mine_unknown && !confirm('ใบส่งของ ' + d.doc_no + ' k2m ไม่ได้ระบุเหมือง\n\nยืนยันว่าเป็นของเหมือง ' + (d.comp_code || '') + ' ใช่หรือไม่ ?')) return;
     if (!confirm('ต้องการอ้างอิงใบส่งของ ' + d.doc_no + ' หรือไม่ ?\nลูกค้า / ปลายทาง / ชนิดหิน จะถูกแทนที่ด้วยข้อมูลจากใบส่งของ (มีผลเมื่อกดบันทึก)')) return;
 
     doSelectedFromModal = true;

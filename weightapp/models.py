@@ -1371,6 +1371,11 @@ class DeliveryOrder(models.Model):
     comp_code = models.CharField(max_length=20, blank=False, null=True, db_index=True)
     # k2m creditType: "cash" = เงินสด, "credit-day" = เงินเชื่อ (ใช้ติ๊ก "จ่าย" ตอนอ้างใบส่งของ ทั้งหน้าเว็บและโปรแกรมตาชั่ง)
     credit_type = models.CharField(max_length=20, blank=True, null=True)
+    # True = k2m ไม่ส่ง mine_code มา และสังกัดมีหลายเหมือง (ไม่รู้ว่าเป็นของเหมืองไหน)
+    # insertDeliveryFromApiK2M สร้างใบนี้ลงทุกเหมืองของ aff_so เดียวกัน (1 แถวต่อ comp_code) แล้วติดธงนี้
+    # หน้าเว็บ / ตาชั่ง ไฮไลต์เหลือง + ถามยืนยันก่อนอ้างอิง ; k2m ระบุเหมืองทีหลัง -> ล้างธง + ลบสำเนาเหมืองอื่นที่ยังไม่ชั่ง
+    # ตรงกับ Windows delivery_order.mine_unknown (DeliveryOrderMine.cs)
+    mine_unknown = models.BooleanField(default=False)
     v_stamp = models.DateTimeField(auto_now=True)
 
     class Meta:

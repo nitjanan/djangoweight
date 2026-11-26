@@ -27,6 +27,33 @@ class DeliveryOrderCreditTypeTests(TestCase):
         self.assertIsNone(self._uc())
 
 
+class DeliveryOrderMineUnknownTests(TestCase):
+    """mine_unknown (k2m ไม่ระบุเหมือง): ตาชั่งส่งผลชั่งแล้วธงไม่หาย + หน้าเลือกใบส่งของได้ comp_code / mine_unknown"""
+
+    def test_uc_delivery_order_keeps_flag(self):
+        from weightapp.views import uc_delivery_order
+        DeliveryOrder.objects.create(doc_no='DO_MU', comp_code='TEST_COMP', delivery_date='2026-11-25', mine_unknown=True)
+        uc_delivery_order({'do_doc_no': 'DO_MU', 'comp_code': 'TEST_COMP', 'delivery_date': '2026-11-25',
+                           'unit_name': 'ตัน', 'car_company': 0, 'car_customer': 1, 'status': 'open'})
+        self.assertTrue(DeliveryOrder.objects.get(doc_no='DO_MU').mine_unknown)
+
+    def test_search_returns_mine_fields(self):
+        User.objects.create_user(username='u_mu', password='x')
+        c = Client()
+        c.login(username='u_mu', password='x')
+        s = c.session
+        s['company_code'] = 'TEST_COMP'
+        s.save()
+        DeliveryOrder.objects.create(doc_no='DO_MU', comp_code='TEST_COMP', delivery_date='2026-11-25',
+                                     status='open', car_customer_rem=1, mine_unknown=True)
+        DeliveryOrder.objects.create(doc_no='DO_OK', comp_code='TEST_COMP', delivery_date='2026-11-25',
+                                     status='open', car_customer_rem=1)
+        res = c.get(reverse('searchDeliveryOrderForWeight'), {'date': '2026-11-25', 'status': '1'})
+        rows = {d['doc_no']: d for d in res.json()['do_list']}
+        self.assertEqual((rows['DO_MU']['mine_unknown'], rows['DO_MU']['comp_code']), (True, 'TEST_COMP'))
+        self.assertFalse(rows['DO_OK']['mine_unknown'])
+
+
 class UCWeightDeliveryTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -1208,7 +1235,7 @@ class K2MDeliveryOrderByAffTests(TestCase):
                 return self._resp([
                     self._row("DO_A", "MINE_A"),
                     self._row("DO_B", "MINE_B"),
-                    self._row("DO_NULL_M", None),  # หลายเหมือง + ไม่มี mine_code → ข้าม
+                    self._row("DO_NULL_M", None),  # หลายเหมือง + ไม่มี mine_code → ลงทุกเหมืองของสังกัด + mine_unknown
                 ])
             if params["company"] == "AFF_S":
                 return self._resp([self._row("DO_NULL_S", None)])  # เหมืองเดียว → MINE_S
@@ -1224,10 +1251,91 @@ class K2MDeliveryOrderByAffTests(TestCase):
         self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_A").comp_code, "MINE_A")
         self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_B").comp_code, "MINE_B")
         self.assertEqual(DeliveryOrder.objects.get(doc_no="DO_NULL_S").comp_code, "MINE_S")
-        self.assertFalse(DeliveryOrder.objects.filter(doc_no="DO_NULL_M").exists())
-        self.assertIn("Insert=3", result)
-        self.assertIn("Skip=1", result)
+        self.assertFalse(DeliveryOrder.objects.get(doc_no="DO_NULL_S").mine_unknown)  # เหมืองเดียว = รู้เหมือง
+        null_m = DeliveryOrder.objects.filter(doc_no="DO_NULL_M")
+        self.assertEqual(sorted(null_m.values_list('comp_code', flat=True)), ["MINE_A", "MINE_B"])
+        self.assertTrue(all(null_m.values_list('mine_unknown', flat=True)))
+        self.assertIn("Insert=5", result)
+        self.assertIn("Skip=0", result)
         self.assertIn("Error=0", result)
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_null_mine_code_updates_weighed_do_and_flags_it(self, mock_token, mock_url, mock_requests_get):
+        """ไม่มี mine_code + หลายเหมือง: MINE_B ชั่งไปแล้ว (แถวจาก uc_weight_delivery) → เติมรายละเอียด + ธง, MINE_A สร้างใหม่"""
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        d = date(2026, 11, 16)
+        DeliveryOrder.objects.create(doc_no="DO_NULL_M", comp_code="MINE_B", delivery_date=d,
+                                     car_customer=1, car_customer_tot=1, car_customer_rem=0)
+        row = dict(self._row("DO_NULL_M", None), customerCode="C1", productCode="P1", creditType="cash")
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] == 1 and params["company"] == "AFF_M":
+                return self._resp([row])
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+        result = insertDeliveryFromApiK2M(d)
+
+        do = DeliveryOrder.objects.get(doc_no="DO_NULL_M", comp_code="MINE_B")
+        self.assertTrue(do.mine_unknown)
+        self.assertEqual((do.customer_code, do.product_code, do.credit_type, do.site_id), ("C1", "P1", "cash", "SITE"))
+        self.assertEqual((do.car_customer_tot, do.car_customer_rem), (1, 0))  # ยอดจากการชั่งไม่ถูกแตะ
+        do_a = DeliveryOrder.objects.get(doc_no="DO_NULL_M", comp_code="MINE_A")
+        self.assertTrue(do_a.mine_unknown)
+        self.assertEqual((do_a.customer_code, do_a.car_customer_rem), ("C1", 0))
+        self.assertIn("Insert=1", result)
+        self.assertIn("Update=1", result)
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_mine_code_given_later_removes_unweighed_copies(self, mock_token, mock_url, mock_requests_get):
+        """เคยลงทุกเหมือง (ไม่ระบุเหมือง) ตอนนี้ k2m บอก MINE_A → ล้างธง MINE_A, ลบ MINE_B ถ้ายังไม่ชั่ง"""
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        d = date(2026, 11, 16)
+        for code in ("MINE_A", "MINE_B"):
+            DeliveryOrder.objects.create(doc_no="DO_Y", comp_code=code, delivery_date=d, mine_unknown=True)
+        DeliveryOrder.objects.create(doc_no="DO_W", comp_code="MINE_B", delivery_date=d, mine_unknown=True,
+                                     car_customer_tot=1)  # ชั่งแล้ว → เก็บไว้
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] == 1 and params["company"] == "AFF_M":
+                return self._resp([self._row("DO_Y", "MINE_A"), self._row("DO_W", "MINE_A")])
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+        result = insertDeliveryFromApiK2M(d)
+
+        self.assertEqual(list(DeliveryOrder.objects.filter(doc_no="DO_Y").values_list('comp_code', 'mine_unknown')),
+                         [("MINE_A", False)])
+        self.assertTrue(DeliveryOrder.objects.get(doc_no="DO_W", comp_code="MINE_B").mine_unknown)
+        self.assertFalse(DeliveryOrder.objects.get(doc_no="DO_W", comp_code="MINE_A").mine_unknown)
+        self.assertIn("Delete=1", result)
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_mine_code_given_later_clears_flag(self, mock_token, mock_url, mock_requests_get):
+        from weightapp.views import insertDeliveryFromApiK2M
+        from datetime import date
+
+        d = date(2026, 11, 16)
+        DeliveryOrder.objects.create(doc_no="DO_X", comp_code="MINE_A", delivery_date=d, mine_unknown=True)
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] == 1 and params["company"] == "AFF_M":
+                return self._resp([self._row("DO_X", "MINE_A")])
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+        insertDeliveryFromApiK2M(d)
+        self.assertFalse(DeliveryOrder.objects.get(doc_no="DO_X").mine_unknown)
 
     def test_company_aff_api(self):
         from rest_framework.test import APIClient

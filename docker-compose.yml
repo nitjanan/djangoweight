@@ -1,0 +1,51 @@
+# MySQL 8 สำหรับเครื่อง dev (เฉพาะ DB)
+#
+# ข้อมูลเชื่อมต่อ (ตั้งใน DATABASES['default'] ของ weight/settings.py ในเครื่องตัวเอง)
+#   Host     : localhost (127.0.0.1)
+#   Port     : 13306         -> settings.py 'PORT': '13306'
+#   Database : djangoweightdb (สร้างให้ตอนเปิดครั้งแรก ฐานอื่นสร้างเพิ่มใน server เดียวกันได้)
+#   User     : root
+#   Password : (ไม่มีรหัสผ่าน ค่าว่าง)
+#
+#   docker compose up -d      เปิด DB (ครั้งแรกสร้างฐาน djangoweightdb ว่างๆ ให้ แล้วรัน manage.py migrate ต่อ)
+#   docker compose down       ปิด DB ข้อมูลยังอยู่ใน volume mysql_data
+#   docker compose down -v    ปิดและลบข้อมูลทิ้งทั้งหมด (ระวัง : ฐานในเครื่องหายหมด)
+#
+# migrate บนฐานว่างต้องใส่ --skip-checks (weightapp/forms.py query ตาราง base_loss_type ตอน import)
+#   ./venv/Scripts/python.exe manage.py migrate --skip-checks --noinput
+#
+# ถ้าจะเปลี่ยนพอร์ต แก้เลขพอร์ตฝั่งเครื่องใน ports (เช่น "127.0.0.1:13308:3306") แล้วแก้ 'PORT' ใน settings.py ให้ตรงกัน
+# พอร์ต 13306 ไม่ชนกับ MySQL ที่ลงตรงในเครื่อง (3306) และ djangostock (13307)
+
+# ชื่อโปรเจกต์ตายตัว : volume = djangoweight_mysql_data เสมอ ไม่ว่าจะรันจากโฟลเดอร์ชื่ออะไร (เช่น git worktree)
+# ถ้าปล่อยให้ใช้ชื่อโฟลเดอร์ รันจากโฟลเดอร์อื่นจะได้ volume ใหม่ = ฐานว่าง
+name: djangoweight
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: djangoweight-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: djangoweightdb
+      # user root ไม่มีรหัสผ่าน ใช้เฉพาะเครื่อง dev เท่านั้น
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    command:
+      - --character-set-server=utf8mb4
+      # ไม่สนตัวพิมพ์เล็ก/ใหญ่ เหมือน production
+      - --collation-server=utf8mb4_unicode_ci
+      # ชื่อตารางตัวเล็กเหมือน DB เดิมบน Windows ไม่งั้น db_table ที่สะกดตัวใหญ่หาไม่เจอ
+      - --lower-case-table-names=1
+    ports:
+      # รับเฉพาะจากเครื่องนี้ : root ไม่มีรหัสผ่าน ถ้าเปิดทุก IP เครื่องอื่นในวงแลนจะต่อเข้ามาแก้ / ลบข้อมูลได้
+      - "127.0.0.1:13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:

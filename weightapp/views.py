@@ -328,10 +328,11 @@ def insertDeliveryFromApiK2M(delivery_date):
                     if mine_code:
                         target_mines, mine_unknown = [mine_code], False
                     else:
-                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน
-                        # ลงทุกเหมืองของ aff_so นี้ (เช่น SLC, UNI, SRD) + ติดธง mine_unknown
-                        # เหมือนตาชั่งแต่ละเหมืองที่เก็บใบนี้ไว้ในเครื่องตัวเอง (DeliveryOrderMine.Classify ใน Windows)
-                        target_mines, mine_unknown = aff_mines, True
+                        # mine_code ว่าง และสังกัดมีหลายเหมือง → ไม่รู้ว่าเป็นของเหมืองไหน ติดธง mine_unknown
+                        # ลงเฉพาะเหมืองหลักของสังกัด (aff_so SLC -> SLC ไม่ลง UNI / SRD)
+                        # ถ้าสังกัดไม่มีเหมืองหลัก ลงทุกเหมืองของสังกัด (เหมือน DeliveryOrderMine.Classify ใน Windows)
+                        home = unknown_mine_home(company, aff_mines)
+                        target_mines, mine_unknown = ([home] if home else aff_mines), True
 
                     for mine in target_mines:
                         existing_do = DeliveryOrder.objects.filter(
@@ -341,29 +342,36 @@ def insertDeliveryFromApiK2M(delivery_date):
                         ).first()
 
                         if existing_do:
+                            was_unknown = existing_do.mine_unknown
                             _apply_k2m_do_detail(existing_do, row, status)
                             existing_do.mine_unknown = mine_unknown
                             existing_do.save()
+                            if was_unknown != mine_unknown:
+                                # ยอดชั่งเดิมเป็นยอดรวมทุกเหมือง (หรือกลับกัน) → คำนวณใหม่ตามขอบเขตใหม่
+                                recount_do_totals(existing_do)
                             update_count += 1
                         else:
                             _create_k2m_do(row, mine, delivery_date, status, mine_unknown)
                             insert_count += 1
 
-                    if not mine_unknown:
-                        # k2m ระบุเหมืองแล้ว: สำเนาที่เคยลงเหมืองอื่นตอนไม่ระบุเหมือง ลบทิ้งถ้ายังไม่เคยชั่ง (ชั่งแล้วเก็บไว้ ยังติดธงเหลือง)
-                        stale = DeliveryOrder.objects.filter(
-                            doc_no=row.get("docNo"),
-                            comp_code__in=aff_mines,
-                            delivery_date=delivery_date,
-                            mine_unknown=True,
-                        ).exclude(comp_code=mine_code)
-                        for do in stale:
-                            weighed = (do.car_company_tot or 0) or (do.car_customer_tot or 0) or (do.qty_tot or 0) \
-                                or WeightDelivery.objects.filter(do_doc_no=do.doc_no, comp_code=do.comp_code,
-                                                                 delivery_date=delivery_date).exists()
-                            if not weighed:
-                                do.delete()
-                                delete_count += 1
+                    # สำเนาใบไม่ระบุเหมืองที่เคยลงเหมืองอื่น (k2m ระบุเหมืองแล้ว หรือเวอร์ชันก่อนที่ลงทุกเหมือง)
+                    # ลบทิ้งถ้ายังไม่เคยชั่ง (ชั่งแล้วเก็บไว้ ยังติดธงเหลือง)
+                    stale = DeliveryOrder.objects.filter(
+                        doc_no=row.get("docNo"),
+                        comp_code__in=aff_mines,
+                        delivery_date=delivery_date,
+                        mine_unknown=True,
+                    ).exclude(comp_code__in=target_mines)
+                    for do in stale:
+                        # นับเฉพาะรายการชั่งที่ไม่ยกเลิกของเหมืองนี้เอง (*_tot เป็นยอดรวมทุกเหมือง ใช้ตัดสินไม่ได้)
+                        weighed = WeightDelivery.objects.filter(
+                            do_doc_no=do.doc_no, comp_code=do.comp_code,
+                            delivery_date=delivery_date, is_cancel=False).exists()
+                        if weighed:
+                            recount_do_totals(do)
+                        else:
+                            do.delete()
+                            delete_count += 1
 
                 print(
                     f"Company={company} "
@@ -447,6 +455,57 @@ def _apply_k2m_do_detail(do, row, status):
     do.unit_name = row.get("unitName")
     do.credit_type = (row.get("creditType") or "").strip() or do.credit_type
 
+def payload_mine_unknown(data):
+    """ตาชั่งส่ง mine_unknown มากับ uc_weight_delivery (ตาชั่งเวอร์ชันเก่าไม่ส่ง = False)"""
+    return data.get('mine_unknown') in [True, 'true', 'True', 1, '1']
+
+def do_count_mines(doc_no, comp_code, delivery_date, mine_unknown=False):
+    """
+    เหมืองที่ต้องนับเที่ยว / ยอดชั่ง รวมกันของ DO นี้ -> (list ของ comp_code, mine_unknown)
+    ปกติ = เหมืองตัวเอง ; ใบที่ k2m ไม่ระบุเหมือง = ทุกเหมืองใน aff_so เดียวกัน (ใช้ plan เที่ยวเดียวกัน)
+    """
+    if not mine_unknown and comp_code:
+        mine_unknown = DeliveryOrder.objects.filter(
+            doc_no=doc_no, comp_code=comp_code, delivery_date=delivery_date, mine_unknown=True).exists()
+    if not mine_unknown or not comp_code:
+        return [comp_code], bool(mine_unknown)
+    aff_id = BaseCompany.objects.filter(code=comp_code).values_list('aff_so_id', flat=True).first()
+    mines = []
+    if aff_id:
+        mines = [c for c in BaseCompany.objects.filter(aff_so_id=aff_id).values_list('code', flat=True) if c]
+    if comp_code not in mines:
+        mines.append(comp_code)
+    return mines, True
+
+def recount_do_totals(do):
+    """คำนวณ *_tot / *_rem / qty_tot ของ DeliveryOrder แถวนี้ใหม่จากรายการชั่งที่ไม่ยกเลิก (ตาม do_count_mines)"""
+    count_mines, _ = do_count_mines(do.doc_no, do.comp_code, do.delivery_date, do.mine_unknown)
+    s = WeightDelivery.objects.filter(
+        do_doc_no=do.doc_no, comp_code__in=count_mines,
+        delivery_date=do.delivery_date, is_cancel=False,
+    ).aggregate(
+        ton=Sum('weight_ton'), q=Sum('weight_q'),
+        cus=Count('id', filter=Q(carry_type_name='รับเอง')),
+        com=Count('id', filter=Q(carry_type_name='ส่งให้')),
+    )
+    do.car_company_tot = s['com'] or 0
+    do.car_customer_tot = s['cus'] or 0
+    do.car_company_rem = (do.car_company or 0) - do.car_company_tot
+    do.car_customer_rem = (do.car_customer or 0) - do.car_customer_tot
+    do.qty_tot = (s['ton'] or 0) if do.unit_name == 'ตัน' else (s['q'] or 0) if do.unit_name == 'คิว' else 0
+    do.save(update_fields=['car_company_tot', 'car_customer_tot', 'car_company_rem',
+                           'car_customer_rem', 'qty_tot', 'v_stamp'])
+
+def recount_do_group(do):
+    """คำนวณ DO แถวนี้ใหม่ ถ้าเป็นใบไม่ระบุเหมือง คำนวณแถวของเหมืองอื่นที่ยังติดธงด้วย (ยอดรวมเดียวกัน)"""
+    recount_do_totals(do)
+    if do.mine_unknown:
+        count_mines, _ = do_count_mines(do.doc_no, do.comp_code, do.delivery_date, True)
+        for sib in DeliveryOrder.objects.filter(
+                doc_no=do.doc_no, delivery_date=do.delivery_date,
+                comp_code__in=count_mines, mine_unknown=True).exclude(id=do.id):
+            recount_do_totals(sib)
+
 def resolve_k2m_mine_code(mine_code, aff_mines):
     """เหมืองของแถว DO จาก k2m: ใช้ mine_code ถ้ามี ถ้าว่างและสังกัดมีเหมืองเดียวให้ใช้เหมืองนั้น ไม่งั้นคืน None"""
     mine_code = (mine_code or '').strip()
@@ -455,7 +514,18 @@ def resolve_k2m_mine_code(mine_code, aff_mines):
     if len(aff_mines) == 1:
         return aff_mines[0]
     return None
-    
+
+def unknown_mine_home(aff_name, aff_mines):
+    """
+    เหมืองที่เก็บใบ DO ที่ k2m ไม่ระบุเหมือง = เหมืองที่ code ตรงกับชื่อสังกัด (aff_so SLC -> เหมือง SLC ไม่ลง UNI / SRD)
+    สังกัดที่ไม่มีเหมืองชื่อตรงกัน คืน None = ลงทุกเหมืองของสังกัดเหมือนเดิม
+    (Windows ใช้กฎเดียวกันใน DeliveryOrderMine.UnknownMineHome)
+    """
+    for code in aff_mines:
+        if code and aff_name and code.strip().upper() == aff_name.strip().upper():
+            return code
+    return None
+
 '''
 # Schedule the tasks
 scheduler = BackgroundScheduler()
@@ -2078,10 +2148,11 @@ def updateWeightDeliveryAndDeliveryOrder(weight_id, new_transport, do_doc_no, de
         car_customer = delivery_order.car_customer or 0
         car_company = delivery_order.car_company or 0
 
-        # Calculate counts of OTHER weights
+        # Calculate counts of OTHER weights (ใบไม่ระบุเหมือง: นับทุกเหมืองใน aff_so เหมือน uc_weight_delivery)
+        count_mines, _ = do_count_mines(do_doc_no, comp_code, delivery_date, delivery_order.mine_unknown)
         other_weights = WeightDelivery.objects.filter(
             do_doc_no=do_doc_no,
-            comp_code=comp_code,
+            comp_code__in=count_mines,
             delivery_date=delivery_date,
             is_cancel=False
         ).exclude(weight_id=weight_id)
@@ -2141,46 +2212,15 @@ def updateCancelDeliveryOrder(weight_id):
         w_do.is_cancel = True
         w_do.save()
 
-        sum_do = WeightDelivery.objects.filter(
-            do_doc_no=w_do.do_doc_no,
-            comp_code=w_do.comp_code,
-            delivery_date=w_do.delivery_date,
-            is_cancel=False,
-        ).aggregate(
-            sum_weight_ton=Sum("weight_ton"),
-            sum_weight_q=Sum("weight_q"),
-
-            car_customer=Count(
-                'id',
-                filter=Q(carry_type_name='รับเอง')
-            ),
-
-            car_company=Count(
-                'id',
-                filter=Q(carry_type_name='ส่งให้')
-            )
-        )
-
-        qty_tot = 0
-
-        if w_do.unit_name == 'ตัน':
-            qty_tot = sum_do['sum_weight_ton'] or 0
-
-        elif w_do.unit_name == 'คิว':
-            qty_tot = sum_do['sum_weight_q'] or 0
-
         do = DeliveryOrder.objects.get(
             doc_no=w_do.do_doc_no,
             comp_code=w_do.comp_code,
             delivery_date=w_do.delivery_date
         )
-
-        do.car_company_rem = do.car_company - (sum_do['car_company'] or 0)
-        do.car_customer_rem = do.car_customer - (sum_do['car_customer'] or 0)
-        do.qty_tot = qty_tot
-        do.car_company_tot = sum_do['car_company'] or 0
-        do.car_customer_tot = sum_do['car_customer'] or 0
-        do.save()
+        if not do.unit_name:
+            do.unit_name = w_do.unit_name  # ใช้เลือก ตัน/คิว ตอนคำนวณ qty_tot เหมือนเดิม (ไม่ได้บันทึกลง DO)
+        # ใบไม่ระบุเหมือง: คำนวณยอดรวมทุกเหมืองใหม่ ให้แถวของเหมืองอื่นด้วย
+        recount_do_group(do)
 
     except (WeightDelivery.DoesNotExist, DeliveryOrder.DoesNotExist):
         pass
@@ -10398,6 +10438,19 @@ def uc_weight_delivery(request):
             # Lock the DeliveryOrder row
             DeliveryOrder.objects.select_for_update().filter(id=delivery_order.id).first()
 
+            # ใบที่ k2m ไม่ระบุเหมือง: ทุกเหมืองใน aff_so เดียวกันใช้ plan ร่วมกัน -> นับเที่ยวรวมทุกเหมือง
+            # ระหว่างวัน Django ยังไม่มีธงจาก k2m (job ตี 3:30) ตาชั่งจึงส่ง mine_unknown มาด้วย
+            count_mines, mine_unknown = do_count_mines(
+                do_doc_no, comp_code, delivery_date,
+                payload_mine_unknown(data) or delivery_order.mine_unknown)
+            if mine_unknown:
+                if not delivery_order.mine_unknown:
+                    DeliveryOrder.objects.filter(id=delivery_order.id).update(mine_unknown=True)
+                # lock สำเนาของเหมืองอื่นด้วย กันสองเหมืองชั่งเที่ยวสุดท้ายพร้อมกัน
+                list(DeliveryOrder.objects.select_for_update().filter(
+                    doc_no=do_doc_no, delivery_date=delivery_date, comp_code__in=count_mines))
+                data = {**data, 'mine_unknown': True}
+
             if not is_cancel and carry_type_name in ['ส่งให้', 'รับเอง']:
                 car_company = data.get('car_company')
                 car_customer = data.get('car_customer')
@@ -10413,7 +10466,7 @@ def uc_weight_delivery(request):
                 if carry_type_name == 'ส่งให้':
                     other_count = WeightDelivery.objects.filter(
                         do_doc_no=do_doc_no,
-                        comp_code=comp_code,
+                        comp_code__in=count_mines,
                         delivery_date=delivery_date,
                         carry_type_name='ส่งให้',
                         is_cancel=False
@@ -10425,7 +10478,7 @@ def uc_weight_delivery(request):
                 elif carry_type_name == 'รับเอง':
                     other_count = WeightDelivery.objects.filter(
                         do_doc_no=do_doc_no,
-                        comp_code=comp_code,
+                        comp_code__in=count_mines,
                         delivery_date=delivery_date,
                         carry_type_name='รับเอง',
                         is_cancel=False
@@ -10574,10 +10627,15 @@ def uc_delivery_order(data):
         else:
             car_customer = int(raw_car_customer or 0)
 
+        # ใบที่ k2m ไม่ระบุเหมือง: ยอดชั่งรวมทุกเหมืองใน aff_so (plan เดียวกัน) ไม่งั้นนับเฉพาะเหมืองนี้
+        count_mines, mine_unknown = do_count_mines(
+            doc_no, comp_code, delivery_date,
+            payload_mine_unknown(data) or bool(existing_do and existing_do.mine_unknown))
+
         # QUERY รอบเดียว
         sum_do = WeightDelivery.objects.filter(
             do_doc_no = doc_no,
-            comp_code = comp_code,
+            comp_code__in = count_mines,
             delivery_date = delivery_date,
             is_cancel = False,
         ).aggregate(
@@ -10602,28 +10660,40 @@ def uc_delivery_order(data):
         car_company_rem = car_company - db_car_company
         car_customer_rem = car_customer - db_car_customer
 
+        defaults = {
+            'unit_name': unit_name,
+            'car_company': car_company,
+            'car_customer': car_customer,
+
+            'car_company_rem': car_company_rem,
+            'car_customer_rem': car_customer_rem,  # ผลลัพธ์จะเป็น 0 ตามที่ต้องการ
+
+            'qty_tot': qty_tot,
+            'car_company_tot': db_car_company,
+            'car_customer_tot': db_car_customer,
+
+            'qty': qty,
+            'status': status,
+            'credit_type': credit_type,
+        }
+        if mine_unknown:
+            defaults['mine_unknown'] = True  # ตั้งได้อย่างเดียว ล้างธงทำที่ insertDeliveryFromApiK2M ตอน k2m ระบุเหมือง
+
         DeliveryOrder.objects.update_or_create(
             doc_no=doc_no,
             comp_code=comp_code,
             delivery_date=delivery_date,
-
-            defaults={
-                'unit_name': unit_name,
-                'car_company': car_company,
-                'car_customer': car_customer,
-
-                'car_company_rem': car_company_rem,
-                'car_customer_rem': car_customer_rem,  # ผลลัพธ์จะเป็น 0 ตามที่ต้องการ
-
-                'qty_tot': qty_tot,
-                'car_company_tot': db_car_company,
-                'car_customer_tot': db_car_customer,
-
-                'qty': qty,
-                'status': status,
-                'credit_type': credit_type,
-            }
+            defaults=defaults,
         )
+
+        # สำเนาของเหมืองอื่นที่ยังไม่ระบุเหมือง ต้องเห็นยอดรวมเดียวกัน (หน้าใบส่งของ / summary API ของตาชั่งเหมืองนั้น)
+        if mine_unknown:
+            siblings = DeliveryOrder.objects.filter(
+                doc_no=doc_no, delivery_date=delivery_date,
+                comp_code__in=count_mines, mine_unknown=True,
+            ).exclude(comp_code=comp_code)
+            for sib in siblings:
+                recount_do_totals(sib)
     except Exception as e:
         print(f"เกิดข้อผิดพลาดใน uc_delivery_order: {str(e)}")
 

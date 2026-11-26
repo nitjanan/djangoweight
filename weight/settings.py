@@ -108,7 +108,7 @@ DATABASES = {
         'USER': 'root',
         'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT': '',
+        'PORT': '3305',
     },
     # Postgres ของระบบ Express (บัญชี/สต๊อก) — อ่านอย่างเดียว ไม่เคยเขียน
     # ใช้ดึงบิลน้ำมันของทีมรถร่วมมาหคิดราคาน้ำมันเฉลี่ย ดู _exportDocumentFuelPriceByTeam

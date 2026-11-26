@@ -1270,6 +1270,8 @@ class K2MDeliveryOrderByAffTests(TestCase):
         d = date(2026, 11, 16)
         DeliveryOrder.objects.create(doc_no="DO_NULL_M", comp_code="MINE_B", delivery_date=d,
                                      car_customer=1, car_customer_tot=1, car_customer_rem=0)
+        WeightDelivery.objects.create(weight_id=9001, do_id=1, delivery_date=d, bws='B', comp_code='MINE_B',
+                                      do_doc_no='DO_NULL_M', carry_type_name='รับเอง', unit_name='ตัน')
         row = dict(self._row("DO_NULL_M", None), customerCode="C1", productCode="P1", creditType="cash")
 
         def fake_get(url, headers=None, params=None, timeout=None):
@@ -1303,6 +1305,11 @@ class K2MDeliveryOrderByAffTests(TestCase):
             DeliveryOrder.objects.create(doc_no="DO_Y", comp_code=code, delivery_date=d, mine_unknown=True)
         DeliveryOrder.objects.create(doc_no="DO_W", comp_code="MINE_B", delivery_date=d, mine_unknown=True,
                                      car_customer_tot=1)  # ชั่งแล้ว → เก็บไว้
+        WeightDelivery.objects.create(weight_id=9002, do_id=1, delivery_date=d, bws='B', comp_code='MINE_B',
+                                      do_doc_no='DO_W', carry_type_name='รับเอง', unit_name='ตัน')
+        # DO_Y ที่ MINE_B ชั่งแล้วแต่ยกเลิก = ยังไม่เคยชั่ง → ลบได้
+        WeightDelivery.objects.create(weight_id=9003, do_id=1, delivery_date=d, bws='B', comp_code='MINE_B',
+                                      do_doc_no='DO_Y', carry_type_name='รับเอง', unit_name='ตัน', is_cancel=True)
 
         def fake_get(url, headers=None, params=None, timeout=None):
             if params["page"] == 1 and params["company"] == "AFF_M":
@@ -1317,6 +1324,108 @@ class K2MDeliveryOrderByAffTests(TestCase):
         self.assertTrue(DeliveryOrder.objects.get(doc_no="DO_W", comp_code="MINE_B").mine_unknown)
         self.assertFalse(DeliveryOrder.objects.get(doc_no="DO_W", comp_code="MINE_A").mine_unknown)
         self.assertIn("Delete=1", result)
+
+    def _post_wd(self, client, weight_id, bws, carry='รับเอง', mine_unknown=True):
+        return client.post('/api/uc_weight_delivery/', data=json.dumps({
+            'weight_id': weight_id, 'bws': bws, 'delivery_date': '2026-11-26', 'do_id': 1,
+            'do_doc_no': 'DO_U', 'carry_type_name': carry, 'weight_ton': 10, 'weight_q': 0,
+            'unit_name': 'ตัน', 'car_company': 0, 'car_customer': 1, 'status': 'open',
+            'mine_unknown': mine_unknown,
+        }), content_type='application/json')
+
+    def test_mine_unknown_counts_trips_across_aff_mines(self):
+        """ใบไม่ระบุเหมือง plan รับเอง 1 เที่ยว: MINE_A ชั่งแล้ว → MINE_B ชั่งอีกต้องโดน 422 + ยอดของทั้งสองแถวรวมกัน"""
+        BaseWeightStation.objects.create(id='BWS_A', des='A', company=BaseCompany.objects.get(code='MINE_A'))
+        BaseWeightStation.objects.create(id='BWS_B', des='B', company=BaseCompany.objects.get(code='MINE_B'))
+        c = Client()
+        self.assertEqual(self._post_wd(c, 9101, 'BWS_A').status_code, 200)
+        self.assertEqual(self._post_wd(c, 9102, 'BWS_B').status_code, 422)
+
+        rows = {d.comp_code: d for d in DeliveryOrder.objects.filter(doc_no='DO_U')}
+        self.assertTrue(rows['MINE_A'].mine_unknown)
+        self.assertEqual((rows['MINE_A'].car_customer_tot, rows['MINE_A'].car_customer_rem), (1, 0))
+
+    def test_mine_unknown_sibling_rows_get_combined_totals(self):
+        """ตาชั่งเวอร์ชันเก่า (ไม่ส่งธง) แต่แถวใน web app ติดธงแล้ว → ยังนับรวม + อัปเดตแถวเหมืองอื่น"""
+        BaseWeightStation.objects.create(id='BWS_A', des='A', company=BaseCompany.objects.get(code='MINE_A'))
+        for code in ('MINE_A', 'MINE_B'):
+            DeliveryOrder.objects.create(doc_no='DO_U', comp_code=code, delivery_date='2026-11-26',
+                                         car_customer=2, unit_name='ตัน', mine_unknown=True)
+        c = Client()
+        self.assertEqual(self._post_wd(c, 9201, 'BWS_A', mine_unknown=False).status_code, 200)
+        b = DeliveryOrder.objects.get(doc_no='DO_U', comp_code='MINE_B')
+        self.assertEqual((b.car_customer_tot, b.car_customer_rem, float(b.qty_tot)), (1, 1, 10.0))
+
+    def test_known_mine_not_counted_across_mines(self):
+        """ใบปกติ (ไม่ติดธง) นับแยกเหมืองเหมือนเดิม"""
+        from weightapp.views import do_count_mines
+        DeliveryOrder.objects.create(doc_no='DO_K', comp_code='MINE_A', delivery_date='2026-11-26')
+        self.assertEqual(do_count_mines('DO_K', 'MINE_A', '2026-11-26'), (['MINE_A'], False))
+        self.assertEqual(sorted(do_count_mines('DO_K', 'MINE_A', '2026-11-26', True)[0]), ['MINE_A', 'MINE_B'])
+
+    @patch('weightapp.views.requests.get')
+    @patch('weightapp.views.get_k2m_api_url')
+    @patch('weightapp.views.get_k2m_api_token')
+    def test_null_mine_code_goes_to_home_mine_only(self, mock_token, mock_url, mock_requests_get):
+        """สังกัด HOME มีเหมือง HOME (ชื่อตรงสังกัด) + OTHER: ไม่ระบุเหมือง → ลงเฉพาะ HOME,
+        สำเนาเก่าที่ OTHER ยังไม่ชั่ง → ลบ, ชั่งแล้ว → เก็บไว้"""
+        from weightapp.views import insertDeliveryFromApiK2M
+        from weightapp.models import BaseAffiliatedCompany
+        from datetime import date
+
+        aff = BaseAffiliatedCompany.objects.create(name="HOME")
+        BaseCompany.objects.create(name="Home", code="HOME", aff_so=aff)
+        BaseCompany.objects.create(name="Other", code="OTHER", aff_so=aff)
+        d = date(2026, 11, 16)
+        DeliveryOrder.objects.create(doc_no="DO_H2", comp_code="OTHER", delivery_date=d, mine_unknown=True)
+        DeliveryOrder.objects.create(doc_no="DO_H3", comp_code="OTHER", delivery_date=d, mine_unknown=True)
+        WeightDelivery.objects.create(weight_id=9501, do_id=1, delivery_date=d, bws='O', comp_code='OTHER',
+                                      do_doc_no='DO_H3', carry_type_name='รับเอง', unit_name='ตัน')
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            if params["page"] == 1 and params["company"] == "HOME":
+                return self._resp([self._row("DO_H1", None), self._row("DO_H2", None), self._row("DO_H3", None)])
+            return self._resp([])
+
+        mock_requests_get.side_effect = fake_get
+        result = insertDeliveryFromApiK2M(d)
+
+        def mines(doc):
+            return sorted(DeliveryOrder.objects.filter(doc_no=doc).values_list('comp_code', flat=True))
+        self.assertEqual(mines("DO_H1"), ["HOME"])
+        self.assertEqual(mines("DO_H2"), ["HOME"])           # สำเนา OTHER ยังไม่ชั่ง → ลบ
+        self.assertEqual(mines("DO_H3"), ["HOME", "OTHER"])  # OTHER ชั่งแล้ว → เก็บ
+        self.assertTrue(all(DeliveryOrder.objects.filter(doc_no__startswith="DO_H").values_list('mine_unknown', flat=True)))
+        self.assertIn("Delete=1", result)
+
+    def test_web_edit_link_mine_unknown_checks_all_mines(self):
+        """หน้าแก้ไขใบชั่งใน web app: ผูกใบไม่ระบุเหมืองที่เหมืองอื่นใช้เที่ยวหมดแล้ว → ไม่ให้บันทึก"""
+        from weightapp.views import updateWeightDeliveryAndDeliveryOrder
+        from types import SimpleNamespace
+        for code in ('MINE_A', 'MINE_B'):
+            DeliveryOrder.objects.create(doc_no='DO_U', comp_code=code, delivery_date='2026-11-26',
+                                         car_customer=1, unit_name='ตัน', mine_unknown=True)
+        WeightDelivery.objects.create(weight_id=9301, do_id=1, delivery_date='2026-11-26', bws='A',
+                                      comp_code='MINE_A', do_doc_no='DO_U', carry_type_name='รับเอง', unit_name='ตัน')
+        tr = SimpleNamespace(base_carry_type=SimpleNamespace(base_carry_type_name='รับเอง'))
+        ok, msg = updateWeightDeliveryAndDeliveryOrder(9302, tr, 'DO_U', '2026-11-26', 'MINE_B', 10, 0, 'ตัน', 'B', False)
+        self.assertFalse(ok)
+        self.assertIn('plan', msg)
+
+    def test_web_unlink_mine_unknown_recounts_all_rows(self):
+        """เอารายการชั่งออกจากใบไม่ระบุเหมือง (unlink) → ยอดคงเหลือของทุกเหมืองกลับมา"""
+        from weightapp.views import uc_delivery_order, updateCancelDeliveryOrder
+        for code in ('MINE_A', 'MINE_B'):
+            DeliveryOrder.objects.create(doc_no='DO_U', comp_code=code, delivery_date='2026-11-26',
+                                         car_customer=1, unit_name='ตัน', mine_unknown=True)
+        WeightDelivery.objects.create(weight_id=9401, do_id=1, delivery_date='2026-11-26', bws='A',
+                                      comp_code='MINE_A', do_doc_no='DO_U', carry_type_name='รับเอง', unit_name='ตัน')
+        uc_delivery_order({'do_doc_no': 'DO_U', 'comp_code': 'MINE_A', 'delivery_date': '2026-11-26',
+                           'unit_name': 'ตัน', 'car_customer': 1, 'car_company': 0})
+        self.assertEqual(DeliveryOrder.objects.get(doc_no='DO_U', comp_code='MINE_B').car_customer_rem, 0)
+        updateCancelDeliveryOrder(9401)
+        for d in DeliveryOrder.objects.filter(doc_no='DO_U'):
+            self.assertEqual((d.car_customer_tot, d.car_customer_rem), (0, 1), d.comp_code)
 
     @patch('weightapp.views.requests.get')
     @patch('weightapp.views.get_k2m_api_url')
